@@ -23,6 +23,10 @@ from pipecat.services.cartesia.tts import CartesiaTTSService
 from pipecat.services.groq.llm import GroqLLMService
 from pipecat.services.deepgram.stt import DeepgramSTTService
 from pipecat.transports.local.audio import LocalAudioTransport, LocalAudioTransportParams
+from pipecat.turns.user_start.wake_phrase_user_turn_start_strategy import (
+    WakePhraseUserTurnStartStrategy,
+)
+from pipecat.turns.user_turn_strategies import UserTurnStrategies, default_user_turn_start_strategies
 
 from potts.config import Config
 from potts.llm.prompt import SYSTEM_PROMPT
@@ -102,10 +106,29 @@ async def run():
         settings=CartesiaTTSService.Settings(voice=config.voice_id),
     )
 
+    # Wake word strategy — detecta "potts" / "hey potts" / "oye potts" en el STT
+    wake_strategy = WakePhraseUserTurnStartStrategy(
+        phrases=["potts", "hey potts", "oye potts"],
+        timeout=15.0,  # vuelve a dormir tras 15s sin actividad
+    )
+
+    @wake_strategy.event_handler("on_wake_phrase_detected")
+    async def on_wake(strategy, phrase):
+        print(f"\033[1;33m[Potts activo — escuchando...]\033[0m")
+
+    @wake_strategy.event_handler("on_wake_phrase_timeout")
+    async def on_sleep(strategy):
+        print(f"\033[2m[Potts en espera — di 'Potts' para activar]\033[0m")
+
     context = LLMContext(messages=[{"role": "system", "content": SYSTEM_PROMPT}])
     aggregators = LLMContextAggregatorPair(
         context,
-        user_params=LLMUserAggregatorParams(vad_analyzer=SileroVADAnalyzer()),
+        user_params=LLMUserAggregatorParams(
+            vad_analyzer=SileroVADAnalyzer(),
+            user_turn_strategies=UserTurnStrategies(
+                start=[wake_strategy, *default_user_turn_start_strategies()]
+            ),
+        ),
     )
 
     pipeline = Pipeline(
@@ -126,7 +149,8 @@ async def run():
         params=PipelineParams(allow_interruptions=True),
     )
 
-    logger.info("Potts is online. Listening...\n")
+    logger.info("Potts en espera. Di 'Potts' para activar.\n")
+    print("\033[2m[Potts en espera — di 'Potts' para activar]\033[0m\n")
 
     runner = PipelineRunner()
     await runner.run(task)
