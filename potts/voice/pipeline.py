@@ -30,6 +30,7 @@ from pipecat.turns.user_turn_strategies import UserTurnStrategies, default_user_
 
 from potts.config import Config
 from potts.llm.prompt import SYSTEM_PROMPT
+from potts.tools.registry import TOOLS, register_tools
 
 
 class ChatPrinter(FrameProcessor):
@@ -94,7 +95,14 @@ async def run():
         )
     )
 
-    stt = DeepgramSTTService(api_key=config.deepgram_api_key)
+    stt = DeepgramSTTService(
+        api_key=config.deepgram_api_key,
+        settings=DeepgramSTTService.Settings(
+            model="nova-3-general",
+            language="es",
+            keyterm=["Potts"],
+        ),
+    )
 
     llm = GroqLLMService(
         api_key=config.groq_api_key,
@@ -106,10 +114,9 @@ async def run():
         settings=CartesiaTTSService.Settings(voice=config.voice_id),
     )
 
-    # Wake word strategy — detecta "potts" / "hey potts" / "oye potts" en el STT
     wake_strategy = WakePhraseUserTurnStartStrategy(
-        phrases=["potts", "hey potts", "oye potts"],
-        timeout=15.0,  # vuelve a dormir tras 15s sin actividad
+        phrases=["potts", "hey potts", "oye potts", "pots", "pods", "bots"],
+        timeout=15.0,
     )
 
     @wake_strategy.event_handler("on_wake_phrase_detected")
@@ -120,7 +127,12 @@ async def run():
     async def on_sleep(strategy):
         print(f"\033[2m[Potts en espera — di 'Potts' para activar]\033[0m")
 
-    context = LLMContext(messages=[{"role": "system", "content": SYSTEM_PROMPT}])
+    register_tools(llm)
+
+    context = LLMContext(
+        messages=[{"role": "system", "content": SYSTEM_PROMPT}],
+        tools=TOOLS,
+    )
     aggregators = LLMContextAggregatorPair(
         context,
         user_params=LLMUserAggregatorParams(
