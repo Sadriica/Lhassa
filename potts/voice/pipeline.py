@@ -33,10 +33,18 @@ from potts.config import Config
 from potts.llm.prompt import build_system_prompt
 from potts.memory.store import build_memory_context, init_db
 from potts.tools.registry import TOOLS, register_tools
+from potts.voice.beep import play_beep
+from potts.voice.mute_strategy import WakeWordOnlyMuteStrategy
+
+
+WAKE_VARIANTS = {
+    "potts", "pots", "pods", "pot", "pos", "pues",
+    "box", "bots", "bot", "voz", "vos", "boz", "pox",
+}
 
 
 class WakeDebug(FrameProcessor):
-    """Muestra transcripciones en tiempo real para afinar el wake word."""
+    """Muestra transcripciones en tiempo real — activo durante desarrollo."""
 
     async def process_frame(self, frame: Frame, direction: FrameDirection):
         await super().process_frame(frame, direction)
@@ -47,11 +55,10 @@ class WakeDebug(FrameProcessor):
 
 
 class ChatPrinter(FrameProcessor):
-    """Intercepts transcription and LLM text frames and prints them as a chat."""
+    """Imprime tokens del LLM en tiempo real (streaming visual)."""
 
     def __init__(self):
         super().__init__()
-        self._potts_buffer = []
         self._potts_speaking = False
 
     async def process_frame(self, frame: Frame, direction: FrameDirection):
@@ -59,26 +66,23 @@ class ChatPrinter(FrameProcessor):
 
         if isinstance(frame, TranscriptionFrame) and frame.text.strip():
             print(f"\n\033[1;36mYou:\033[0m {frame.text.strip()}")
+            print(f"\033[1;35mPotts:\033[0m ", end="", flush=True)
 
         elif isinstance(frame, LLMFullResponseStartFrame):
-            self._potts_buffer = []
             self._potts_speaking = True
 
         elif isinstance(frame, LLMTextFrame) and self._potts_speaking:
-            self._potts_buffer.append(frame.text)
+            # Streaming: cada token se imprime inmediatamente
+            print(frame.text, end="", flush=True)
 
         elif isinstance(frame, LLMFullResponseEndFrame) and self._potts_speaking:
-            full = "".join(self._potts_buffer).strip()
-            if full:
-                print(f"\033[1;35mPotts:\033[0m {full}\n")
-            self._potts_buffer = []
+            print("\n", flush=True)
             self._potts_speaking = False
 
         await self.push_frame(frame, direction)
 
 
 def find_device(name: str) -> int:
-    """Return the first PyAudio device index whose name contains `name`."""
     p = pyaudio.PyAudio()
     try:
         for i in range(p.get_device_count()):
@@ -135,42 +139,40 @@ async def run():
         settings=CartesiaTTSService.Settings(voice=config.voice_id),
     )
 
-    wake_strategy = WakePhraseUserTurnStartStrategy(
-        phrases=[
-            # Pronunciación directa
-            "potts", "pots", "pods", "pot",
-            # Con h aspirada (inglés)
-            "hey potts", "hey pots", "hey pods",
-            # Español
-            "oye potts", "oye pots", "oye pods",
-            # Variantes fonéticas en español (Deepgram nova-3 es)
-            "pos", "pues", "box", "bots", "bot",
-            "voz", "vos", "boz",
-            "pox", "pox",
-            # Con "a" delante (acento colombiano "a ver potts")
-            "a ver potts", "a ver pots",
-        ],
-        timeout=300.0,  # 5 minutos — una vez activo, no requiere repetir wake word
-    )
-
-    @wake_strategy.event_handler("on_wake_phrase_detected")
-    async def on_wake(strategy, phrase):
-        print(f"\033[1;33m[Potts activo — escuchando...]\033[0m")
-
-    @wake_strategy.event_handler("on_wake_phrase_timeout")
-    async def on_sleep(strategy):
-        print(f"\033[2m[Potts en espera — di 'Potts' para activar]\033[0m")
-
     register_tools(llm)
 
     context = LLMContext(
         messages=[{"role": "system", "content": system_prompt}],
         tools=TOOLS,
     )
+
+    wake_strategy = WakePhraseUserTurnStartStrategy(
+        phrases=[
+            "potts", "pots", "pods", "pot",
+            "hey potts", "hey pots", "hey pods",
+            "oye potts", "oye pots", "oye pods",
+            "pos", "pues", "box", "bots", "bot",
+            "voz", "vos", "boz", "pox",
+            "a ver potts", "a ver pots",
+        ],
+        timeout=300.0,
+    )
+
+    @wake_strategy.event_handler("on_wake_phrase_detected")
+    async def on_wake(strategy, phrase):
+        print(f"\033[1;33m[Potts activo]\033[0m", flush=True)
+        asyncio.create_task(play_beep(freq=880, duration_ms=120))
+
+    @wake_strategy.event_handler("on_wake_phrase_timeout")
+    async def on_sleep(strategy):
+        asyncio.create_task(play_beep(freq=440, duration_ms=80))
+        print(f"\033[2m[Potts en espera — di 'Potts' para activar]\033[0m", flush=True)
+
     aggregators = LLMContextAggregatorPair(
         context,
         user_params=LLMUserAggregatorParams(
             vad_analyzer=SileroVADAnalyzer(),
+            user_mute_strategies=[WakeWordOnlyMuteStrategy()],
             user_turn_strategies=UserTurnStrategies(
                 start=[wake_strategy, *default_user_turn_start_strategies()]
             ),
@@ -200,6 +202,10 @@ async def run():
     print("\033[2m[Potts en espera — di 'Potts' para activar]\033[0m\n")
 
     runner = PipelineRunner()
-    await runner.run(task)
+
+    try:
+        await runner.run(task)
+    except Exception as e:
+        logger.error(f"Pipeline error: {e}")
 
     return context, context.get_messages()
