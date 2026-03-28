@@ -1,7 +1,7 @@
 [project]
 name = "potts"
-version = "0.3.0"
-description = "Personal voice AI assistant — voice pipeline, sub-agents, scheduler, dashboard"
+version = "0.4.0"
+description = "Personal voice AI assistant — voice pipeline, multi-provider LLM, sub-agents with tools, scheduler, GitHub, Outlook, dashboard"
 requires-python = ">=3.13"
 dependencies = [
     # Core
@@ -10,15 +10,17 @@ dependencies = [
     "python-dotenv>=1.0.0",
 
     # Voice pipeline (STT → LLM → TTS)
+    # Pipecat bundles LLM services for groq, anthropic, openai, openrouter, ollama, cerebras
     "pipecat-ai[cartesia,deepgram,groq,local,silero]>=0.0.108",
-    "torch>=2.0.0",         # required by Silero VAD
+    "torch>=2.0.0",             # required by Silero VAD
 
-    # LLM / agents
-    "groq>=1.0.0",
+    # LLM clients — used directly by agents (all providers)
+    "openai>=1.0.0",            # covers groq (openai-compat), openai, openrouter, ollama, cerebras
+    "anthropic>=0.50.0",        # Anthropic Claude direct client
 
     # Web tools
-    "duckduckgo-search>=8.0.0",
-    "httpx>=0.27.0",
+    "duckduckgo-search>=8.0.0", # fallback search when Brave key is not set
+    "httpx>=0.27.0",            # Brave Search, GitHub API, Microsoft Graph
 
     # Dashboard API
     "fastapi>=0.110.0",
@@ -32,5 +34,5 @@ dependencies = [
 potts = "main:main"
 
 [tool.uv]
-# Keep torch CPU-only on systems without CUDA to avoid the 2 GB GPU wheel
-# Override locally with: uv add torch --extra-index-url https://download.pytorch.org/whl/cpu
+# To use CPU-only PyTorch and avoid the large CUDA wheel:
+#   uv add torch --extra-index-url https://download.pytorch.org/whl/cpu

@@ -21,7 +21,6 @@ from pipecat.processors.aggregators.llm_response_universal import (
 )
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 from pipecat.services.cartesia.tts import CartesiaTTSService
-from pipecat.services.groq.llm import GroqLLMService
 from pipecat.services.deepgram.stt import DeepgramSTTService
 from pipecat.transports.local.audio import LocalAudioTransport, LocalAudioTransportParams
 from pipecat.turns.user_start.wake_phrase_user_turn_start_strategy import (
@@ -31,6 +30,7 @@ from pipecat.turns.user_turn_strategies import UserTurnStrategies, default_user_
 
 from potts.config import Config
 from potts.llm.prompt import build_system_prompt
+from potts.llm.provider import get_pipeline_llm
 from potts.memory.store import build_memory_context
 from potts.state import state
 from potts.tools.registry import TOOLS, register_tools
@@ -99,12 +99,13 @@ async def run():
     else:
         logger.info("No prior memory — first session.")
 
-    try:
-        pw = find_device("pipewire")
-        logger.info(f"Using audio device [{pw}] PipeWire")
-    except RuntimeError:
-        pw = None
-        logger.warning("PipeWire not found — using system default audio device")
+    pw = None
+    if config.mic_name:
+        try:
+            pw = find_device(config.mic_name)
+            logger.info(f"Using audio device [{pw}] '{config.mic_name}'")
+        except RuntimeError:
+            logger.warning(f"Audio device '{config.mic_name}' not found — using system default")
 
     transport = LocalAudioTransport(
         LocalAudioTransportParams(
@@ -124,10 +125,7 @@ async def run():
         ),
     )
 
-    llm = GroqLLMService(
-        api_key=config.groq_api_key,
-        settings=GroqLLMService.Settings(model=config.model),
-    )
+    llm = get_pipeline_llm(config)
 
     tts = CartesiaTTSService(
         api_key=config.cartesia_api_key,

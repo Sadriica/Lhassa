@@ -40,6 +40,7 @@ async def _run_all(config: Config) -> list:
     background services that are cancelled cleanly when the voice pipeline exits.
     """
     await init_db()
+    config.validate()  # Check provider key is present before starting pipeline
 
     api_task = asyncio.create_task(
         run_api_server(host=config.api_host, port=config.api_port),

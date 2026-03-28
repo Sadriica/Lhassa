@@ -126,6 +126,70 @@ TOOLS = ToolsSchema(
             },
             required=["subject", "start", "end"],
         ),
+        FunctionSchema(
+            name="github_list_repos",
+            description="List the user's GitHub repositories, sorted by most recently updated.",
+            properties={
+                "limit": {"type": "integer", "description": "Max number of repos to return (default 10)"},
+            },
+            required=[],
+        ),
+        FunctionSchema(
+            name="github_list_issues",
+            description="List open issues for a GitHub repository.",
+            properties={
+                "repo": {"type": "string", "description": "Repository in owner/name format (e.g. torvalds/linux)"},
+                "state": {"type": "string", "description": "'open' or 'closed' (default 'open')"},
+                "limit": {"type": "integer", "description": "Max number of issues (default 10)"},
+            },
+            required=["repo"],
+        ),
+        FunctionSchema(
+            name="github_get_issue",
+            description="Get the full details of a specific GitHub issue.",
+            properties={
+                "repo": {"type": "string", "description": "Repository in owner/name format"},
+                "number": {"type": "integer", "description": "Issue number"},
+            },
+            required=["repo", "number"],
+        ),
+        FunctionSchema(
+            name="github_list_prs",
+            description="List pull requests for a GitHub repository.",
+            properties={
+                "repo": {"type": "string", "description": "Repository in owner/name format"},
+                "state": {"type": "string", "description": "'open', 'closed', or 'all' (default 'open')"},
+                "limit": {"type": "integer", "description": "Max number of PRs (default 10)"},
+            },
+            required=["repo"],
+        ),
+        FunctionSchema(
+            name="github_get_pr",
+            description="Get full details of a specific GitHub pull request.",
+            properties={
+                "repo": {"type": "string", "description": "Repository in owner/name format"},
+                "number": {"type": "integer", "description": "PR number"},
+            },
+            required=["repo", "number"],
+        ),
+        FunctionSchema(
+            name="github_comment",
+            description="Post a comment on a GitHub issue or pull request.",
+            properties={
+                "repo": {"type": "string", "description": "Repository in owner/name format"},
+                "number": {"type": "integer", "description": "Issue or PR number"},
+                "body": {"type": "string", "description": "Comment text"},
+            },
+            required=["repo", "number", "body"],
+        ),
+        FunctionSchema(
+            name="github_notifications",
+            description="List unread GitHub notifications (mentions, reviews, issues assigned to you, etc.).",
+            properties={
+                "limit": {"type": "integer", "description": "Max notifications to return (default 10)"},
+            },
+            required=[],
+        ),
     ]
 )
 
@@ -146,9 +210,8 @@ async def handle_web_search(params: FunctionCallParams):
     _bump_tool()
 
     try:
-        results = await asyncio.to_thread(
-            lambda: list(DDGS().text(query, max_results=max_results))
-        )
+        from potts.tools.search import web_search
+        results = await web_search(query, max_results)
         if not results:
             await params.result_callback("No results found for that query.")
             return
@@ -230,11 +293,7 @@ async def handle_delegate_to_agent(params: FunctionCallParams):
     from potts.agents.research import ResearchAgent
     from potts.agents.system import SystemAgent
 
-    agent_map = {
-        "code": CodeAgent,
-        "research": ResearchAgent,
-        "system": SystemAgent,
-    }
+    agent_map = {"code": CodeAgent, "research": ResearchAgent, "system": SystemAgent}
     agent = agent_map.get(agent_type, ResearchAgent)()
 
     async def _run():
@@ -435,6 +494,140 @@ async def handle_create_event(params: FunctionCallParams):
         await params.result_callback(f"Error creating event: {e}")
 
 
+# ── GitHub handlers ───────────────────────────────────────────────────────────
+
+def _github_token() -> str:
+    from potts.config import Config
+    token = Config().github_token
+    if not token:
+        raise RuntimeError("GITHUB_TOKEN is not set. Add it to your .env file.")
+    return token
+
+
+async def handle_github_list_repos(params: FunctionCallParams):
+    limit = params.arguments.get("limit", 10)
+    _bump_tool()
+    print(f"\033[2m[🐙 GitHub: listing repos...]\033[0m")
+    try:
+        from potts.tools.github import list_repos
+        repos = await list_repos(_github_token(), limit)
+        lines = [f"- {r['name']} ({'⭐' + str(r['stars']) if r['stars'] else 'no stars'}): {r['description'] or '(no description)'}" for r in repos]
+        await params.result_callback("\n".join(lines) if lines else "No repositories found.")
+    except RuntimeError as e:
+        await params.result_callback(str(e))
+    except Exception as e:
+        await params.result_callback(f"GitHub error: {e}")
+
+
+async def handle_github_list_issues(params: FunctionCallParams):
+    repo = params.arguments.get("repo", "")
+    state_filter = params.arguments.get("state", "open")
+    limit = params.arguments.get("limit", 10)
+    _bump_tool()
+    print(f"\033[2m[🐙 GitHub: issues for {repo}...]\033[0m")
+    try:
+        from potts.tools.github import list_issues
+        issues = await list_issues(_github_token(), repo, state_filter, limit)
+        if not issues:
+            await params.result_callback(f"No {state_filter} issues in {repo}.")
+            return
+        lines = [f"#{i['number']} [{i['state']}] {i['title']} — {i['url']}" for i in issues]
+        await params.result_callback("\n".join(lines))
+    except RuntimeError as e:
+        await params.result_callback(str(e))
+    except Exception as e:
+        await params.result_callback(f"GitHub error: {e}")
+
+
+async def handle_github_get_issue(params: FunctionCallParams):
+    repo = params.arguments.get("repo", "")
+    number = params.arguments.get("number", 0)
+    _bump_tool()
+    try:
+        from potts.tools.github import get_issue
+        issue = await get_issue(_github_token(), repo, number)
+        text = f"#{issue['number']} {issue['title']} [{issue['state']}]\nAuthor: {issue['author']}\n{issue['body'][:800]}\n{issue['url']}"
+        await params.result_callback(text)
+    except RuntimeError as e:
+        await params.result_callback(str(e))
+    except Exception as e:
+        await params.result_callback(f"GitHub error: {e}")
+
+
+async def handle_github_list_prs(params: FunctionCallParams):
+    repo = params.arguments.get("repo", "")
+    state_filter = params.arguments.get("state", "open")
+    limit = params.arguments.get("limit", 10)
+    _bump_tool()
+    print(f"\033[2m[🐙 GitHub: PRs for {repo}...]\033[0m")
+    try:
+        from potts.tools.github import list_prs
+        prs = await list_prs(_github_token(), repo, state_filter, limit)
+        if not prs:
+            await params.result_callback(f"No {state_filter} PRs in {repo}.")
+            return
+        lines = [f"#{p['number']} [{p['state']}{'·draft' if p['draft'] else ''}] {p['title']} by {p['author']}" for p in prs]
+        await params.result_callback("\n".join(lines))
+    except RuntimeError as e:
+        await params.result_callback(str(e))
+    except Exception as e:
+        await params.result_callback(f"GitHub error: {e}")
+
+
+async def handle_github_get_pr(params: FunctionCallParams):
+    repo = params.arguments.get("repo", "")
+    number = params.arguments.get("number", 0)
+    _bump_tool()
+    try:
+        from potts.tools.github import get_pr
+        pr = await get_pr(_github_token(), repo, number)
+        text = (
+            f"PR #{pr['number']}: {pr['title']} [{pr['state']}]\n"
+            f"Author: {pr['author']} | {pr['head']} → {pr['base']}\n"
+            f"+{pr['additions']} -{pr['deletions']} across {pr['changed_files']} files\n"
+            f"{(pr['body'] or '')[:500]}\n{pr['url']}"
+        )
+        await params.result_callback(text)
+    except RuntimeError as e:
+        await params.result_callback(str(e))
+    except Exception as e:
+        await params.result_callback(f"GitHub error: {e}")
+
+
+async def handle_github_comment(params: FunctionCallParams):
+    repo = params.arguments.get("repo", "")
+    number = params.arguments.get("number", 0)
+    body = params.arguments.get("body", "")
+    _bump_tool()
+    print(f"\033[2m[🐙 GitHub: commenting on {repo}#{number}...]\033[0m")
+    try:
+        from potts.tools.github import create_issue_comment
+        url = await create_issue_comment(_github_token(), repo, number, body)
+        await params.result_callback(f"Comment posted: {url}")
+    except RuntimeError as e:
+        await params.result_callback(str(e))
+    except Exception as e:
+        await params.result_callback(f"GitHub error: {e}")
+
+
+async def handle_github_notifications(params: FunctionCallParams):
+    limit = params.arguments.get("limit", 10)
+    _bump_tool()
+    print(f"\033[2m[🐙 GitHub: checking notifications...]\033[0m")
+    try:
+        from potts.tools.github import list_notifications
+        notifs = await list_notifications(_github_token(), limit)
+        if not notifs:
+            await params.result_callback("No unread GitHub notifications.")
+            return
+        lines = [f"[{n['repo']}] {n['type']}: {n['title']} ({n['reason']})" for n in notifs]
+        await params.result_callback("\n".join(lines))
+    except RuntimeError as e:
+        await params.result_callback(str(e))
+    except Exception as e:
+        await params.result_callback(f"GitHub error: {e}")
+
+
 # ── Registration ───────────────────────────────────────────────────────────────
 
 def register_tools(llm):
@@ -450,8 +643,17 @@ def register_tools(llm):
     llm.register_function("send_email", handle_send_email)
     llm.register_function("read_calendar", handle_read_calendar)
     llm.register_function("create_event", handle_create_event)
+    llm.register_function("github_list_repos", handle_github_list_repos)
+    llm.register_function("github_list_issues", handle_github_list_issues)
+    llm.register_function("github_get_issue", handle_github_get_issue)
+    llm.register_function("github_list_prs", handle_github_list_prs)
+    llm.register_function("github_get_pr", handle_github_get_pr)
+    llm.register_function("github_comment", handle_github_comment)
+    llm.register_function("github_notifications", handle_github_notifications)
     logger.info(
         "Tools registered: web_search, shell, read_file, write_file, "
         "delegate_to_agent, schedule_reminder, list_reminders, "
-        "read_emails, send_email, read_calendar, create_event"
+        "read_emails, send_email, read_calendar, create_event, "
+        "github_list_repos, github_list_issues, github_get_issue, "
+        "github_list_prs, github_get_pr, github_comment, github_notifications"
     )
