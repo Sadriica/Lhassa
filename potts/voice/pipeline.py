@@ -5,6 +5,7 @@ from loguru import logger
 from pipecat.audio.vad.silero import SileroVADAnalyzer
 from pipecat.frames.frames import (
     Frame,
+    InterimTranscriptionFrame,
     LLMFullResponseEndFrame,
     LLMFullResponseStartFrame,
     LLMTextFrame,
@@ -29,8 +30,20 @@ from pipecat.turns.user_start.wake_phrase_user_turn_start_strategy import (
 from pipecat.turns.user_turn_strategies import UserTurnStrategies, default_user_turn_start_strategies
 
 from potts.config import Config
-from potts.llm.prompt import SYSTEM_PROMPT
+from potts.llm.prompt import build_system_prompt
+from potts.memory.store import build_memory_context, init_db
 from potts.tools.registry import TOOLS, register_tools
+
+
+class WakeDebug(FrameProcessor):
+    """Muestra transcripciones en tiempo real para afinar el wake word."""
+
+    async def process_frame(self, frame: Frame, direction: FrameDirection):
+        await super().process_frame(frame, direction)
+        if isinstance(frame, (TranscriptionFrame, InterimTranscriptionFrame)):
+            tag = "F" if isinstance(frame, TranscriptionFrame) else "i"
+            print(f"\033[2m[{tag}] {frame.text!r}\033[0m", flush=True)
+        await self.push_frame(frame, direction)
 
 
 class ChatPrinter(FrameProcessor):
@@ -79,6 +92,14 @@ def find_device(name: str) -> int:
 async def run():
     config = Config()
 
+    await init_db()
+    memory_context = await build_memory_context()
+    system_prompt = build_system_prompt(memory_context)
+    if memory_context:
+        logger.info("Memoria cargada.")
+    else:
+        logger.info("Sin memoria previa — primera sesión.")
+
     try:
         pw = find_device("pipewire")
         logger.info(f"Using audio device [{pw}] pipewire")
@@ -115,8 +136,21 @@ async def run():
     )
 
     wake_strategy = WakePhraseUserTurnStartStrategy(
-        phrases=["potts", "hey potts", "oye potts", "pots", "pods", "bots"],
-        timeout=15.0,
+        phrases=[
+            # Pronunciación directa
+            "potts", "pots", "pods", "pot",
+            # Con h aspirada (inglés)
+            "hey potts", "hey pots", "hey pods",
+            # Español
+            "oye potts", "oye pots", "oye pods",
+            # Variantes fonéticas en español (Deepgram nova-3 es)
+            "pos", "pues", "box", "bots", "bot",
+            "voz", "vos", "boz",
+            "pox", "pox",
+            # Con "a" delante (acento colombiano "a ver potts")
+            "a ver potts", "a ver pots",
+        ],
+        timeout=300.0,  # 5 minutos — una vez activo, no requiere repetir wake word
     )
 
     @wake_strategy.event_handler("on_wake_phrase_detected")
@@ -130,7 +164,7 @@ async def run():
     register_tools(llm)
 
     context = LLMContext(
-        messages=[{"role": "system", "content": SYSTEM_PROMPT}],
+        messages=[{"role": "system", "content": system_prompt}],
         tools=TOOLS,
     )
     aggregators = LLMContextAggregatorPair(
@@ -147,6 +181,7 @@ async def run():
         [
             transport.input(),
             stt,
+            WakeDebug(),
             aggregators.user(),
             llm,
             ChatPrinter(),
@@ -166,3 +201,5 @@ async def run():
 
     runner = PipelineRunner()
     await runner.run(task)
+
+    return context, context.get_messages()
