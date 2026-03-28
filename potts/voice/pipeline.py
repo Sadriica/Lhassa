@@ -31,20 +31,15 @@ from pipecat.turns.user_turn_strategies import UserTurnStrategies, default_user_
 
 from potts.config import Config
 from potts.llm.prompt import build_system_prompt
-from potts.memory.store import build_memory_context, init_db
+from potts.memory.store import build_memory_context
+from potts.state import state
 from potts.tools.registry import TOOLS, register_tools
 from potts.voice.beep import play_beep
-from potts.voice.mute_strategy import WakeWordOnlyMuteStrategy
-
-
-WAKE_VARIANTS = {
-    "potts", "pots", "pods", "pot", "pos", "pues",
-    "box", "bots", "bot", "voz", "vos", "boz", "pox",
-}
+from potts.voice.mute_strategy import WAKE_VARIANTS, WakeWordOnlyMuteStrategy
 
 
 class WakeDebug(FrameProcessor):
-    """Muestra transcripciones en tiempo real — activo durante desarrollo."""
+    """Prints live STT transcriptions to the terminal — useful during development."""
 
     async def process_frame(self, frame: Frame, direction: FrameDirection):
         await super().process_frame(frame, direction)
@@ -55,7 +50,7 @@ class WakeDebug(FrameProcessor):
 
 
 class ChatPrinter(FrameProcessor):
-    """Imprime tokens del LLM en tiempo real (streaming visual)."""
+    """Streams LLM tokens to the terminal in real time."""
 
     def __init__(self):
         super().__init__()
@@ -72,7 +67,6 @@ class ChatPrinter(FrameProcessor):
             self._potts_speaking = True
 
         elif isinstance(frame, LLMTextFrame) and self._potts_speaking:
-            # Streaming: cada token se imprime inmediatamente
             print(frame.text, end="", flush=True)
 
         elif isinstance(frame, LLMFullResponseEndFrame) and self._potts_speaking:
@@ -83,6 +77,7 @@ class ChatPrinter(FrameProcessor):
 
 
 def find_device(name: str) -> int:
+    """Return the index of the first audio device whose name contains `name`."""
     p = pyaudio.PyAudio()
     try:
         for i in range(p.get_device_count()):
@@ -94,19 +89,19 @@ def find_device(name: str) -> int:
 
 
 async def run():
+    """Build and run the full Pipecat voice pipeline. Returns (context, messages)."""
     config = Config()
 
-    await init_db()
     memory_context = await build_memory_context()
     system_prompt = build_system_prompt(memory_context)
     if memory_context:
-        logger.info("Memoria cargada.")
+        logger.info("Memory loaded.")
     else:
-        logger.info("Sin memoria previa — primera sesión.")
+        logger.info("No prior memory — first session.")
 
     try:
         pw = find_device("pipewire")
-        logger.info(f"Using audio device [{pw}] pipewire")
+        logger.info(f"Using audio device [{pw}] PipeWire")
     except RuntimeError:
         pw = None
         logger.warning("PipeWire not found — using system default audio device")
@@ -146,27 +141,30 @@ async def run():
         tools=TOOLS,
     )
 
+    # Wake phrases cover common mishearings of "Potts" in Spanish accent
+    wake_phrases = [
+        "potts", "pots", "pods", "pot",
+        "hey potts", "hey pots", "hey pods",
+        "oye potts", "oye pots", "oye pods",
+        "pos", "pues", "box", "bots", "bot",
+        "voz", "vos", "boz", "pox",
+        "a ver potts", "a ver pots",
+    ]
+
     wake_strategy = WakePhraseUserTurnStartStrategy(
-        phrases=[
-            "potts", "pots", "pods", "pot",
-            "hey potts", "hey pots", "hey pods",
-            "oye potts", "oye pots", "oye pods",
-            "pos", "pues", "box", "bots", "bot",
-            "voz", "vos", "boz", "pox",
-            "a ver potts", "a ver pots",
-        ],
-        timeout=300.0,
+        phrases=wake_phrases,
+        timeout=300.0,  # 5 minutes before auto-sleep
     )
 
     @wake_strategy.event_handler("on_wake_phrase_detected")
     async def on_wake(strategy, phrase):
-        print(f"\033[1;33m[Potts activo]\033[0m", flush=True)
+        print(f"\033[1;33m[Potts active]\033[0m", flush=True)
         asyncio.create_task(play_beep(freq=880, duration_ms=120))
 
     @wake_strategy.event_handler("on_wake_phrase_timeout")
     async def on_sleep(strategy):
         asyncio.create_task(play_beep(freq=440, duration_ms=80))
-        print(f"\033[2m[Potts en espera — di 'Potts' para activar]\033[0m", flush=True)
+        print(f"\033[2m[Potts sleeping — say 'Potts' to wake]\033[0m", flush=True)
 
     aggregators = LLMContextAggregatorPair(
         context,
@@ -183,7 +181,7 @@ async def run():
         [
             transport.input(),
             stt,
-            WakeDebug(),
+            *([WakeDebug()] if config.debug else []),
             aggregators.user(),
             llm,
             ChatPrinter(),
@@ -198,14 +196,23 @@ async def run():
         params=PipelineParams(allow_interruptions=True),
     )
 
-    logger.info("Potts en espera. Di 'Potts' para activar.\n")
-    print("\033[2m[Potts en espera — di 'Potts' para activar]\033[0m\n")
+    # Expose refs so notifier can inject TTS frames and main can recover messages on shutdown
+    state.pipeline_task = task
+    state.llm_context = context
+
+    logger.info("Potts ready. Say 'Potts' to activate.\n")
+    print("\033[2m[Potts sleeping — say 'Potts' to wake]\033[0m\n")
 
     runner = PipelineRunner()
 
     try:
         await runner.run(task)
+    except asyncio.CancelledError:
+        pass  # Clean shutdown from main
     except Exception as e:
         logger.error(f"Pipeline error: {e}")
+    finally:
+        state.pipeline_task = None
+        # Keep llm_context alive so _run_all can read messages after cancellation
 
     return context, context.get_messages()

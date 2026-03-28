@@ -1,0 +1,176 @@
+# Scheduler
+
+Potts has a built-in reminder system. You can set reminders by voice and Potts will notify you at the right time — speaking the message aloud if you're in an active session, or sending a desktop notification if it's idle.
+
+---
+
+## How It Works
+
+The scheduler is a background asyncio task that runs alongside the voice pipeline and the API server. It **polls the database every 30 seconds**, checks for any tasks whose `run_at` time is in the past with status `pending`, fires them, and marks them as done.
+
+```
+Scheduler polls → find due tasks → notify user → mark done → sleep 30s → repeat
+```
+
+This means reminders fire within 30 seconds of their scheduled time. If you set a reminder for exactly 14:00, it will fire somewhere between 14:00:00 and 14:00:30.
+
+The scheduler starts automatically with `make run` and stops cleanly when you press Ctrl+C.
+
+---
+
+## Setting Reminders by Voice
+
+### Relative time (in_minutes)
+
+```
+"Potts, remind me in 20 minutes to call John."
+"Potts, set a reminder in 5 minutes — the pasta is boiling."
+"Potts, remind me in 2 hours to take my medication."
+"Potts, remind me in 1 hour to check the backup."
+```
+
+Potts confirms:
+```
+Potts: Reminder 'call John' set for in 20 minutes.
+```
+
+### Absolute time (at_time)
+
+```
+"Potts, remind me at 15:00 to join the standup."
+"Potts, set a reminder at 8:30 tomorrow to take my vitamins."
+"Potts, remind me at 9pm to watch the match."
+```
+
+Potts confirms:
+```
+Potts: Reminder 'standup' set for at 15:00.
+```
+
+### ISO 8601 format
+
+You can also give a fully qualified ISO 8601 timestamp — useful when delegating from a script or the API:
+
+```
+at_time: "2026-04-01T14:00:00+02:00"
+```
+
+---
+
+## Time Format Details
+
+| Format | Example | Interpretation |
+|---|---|---|
+| `HH:MM` | `15:30` | Local time today (tomorrow if the time has already passed today) |
+| ISO 8601 (no tz) | `2026-04-01T14:00:00` | Treated as local time, then converted to UTC |
+| ISO 8601 (with tz) | `2026-04-01T14:00:00+02:00` | Exact UTC moment |
+
+All times are stored internally as UTC ISO 8601 strings. Potts converts HH:MM to UTC using your system's local timezone.
+
+---
+
+## Notification Routing
+
+When a reminder fires, Potts routes the notification based on current state:
+
+| State | How you're notified |
+|---|---|
+| Voice pipeline active (you said the wake word recently) | Potts **speaks the message** via Cartesia TTS |
+| Voice pipeline idle / sleeping | **Desktop notification** via `notify-send` |
+| `notify-send` not installed | Message is **printed to the terminal** |
+
+The desktop notification title is always "Potts — Reminder".
+
+### Example: spoken reminder
+
+```
+[15:00:12] Potts: Reminder — join the standup.
+```
+
+### Example: desktop notification
+
+```
+Title: Potts — Reminder
+Body: Join the standup.
+```
+
+---
+
+## Listing Pending Reminders
+
+```
+You: Potts, what reminders do I have?
+Potts: You have two pending reminders.
+       Number one: call John at 14:20.
+       Number two: check backup at 16:00.
+
+You: Potts, any upcoming reminders?
+Potts: No pending reminders.
+```
+
+The `list_reminders` tool returns all reminders with status `pending`. Fired reminders are marked `done` and don't appear in the list.
+
+---
+
+## Viewing Scheduled Tasks in the Dashboard
+
+The **Scheduled Tasks** panel in the dashboard at `http://localhost:7860` shows all tasks from the database (last 50, any status), including:
+
+- Task name
+- Scheduled time
+- Message
+- Status (pending / done)
+
+The panel refreshes when you load the page. The WebSocket broadcasts a `scheduled_task_fired` event when a task fires, which can be used by the dashboard to refresh the panel.
+
+---
+
+## REST API
+
+You can also query scheduled tasks directly:
+
+```bash
+# All tasks (last 50)
+curl http://localhost:7860/api/scheduled
+```
+
+Response format:
+```json
+[
+  {
+    "id": 1,
+    "name": "call John",
+    "run_at": "2026-03-28T14:20:00+00:00",
+    "message": "Time to call John",
+    "status": "pending",
+    "created_at": "2026-03-28T13:58:32+00:00"
+  }
+]
+```
+
+---
+
+## Limitations
+
+- **30-second granularity** — reminders fire within 30 seconds of the scheduled time, not at the exact second.
+- **No recurring reminders** — each reminder fires once and is marked done. To repeat, set a new one.
+- **No cancellation by voice** — once set, a reminder can't be cancelled by speaking. You can delete it from the SQLite database directly, or wait for it to fire.
+- **No sound if Potts is not running** — if you stop Potts before a reminder fires, it won't trigger. Reminders are not persisted to a system cron.
+
+---
+
+## Direct Database Access
+
+Reminders live in `~/.potts/memory.db`, in the `scheduled_tasks` table:
+
+```bash
+sqlite3 ~/.potts/memory.db "SELECT * FROM scheduled_tasks WHERE status='pending';"
+```
+
+To cancel a pending reminder manually:
+
+```bash
+sqlite3 ~/.potts/memory.db "UPDATE scheduled_tasks SET status='cancelled' WHERE id=3;"
+```
+
+(Any non-`pending` status prevents the scheduler from firing the task.)

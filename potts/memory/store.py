@@ -1,16 +1,12 @@
 """
-Memoria persistente de Potts — Opción C (híbrida)
+Persistent SQLite store for Potts memory.
 
-Tablas:
-  facts    — hechos sobre el usuario extraídos automáticamente
-  sessions — resumen de cada conversación
-
-Flujo:
-  Al iniciar → load_context() inyecta hechos + últimos resúmenes en el system prompt
-  Al terminar → save_session() pide al LLM que extraiga hechos y resuma la conversación
+Tables:
+  facts           — key/value facts about the user, extracted by the LLM
+  sessions        — one-sentence summaries of past conversations
+  scheduled_tasks — reminders set via the schedule_reminder tool
 """
 
-import json
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
@@ -21,7 +17,7 @@ DB_PATH = Path.home() / ".potts" / "memory.db"
 
 
 async def init_db():
-    """Crea las tablas si no existen."""
+    """Create tables if they don't exist. Safe to call multiple times."""
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute("""
@@ -42,11 +38,23 @@ async def init_db():
                 summary   TEXT NOT NULL
             )
         """)
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS scheduled_tasks (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                name        TEXT NOT NULL,
+                run_at      TEXT NOT NULL,
+                message     TEXT NOT NULL,
+                status      TEXT NOT NULL DEFAULT 'pending',
+                created_at  TEXT NOT NULL
+            )
+        """)
         await db.commit()
 
 
+# ── Facts ──────────────────────────────────────────────────────────────────────
+
 async def upsert_fact(key: str, value: str):
-    """Inserta o actualiza un hecho."""
+    """Insert or update a fact. Uses ON CONFLICT for atomic upsert."""
     now = datetime.now(timezone.utc).isoformat()
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute("""
@@ -57,23 +65,29 @@ async def upsert_fact(key: str, value: str):
 
 
 async def load_facts() -> list[dict]:
-    """Retorna todos los hechos almacenados."""
+    """Return all stored facts, most recently updated first."""
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
-        async with db.execute("SELECT key, value, updated FROM facts ORDER BY updated DESC") as cur:
+        async with db.execute(
+            "SELECT key, value, updated FROM facts ORDER BY updated DESC"
+        ) as cur:
             return [dict(row) for row in await cur.fetchall()]
 
 
+# ── Sessions ───────────────────────────────────────────────────────────────────
+
 async def save_session(summary: str):
-    """Guarda el resumen de una sesión."""
+    """Persist a one-sentence session summary with a UTC timestamp."""
     date = datetime.now(timezone.utc).isoformat()
     async with aiosqlite.connect(DB_PATH) as db:
-        await db.execute("INSERT INTO sessions(date, summary) VALUES(?, ?)", (date, summary))
+        await db.execute(
+            "INSERT INTO sessions(date, summary) VALUES(?, ?)", (date, summary)
+        )
         await db.commit()
 
 
 async def load_recent_sessions(n: int = 5) -> list[dict]:
-    """Retorna los últimos N resúmenes de sesión."""
+    """Return the N most recent session summaries."""
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         async with db.execute(
@@ -82,10 +96,59 @@ async def load_recent_sessions(n: int = 5) -> list[dict]:
             return [dict(row) for row in await cur.fetchall()]
 
 
+# ── Scheduled tasks ────────────────────────────────────────────────────────────
+
+async def add_scheduled_task(name: str, run_at: str, message: str) -> int:
+    """Insert a new scheduled task. run_at must be ISO 8601 UTC."""
+    created = datetime.now(timezone.utc).isoformat()
+    async with aiosqlite.connect(DB_PATH) as db:
+        cur = await db.execute(
+            """INSERT INTO scheduled_tasks(name, run_at, message, status, created_at)
+               VALUES(?, ?, ?, 'pending', ?)""",
+            (name, run_at, message, created),
+        )
+        await db.commit()
+        return cur.lastrowid
+
+
+async def load_pending_tasks() -> list[dict]:
+    """Return pending tasks whose run_at is at or before the current UTC time."""
+    now = datetime.now(timezone.utc).isoformat()
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            """SELECT * FROM scheduled_tasks
+               WHERE status='pending' AND run_at <= ?
+               ORDER BY run_at""",
+            (now,),
+        ) as cur:
+            return [dict(row) for row in await cur.fetchall()]
+
+
+async def load_all_scheduled_tasks() -> list[dict]:
+    """Return the 50 most recent scheduled tasks (any status)."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            "SELECT * FROM scheduled_tasks ORDER BY run_at DESC LIMIT 50"
+        ) as cur:
+            return [dict(row) for row in await cur.fetchall()]
+
+
+async def mark_task_done(task_id: int):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "UPDATE scheduled_tasks SET status='done' WHERE id=?", (task_id,)
+        )
+        await db.commit()
+
+
+# ── Memory context for system prompt injection ─────────────────────────────────
+
 async def build_memory_context() -> Optional[str]:
     """
-    Construye el bloque de contexto que se inyecta en el system prompt.
-    Retorna None si no hay memoria guardada.
+    Build the memory block injected into the system prompt at startup.
+    Returns None if the DB is empty (first session).
     """
     facts = await load_facts()
     sessions = await load_recent_sessions(5)
@@ -97,12 +160,12 @@ async def build_memory_context() -> Optional[str]:
 
     if facts:
         facts_text = "\n".join(f"- {f['key']}: {f['value']}" for f in facts)
-        parts.append(f"## Lo que sabes sobre el usuario\n{facts_text}")
+        parts.append(f"## What you know about the user\n{facts_text}")
 
     if sessions:
         sessions_text = "\n".join(
             f"- [{s['date'][:10]}]: {s['summary']}" for s in reversed(sessions)
         )
-        parts.append(f"## Conversaciones recientes\n{sessions_text}")
+        parts.append(f"## Recent conversations\n{sessions_text}")
 
     return "\n\n".join(parts)

@@ -4,20 +4,24 @@ You operate primarily through voice. Keep responses concise and natural for spee
 - No markdown, bullet points, or formatting — this is spoken audio
 - Sentences should be short and clear
 - When you don't know something, say so directly
-- You have a calm, confident, and slightly dry sense of humor
+- You have a calm, confident, and slightly dry sense of humour
 
-You have access to tools you can use when needed:
+Available tools:
 - web_search: search the internet for up-to-date information
-- shell: run shell commands on the user's machine (Linux/Arch)
-- read_file: read a file from the filesystem
-- write_file: write a file to the filesystem
+- shell: run shell commands on the user's Linux/Arch machine
+- read_file / write_file: read and write files on the filesystem
+- delegate_to_agent: hand off a complex task to a background agent (code / research / system); you'll be notified when it finishes
+- schedule_reminder: set a reminder for a specific time or after N minutes
+- list_reminders: show all pending reminders
+- read_emails / send_email: read and send Outlook emails
+- read_calendar / create_event: read and create Outlook calendar events
 
-When using tools, don't narrate what you're doing — just do it and report the result concisely.
-After a tool returns results, summarize them in 1-3 spoken sentences maximum."""
+When using tools, don't narrate — just do it and report the result in 1–3 sentences.
+For long tasks, delegate to an agent and tell the user you'll notify them when done."""
 
 
-def build_system_prompt(memory_context: str = None) -> str:
-    """Construye el system prompt con memoria inyectada si existe."""
+def build_system_prompt(memory_context: str | None = None) -> str:
+    """Return the full system prompt, optionally with injected memory context."""
     if not memory_context:
         return BASE_PROMPT
     return f"{BASE_PROMPT}\n\n---\n\n{memory_context}"

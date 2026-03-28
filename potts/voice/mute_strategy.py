@@ -1,7 +1,7 @@
 """
-Estrategia de mute que silencia al usuario mientras Potts habla,
-EXCEPTO cuando detecta la wake word — en ese caso deja pasar el frame
-para que WakePhraseUserTurnStartStrategy dispare la interrupción.
+Mute strategy that silences user audio while Potts is speaking,
+EXCEPT when a wake phrase is detected — in that case the frame is allowed through
+so WakePhraseUserTurnStartStrategy can trigger an interruption.
 """
 
 from pipecat.frames.frames import (
@@ -12,7 +12,8 @@ from pipecat.frames.frames import (
 )
 from pipecat.turns.user_mute.base_user_mute_strategy import BaseUserMuteStrategy
 
-WAKE_VARIANTS = {
+# Canonical set of wake phrase variants (covers common mishearings of "Potts")
+WAKE_VARIANTS: set[str] = {
     "potts", "pots", "pods", "pot",
     "hey potts", "hey pots", "hey pods",
     "oye potts", "oye pots", "oye pods",
@@ -24,9 +25,9 @@ WAKE_VARIANTS = {
 
 class WakeWordOnlyMuteStrategy(BaseUserMuteStrategy):
     """
-    Mute mientras Potts habla.
-    Excepción: si la transcripción contiene la wake word, pasa — esto
-    permite que WakePhraseUserTurnStartStrategy dispare la interrupción.
+    Mutes user input while Potts is speaking.
+    Exception: if the transcription contains a wake phrase, it passes through
+    so WakePhraseUserTurnStartStrategy can fire an interruption.
     """
 
     def __init__(self):
@@ -44,10 +45,10 @@ class WakeWordOnlyMuteStrategy(BaseUserMuteStrategy):
         elif isinstance(frame, BotStoppedSpeakingFrame):
             self._bot_speaking = False
 
-        # Mientras Potts habla, deja pasar solo si contiene wake word
+        # While bot is speaking, allow wake phrases through (return False = not muted)
         if self._bot_speaking and isinstance(frame, TranscriptionFrame):
             text = frame.text.lower().strip().rstrip(".,!?")
             if any(w in text for w in WAKE_VARIANTS):
-                return False  # no muted → interrupción permitida
+                return False
 
         return self._bot_speaking

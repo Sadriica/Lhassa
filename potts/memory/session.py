@@ -1,6 +1,6 @@
 """
-Gestión del ciclo de vida de la sesión.
-Al finalizar, llama al LLM para extraer hechos y generar un resumen.
+Session lifecycle — called on shutdown to extract facts and save a summary.
+Uses Groq to analyse the conversation and produce structured JSON output.
 """
 
 import json
@@ -8,33 +8,33 @@ from loguru import logger
 from groq import AsyncGroq
 
 from potts.memory.store import save_session, upsert_fact
+from potts.state import state
 
 
-EXTRACT_PROMPT = """Analiza esta conversación y responde en JSON con este formato exacto:
+EXTRACT_PROMPT = """Analyse this conversation and respond with JSON in exactly this format:
 {
-  "facts": [{"key": "nombre_clave", "value": "valor"}],
-  "summary": "resumen de una oración de qué se habló"
+  "facts": [{"key": "snake_case_key", "value": "value"}],
+  "summary": "one-sentence summary of what was discussed"
 }
 
-Reglas para facts:
-- Solo incluye hechos NUEVOS o ACTUALIZADOS sobre el usuario (nombre, trabajo, proyectos, preferencias, etc.)
-- Usa claves en snake_case descriptivas: nombre, trabajo, sistema_operativo, proyecto_actual, etc.
-- Si no hay hechos nuevos, usa facts: []
-- El summary SIEMPRE debe existir, una oración concisa
+Rules for facts:
+- Only include NEW or UPDATED facts about the user (name, job, projects, preferences, OS, etc.)
+- Keys must be descriptive snake_case: name, job, current_project, operating_system, etc.
+- If there are no new facts, use facts: []
+- The summary field is always required — one concise sentence
 
-Conversación:
+Conversation:
 {conversation}"""
 
 
 async def close_session(api_key: str, model: str, messages: list):
     """
-    Llamado al cerrar Potts. Extrae hechos y guarda resumen de la sesión.
-    Solo procesa si hubo al menos un intercambio real (>2 mensajes).
+    Extract facts and save a session summary when Potts shuts down.
+    Skips sessions with fewer than 2 real exchanges (user + assistant).
     """
-    # Filtra solo user/assistant, ignora el system prompt
     exchange = [m for m in messages if m.get("role") in ("user", "assistant")]
     if len(exchange) < 2:
-        logger.info("Sesión muy corta, no se guarda en memoria.")
+        logger.info("Session too short — skipping memory save.")
         return
 
     conversation_text = "\n".join(
@@ -53,6 +53,8 @@ async def close_session(api_key: str, model: str, messages: list):
             response_format={"type": "json_object"},
             temperature=0,
         )
+        state.metrics["groq_calls"] += 1
+
         raw = response.choices[0].message.content
         data = json.loads(raw)
 
@@ -64,11 +66,14 @@ async def close_session(api_key: str, model: str, messages: list):
             value = fact.get("value", "").strip()
             if key and value:
                 await upsert_fact(key, value)
-                logger.info(f"[memoria] hecho guardado: {key} = {value}")
+                logger.info(f"[memory] fact saved: {key} = {value}")
 
         if summary:
             await save_session(summary)
-            logger.info(f"[memoria] sesión guardada: {summary}")
+            state.metrics["sessions"] += 1
+            logger.info(f"[memory] session saved: {summary}")
 
+    except json.JSONDecodeError as e:
+        logger.error(f"Could not parse memory extraction response: {e}")
     except Exception as e:
-        logger.error(f"Error al guardar memoria de sesión: {e}")
+        logger.error(f"Error saving session memory: {e}")
