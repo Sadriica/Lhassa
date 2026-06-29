@@ -164,8 +164,12 @@ class Config:
     )
 
     # ── Dashboard API ─────────────────────────────────────────────────────────
-    api_host: str = os.getenv("POTTS_API_HOST", "0.0.0.0")
-    api_port: int = _safe_int(os.getenv("POTTS_API_PORT", "7860"), 7860)
+    # Bind to localhost only by default — the dashboard is not authenticated and
+    # potts can run privileged/root commands, so it must not be network-reachable.
+    # Set POTTS_API_HOST=0.0.0.0 only if you accept exposing it on your LAN.
+    api_host: str = os.getenv("POTTS_API_HOST", "127.0.0.1")
+    # Dedicated port for potts (uncommon, unlikely to clash).
+    api_port: int = _safe_int(os.getenv("POTTS_API_PORT", "7766"), 7766)
 
     # ── Microsoft Graph — Outlook email + calendar (optional) ─────────────────
     ms_tenant_id: str = os.getenv("MS_TENANT_ID", "")
@@ -249,7 +253,7 @@ class Config:
             )
 
         # ── Port ───────────────────────────────────────────────────────────────
-        port_raw = os.getenv("POTTS_API_PORT", "7860")
+        port_raw = os.getenv("POTTS_API_PORT", "7766")
         try:
             int(port_raw)
         except ValueError:

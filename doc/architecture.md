@@ -288,7 +288,7 @@ potts/                          ← project root
 │   │       ├── HistoryPanel.jsx← session summaries
 │   │       └── ScheduledPanel.jsx
 │   ├── package.json
-│   └── vite.config.js          ← dev proxy: /api + /ws → localhost:7860
+│   └── vite.config.js          ← dev proxy: /api + /ws → localhost:7766
 │
 └── doc/                        ← this documentation
     ├── getting-started.md

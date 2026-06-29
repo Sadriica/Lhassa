@@ -327,6 +327,6 @@ Potts, lee el archivo ~/notas/tareas.txt y resúmelo.
 
 **You can interrupt.** If Potts is speaking and you say "Potts" again, it stops and listens immediately.
 
-**The dashboard shows everything.** Open http://localhost:7860 to see agent output in full, memory facts, session history, and pending reminders.
+**The dashboard shows everything.** Open http://localhost:7766 to see agent output in full, memory facts, session history, and pending reminders.
 
 **Wake timeout.** After 5 minutes of no interaction, Potts goes to sleep (low beep). Say "Potts" to wake it again. Change the timeout with `POTTS_WAKE_TIMEOUT` in `.env`.

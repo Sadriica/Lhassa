@@ -384,8 +384,8 @@ In debug mode, every STT frame is printed to the terminal:
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
-| `POTTS_API_HOST` | No | `0.0.0.0` | Host the API server binds to. `0.0.0.0` makes it accessible on all network interfaces (LAN + localhost). Use `127.0.0.1` to restrict to localhost only. |
-| `POTTS_API_PORT` | No | `7860` | Port for the dashboard and API. Change this if 7860 is in use. |
+| `POTTS_API_HOST` | No | `127.0.0.1` | Host the API server binds to. Defaults to localhost only (the dashboard is unauthenticated and Potts can run privileged commands). Set `0.0.0.0` only to expose it on your LAN. |
+| `POTTS_API_PORT` | No | `7766` | Port for the dashboard and API. Change this if 7860 is in use. |
 
 ---
 
@@ -428,7 +428,7 @@ POTTS_VOICE_ID=a0e99841-438c-4a64-b679-ae501e7d6091
 # POTTS_MIC_NAME=         # leave empty for OS default; "pipewire" on Linux
 
 # ── Dashboard ─────────────────────────────────────────────────────────────────
-POTTS_API_HOST=0.0.0.0
+POTTS_API_HOST=127.0.0.1
 POTTS_API_PORT=7860
 
 # ── Logging ───────────────────────────────────────────────────────────────────

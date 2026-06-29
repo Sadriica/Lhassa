@@ -63,7 +63,7 @@ make install   # first time: installs Python deps + builds the dashboard (~2–5
 make run       # start Potts
 ```
 
-Open [http://localhost:7860](http://localhost:7860) for the live dashboard (optional).
+Open [http://localhost:7766](http://localhost:7766) for the live dashboard (optional).
 
 ---
 

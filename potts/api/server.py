@@ -1,6 +1,6 @@
 """
 FastAPI server — REST API + WebSocket fan-out + React static file serving.
-Runs at http://0.0.0.0:7860 by default (configurable via POTTS_API_HOST / POTTS_API_PORT).
+Runs at http://127.0.0.1:7766 by default (configurable via POTTS_API_HOST / POTTS_API_PORT).
 """
 
 import asyncio
@@ -278,7 +278,7 @@ else:
 
 # ── Entry point (called from main.py via asyncio.create_task) ─────────────────
 
-async def run_api_server(host: str = "0.0.0.0", port: int = 7860):
+async def run_api_server(host: str = "127.0.0.1", port: int = 7766):
     import uvicorn
 
     config = uvicorn.Config(
