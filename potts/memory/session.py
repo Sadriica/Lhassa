@@ -1,14 +1,18 @@
 """
 Session lifecycle — called on shutdown to extract facts and save a summary.
-Uses the configured LLM provider (same as the voice pipeline). Falls back to
-Groq if the active provider doesn't support JSON response_format.
+The fact-extraction LLM call is routed through the cost gateway
+(``potts.llm.gateway``) so the shared cache, daily token budget, and cost
+ledger all apply. The gateway is provider-agnostic, so the request for JSON
+output lives in the prompt/system text rather than a provider-specific
+``response_format`` flag.
 """
 
 import asyncio
 import json
-import os
+
 from loguru import logger
 
+from potts.llm.gateway import BudgetExceeded, gateway
 from potts.memory.store import save_session, upsert_fact
 from potts.state import state
 
@@ -28,17 +32,24 @@ Rules for facts:
 Conversation:
 {conversation}"""
 
-_GROQ_FALLBACK_MODEL = os.getenv(
-    "POTTS_MEMORY_FALLBACK_MODEL",
-    "llama-3.3-70b-versatile",
+# The gateway is provider-agnostic and does not pass an OpenAI-style
+# ``response_format=json_object``, so the JSON-only contract is stated here in
+# the system prompt — it covers both the Anthropic and OpenAI-compatible paths.
+EXTRACT_SYSTEM = (
+    "You are a JSON extraction assistant. Reply with valid JSON only — "
+    "no prose, no markdown."
 )
+
+# Upper bound on how long fact extraction may block shutdown.
+_EXTRACT_TIMEOUT = 45.0
 
 
 async def close_session(messages: list):
     """
     Extract facts and save a session summary when Potts shuts down.
     Skips sessions with fewer than 2 real exchanges (user + assistant).
-    Uses the configured LLM provider; falls back gracefully on error.
+    Routes the extraction through the cost gateway; falls back gracefully on
+    error and never crashes shutdown.
     """
     exchange = [m for m in messages if m.get("role") in ("user", "assistant")]
     if len(exchange) < 2:
@@ -56,17 +67,22 @@ async def close_session(messages: list):
         if isinstance(m.get("content"), str)
     )
 
-    prompt = EXTRACT_PROMPT.format(conversation=conversation_text)
+    # .replace (not .format) — EXTRACT_PROMPT contains literal JSON braces.
+    prompt = EXTRACT_PROMPT.replace("{conversation}", conversation_text)
 
     try:
-        from potts.config import Config
-        from potts.llm.provider import get_agent_client
-        config = Config()
-        client, provider = get_agent_client(config)
-        raw = await _extract_session_payload(config, client, provider, prompt)
+        raw = await _extract_session_payload(prompt)
+    except BudgetExceeded as e:
+        logger.warning(f"[memory] Daily LLM budget reached — skipping memory extraction: {e}")
+        return
+    except Exception as e:
+        logger.error(f"Error extracting session memory: {e}")
+        return
 
-        state.metrics["llm_calls"] += 1
+    if not raw:
+        return
 
+    try:
         data = json.loads(raw)
         facts = data.get("facts", [])
         summary = data.get("summary", "")
@@ -89,64 +105,30 @@ async def close_session(messages: list):
         logger.error(f"Error saving session memory: {e}")
 
 
-async def _extract_session_payload(config, client, provider: str, prompt: str) -> str:
-    try:
-        if provider == "anthropic":
-            return await _extract_anthropic(client, config.model, prompt)
-        return await _extract_openai_compat(client, config.model, prompt)
-    except Exception as primary_error:
-        if provider in ("anthropic", "groq") or not getattr(config, "groq_api_key", ""):
-            raise
+async def _extract_session_payload(prompt: str) -> str:
+    """Run fact extraction through the cost gateway and return the raw JSON text.
 
-        logger.warning(
-            f"[memory] Primary extraction via {provider} failed, retrying with Groq: {primary_error}"
-        )
-        return await _extract_with_groq_fallback(prompt, config.groq_api_key)
-
-
-async def _extract_with_groq_fallback(prompt: str, api_key: str) -> str:
-    from openai import AsyncOpenAI
-
-    client = AsyncOpenAI(
-        api_key=api_key,
-        base_url="https://api.groq.com/openai/v1",
-    )
-    try:
-        return await _extract_openai_compat(client, _GROQ_FALLBACK_MODEL, prompt)
-    finally:
-        await client.aclose()
-
-
-async def _extract_openai_compat(client, model: str, prompt: str) -> str:
-    """Call an OpenAI-compatible client and request JSON output."""
-    response = await asyncio.wait_for(
-        client.chat.completions.create(
-            model=model,
-            messages=[{"role": "user", "content": prompt}],
-            response_format={"type": "json_object"},
-            temperature=0,
-            timeout=30,
-        ),
-        timeout=45.0,
-    )
-    if not response.choices or not response.choices[0].message.content:
-        return "{}"
-    return response.choices[0].message.content
-
-
-async def _extract_anthropic(client, model: str, prompt: str) -> str:
-    """Call the Anthropic client. Instructs the model to reply with JSON only."""
-    response = await asyncio.wait_for(
-        client.messages.create(
-            model=model,
+    The gateway applies the shared cache, daily token budget (raising
+    ``BudgetExceeded`` when spent), and cost ledger. Wrapped in a timeout so a
+    stalled provider can never hang shutdown.
+    """
+    result = await asyncio.wait_for(
+        gateway.complete(
+            [{"role": "user", "content": prompt}],
+            system=EXTRACT_SYSTEM,
             max_tokens=1024,
-            messages=[{"role": "user", "content": prompt}],
-            system="You are a JSON extraction assistant. Reply with valid JSON only — no prose, no markdown.",
+            temperature=0,
         ),
-        timeout=45.0,
+        timeout=_EXTRACT_TIMEOUT,
     )
-    # Extract text from the first content block
-    for block in response.content:
-        if hasattr(block, "text"):
-            return block.text
-    return "{}"
+    return _strip_json_fence(result.text)
+
+
+def _strip_json_fence(text: str) -> str:
+    """Strip a ```json … ``` markdown fence if a provider wrapped the JSON in one."""
+    cleaned = (text or "").strip()
+    if cleaned.startswith("```"):
+        cleaned = cleaned.split("\n", 1)[-1] if "\n" in cleaned else ""
+        if cleaned.endswith("```"):
+            cleaned = cleaned[: -len("```")]
+    return cleaned.strip() or "{}"

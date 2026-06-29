@@ -11,6 +11,29 @@ _PROVIDERS = {"groq", "anthropic", "openai", "openrouter", "ollama", "cerebras"}
 # Config is instantiated and the result is stable across the process lifetime.
 _CLAUDE_AVAILABLE = shutil.which("claude") is not None
 
+# Local AI coding CLIs that the run_ai_cli tool can drive, in auto-detect priority.
+# Kept here (rather than importing potts.agents.local_cli) so config stays free of
+# heavier imports; the per-CLI argv table lives in potts/agents/local_cli.py.
+_AI_CLI_BINARIES = ("claude", "codex", "opencode")
+
+
+def _detect_ai_cli() -> str:
+    """
+    Resolve POTTS_AI_CLI.
+
+    If POTTS_AI_CLI is set explicitly, use it (lowercased). Otherwise auto-detect
+    the first installed CLI in _AI_CLI_BINARIES priority order, falling back to
+    "claude" when none is installed (the run_ai_cli tool reports a clear
+    not-installed message at call time).
+    """
+    explicit = os.getenv("POTTS_AI_CLI")
+    if explicit:
+        return explicit.strip().lower()
+    for cli in _AI_CLI_BINARIES:
+        if shutil.which(cli) is not None:
+            return cli
+    return "claude"
+
 # Default models per provider — used when POTTS_MODEL is not set.
 _DEFAULT_MODELS = {
     "anthropic":  "claude-haiku-4-5-20251001",
@@ -169,6 +192,13 @@ class Config:
     # Defaults to the cwd where Potts was launched if not set.
     agent_dir: str = os.getenv("POTTS_AGENT_DIR", "")
 
+    # ── Local AI coding CLI (run_ai_cli tool) ─────────────────────────────────
+    # Which local AI coding CLI the run_ai_cli tool dispatches tasks to, taking
+    # advantage of the user's existing subscription. Options: claude | codex | opencode.
+    # Auto-detected from the first installed CLI if POTTS_AI_CLI is not set.
+    # This is independent of agent_backend and never affects it.
+    ai_cli: str = _detect_ai_cli()
+
     # ── Vision tools ──────────────────────────────────────────────────────────
     # Provider for analyze_screen / analyze_image.
     # "auto"       — use the active LLM provider if it supports vision, else
@@ -285,6 +315,22 @@ class Config:
         else:
             detected = " (auto-detected: claude CLI not found)" if not os.getenv("POTTS_AGENT_BACKEND") else ""
             logger.info(f"Agent backend: builtin{detected}  provider={provider}  model={self.model}")
+
+        # ── Local AI coding CLI (run_ai_cli tool) ──────────────────────────────
+        ai_cli = self.ai_cli
+        if ai_cli not in _AI_CLI_BINARIES:
+            raise RuntimeError(
+                f"Unknown POTTS_AI_CLI={ai_cli!r}. "
+                f"Valid options: {', '.join(_AI_CLI_BINARIES)}"
+            )
+        ai_detected = " (auto-detected)" if not os.getenv("POTTS_AI_CLI") else ""
+        if shutil.which(ai_cli) is not None:
+            logger.info(f"AI CLI: {ai_cli}{ai_detected}  (run_ai_cli tool)")
+        else:
+            logger.warning(
+                f"AI CLI: {ai_cli}{ai_detected} is not installed — the run_ai_cli "
+                f"tool will report it as unavailable until it is on PATH."
+            )
 
         # ── Vision provider ────────────────────────────────────────────────────
         _VISION_CAPABLE = {"anthropic", "openai", "openrouter"}

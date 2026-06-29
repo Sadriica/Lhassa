@@ -49,6 +49,20 @@ TOOLS = ToolsSchema(
             required=["command"],
         ),
         FunctionSchema(
+            name="run_privileged",
+            description=(
+                "Run an administrative command as root (via sudo) when the normal shell "
+                "isn't enough. Only an allowlisted set of admin commands is permitted "
+                "(systemctl, journalctl, pacman, tlp, power-mode, dmesg, sensors); anything "
+                "outside that list or anything destructive is refused. Pass the bare command "
+                "without a leading 'sudo'."
+            ),
+            properties={
+                "command": {"type": "string", "description": "Admin command to run as root, e.g. 'systemctl restart bluetooth'"},
+            },
+            required=["command"],
+        ),
+        FunctionSchema(
             name="read_file",
             description="Read the contents of a file from the filesystem.",
             properties={
@@ -81,6 +95,24 @@ TOOLS = ToolsSchema(
                 "task": {"type": "string", "description": "Detailed description of the task to perform"},
             },
             required=["agent", "task"],
+        ),
+        FunctionSchema(
+            name="run_ai_cli",
+            description=(
+                "Dispatch a coding task to a local AI coding CLI (claude, codex, or opencode) "
+                "running non-interactively on the user's machine, using their existing subscription. "
+                "Streams the CLI's output to the dashboard and returns the result. "
+                "Leave 'cli' empty to use the configured/auto-detected default (POTTS_AI_CLI)."
+            ),
+            properties={
+                "task": {"type": "string", "description": "Detailed description of the coding task to perform"},
+                "cli": {
+                    "type": "string",
+                    "enum": ["claude", "codex", "opencode"],
+                    "description": "Which local AI CLI to use. Omit to use the configured default.",
+                },
+            },
+            required=["task"],
         ),
         FunctionSchema(
             name="schedule_reminder",
@@ -341,6 +373,21 @@ async def handle_shell(params: FunctionCallParams):
         await params.result_callback(f"Shell error: {e}")
 
 
+async def handle_run_privileged(params: FunctionCallParams):
+    command = params.arguments.get("command", "")
+    logger.info(f"[tool] run_privileged: {command!r}")
+    print(f"\033[2m[🔐 root: {command}]\033[0m")
+    _bump_tool()
+
+    try:
+        from potts.tools.privileged import run_privileged
+        result = await run_privileged(command, source="voice_tool")
+        await params.result_callback(result)
+    except Exception as e:
+        logger.error(f"run_privileged error: {e}")
+        await params.result_callback(f"Privileged command error: {e}")
+
+
 async def handle_read_file(params: FunctionCallParams):
     path = params.arguments.get("path", "")
     logger.info(f"[tool] read_file: {path!r}")
@@ -433,6 +480,23 @@ async def handle_delegate_to_agent(params: FunctionCallParams):
     await params.result_callback(
         f"Agent '{agent_type}' started in the background. I'll notify you when it's done."
     )
+
+
+async def handle_run_ai_cli(params: FunctionCallParams):
+    task = params.arguments.get("task", "")
+    cli = params.arguments.get("cli") or None
+    _bump_tool()
+
+    try:
+        from potts.agents.local_cli import make_agent as make_local_cli_agent
+        agent = make_local_cli_agent(cli)
+        logger.info(f"[tool] run_ai_cli: {agent.cli} → {task[:60]!r}")
+        print(f"\033[2m[🛠 {agent.cli}: {task[:60]}]\033[0m")
+        result = await agent.run(task)
+        await params.result_callback(result)
+    except Exception as e:
+        logger.error(f"run_ai_cli error: {e}")
+        await params.result_callback(f"AI CLI error: {e}")
 
 
 async def handle_schedule_reminder(params: FunctionCallParams):
@@ -848,9 +912,11 @@ def register_tools(llm):
     """Register all tool handlers with the LLM service."""
     llm.register_function("web_search", handle_web_search)
     llm.register_function("shell", handle_shell)
+    llm.register_function("run_privileged", handle_run_privileged)
     llm.register_function("read_file", handle_read_file)
     llm.register_function("write_file", handle_write_file)
     llm.register_function("delegate_to_agent", handle_delegate_to_agent)
+    llm.register_function("run_ai_cli", handle_run_ai_cli)
     llm.register_function("schedule_reminder", handle_schedule_reminder)
     llm.register_function("list_reminders", handle_list_reminders)
     llm.register_function("read_emails", handle_read_emails)
@@ -870,8 +936,8 @@ def register_tools(llm):
     llm.register_function("watch_file", handle_watch_file)
     llm.register_function("watch_command", handle_watch_command)
     logger.info(
-        "Tools registered: web_search, shell, read_file, write_file, "
-        "delegate_to_agent, schedule_reminder, list_reminders, "
+        "Tools registered: web_search, shell, run_privileged, read_file, write_file, "
+        "delegate_to_agent, run_ai_cli, schedule_reminder, list_reminders, "
         "read_emails, send_email, read_calendar, create_event, "
         "github_list_repos, github_list_issues, github_get_issue, "
         "github_list_prs, github_get_pr, github_comment, github_notifications, "
