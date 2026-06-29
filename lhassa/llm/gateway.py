@@ -52,6 +52,14 @@ PRICING: dict[str, tuple[float, float]] = {
 # The default implementation talks to the real provider; tests inject a fake.
 CompletionFn = Callable[..., Awaitable[tuple[str, int, int]]]
 
+# A tools-aware completion backend: given the resolved call (incl. tool schemas),
+# return (text, tool_calls, input, output, stop_reason). Tests inject a fake to
+# run the agent/CLI loop offline. tool_calls is a list of normalized dicts
+# ``{"id", "name", "input"}`` where input is the parsed argument object.
+ToolCompletionFn = Callable[
+    ..., Awaitable[tuple[str, list[dict], int, int, str]]
+]
+
 
 class BudgetExceeded(Exception):
     """Raised when today's output-token spend has reached the daily budget."""
@@ -68,6 +76,24 @@ class CompletionResult:
     output_tokens: int
     cost_usd: float
     cache_hit: bool
+
+
+@dataclass
+class ToolTurnResult:
+    """Outcome of one tool-aware round-trip — text, any tool calls, and costing.
+
+    ``tool_calls`` are provider-normalized: each is ``{"id", "name", "input"}``
+    where ``input`` is the parsed argument object. An empty list means the model
+    produced a final answer (a deterministic turn that may be cached).
+    """
+
+    text: str
+    tool_calls: list[dict]
+    input_tokens: int
+    output_tokens: int
+    cost_usd: float
+    cache_hit: bool
+    stop_reason: str
 
 
 def _resolve_provider(config: "Config") -> str:
@@ -118,6 +144,37 @@ def _cache_key(
         },
         sort_keys=True,
         ensure_ascii=False,
+    )
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _tools_cache_key(
+    provider: str,
+    model: str,
+    messages: list[dict],
+    tools: list[dict],
+    max_tokens: int,
+    system: Optional[str],
+) -> str:
+    """Stable SHA-256 for a tool-aware turn — includes the tool schemas.
+
+    Distinct from ``_cache_key`` (the ``kind`` discriminator prevents a plain
+    completion and a tool turn with the same messages from colliding). ``default=str``
+    keeps it robust if a message carries a non-JSON-native value.
+    """
+    payload = json.dumps(
+        {
+            "kind": "tools",
+            "provider": provider,
+            "model": model,
+            "system": system,
+            "messages": messages,
+            "tools": tools,
+            "max_tokens": max_tokens,
+        },
+        sort_keys=True,
+        ensure_ascii=False,
+        default=str,
     )
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
@@ -288,6 +345,84 @@ class LedgerGateway:
         text = resp.choices[0].message.content or ""
         return text, resp.usage.prompt_tokens, resp.usage.completion_tokens
 
+    async def _default_tools_completion(
+        self,
+        config: "Config",
+        provider: str,
+        model: str,
+        messages: list[dict],
+        tools: list[dict],
+        max_tokens: int,
+        system: Optional[str],
+    ) -> tuple[str, list[dict], int, int, str]:
+        """Live tool-aware call. Returns (text, tool_calls, in, out, stop_reason).
+
+        ``tools`` is passed through in whatever shape the caller built it (Anthropic
+        ``input_schema`` form for the Anthropic client, OpenAI ``function`` form for
+        the OpenAI-compatible client). The returned ``tool_calls`` are normalized to
+        ``{"id", "name", "input"}`` regardless of provider.
+        """
+        from lhassa.llm.provider import get_agent_client
+
+        client, provider_name = get_agent_client(config)
+
+        if provider_name == "anthropic":
+            kwargs: dict = {
+                "model": model,
+                "messages": messages,
+                "tools": tools,
+                "max_tokens": max_tokens,
+            }
+            if system:
+                kwargs["system"] = system
+            resp = await client.messages.create(**kwargs)
+            text_parts: list[str] = []
+            tool_calls: list[dict] = []
+            for block in resp.content:
+                btype = getattr(block, "type", None)
+                if btype == "text":
+                    text_parts.append(block.text)
+                elif btype == "tool_use":
+                    tool_calls.append(
+                        {"id": block.id, "name": block.name, "input": dict(block.input)}
+                    )
+            return (
+                "".join(text_parts),
+                tool_calls,
+                resp.usage.input_tokens,
+                resp.usage.output_tokens,
+                resp.stop_reason or "",
+            )
+
+        # OpenAI-compatible (groq, openai, openrouter, ollama, cerebras)
+        chat_messages = messages
+        if system:
+            chat_messages = [{"role": "system", "content": system}, *messages]
+        resp = await client.chat.completions.create(
+            model=model,
+            messages=chat_messages,
+            tools=tools,
+            tool_choice="auto",
+            max_tokens=max_tokens,
+        )
+        choice = resp.choices[0]
+        msg = choice.message
+        text = msg.content or ""
+        tool_calls = []
+        for tc in getattr(msg, "tool_calls", None) or []:
+            try:
+                args = json.loads(tc.function.arguments)
+            except (json.JSONDecodeError, TypeError):
+                args = {}
+            tool_calls.append({"id": tc.id, "name": tc.function.name, "input": args})
+        return (
+            text,
+            tool_calls,
+            resp.usage.prompt_tokens,
+            resp.usage.completion_tokens,
+            choice.finish_reason or "",
+        )
+
     # ── Public entry point ────────────────────────────────────────────────────
 
     async def complete(
@@ -399,6 +534,161 @@ class LedgerGateway:
             f"in={input_tokens} out={output_tokens} cost=${cost:.6f}"
         )
         return result
+
+    async def complete_with_tools(
+        self,
+        messages: list[dict],
+        tools: list[dict],
+        *,
+        config: "Config | None" = None,
+        model: str | None = None,
+        max_tokens: int = 4096,
+        system: str | None = None,
+        completion_fn: ToolCompletionFn | None = None,
+    ) -> ToolTurnResult:
+        """Run one tool-aware round-trip through cache → budget → live call → ledger.
+
+        This is the choke point for the agent and CLI tool loops: callers invoke it
+        once per loop iteration instead of hitting the raw provider client, then
+        execute any returned tool calls and feed results back on the next call.
+
+        Caching is deliberately limited to *deterministic* turns — only a turn that
+        returns no tool calls is stored (tool outputs are non-deterministic, so a
+        tool-calling turn must never be served from cache). The cache key includes
+        the tool schemas, so changing the available tools invalidates it.
+
+        Args:
+            messages: chat messages (provider-native role/content dicts, no system).
+            tools: tool schemas in the shape the resolved provider expects — Anthropic
+                ``input_schema`` form for Anthropic, OpenAI ``function`` form otherwise.
+            config: Config to use; a fresh Config() is created if omitted.
+            model: model id override; defaults to ``config.model``.
+            max_tokens: max output tokens (also part of the cache key).
+            system: optional system prompt (part of the cache key).
+            completion_fn: async ``(provider, model, messages, tools, system,
+                max_tokens) -> (text, tool_calls, input_tokens, output_tokens,
+                stop_reason)``. Injected by tests to run offline; defaults to the
+                live provider.
+
+        Returns:
+            ToolTurnResult with text, normalized tool_calls, usage, cost, cache_hit,
+            and stop_reason.
+
+        Raises:
+            BudgetExceeded: if today's output-token spend already meets the budget.
+        """
+        if config is None:
+            from lhassa.config import Config
+
+            config = Config()
+
+        await self._ensure_db()
+
+        model = model or config.model
+        provider = _resolve_provider(config)
+        key = _tools_cache_key(provider, model, messages, tools, max_tokens, system)
+
+        # ── Cache (only no-tool turns are ever stored → a hit is always tool-free) ─
+        if config.llm_cache_enabled:
+            cached = await self._cache_get(key)
+            if cached is not None:
+                state.metrics["llm_cache_hits"] += 1
+                try:
+                    payload = json.loads(cached)
+                    text = payload.get("text", "")
+                    stop_reason = payload.get("stop_reason", "")
+                except (json.JSONDecodeError, TypeError):
+                    text, stop_reason = cached, ""
+                await self._record(
+                    CompletionResult(
+                        text=text,
+                        provider=provider,
+                        model=model,
+                        input_tokens=0,
+                        output_tokens=0,
+                        cost_usd=0.0,
+                        cache_hit=True,
+                    )
+                )
+                logger.debug(f"LLM gateway: tool cache hit ({provider}/{model})")
+                return ToolTurnResult(
+                    text=text,
+                    tool_calls=[],
+                    input_tokens=0,
+                    output_tokens=0,
+                    cost_usd=0.0,
+                    cache_hit=True,
+                    stop_reason=stop_reason,
+                )
+
+        # ── Budget ─────────────────────────────────────────────────────────────
+        budget = config.llm_daily_token_budget
+        if budget > 0:
+            day = _today()
+            spent = await self.daily_output_tokens(day)
+            if spent >= budget:
+                raise BudgetExceeded(
+                    f"Daily LLM output-token budget reached: {spent}/{budget} "
+                    f"tokens spent today ({day} UTC). Calls resume tomorrow."
+                )
+
+        # ── Live call ──────────────────────────────────────────────────────────
+        if completion_fn is None:
+            text, tool_calls, input_tokens, output_tokens, stop_reason = (
+                await self._default_tools_completion(
+                    config, provider, model, messages, tools, max_tokens, system
+                )
+            )
+        else:
+            text, tool_calls, input_tokens, output_tokens, stop_reason = (
+                await completion_fn(provider, model, messages, tools, system, max_tokens)
+            )
+
+        tool_calls = tool_calls or []
+        cost = estimate_cost(model, input_tokens, output_tokens)
+
+        # ── Ledger: mirror into live metrics, persist a row ───────────────────
+        state.metrics["llm_calls"] += 1
+        state.metrics["llm_input_tokens"] += input_tokens
+        state.metrics["llm_output_tokens"] += output_tokens
+        state.metrics["llm_cost_usd"] += cost
+
+        await self._add_daily_spend(_today(), output_tokens)
+
+        # Cache only deterministic (no tool) turns.
+        if config.llm_cache_enabled and not tool_calls:
+            await self._cache_put(
+                key,
+                provider,
+                model,
+                json.dumps({"text": text, "stop_reason": stop_reason}),
+            )
+
+        await self._record(
+            CompletionResult(
+                text=text,
+                provider=provider,
+                model=model,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                cost_usd=cost,
+                cache_hit=False,
+            )
+        )
+        logger.debug(
+            f"LLM gateway: live tool call {provider}/{model} "
+            f"in={input_tokens} out={output_tokens} tools={len(tool_calls)} "
+            f"cost=${cost:.6f}"
+        )
+        return ToolTurnResult(
+            text=text,
+            tool_calls=tool_calls,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            cost_usd=cost,
+            cache_hit=False,
+            stop_reason=stop_reason,
+        )
 
 
 # Module-level default instance — import from anywhere via

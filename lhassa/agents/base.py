@@ -203,10 +203,12 @@ class BaseAgent:
 
     def __init__(self):
         from lhassa.config import Config
-        from lhassa.llm.provider import get_agent_client
         config = Config()
+        self._config = config
         self.model = config.model
-        self._client, self._provider = get_agent_client(config)
+        # Provider shape selects the loop branch / tool format; the model
+        # round-trip itself goes through the LLM gateway (cache + budget + ledger).
+        self._provider = "anthropic" if config.llm_provider == "anthropic" else "openai"
 
     async def run(self, task: str) -> str:
         """Execute the task with a tool loop. Streams tokens to the dashboard."""
@@ -238,56 +240,55 @@ class BaseAgent:
     # ── OpenAI-compatible loop (Groq, OpenAI, OpenRouter, Ollama, Cerebras) ───
 
     async def _run_openai_compat(self, run_id: str, run: AgentRun, task: str) -> str:
-        messages = [
-            {"role": "system", "content": self.system_prompt},
-            {"role": "user", "content": task},
-        ]
+        from lhassa.llm.gateway import gateway
+
+        # System prompt is passed separately to the gateway (it prepends it).
+        messages: list[dict] = [{"role": "user", "content": task}]
 
         for iteration in range(MAX_ITERATIONS):
-            response = await asyncio.wait_for(
-                self._client.chat.completions.create(
+            turn = await asyncio.wait_for(
+                gateway.complete_with_tools(
+                    messages,
+                    AGENT_TOOLS,
+                    config=self._config,
                     model=self.model,
-                    messages=messages,
-                    tools=AGENT_TOOLS,
-                    tool_choice="auto",
-                    stream=False,
+                    system=self.system_prompt,
                     max_tokens=4096,
                 ),
                 timeout=60.0,
             )
-            state.metrics["llm_calls"] += 1
-
-            msg = response.choices[0].message
-            finish = response.choices[0].finish_reason
 
             # Stream the text portion to the dashboard
-            if msg.content:
-                run.output += msg.content
-                await state.broadcast({"type": "agent_token", "run_id": run_id, "token": msg.content})
+            if turn.text:
+                run.output += turn.text
+                await state.broadcast({"type": "agent_token", "run_id": run_id, "token": turn.text})
 
             # No tool calls — we're done
-            if finish == "stop" or not msg.tool_calls:
-                return run.output or msg.content or ""
+            if not turn.tool_calls:
+                return run.output or turn.text or ""
 
-            # Execute each tool call
-            tool_results = []
-            for tc in msg.tool_calls:
-                try:
-                    args = json.loads(tc.function.arguments)
-                except json.JSONDecodeError as e:
-                    logger.warning(f"[{self.name}] bad tool arguments for {tc.function.name}: {e}")
-                    tool_results.append({"tool_call_id": tc.id, "role": "tool", "content": f"Error: invalid tool arguments — {e}"})
-                    continue
-                logger.info(f"[{self.name}] tool: {tc.function.name}({args})")
-                note = f"\n[calling {tc.function.name}...]\n"
+            # Re-materialise the assistant turn (with tool calls) for the next round.
+            assistant_tool_calls = [
+                {
+                    "id": tc["id"],
+                    "type": "function",
+                    "function": {"name": tc["name"], "arguments": json.dumps(tc["input"])},
+                }
+                for tc in turn.tool_calls
+            ]
+            messages.append(
+                {"role": "assistant", "content": turn.text or None, "tool_calls": assistant_tool_calls}
+            )
+
+            # Execute each tool call and feed results back
+            for tc in turn.tool_calls:
+                logger.info(f"[{self.name}] tool: {tc['name']}({tc['input']})")
+                note = f"\n[calling {tc['name']}...]\n"
                 run.output += note
                 await state.broadcast({"type": "agent_token", "run_id": run_id, "token": note})
 
-                result = await _execute_tool(tc.function.name, args)
-                tool_results.append({"tool_call_id": tc.id, "role": "tool", "content": result})
-
-            messages.append(msg)  # assistant message with tool_calls
-            messages.extend(tool_results)
+                result = await _execute_tool(tc["name"], tc["input"])
+                messages.append({"tool_call_id": tc["id"], "role": "tool", "content": result})
 
         note = f"\n\n[Agent stopped after {MAX_ITERATIONS} iterations — task may be incomplete.]"
         run.output += note
@@ -298,56 +299,54 @@ class BaseAgent:
     # ── Anthropic tool-use loop ────────────────────────────────────────────────
 
     async def _run_anthropic(self, run_id: str, run: AgentRun, task: str) -> str:
+        from lhassa.llm.gateway import gateway
 
         messages: list[dict] = [{"role": "user", "content": task}]
         tools = _to_anthropic_tools(AGENT_TOOLS)
 
         for iteration in range(MAX_ITERATIONS):
-            response = await asyncio.wait_for(
-                self._client.messages.create(
+            turn = await asyncio.wait_for(
+                gateway.complete_with_tools(
+                    messages,
+                    tools,
+                    config=self._config,
                     model=self.model,
                     system=self.system_prompt,
-                    messages=messages,
-                    tools=tools,
                     max_tokens=4096,
                 ),
                 timeout=60.0,
             )
-            state.metrics["llm_calls"] += 1
 
-            # Collect text and tool_use blocks
-            text_parts: list[str] = []
-            tool_calls: list[dict] = []
-
-            for block in response.content:
-                if block.type == "text":
-                    text_parts.append(block.text)
-                elif block.type == "tool_use":
-                    tool_calls.append(block)
-
-            if text_parts:
-                text = "".join(text_parts)
-                run.output += text
-                await state.broadcast({"type": "agent_token", "run_id": run_id, "token": text})
+            if turn.text:
+                run.output += turn.text
+                await state.broadcast({"type": "agent_token", "run_id": run_id, "token": turn.text})
 
             # No tool use — done
-            if response.stop_reason == "end_turn" or not tool_calls:
+            if not turn.tool_calls:
                 return run.output
 
-            # Execute tools and build tool_result blocks
-            messages.append({"role": "assistant", "content": response.content})
-            tool_result_content: list[dict] = []
+            # Re-materialise the assistant turn (text + tool_use blocks).
+            assistant_content: list[dict] = []
+            if turn.text:
+                assistant_content.append({"type": "text", "text": turn.text})
+            for tc in turn.tool_calls:
+                assistant_content.append(
+                    {"type": "tool_use", "id": tc["id"], "name": tc["name"], "input": tc["input"]}
+                )
+            messages.append({"role": "assistant", "content": assistant_content})
 
-            for tc in tool_calls:
-                logger.info(f"[{self.name}] tool: {tc.name}({tc.input})")
-                note = f"\n[calling {tc.name}...]\n"
+            # Execute tools and build tool_result blocks
+            tool_result_content: list[dict] = []
+            for tc in turn.tool_calls:
+                logger.info(f"[{self.name}] tool: {tc['name']}({tc['input']})")
+                note = f"\n[calling {tc['name']}...]\n"
                 run.output += note
                 await state.broadcast({"type": "agent_token", "run_id": run_id, "token": note})
 
-                result = await _execute_tool(tc.name, tc.input)
+                result = await _execute_tool(tc["name"], tc["input"])
                 tool_result_content.append({
                     "type": "tool_result",
-                    "tool_use_id": tc.id,
+                    "tool_use_id": tc["id"],
                     "content": result,
                 })
 
