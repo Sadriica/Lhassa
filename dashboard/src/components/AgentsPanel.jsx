@@ -12,6 +12,12 @@ const AGENT_ICONS = {
   system:   '🖥',
 }
 
+// Extract the base agent type from names like "code (claude)" → "code"
+function agentIcon(name) {
+  const base = name?.split(' ')[0] ?? ''
+  return AGENT_ICONS[base] || '🤖'
+}
+
 function AgentCard({ agent }) {
   const [expanded, setExpanded] = useState(agent.status === 'running')
   const isRunning = agent.status === 'running'
@@ -25,7 +31,7 @@ function AgentCard({ agent }) {
         onClick={() => setExpanded(e => !e)}
       >
         <div className="flex items-center gap-3">
-          <span className="text-lg">{AGENT_ICONS[agent.name] || '🤖'}</span>
+          <span className="text-lg">{agentIcon(agent.name)}</span>
           <div>
             <span className="text-sm font-medium text-slate-200">{agent.name}</span>
             <span className="text-xs text-slate-500 ml-2">#{agent.id}</span>

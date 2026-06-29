@@ -3,11 +3,19 @@ GitHub tools — read repos, issues, PRs, and create comments via the GitHub RES
 Requires GITHUB_TOKEN in .env (Settings → Developer settings → Personal access tokens).
 """
 
-from typing import Optional
 import httpx
-from loguru import logger
 
 GITHUB_BASE = "https://api.github.com"
+
+# Cached client — reuses TCP connections across calls
+_http: httpx.AsyncClient | None = None
+
+
+def _get_http() -> httpx.AsyncClient:
+    global _http
+    if _http is None:
+        _http = httpx.AsyncClient(timeout=15)
+    return _http
 
 
 def _headers(token: str) -> dict:
@@ -19,25 +27,23 @@ def _headers(token: str) -> dict:
 
 
 async def _get(token: str, path: str, params: dict | None = None) -> dict | list:
-    async with httpx.AsyncClient(timeout=15) as client:
-        r = await client.get(
-            f"{GITHUB_BASE}{path}",
-            headers=_headers(token),
-            params=params or {},
-        )
-        r.raise_for_status()
-        return r.json()
+    r = await _get_http().get(
+        f"{GITHUB_BASE}{path}",
+        headers=_headers(token),
+        params=params or {},
+    )
+    r.raise_for_status()
+    return r.json()
 
 
 async def _post(token: str, path: str, body: dict) -> dict:
-    async with httpx.AsyncClient(timeout=15) as client:
-        r = await client.post(
-            f"{GITHUB_BASE}{path}",
-            headers=_headers(token),
-            json=body,
-        )
-        r.raise_for_status()
-        return r.json()
+    r = await _get_http().post(
+        f"{GITHUB_BASE}{path}",
+        headers=_headers(token),
+        json=body,
+    )
+    r.raise_for_status()
+    return r.json()
 
 
 # ── Repos ──────────────────────────────────────────────────────────────────────

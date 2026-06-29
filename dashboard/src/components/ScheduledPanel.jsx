@@ -6,7 +6,7 @@ const STATUS_COLOR = {
   error:   'text-red-400',
 }
 
-export default function ScheduledPanel() {
+export default function ScheduledPanel({ refreshTick = 0 }) {
   const [tasks, setTasks] = useState([])
   const [loading, setLoading] = useState(true)
 
@@ -17,11 +17,12 @@ export default function ScheduledPanel() {
       .catch(() => setLoading(false))
   }
 
+  // Refresh on interval AND whenever a task fires (refreshTick changes)
   useEffect(() => {
     load()
     const t = setInterval(load, 15000)
     return () => clearInterval(t)
-  }, [])
+  }, [refreshTick])
 
   const pending = tasks.filter(t => t.status === 'pending')
   const done = tasks.filter(t => t.status === 'done')

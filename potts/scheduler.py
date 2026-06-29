@@ -18,16 +18,27 @@ async def run_scheduler():
         while True:
             try:
                 tasks = await load_pending_tasks()
-                for task in tasks:
-                    logger.info(f"[scheduler] Firing task '{task['name']}'")
-                    await mark_task_done(task["id"])
-                    await notify(task["message"], title="Potts — Reminder")
-                    await state.broadcast({
-                        "type": "scheduled_task_fired",
-                        "task": task,
-                    })
             except Exception as e:
-                logger.error(f"[scheduler] Error processing tasks: {e}")
+                logger.error(f"[scheduler] Error loading tasks: {e}")
+                await asyncio.sleep(30)
+                continue
+
+            for task in tasks:
+                try:
+                    logger.info(f"[scheduler] Firing task '{task['name']}'")
+                    await notify(task["message"], title="Potts — Reminder")
+                    await mark_task_done(task["id"])
+                    try:
+                        await state.broadcast({
+                            "type": "scheduled_task_fired",
+                            "task": {**task, "status": "done"},
+                        })
+                    except Exception as e:
+                        logger.warning(
+                            f"[scheduler] Reminder '{task['name']}' fired but broadcast failed: {e}"
+                        )
+                except Exception as e:
+                    logger.error(f"[scheduler] Error processing task '{task['name']}': {e}")
 
             await asyncio.sleep(30)
     except asyncio.CancelledError:

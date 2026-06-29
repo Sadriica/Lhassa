@@ -8,37 +8,86 @@ cp .env.example .env
 
 ---
 
-## LLM
+## LLM Provider
 
-| Variable | Required | Default | Description |
+Potts supports six LLM providers. **You only need to set one API key** — Potts auto-detects the provider from whichever key is present, and that same provider is used for the voice pipeline, the built-in agent tool loop, and vision tools.
+
+### API keys and auto-detection
+
+Set one (or more) of these keys. The first one found is used:
+
+| Variable | Provider | Auto-detected default model | Where to get it |
 |---|---|---|---|
-| `GROQ_API_KEY` | **Yes** | — | Groq API key for LLM inference. Get one at [console.groq.com](https://console.groq.com). |
-| `POTTS_MODEL` | No | `llama-3.3-70b-versatile` | Groq model ID to use for the voice pipeline and agents. |
-| `ANTHROPIC_API_KEY` | No | — | Anthropic API key. Set this to swap to Claude instead of Groq (requires changing the LLM service in `pipeline.py`). |
+| `ANTHROPIC_API_KEY` | `anthropic` | `claude-haiku-4-5-20251001` | [console.anthropic.com](https://console.anthropic.com) |
+| `OPENAI_API_KEY` | `openai` | `gpt-4o-mini` | [platform.openai.com](https://platform.openai.com) |
+| `GROQ_API_KEY` | `groq` | `llama-3.3-70b-versatile` | [console.groq.com](https://console.groq.com) |
+| `OPENROUTER_API_KEY` | `openrouter` | `anthropic/claude-haiku-4-5-20251001` | [openrouter.ai/keys](https://openrouter.ai/keys) |
+| `CEREBRAS_API_KEY` | `cerebras` | `llama3.3-70b` | [cloud.cerebras.ai](https://cloud.cerebras.ai) |
+| `OLLAMA_BASE_URL` | `ollama` | `llama3.2` | No key needed — set URL if Ollama isn't on localhost |
 
-### Changing the model
+Auto-detection priority: `ANTHROPIC_API_KEY` → `OPENAI_API_KEY` → `GROQ_API_KEY` → `OPENROUTER_API_KEY` → `CEREBRAS_API_KEY`.
 
-To use a different Groq model, set `POTTS_MODEL` in your `.env`:
+`OLLAMA_BASE_URL` defaults to `http://localhost:11434`. To use Ollama you must set `POTTS_LLM_PROVIDER=ollama` explicitly (no key to detect from).
 
+Potts logs the resolved provider and model at startup so you can confirm it picked the right one:
 ```
-POTTS_MODEL=llama-3.1-8b-instant
+INFO | LLM provider: anthropic (auto-detected from API key)  model=claude-haiku-4-5-20251001
 ```
 
-Fast, cheap models like `llama-3.1-8b-instant` give snappier responses. Larger models like `llama-3.3-70b-versatile` give better reasoning and tool use.
+### Override (optional)
 
-### Swapping to Anthropic
+If you want to force a specific provider or model, set these explicitly:
 
-To use Claude instead of Groq:
+| Variable | Default | Description |
+|---|---|---|
+| `POTTS_LLM_PROVIDER` | auto-detected | Override: `groq`, `anthropic`, `openai`, `openrouter`, `cerebras`, `ollama` |
+| `POTTS_MODEL` | provider default | Override: any model name supported by the active provider |
 
-1. Set `ANTHROPIC_API_KEY` and `POTTS_MODEL` in your `.env`:
-   ```
-   ANTHROPIC_API_KEY=sk-ant-...
-   POTTS_MODEL=claude-sonnet-4-6
-   ```
-2. Edit `potts/voice/pipeline.py` — replace `GroqLLMService` with `AnthropicLLMService` from pipecat.
-3. Edit `potts/agents/base.py` — replace `AsyncGroq` with the Anthropic equivalent.
+### Provider examples
 
-The rest of the codebase (tools, memory, scheduler) is model-agnostic.
+**Anthropic (also enables vision automatically):**
+```dotenv
+ANTHROPIC_API_KEY=sk-ant-...
+# POTTS_MODEL=claude-sonnet-4-6   # optional override; default: claude-haiku-4-5-20251001
+```
+
+**OpenAI (also enables vision automatically):**
+```dotenv
+OPENAI_API_KEY=sk-...
+# POTTS_MODEL=gpt-4o   # optional; default: gpt-4o-mini
+```
+
+**Groq (free tier, fast):**
+```dotenv
+GROQ_API_KEY=gsk_...
+# POTTS_MODEL=llama-3.3-70b-versatile   # default
+```
+
+**OpenRouter (hundreds of models):**
+```dotenv
+OPENROUTER_API_KEY=sk-or-...
+POTTS_MODEL=meta-llama/llama-3.3-70b-instruct   # or any OpenRouter model
+```
+
+**Ollama (fully local):**
+```dotenv
+POTTS_LLM_PROVIDER=ollama   # required — no key to auto-detect from
+POTTS_MODEL=llama3.3
+# OLLAMA_BASE_URL=http://localhost:11434   # default
+```
+
+**Groq for voice, Anthropic for vision and agents:**
+```dotenv
+GROQ_API_KEY=gsk_...
+ANTHROPIC_API_KEY=sk-ant-...   # Groq wins provider detection; Anthropic is used for vision
+```
+
+### Provider compatibility notes
+
+- **Voice pipeline**: pipecat bundles LLM services for Groq, Anthropic, OpenAI, OpenRouter, Ollama, and Cerebras. All providers use the same wake-word and tool-call flow.
+- **Agents**: all providers use the OpenAI-compatible client except Anthropic, which uses the native Anthropic SDK. The tool loop works the same way for both.
+- **Session memory extraction**: uses the active provider automatically. Anthropic falls back to a text prompt since it doesn't support `response_format: json_object`.
+- **Vision tools** (`analyze_screen`, `analyze_image`): if `POTTS_LLM_PROVIDER` is `anthropic`, `openai`, or `openrouter`, vision uses the same key automatically. Otherwise, vision falls back to `ANTHROPIC_API_KEY` → `OPENAI_API_KEY`.
 
 ---
 
@@ -47,13 +96,26 @@ The rest of the codebase (tools, memory, scheduler) is model-agnostic.
 | Variable | Required | Default | Description |
 |---|---|---|---|
 | `DEEPGRAM_API_KEY` | **Yes** | — | Deepgram API key for live speech recognition. Get one at [console.deepgram.com](https://console.deepgram.com). |
+| `POTTS_STT_LANGUAGE` | No | `en` | BCP-47 language code for speech recognition. See supported languages below. |
 
-Deepgram is configured internally with:
-- **Model:** `nova-3-general`
-- **Language:** `es` (Spanish)
-- **Keyterm boost:** `["Potts"]` — tells the model to prioritise transcribing "Potts"
+Deepgram is configured with the `nova-3-general` model and a keyterm boost for "Potts" to improve wake word recognition.
 
-To change the language, edit `potts/voice/pipeline.py` — look for `DeepgramSTTService.Settings`.
+### Supported languages
+
+Common options for `POTTS_STT_LANGUAGE`:
+
+| Code | Language |
+|---|---|
+| `en` | English (default) |
+| `es` | Spanish |
+| `fr` | French |
+| `de` | German |
+| `pt` | Portuguese |
+| `nl` | Dutch |
+| `hi` | Hindi |
+| `ja` | Japanese |
+
+Full list: [developers.deepgram.com/docs/languages](https://developers.deepgram.com/docs/languages)
 
 ---
 
@@ -77,6 +139,196 @@ To change the language, edit `potts/voice/pipeline.py` — look for `DeepgramSTT
 The default voice ID (`a0e99841-438c-4a64-b679-ae501e7d6091`) is a calm English voice. There are Spanish, British, and many other accent options available.
 
 ---
+
+## Audio
+
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `POTTS_MIC_NAME` | No | `pipewire` (Linux) / `""` (macOS, Windows) | Substring matched against PyAudio device names (case-insensitive). Set to `""` to use the system default device. |
+
+The default is `pipewire` on Linux (matches PipeWire's virtual device) and empty on macOS/Windows (uses the OS default). If Potts can't find your microphone, list available devices:
+
+```bash
+python -c "import pyaudio; p = pyaudio.PyAudio(); [print(i, p.get_device_info_by_index(i)['name']) for i in range(p.get_device_count())]"
+```
+
+Then set `POTTS_MIC_NAME` to a substring of the device name you want.
+
+---
+
+## Web Search
+
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `BRAVE_API_KEY` | No | — | Brave Search API key. When set, `web_search` uses the Brave Search API instead of DuckDuckGo. Get one at [api.search.brave.com](https://api.search.brave.com). |
+
+Brave Search is generally faster and more reliable than DuckDuckGo. If `BRAVE_API_KEY` is not set, Potts falls back to DuckDuckGo automatically — no configuration needed.
+
+---
+
+## Vision tools
+
+`analyze_screen` and `analyze_image` require a vision-capable LLM. The provider is configured independently of `POTTS_LLM_PROVIDER` so you can, for example, use Groq for voice and Anthropic for vision.
+
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `POTTS_VISION_PROVIDER` | No | `auto` | Vision provider. Options: `auto`, `anthropic`, `openai`, `openrouter`. |
+| `POTTS_VISION_MODEL` | No | provider default | Model to use for vision. Leave empty to use the provider default. |
+
+### Auto-detection
+
+When `POTTS_VISION_PROVIDER=auto` (the default), Potts resolves the provider in this order:
+
+1. If `POTTS_LLM_PROVIDER` is `anthropic`, `openai`, or `openrouter` **and** the matching key is set → use it (no extra keys needed)
+2. If `ANTHROPIC_API_KEY` is set → use Anthropic
+3. If `OPENAI_API_KEY` is set → use OpenAI
+4. No vision key found → vision tools disabled (logged as a warning at startup)
+
+### Provider defaults
+
+| Provider | Default model | Notes |
+|---|---|---|
+| `anthropic` | `claude-haiku-4-5-20251001` | Fast and cheap, excellent at reading screenshots |
+| `openai` | `gpt-4o-mini` | Good all-around vision |
+| `openrouter` | `anthropic/claude-haiku-4-5-20251001` | Set `POTTS_VISION_MODEL` to use a different model |
+
+### Common setups
+
+**Using Anthropic for everything** — vision works automatically (no extra config):
+```dotenv
+ANTHROPIC_API_KEY=sk-ant-...
+# provider auto-detected as anthropic; vision uses the same key
+```
+
+**Groq for voice, Anthropic for vision:**
+```dotenv
+GROQ_API_KEY=gsk_...           # Groq wins auto-detection → voice uses Groq
+ANTHROPIC_API_KEY=sk-ant-...   # picked up automatically by vision auto-detection
+```
+
+**Explicit OpenRouter vision model:**
+```dotenv
+POTTS_VISION_PROVIDER=openrouter
+OPENROUTER_API_KEY=sk-or-...
+POTTS_VISION_MODEL=google/gemini-flash-1.5
+```
+
+### Screenshot tool requirement
+
+`analyze_screen` needs a screenshot utility. Potts tries each in order until one works:
+
+**Linux** — install one of:
+```bash
+sudo pacman -S scrot        # Arch — recommended
+sudo apt install scrot       # Debian/Ubuntu
+# alternatives: maim, imagemagick (provides `import`), gnome-screenshot, spectacle (KDE)
+```
+
+**macOS** — `screencapture` is built-in. No installation needed.
+
+**Windows** — PowerShell screenshot is built-in. For better results, install Pillow:
+```
+pip install Pillow
+```
+
+---
+
+## Agent backend
+
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `POTTS_AGENT_BACKEND` | No | auto-detected | `claude_code` delegates to `claude --print`; `builtin` uses the internal LLM tool loop with `POTTS_LLM_PROVIDER`. If not set, Potts detects automatically (see below). |
+| `POTTS_AGENT_DIR` | No | cwd at launch | Working directory for `claude --print`. Set this to your project root so Claude Code has the right file context. Only used when `POTTS_AGENT_BACKEND=claude_code`. |
+
+### Auto-detection
+
+If `POTTS_AGENT_BACKEND` is not set, Potts detects the right backend at startup:
+
+| Condition | Resolved backend | Startup log |
+|---|---|---|
+| `claude` found in PATH | `claude_code` | `Agent backend: claude_code (auto-detected)` |
+| `claude` not found | `builtin` | `Agent backend: builtin (claude CLI not found ...)` |
+
+You can always override the detected value explicitly.
+
+### Startup validation
+
+Potts validates the agent backend before the voice pipeline starts, so misconfiguration surfaces immediately with a clear message rather than failing silently later:
+
+```
+# If POTTS_AGENT_BACKEND=claude_code but claude is not installed:
+RuntimeError: POTTS_AGENT_BACKEND=claude_code but the 'claude' CLI was not found in PATH.
+Install Claude Code:  https://claude.ai/code
+Or set POTTS_AGENT_BACKEND=builtin to use the built-in LLM tool loop.
+```
+
+### claude_code backend (uses your Claude subscription)
+
+When `agent_backend=claude_code`, all three agent types run through `claude --print`:
+
+- **No separate API key** — uses your Claude Code subscription (Pro/Max)
+- **Full Claude Code toolset** — agents can read, edit, and write files (`Read`, `Edit`, `Write`, `Bash`, `Glob`, `Grep`)
+- **Best available Claude model** — whichever model your subscription provides
+
+Requirements: `claude` CLI installed and authenticated (`claude` works in your terminal).
+
+Recommended setup — Groq (fast, free) for voice, Claude subscription for agents:
+
+```dotenv
+# Voice pipeline — Groq auto-detected from the key
+GROQ_API_KEY=gsk_...
+
+# Agents — set your project directory (or leave unset to use cwd)
+POTTS_AGENT_DIR=/home/yourname/code/myproject
+```
+
+### builtin backend (internal LLM tool loop)
+
+When `agent_backend=builtin`, agents use the same provider as the voice pipeline with a 10-iteration tool loop (`web_search`, `shell`, `read_file`, `write_file`). Supports all `POTTS_LLM_PROVIDER` options.
+
+```dotenv
+POTTS_AGENT_BACKEND=builtin
+# Uses POTTS_LLM_PROVIDER and POTTS_MODEL — no extra config needed
+```
+
+Output streams line by line to the dashboard's Agents panel regardless of which backend is active.
+
+---
+
+## GitHub
+
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `GITHUB_TOKEN` | No | — | GitHub personal access token. Required for the GitHub tools (`github_list_repos`, `github_list_issues`, `github_get_issue`, `github_list_prs`, `github_get_pr`, `github_comment`, `github_notifications`). |
+
+Create a token at [github.com/settings/tokens](https://github.com/settings/tokens). The token needs `repo` scope for private repositories, or no scope for public-only access.
+
+If `GITHUB_TOKEN` is not set, calling any GitHub tool will return an error message.
+
+---
+
+## Microsoft Graph (Outlook email + calendar)
+
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `MS_TENANT_ID` | No | — | Azure Active Directory tenant ID. Use `consumers` for personal Microsoft accounts, or your organisation's tenant UUID for work/school accounts. |
+| `MS_CLIENT_ID` | No | — | Azure app registration client ID (Application ID). |
+
+Both must be set to use email and calendar tools. See [outlook.md](outlook.md) for full setup instructions.
+
+---
+
+## Wake behaviour
+
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `POTTS_WAKE_TIMEOUT` | No | `300` | Seconds of silence before Potts goes back to sleep after being woken. Lower values save API costs on idle sessions. |
+
+## Agent tuning
+
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `POTTS_MAX_AGENT_ITERATIONS` | No | `10` | Maximum tool-calling loop iterations per agent run. Increase for complex multi-step tasks; decrease to limit API cost. |
 
 ## General
 
@@ -137,36 +389,43 @@ In debug mode, every STT frame is printed to the terminal:
 
 ---
 
-## Microsoft Graph (Outlook email + calendar)
-
-| Variable | Required | Default | Description |
-|---|---|---|---|
-| `MS_TENANT_ID` | No | — | Azure Active Directory tenant ID. Use `consumers` for personal Microsoft accounts, or your organisation's tenant UUID for work/school accounts. |
-| `MS_CLIENT_ID` | No | — | Azure app registration client ID (Application ID). |
-
-Both must be set to use email and calendar tools. See [outlook.md](outlook.md) for full setup instructions.
-
----
-
-## GitHub
-
-| Variable | Required | Default | Description |
-|---|---|---|---|
-| `GITHUB_TOKEN` | No | — | Personal access token for GitHub. Currently available for use in the `shell` tool or custom agent prompts. Not wired to any built-in tool. |
-
----
-
 ## Full .env Example
 
 ```dotenv
-# ── Required ──────────────────────────────────────────────────────────────────
-GROQ_API_KEY=gsk_xxxxxxxxxxxxxxxxxxxx
+# ── Required: STT + TTS ───────────────────────────────────────────────────────
 DEEPGRAM_API_KEY=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 CARTESIA_API_KEY=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
 
+# ── LLM: set ONE key — provider and model are auto-detected ───────────────────
+#
+# Groq (free tier, good for getting started):
+GROQ_API_KEY=gsk_xxxxxxxxxxxxxxxxxxxx
+#
+# Anthropic (Claude; also enables vision tools automatically):
+# ANTHROPIC_API_KEY=sk-ant-xxxxxxxxxxxx
+#
+# OpenAI (GPT; also enables vision tools automatically):
+# OPENAI_API_KEY=sk-xxxxxxxxxxxx
+#
+# OpenRouter (access many models with one key):
+# OPENROUTER_API_KEY=sk-or-xxxxxxxxxxxx
+#
+# Ollama (local — no key, but must set provider explicitly):
+# POTTS_LLM_PROVIDER=ollama
+# POTTS_MODEL=llama3.3
+# OLLAMA_BASE_URL=http://localhost:11434
+
+# ── Model override (optional — auto-set to provider default if not given) ─────
+# POTTS_MODEL=llama-3.3-70b-versatile
+
+# ── STT language ──────────────────────────────────────────────────────────────
+POTTS_STT_LANGUAGE=en    # en, es, fr, de, pt, nl, hi, ja ...
+
 # ── Voice ─────────────────────────────────────────────────────────────────────
 POTTS_VOICE_ID=a0e99841-438c-4a64-b679-ae501e7d6091
-POTTS_MODEL=llama-3.3-70b-versatile
+
+# ── Audio ─────────────────────────────────────────────────────────────────────
+# POTTS_MIC_NAME=         # leave empty for OS default; "pipewire" on Linux
 
 # ── Dashboard ─────────────────────────────────────────────────────────────────
 POTTS_API_HOST=0.0.0.0
@@ -176,14 +435,24 @@ POTTS_API_PORT=7860
 POTTS_LOG_LEVEL=INFO
 POTTS_DEBUG=0
 
-# ── Microsoft Graph (optional) ────────────────────────────────────────────────
-# MS_TENANT_ID=consumers
-# MS_CLIENT_ID=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+# ── Wake & agent behaviour ────────────────────────────────────────────────────
+# POTTS_WAKE_TIMEOUT=300          # seconds before auto-sleep (default 300)
+# POTTS_MAX_AGENT_ITERATIONS=10   # max tool-loop steps per agent run (default 10)
+
+# ── Web search ────────────────────────────────────────────────────────────────
+# BRAVE_API_KEY=BSA-xxxxxxxxxxxx   # optional; falls back to DuckDuckGo if not set
+
+# ── Agent backend ────────────────────────────────────────────────────────────
+# Auto-detected: claude_code if `claude` CLI is found, builtin otherwise.
+# Uncomment to override:
+# POTTS_AGENT_BACKEND=claude_code   # use `claude --print` (Claude subscription)
+# POTTS_AGENT_BACKEND=builtin       # use internal LLM tool loop
+# POTTS_AGENT_DIR=/home/you/code/myproject   # directory for claude --print
 
 # ── GitHub (optional) ─────────────────────────────────────────────────────────
 # GITHUB_TOKEN=github_pat_xxxxxxxxxxxx
 
-# ── Anthropic (optional, replaces Groq) ──────────────────────────────────────
-# ANTHROPIC_API_KEY=sk-ant-xxxxxxxxxxxx
-# POTTS_MODEL=claude-sonnet-4-6
+# ── Microsoft Graph (optional) ────────────────────────────────────────────────
+# MS_TENANT_ID=consumers
+# MS_CLIENT_ID=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
 ```

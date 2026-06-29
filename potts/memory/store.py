@@ -48,6 +48,10 @@ async def init_db():
                 created_at  TEXT NOT NULL
             )
         """)
+        await db.execute("""
+            CREATE INDEX IF NOT EXISTS scheduled_tasks_pending
+            ON scheduled_tasks(status, run_at)
+        """)
         await db.commit()
 
 
@@ -77,12 +81,19 @@ async def load_facts() -> list[dict]:
 # ── Sessions ───────────────────────────────────────────────────────────────────
 
 async def save_session(summary: str):
-    """Persist a one-sentence session summary with a UTC timestamp."""
+    """Persist a one-sentence session summary with a UTC timestamp.
+    Keeps only the most recent 100 sessions to prevent unbounded growth."""
     date = datetime.now(timezone.utc).isoformat()
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute(
             "INSERT INTO sessions(date, summary) VALUES(?, ?)", (date, summary)
         )
+        # Trim to the 100 most recent rows
+        await db.execute("""
+            DELETE FROM sessions WHERE id NOT IN (
+                SELECT id FROM sessions ORDER BY id DESC LIMIT 100
+            )
+        """)
         await db.commit()
 
 
@@ -143,15 +154,74 @@ async def mark_task_done(task_id: int):
         await db.commit()
 
 
+async def replace_memory_snapshot(
+    facts: list[dict] | None = None,
+    sessions: list[dict] | None = None,
+    scheduled_tasks: list[dict] | None = None,
+):
+    """Replace persisted memory tables with the provided snapshot."""
+    await init_db()
+
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("DELETE FROM facts")
+        await db.execute("DELETE FROM sessions")
+        await db.execute("DELETE FROM scheduled_tasks")
+
+        for fact in facts or []:
+            key = str(fact.get("key", "")).strip()
+            value = str(fact.get("value", "")).strip()
+            updated = str(fact.get("updated", "")).strip() or datetime.now(timezone.utc).isoformat()
+            if key and value:
+                await db.execute(
+                    "INSERT INTO facts(key, value, updated) VALUES(?, ?, ?)",
+                    (key, value, updated),
+                )
+
+        for session in sessions or []:
+            date = str(session.get("date", "")).strip() or datetime.now(timezone.utc).isoformat()
+            summary = str(session.get("summary", "")).strip()
+            if summary:
+                await db.execute(
+                    "INSERT INTO sessions(date, summary) VALUES(?, ?)",
+                    (date, summary),
+                )
+
+        for task in scheduled_tasks or []:
+            name = str(task.get("name", "")).strip()
+            run_at = str(task.get("run_at", "")).strip()
+            message = str(task.get("message", "")).strip()
+            status = str(task.get("status", "pending")).strip() or "pending"
+            created_at = str(task.get("created_at", "")).strip() or datetime.now(timezone.utc).isoformat()
+            if name and run_at and message:
+                await db.execute(
+                    """
+                    INSERT INTO scheduled_tasks(name, run_at, message, status, created_at)
+                    VALUES(?, ?, ?, ?, ?)
+                    """,
+                    (name, run_at, message, status, created_at),
+                )
+
+        await db.commit()
+
+
 # ── Memory context for system prompt injection ─────────────────────────────────
 
 async def build_memory_context() -> Optional[str]:
     """
     Build the memory block injected into the system prompt at startup.
     Returns None if the DB is empty (first session).
+    Uses a single DB connection for both queries.
     """
-    facts = await load_facts()
-    sessions = await load_recent_sessions(5)
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            "SELECT key, value FROM facts ORDER BY updated DESC"
+        ) as cur:
+            facts = [dict(row) for row in await cur.fetchall()]
+        async with db.execute(
+            "SELECT date, summary FROM sessions ORDER BY id DESC LIMIT 5"
+        ) as cur:
+            sessions = [dict(row) for row in await cur.fetchall()]
 
     if not facts and not sessions:
         return None

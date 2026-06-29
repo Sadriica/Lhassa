@@ -12,7 +12,10 @@ export default function MemoryPanel() {
 
     // Refresh every 60s
     const t = setInterval(() => {
-      fetch('/api/memory/facts').then(r => r.json()).then(setFacts).catch(() => {})
+      fetch('/api/memory/facts')
+        .then(r => r.json())
+        .then(data => setFacts(data))
+        .catch(() => {})
     }, 60000)
     return () => clearInterval(t)
   }, [])

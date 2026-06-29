@@ -41,8 +41,8 @@ Voice Pipeline (pipecat):
       │  WakeWordOnlyMuteStrategy
       │
       ▼ (complete user turn)
-  GroqLLMService              ◄── Groq API (HTTPS)
-      │  (LLMTextFrame / tool calls)
+  LLM Service                 ◄── configured provider (Groq / Anthropic / OpenAI /
+      │  (LLMTextFrame / tool calls)      OpenRouter / Cerebras / Ollama)
       ▼
   ChatPrinter  (terminal output)
       │
@@ -109,8 +109,9 @@ On shutdown (KeyboardInterrupt / Ctrl+C):
    The LLMContextAggregator assembles the full user message and pushes it to the LLM.
 
 5. LLM CALL
-   GroqLLMService sends the context (system prompt + history + user message + tools) to Groq.
-   state.metrics["groq_calls"] is incremented.
+   The configured LLM service (GroqLLMService, AnthropicLLMService, etc.) sends the
+   context (system prompt + history + user message + tools) to the provider API.
+   state.metrics["llm_calls"] is incremented.
    LLMTextFrames stream back token by token.
    → ChatPrinter writes tokens to the terminal in real time
 
@@ -184,6 +185,9 @@ Events that trigger broadcasts:
 - `agent_done` — agent completed successfully
 - `agent_error` — agent failed
 - `scheduled_task_fired` — a reminder was triggered
+- `process_done` — a watched process exited (from `watch_process`)
+- `file_event` — a watched file matched the pattern (from `watch_file`)
+- `command_done` — a watched command succeeded (from `watch_command`)
 
 ---
 
@@ -238,17 +242,28 @@ potts/                          ← project root
 │   │   ├── pipeline.py         ← pipecat pipeline: STT→LLM→TTS, wake word
 │   │   ├── beep.py             ← 880 Hz / 440 Hz audio feedback tones
 │   │   ├── mute_strategy.py    ← mutes mic while bot speaks (wake word exception)
-│   │   └── notifier.py         ← TTS or notify-send routing
+│   │   └── notifier.py         ← notification router: speaks via TTS when voice is
+│   │                             active, falls back to notify-send when idle
 │   │
 │   ├── llm/
-│   │   └── prompt.py           ← BASE_PROMPT + memory context injection
+│   │   ├── prompt.py           ← BASE_PROMPT + memory context injection
+│   │   └── provider.py         ← get_agent_client(): returns the right SDK client
+│   │                             for the configured POTTS_LLM_PROVIDER
 │   │
 │   ├── tools/
 │   │   ├── registry.py         ← tool schemas + all handler functions
-│   │   └── graph.py            ← Microsoft Graph: MSAL auth + email/calendar
+│   │   ├── graph.py            ← Microsoft Graph: MSAL auth + email/calendar
+│   │   ├── github.py           ← GitHub REST API: repos, issues, PRs, comments,
+│   │   │                         notifications (requires GITHUB_TOKEN)
+│   │   ├── search.py           ← web_search: Brave Search API with DuckDuckGo fallback
+│   │   ├── vision.py           ← analyze_screen / analyze_image: screenshot capture
+│   │   │                         + vision LLM (Claude Haiku or GPT-4o-mini)
+│   │   └── monitor.py          ← watch_process / watch_file / watch_command:
+│   │                             background asyncio monitors with notify routing
 │   │
 │   ├── agents/
-│   │   ├── base.py             ← BaseAgent: AsyncGroq streaming + state tracking
+│   │   ├── base.py             ← BaseAgent: multi-provider tool loop, state tracking,
+│   │   │                         60s per-call timeout, MAX_ITERATIONS guard
 │   │   ├── code.py             ← CodeAgent (software engineering)
 │   │   ├── research.py         ← ResearchAgent (information synthesis)
 │   │   └── system.py           ← SystemAgent (Arch Linux administration)
@@ -256,6 +271,8 @@ potts/                          ← project root
 │   ├── memory/
 │   │   ├── store.py            ← SQLite CRUD: facts, sessions, scheduled_tasks
 │   │   └── session.py          ← close_session: LLM fact extraction + summary save
+│   │                             (uses active provider; Anthropic path avoids
+│   │                             response_format JSON restriction)
 │   │
 │   └── api/
 │       └── server.py           ← FastAPI app: REST + WebSocket + static files
@@ -301,3 +318,6 @@ Zero dependencies, zero setup, survives restarts, inspectable with standard tool
 
 **Why asyncio throughout?**
 The voice pipeline, API server, and scheduler all need to run concurrently. asyncio tasks share a single thread with cooperative multitasking, which is ideal for I/O-bound work like LLM API calls and audio streaming.
+
+**Why abstract the LLM provider?**
+Tying the codebase to a single provider means every user needs that provider's account. By abstracting behind `POTTS_LLM_PROVIDER`, users can pick what they already have (Groq free tier, an existing OpenAI account, a local Ollama instance) without editing code. The pipecat layer handles the voice pipeline side; `potts/llm/provider.py` handles the agent side. Both paths converge on the same tool schemas and notification routing.

@@ -1,4 +1,4 @@
-"""ResearchAgent — especializado en investigación, síntesis y análisis de información."""
+"""ResearchAgent — specialised in research, synthesis, and information analysis."""
 
 from potts.agents.base import BaseAgent
 

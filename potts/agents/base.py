@@ -9,16 +9,19 @@ Available agent tools: web_search, shell, read_file, write_file.
 
 import asyncio
 import json
+import os
 import subprocess
 import uuid
 from pathlib import Path
-from typing import Any
 
 from loguru import logger
 
 from potts.state import AgentRun, state
+from potts.tools.guardrails import validate_shell_command, validate_write_path
 
-MAX_ITERATIONS = 10  # Safety cap on tool-calling loops
+MAX_ITERATIONS = int(os.getenv("POTTS_MAX_AGENT_ITERATIONS", "10"))  # Safety cap on tool-calling loops
+_SHELL_OUTPUT_MAX = int(os.getenv("POTTS_SHELL_OUTPUT_MAX", "3000"))  # Max chars returned from shell to agent
+_FILE_CONTENT_MAX = int(os.getenv("POTTS_FILE_CONTENT_MAX", "4000"))  # Max chars returned from read_file to agent
 
 # ── Tool schemas (OpenAI function-calling format) ──────────────────────────────
 
@@ -42,7 +45,7 @@ AGENT_TOOLS = [
         "type": "function",
         "function": {
             "name": "shell",
-            "description": "Run a shell command on the Linux/Arch machine.",
+            "description": "Run a shell command on the user's machine.",
             "parameters": {
                 "type": "object",
                 "properties": {"command": {"type": "string"}},
@@ -104,28 +107,91 @@ async def _execute_tool(name: str, args: dict) -> str:
 
         elif name == "shell":
             cmd = args.get("command", "")
+            validation_error = validate_shell_command(cmd)
+            if validation_error:
+                await state.record_audit_event(
+                    action="shell",
+                    target=cmd[:200],
+                    source="agent",
+                    status="blocked",
+                    detail=validation_error,
+                )
+                return validation_error
             result = await asyncio.to_thread(
                 lambda: subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=30)
             )
             output = result.stdout.strip() or result.stderr.strip() or "(no output)"
-            return output[:3000] + "\n...(truncated)" if len(output) > 3000 else output
+            await state.record_audit_event(
+                action="shell",
+                target=cmd[:200],
+                source="agent",
+                status="ok" if result.returncode == 0 else "error",
+                detail=f"exit_code={result.returncode}",
+            )
+            return output[:_SHELL_OUTPUT_MAX] + "\n...(truncated)" if len(output) > _SHELL_OUTPUT_MAX else output
 
         elif name == "read_file":
-            content = Path(args.get("path", "")).expanduser().read_text()
-            return content[:4000] + "\n...(truncated)" if len(content) > 4000 else content
+            path_str = args.get("path", "").strip()
+            if not path_str:
+                return "Error: path is required for read_file"
+            p = Path(path_str).expanduser()
+            size = p.stat().st_size
+            if size > 512 * 1024:
+                return (
+                    f"File is too large to read ({size // 1024} KB). "
+                    "Use shell with head/tail/grep to inspect specific parts."
+                )
+            content = p.read_text(errors="replace")
+            return content[:_FILE_CONTENT_MAX] + "\n...(truncated)" if len(content) > _FILE_CONTENT_MAX else content
 
         elif name == "write_file":
-            p = Path(args.get("path", "")).expanduser()
+            p, validation_error = validate_write_path(args.get("path", ""))
+            if validation_error:
+                await state.record_audit_event(
+                    action="write_file",
+                    target=str(args.get("path", ""))[:200],
+                    source="agent",
+                    status="blocked",
+                    detail=validation_error,
+                )
+                return validation_error
+            assert p is not None
             p.parent.mkdir(parents=True, exist_ok=True)
-            p.write_text(args.get("content", ""))
+            content = args.get("content", "")
+            p.write_text(content)
+            await state.record_audit_event(
+                action="write_file",
+                target=str(p)[:200],
+                source="agent",
+                status="ok",
+                detail=f"bytes={len(content)}",
+            )
             return f"File written: {p}"
 
         else:
             return f"Unknown tool: {name}"
 
     except subprocess.TimeoutExpired:
+        await state.record_audit_event(
+            action=name,
+            target=str(args)[:200],
+            source="agent",
+            status="error",
+            detail="timeout",
+        )
         return "Shell command timed out after 30 seconds."
+    except FileNotFoundError as e:
+        return f"File not found: {args.get('path', str(e))}"
+    except PermissionError as e:
+        return f"Permission denied: {args.get('path', str(e))}"
     except Exception as e:
+        await state.record_audit_event(
+            action=name,
+            target=str(args)[:200],
+            source="agent",
+            status="error",
+            detail=str(e)[:200],
+        )
         return f"Tool error ({name}): {e}"
 
 
@@ -178,15 +244,18 @@ class BaseAgent:
         ]
 
         for iteration in range(MAX_ITERATIONS):
-            response = await self._client.chat.completions.create(
-                model=self.model,
-                messages=messages,
-                tools=AGENT_TOOLS,
-                tool_choice="auto",
-                stream=False,
-                max_tokens=4096,
+            response = await asyncio.wait_for(
+                self._client.chat.completions.create(
+                    model=self.model,
+                    messages=messages,
+                    tools=AGENT_TOOLS,
+                    tool_choice="auto",
+                    stream=False,
+                    max_tokens=4096,
+                ),
+                timeout=60.0,
             )
-            state.metrics["groq_calls"] += 1
+            state.metrics["llm_calls"] += 1
 
             msg = response.choices[0].message
             finish = response.choices[0].finish_reason
@@ -203,7 +272,12 @@ class BaseAgent:
             # Execute each tool call
             tool_results = []
             for tc in msg.tool_calls:
-                args = json.loads(tc.function.arguments)
+                try:
+                    args = json.loads(tc.function.arguments)
+                except json.JSONDecodeError as e:
+                    logger.warning(f"[{self.name}] bad tool arguments for {tc.function.name}: {e}")
+                    tool_results.append({"tool_call_id": tc.id, "role": "tool", "content": f"Error: invalid tool arguments — {e}"})
+                    continue
                 logger.info(f"[{self.name}] tool: {tc.function.name}({args})")
                 note = f"\n[calling {tc.function.name}...]\n"
                 run.output += note
@@ -215,25 +289,31 @@ class BaseAgent:
             messages.append(msg)  # assistant message with tool_calls
             messages.extend(tool_results)
 
+        note = f"\n\n[Agent stopped after {MAX_ITERATIONS} iterations — task may be incomplete.]"
+        run.output += note
+        await state.broadcast({"type": "agent_token", "run_id": run_id, "token": note})
+        logger.warning(f"[{self.name}] reached MAX_ITERATIONS ({MAX_ITERATIONS}) — returning partial output")
         return run.output
 
     # ── Anthropic tool-use loop ────────────────────────────────────────────────
 
     async def _run_anthropic(self, run_id: str, run: AgentRun, task: str) -> str:
-        import anthropic
 
         messages: list[dict] = [{"role": "user", "content": task}]
         tools = _to_anthropic_tools(AGENT_TOOLS)
 
         for iteration in range(MAX_ITERATIONS):
-            response = await self._client.messages.create(
-                model=self.model,
-                system=self.system_prompt,
-                messages=messages,
-                tools=tools,
-                max_tokens=4096,
+            response = await asyncio.wait_for(
+                self._client.messages.create(
+                    model=self.model,
+                    system=self.system_prompt,
+                    messages=messages,
+                    tools=tools,
+                    max_tokens=4096,
+                ),
+                timeout=60.0,
             )
-            state.metrics["groq_calls"] += 1
+            state.metrics["llm_calls"] += 1
 
             # Collect text and tool_use blocks
             text_parts: list[str] = []
@@ -273,4 +353,8 @@ class BaseAgent:
 
             messages.append({"role": "user", "content": tool_result_content})
 
+        note = f"\n\n[Agent stopped after {MAX_ITERATIONS} iterations — task may be incomplete.]"
+        run.output += note
+        await state.broadcast({"type": "agent_token", "run_id": run_id, "token": note})
+        logger.warning(f"[{self.name}] reached MAX_ITERATIONS ({MAX_ITERATIONS}) — returning partial output")
         return run.output

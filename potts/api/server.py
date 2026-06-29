@@ -6,18 +6,21 @@ Runs at http://0.0.0.0:7860 by default (configurable via POTTS_API_HOST / POTTS_
 import asyncio
 import json
 import time
+from dataclasses import asdict
 from pathlib import Path
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from loguru import logger
 
 from potts.state import state
+from potts.config import Config
 from potts.memory.store import (
     load_facts,
     load_recent_sessions,
     load_all_scheduled_tasks,
+    replace_memory_snapshot,
 )
 
 app = FastAPI(title="Potts Dashboard API", docs_url=None, redoc_url=None)
@@ -38,6 +41,7 @@ _START_TIME = time.time()
 
 @app.get("/api/status")
 async def get_status():
+    state.load_audit_events()
     return {
         "voice_active": state.is_voice_active,
         "metrics": state.metrics,
@@ -82,6 +86,108 @@ async def get_metrics():
     return state.metrics
 
 
+@app.get("/api/audit")
+async def get_audit():
+    state.load_audit_events()
+    return [asdict(event) for event in state.audit_events]
+
+
+@app.get("/api/health")
+async def get_health():
+    state.load_audit_events()
+    config = Config()
+    return {
+        "voice_active": state.is_voice_active,
+        "uptime_seconds": int(time.time() - _START_TIME),
+        "ws_clients": len(state._ws_clients),
+        "agent_runs": len(state.agent_runs),
+        "dashboard_built": DASHBOARD_DIST.exists(),
+        "llm_provider": config.llm_provider,
+        "model": config.model,
+        "agent_backend": config.agent_backend,
+        "vision_provider": config.vision_provider,
+        "stt_language": config.stt_language,
+        "allow_destructive_shell": config.allow_destructive_shell,
+        "file_write_root": config.file_write_root or None,
+        "api_host": config.api_host,
+        "api_port": config.api_port,
+    }
+
+
+@app.get("/api/export")
+async def export_state():
+    state.load_audit_events()
+    config = Config()
+    return {
+        "exported_at": int(time.time()),
+        "runtime": {
+            "voice_active": state.is_voice_active,
+            "uptime_seconds": int(time.time() - _START_TIME),
+            "llm_provider": config.llm_provider,
+            "model": config.model,
+            "agent_backend": config.agent_backend,
+            "vision_provider": config.vision_provider,
+            "stt_language": config.stt_language,
+            "allow_destructive_shell": config.allow_destructive_shell,
+            "file_write_root": config.file_write_root or None,
+        },
+        "metrics": state.metrics,
+        "audit": [asdict(event) for event in state.audit_events],
+        "facts": await load_facts(),
+        "sessions": await load_recent_sessions(100),
+        "scheduled_tasks": await load_all_scheduled_tasks(),
+    }
+
+
+def _validate_import_payload(payload: dict) -> tuple[list, list, list, list]:
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="Import payload must be a JSON object.")
+
+    audit = payload.get("audit", [])
+    facts = payload.get("facts", [])
+    sessions = payload.get("sessions", [])
+    scheduled_tasks = payload.get("scheduled_tasks", [])
+
+    if not all(isinstance(value, list) for value in (audit, facts, sessions, scheduled_tasks)):
+        raise HTTPException(
+            status_code=400,
+            detail="Import payload fields audit, facts, sessions, and scheduled_tasks must be arrays.",
+        )
+
+    return audit, facts, sessions, scheduled_tasks
+
+
+@app.post("/api/import")
+async def import_state(payload: dict, dry_run: bool = Query(default=False)):
+    audit, facts, sessions, scheduled_tasks = _validate_import_payload(payload)
+
+    summary = {
+        "ok": True,
+        "dry_run": dry_run,
+        "audit_events": len(audit),
+        "facts": len(facts),
+        "sessions": len(sessions),
+        "scheduled_tasks": len(scheduled_tasks),
+    }
+
+    if dry_run:
+        return summary
+
+    try:
+        state.replace_audit_events(audit)
+        await replace_memory_snapshot(
+            facts=facts,
+            sessions=sessions,
+            scheduled_tasks=scheduled_tasks,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Import failed: {e}") from e
+
+    summary["dry_run"] = False
+    summary["audit_events"] = len(state.audit_events)
+    return summary
+
+
 # ── WebSocket ──────────────────────────────────────────────────────────────────
 
 @app.websocket("/ws")
@@ -89,6 +195,7 @@ async def websocket_endpoint(ws: WebSocket):
     await ws.accept()
     q = state.add_ws_client()
     logger.debug("WebSocket client connected")
+    state.load_audit_events()
 
     # Send a full snapshot immediately so the dashboard renders without waiting
     try:
@@ -96,6 +203,7 @@ async def websocket_endpoint(ws: WebSocket):
             "type": "snapshot",
             "voice_active": state.is_voice_active,
             "metrics": state.metrics,
+            "audit": [asdict(event) for event in state.audit_events],
             "agents": [
                 {
                     "id": r.id,
@@ -103,6 +211,8 @@ async def websocket_endpoint(ws: WebSocket):
                     "status": r.status,
                     "task": r.task,
                     "output": r.output,
+                    "started_at": r.started_at,
+                    "finished_at": r.finished_at,
                 }
                 for r in state.agent_runs.values()
             ],
@@ -151,7 +261,8 @@ async def run_api_server(host: str = "0.0.0.0", port: int = 7860):
         access_log=False,
     )
     server = uvicorn.Server(config)
-    logger.info(f"Dashboard available at http://{host}:{port}")
+    display_host = "localhost" if host in ("0.0.0.0", "::") else host
+    logger.info(f"Dashboard available at http://{display_host}:{port}")
     try:
         await server.serve()
     except asyncio.CancelledError:

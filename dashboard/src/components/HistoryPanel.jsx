@@ -9,6 +9,15 @@ export default function HistoryPanel() {
       .then(r => r.json())
       .then(data => { setSessions(data); setLoading(false) })
       .catch(() => setLoading(false))
+
+    // Refresh every 60s — new sessions are written on Potts shutdown
+    const t = setInterval(() => {
+      fetch('/api/memory/sessions')
+        .then(r => r.json())
+        .then(data => setSessions(data))
+        .catch(() => {})
+    }, 60000)
+    return () => clearInterval(t)
   }, [])
 
   return (

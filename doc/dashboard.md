@@ -10,7 +10,7 @@ The Potts dashboard is a real-time web interface for monitoring what Potts is do
 http://localhost:7860
 ```
 
-The dashboard is served by the FastAPI backend alongside the REST and WebSocket APIs. Because the server binds to `0.0.0.0` by default, it's also accessible from other devices on your local network:
+The dashboard is served by the FastAPI backend alongside the REST and WebSocket APIs. The WebSocket connection automatically upgrades to `wss://` when accessed over HTTPS. Because the server binds to `0.0.0.0` by default, it's also accessible from other devices on your local network:
 
 ```
 http://<your-machine-lan-ip>:7860
@@ -82,8 +82,8 @@ Shows live counters for the current Potts process:
 
 | Metric | What it counts |
 |---|---|
-| Groq calls | LLM API calls made (includes agent runs and session extraction) |
-| Tool calls | Times a tool was invoked (web_search, shell, etc.) |
+| LLM calls | LLM API calls made (voice pipeline + agent tool loop iterations + session extraction) |
+| Tool calls | Times a tool was invoked (web_search, shell, monitor events, etc.) |
 | Sessions | Sessions saved to memory |
 | Agents launched | Background agents started |
 
@@ -168,7 +168,7 @@ All endpoints return JSON. No authentication is required.
 | `GET` | `/api/memory/facts` | All stored facts |
 | `GET` | `/api/memory/sessions` | Last 20 session summaries |
 | `GET` | `/api/scheduled` | Last 50 scheduled tasks (any status) |
-| `GET` | `/api/metrics` | Live counters (Groq calls, tool calls, etc.) |
+| `GET` | `/api/metrics` | Live counters (LLM calls, tool calls, etc.) |
 | `WS` | `/ws` | WebSocket event stream |
 
 ### Example: check status
@@ -181,7 +181,7 @@ curl http://localhost:7860/api/status
 {
   "voice_active": true,
   "metrics": {
-    "groq_calls": 5,
+    "llm_calls": 5,
     "tool_calls": 3,
     "sessions": 0,
     "agents_launched": 1
@@ -214,6 +214,9 @@ curl http://localhost:7860/api/memory/facts
 | `agent_done` | Agent completes | `run_id`, `output` |
 | `agent_error` | Agent fails | `run_id`, `error` |
 | `scheduled_task_fired` | Reminder triggers | `task` |
+| `process_done` | Watched process exits | `pid`, `label` |
+| `file_event` | Watched file matched | `path`, `line` |
+| `command_done` | Watched command succeeded | `command`, `output` |
 
 ---
 

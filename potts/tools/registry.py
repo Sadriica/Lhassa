@@ -3,16 +3,28 @@ Potts tool registry — defines LLM-visible schemas and async handlers for all t
 """
 
 import asyncio
+import os
 import subprocess
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
-from duckduckgo_search import DDGS
 from loguru import logger
 
 from pipecat.adapters.schemas.function_schema import FunctionSchema
 from pipecat.adapters.schemas.tools_schema import ToolsSchema
 from pipecat.services.llm_service import FunctionCallParams
+
+from potts.config import Config
+from potts.memory.store import add_scheduled_task, load_all_scheduled_tasks
+from potts.agents.code import CodeAgent
+from potts.agents.research import ResearchAgent
+from potts.agents.system import SystemAgent
+from potts.agents.claude_code import make_agent as make_claude_agent
+from potts.state import state
+from potts.tools.guardrails import validate_shell_command, validate_write_path
+
+_SHELL_OUTPUT_MAX = int(os.getenv("POTTS_SHELL_OUTPUT_MAX", "2000"))  # Max chars returned from shell to voice pipeline
+_FILE_CONTENT_MAX = int(os.getenv("POTTS_FILE_CONTENT_MAX", "4000"))  # Max chars returned from read_file to voice pipeline
 
 
 # ── Tool schemas (what the LLM sees) ──────────────────────────────────────────
@@ -30,7 +42,7 @@ TOOLS = ToolsSchema(
         ),
         FunctionSchema(
             name="shell",
-            description="Run a shell command on the user's Linux/Arch machine. Use for system operations, file listings, process management, etc.",
+            description="Run a shell command on the user's machine. Use for system operations, file listings, process management, etc.",
             properties={
                 "command": {"type": "string", "description": "The shell command to execute"},
             },
@@ -190,6 +202,54 @@ TOOLS = ToolsSchema(
             },
             required=[],
         ),
+        FunctionSchema(
+            name="analyze_screen",
+            description="Take a screenshot and describe what is on the screen using a vision AI model. Useful when the user says 'what's on my screen', 'what does this error say', etc.",
+            properties={
+                "question": {"type": "string", "description": "Specific question about the screen content (default: describe what you see)"},
+            },
+            required=[],
+        ),
+        FunctionSchema(
+            name="analyze_image",
+            description="Analyse an image file from the filesystem using a vision AI model.",
+            properties={
+                "path": {"type": "string", "description": "Path to the image file"},
+                "question": {"type": "string", "description": "Question to ask about the image"},
+            },
+            required=["path"],
+        ),
+        FunctionSchema(
+            name="watch_process",
+            description="Monitor a running process and notify you when it finishes. Useful for long builds, downloads, scripts, etc.",
+            properties={
+                "pid": {"type": "integer", "description": "Process ID to watch"},
+                "name": {"type": "string", "description": "Process name substring to find and watch (used if pid is not given)"},
+                "label": {"type": "string", "description": "Friendly name for notifications (optional)"},
+            },
+            required=[],
+        ),
+        FunctionSchema(
+            name="watch_file",
+            description="Watch a file for new content or a specific pattern and notify you when it appears. Good for log files.",
+            properties={
+                "path": {"type": "string", "description": "Path to the file to watch"},
+                "pattern": {"type": "string", "description": "Notify when a line containing this text appears. If omitted, notify on any change."},
+                "label": {"type": "string", "description": "Friendly name for notifications (optional)"},
+            },
+            required=["path"],
+        ),
+        FunctionSchema(
+            name="watch_command",
+            description="Run a shell command repeatedly until it succeeds or its output contains a string, then notify you.",
+            properties={
+                "command": {"type": "string", "description": "Shell command to run"},
+                "interval": {"type": "integer", "description": "Seconds between checks (default 30)"},
+                "until_output_contains": {"type": "string", "description": "Stop and notify when output contains this string. If omitted, stop when exit code is 0."},
+                "label": {"type": "string", "description": "Friendly name for notifications (optional)"},
+            },
+            required=["command"],
+        ),
     ]
 )
 
@@ -198,7 +258,6 @@ TOOLS = ToolsSchema(
 
 def _bump_tool():
     """Increment the tool_calls metric."""
-    from potts.state import state
     state.metrics["tool_calls"] += 1
 
 
@@ -228,6 +287,18 @@ async def handle_shell(params: FunctionCallParams):
     print(f"\033[2m[⚡ running: {command}]\033[0m")
     _bump_tool()
 
+    validation_error = validate_shell_command(command)
+    if validation_error:
+        await state.record_audit_event(
+            action="shell",
+            target=command[:200],
+            source="voice_tool",
+            status="blocked",
+            detail=validation_error,
+        )
+        await params.result_callback(validation_error)
+        return
+
     try:
         result = await asyncio.to_thread(
             lambda: subprocess.run(
@@ -239,13 +310,34 @@ async def handle_shell(params: FunctionCallParams):
             )
         )
         output = result.stdout.strip() or result.stderr.strip() or "(no output)"
-        if len(output) > 2000:
-            output = output[:2000] + "\n... (truncated)"
+        if len(output) > _SHELL_OUTPUT_MAX:
+            output = output[:_SHELL_OUTPUT_MAX] + "\n... (truncated)"
+        await state.record_audit_event(
+            action="shell",
+            target=command[:200],
+            source="voice_tool",
+            status="ok" if result.returncode == 0 else "error",
+            detail=f"exit_code={result.returncode}",
+        )
         await params.result_callback(output)
     except subprocess.TimeoutExpired:
+        await state.record_audit_event(
+            action="shell",
+            target=command[:200],
+            source="voice_tool",
+            status="error",
+            detail="timeout",
+        )
         await params.result_callback("Command timed out after 30 seconds and was cancelled.")
     except Exception as e:
         logger.error(f"shell error: {e}")
+        await state.record_audit_event(
+            action="shell",
+            target=command[:200],
+            source="voice_tool",
+            status="error",
+            detail=str(e)[:200],
+        )
         await params.result_callback(f"Shell error: {e}")
 
 
@@ -256,9 +348,17 @@ async def handle_read_file(params: FunctionCallParams):
     _bump_tool()
 
     try:
-        content = Path(path).expanduser().read_text()
-        if len(content) > 4000:
-            content = content[:4000] + "\n... (truncated)"
+        p = Path(path).expanduser()
+        size = p.stat().st_size
+        if size > 512 * 1024:  # 512 KB hard cap — avoid flooding the LLM context
+            await params.result_callback(
+                f"File is too large to read ({size // 1024} KB). "
+                "Use shell with head/tail/grep to inspect specific parts."
+            )
+            return
+        content = p.read_text(errors="replace")
+        if len(content) > _FILE_CONTENT_MAX:
+            content = content[:_FILE_CONTENT_MAX] + "\n... (truncated)"
         await params.result_callback(content)
     except FileNotFoundError:
         await params.result_callback(f"File not found: {path}")
@@ -274,11 +374,36 @@ async def handle_write_file(params: FunctionCallParams):
     _bump_tool()
 
     try:
-        p = Path(path).expanduser()
+        p, validation_error = validate_write_path(path)
+        if validation_error:
+            await state.record_audit_event(
+                action="write_file",
+                target=path[:200],
+                source="voice_tool",
+                status="blocked",
+                detail=validation_error,
+            )
+            await params.result_callback(validation_error)
+            return
+        assert p is not None
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(content)
+        await state.record_audit_event(
+            action="write_file",
+            target=str(p)[:200],
+            source="voice_tool",
+            status="ok",
+            detail=f"bytes={len(content)}",
+        )
         await params.result_callback(f"File written: {path}")
     except Exception as e:
+        await state.record_audit_event(
+            action="write_file",
+            target=path[:200],
+            source="voice_tool",
+            status="error",
+            detail=str(e)[:200],
+        )
         await params.result_callback(f"Write error: {e}")
 
 
@@ -289,12 +414,11 @@ async def handle_delegate_to_agent(params: FunctionCallParams):
     print(f"\033[2m[🤖 delegating to {agent_type}: {task[:60]}]\033[0m")
     _bump_tool()
 
-    from potts.agents.code import CodeAgent
-    from potts.agents.research import ResearchAgent
-    from potts.agents.system import SystemAgent
-
-    agent_map = {"code": CodeAgent, "research": ResearchAgent, "system": SystemAgent}
-    agent = agent_map.get(agent_type, ResearchAgent)()
+    if Config().agent_backend == "claude_code":
+        agent = make_claude_agent(agent_type)
+    else:
+        agent_map = {"code": CodeAgent, "research": ResearchAgent, "system": SystemAgent}
+        agent = agent_map.get(agent_type, ResearchAgent)()
 
     async def _run():
         try:
@@ -317,8 +441,6 @@ async def handle_schedule_reminder(params: FunctionCallParams):
     in_minutes = params.arguments.get("in_minutes")
     at_time = params.arguments.get("at_time")
     _bump_tool()
-
-    from potts.memory.store import add_scheduled_task
 
     now = datetime.now(timezone.utc)
 
@@ -360,8 +482,6 @@ async def handle_schedule_reminder(params: FunctionCallParams):
 
 async def handle_list_reminders(params: FunctionCallParams):
     _bump_tool()
-    from potts.memory.store import load_all_scheduled_tasks
-
     tasks = await load_all_scheduled_tasks()
     pending = [t for t in tasks if t["status"] == "pending"]
 
@@ -389,7 +509,7 @@ async def handle_read_emails(params: FunctionCallParams):
     count = params.arguments.get("count", 5)
     unread_only = params.arguments.get("unread_only", True)
     logger.info(f"[tool] read_emails count={count} unread={unread_only}")
-    print(f"\033[2m[📧 reading emails...]\033[0m")
+    print("\033[2m[📧 reading emails...]\033[0m")
     _bump_tool()
 
     try:
@@ -507,7 +627,7 @@ def _github_token() -> str:
 async def handle_github_list_repos(params: FunctionCallParams):
     limit = params.arguments.get("limit", 10)
     _bump_tool()
-    print(f"\033[2m[🐙 GitHub: listing repos...]\033[0m")
+    print("\033[2m[🐙 GitHub: listing repos...]\033[0m")
     try:
         from potts.tools.github import list_repos
         repos = await list_repos(_github_token(), limit)
@@ -613,7 +733,7 @@ async def handle_github_comment(params: FunctionCallParams):
 async def handle_github_notifications(params: FunctionCallParams):
     limit = params.arguments.get("limit", 10)
     _bump_tool()
-    print(f"\033[2m[🐙 GitHub: checking notifications...]\033[0m")
+    print("\033[2m[🐙 GitHub: checking notifications...]\033[0m")
     try:
         from potts.tools.github import list_notifications
         notifs = await list_notifications(_github_token(), limit)
@@ -626,6 +746,100 @@ async def handle_github_notifications(params: FunctionCallParams):
         await params.result_callback(str(e))
     except Exception as e:
         await params.result_callback(f"GitHub error: {e}")
+
+
+# ── Vision handlers ───────────────────────────────────────────────────────────
+
+async def handle_analyze_screen(params: FunctionCallParams):
+    question = params.arguments.get("question", "Describe what you see in detail.")
+    logger.info(f"[tool] analyze_screen: {question!r}")
+    print("\033[2m[👁 analyzing screen...]\033[0m")
+    _bump_tool()
+
+    try:
+        from potts.tools.vision import take_screenshot, analyze_image
+        screenshot = await take_screenshot()
+        result = await analyze_image(screenshot, question)
+        await params.result_callback(result)
+    except Exception as e:
+        logger.error(f"analyze_screen error: {e}")
+        await params.result_callback(f"Vision error: {e}")
+
+
+async def handle_analyze_image(params: FunctionCallParams):
+    path = params.arguments.get("path", "")
+    question = params.arguments.get("question", "Describe what you see in detail.")
+    logger.info(f"[tool] analyze_image: {path!r}")
+    print(f"\033[2m[👁 analyzing image: {path}]\033[0m")
+    _bump_tool()
+
+    try:
+        from potts.tools.vision import analyze_image_file
+        result = await analyze_image_file(path, question)
+        await params.result_callback(result)
+    except FileNotFoundError:
+        await params.result_callback(f"Image file not found: {path}")
+    except Exception as e:
+        logger.error(f"analyze_image error: {e}")
+        await params.result_callback(f"Vision error: {e}")
+
+
+# ── Monitor handlers ──────────────────────────────────────────────────────────
+
+async def handle_watch_process(params: FunctionCallParams):
+    pid = params.arguments.get("pid")
+    name = params.arguments.get("name")
+    label = params.arguments.get("label")
+    logger.info(f"[tool] watch_process pid={pid} name={name!r}")
+    _bump_tool()
+
+    try:
+        from potts.tools.monitor import watch_process
+        result = await watch_process(pid=pid, name=name, label=label)
+        await params.result_callback(result)
+    except RuntimeError as e:
+        await params.result_callback(str(e))
+    except Exception as e:
+        logger.error(f"watch_process error: {e}")
+        await params.result_callback(f"Monitor error: {e}")
+
+
+async def handle_watch_file(params: FunctionCallParams):
+    path = params.arguments.get("path", "")
+    pattern = params.arguments.get("pattern")
+    label = params.arguments.get("label")
+    logger.info(f"[tool] watch_file: {path!r} pattern={pattern!r}")
+    _bump_tool()
+
+    try:
+        from potts.tools.monitor import watch_file
+        result = await watch_file(path=path, pattern=pattern, label=label)
+        await params.result_callback(result)
+    except Exception as e:
+        logger.error(f"watch_file error: {e}")
+        await params.result_callback(f"Monitor error: {e}")
+
+
+async def handle_watch_command(params: FunctionCallParams):
+    command = params.arguments.get("command", "")
+    interval = params.arguments.get("interval", 30)
+    until_output_contains = params.arguments.get("until_output_contains")
+    label = params.arguments.get("label")
+    logger.info(f"[tool] watch_command: {command!r}")
+    _bump_tool()
+
+    try:
+        from potts.tools.monitor import watch_command
+        result = await watch_command(
+            command=command,
+            interval=interval,
+            until_output_contains=until_output_contains,
+            label=label,
+        )
+        await params.result_callback(result)
+    except Exception as e:
+        logger.error(f"watch_command error: {e}")
+        await params.result_callback(f"Monitor error: {e}")
 
 
 # ── Registration ───────────────────────────────────────────────────────────────
@@ -650,10 +864,16 @@ def register_tools(llm):
     llm.register_function("github_get_pr", handle_github_get_pr)
     llm.register_function("github_comment", handle_github_comment)
     llm.register_function("github_notifications", handle_github_notifications)
+    llm.register_function("analyze_screen", handle_analyze_screen)
+    llm.register_function("analyze_image", handle_analyze_image)
+    llm.register_function("watch_process", handle_watch_process)
+    llm.register_function("watch_file", handle_watch_file)
+    llm.register_function("watch_command", handle_watch_command)
     logger.info(
         "Tools registered: web_search, shell, read_file, write_file, "
         "delegate_to_agent, schedule_reminder, list_reminders, "
         "read_emails, send_email, read_calendar, create_event, "
         "github_list_repos, github_list_issues, github_get_issue, "
-        "github_list_prs, github_get_pr, github_comment, github_notifications"
+        "github_list_prs, github_get_pr, github_comment, github_notifications, "
+        "analyze_screen, analyze_image, watch_process, watch_file, watch_command"
     )

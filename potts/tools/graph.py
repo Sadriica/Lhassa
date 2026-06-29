@@ -8,7 +8,6 @@ subsequent calls (MSAL handles refresh tokens automatically).
 
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
-from typing import Optional
 
 import httpx
 import msal
@@ -44,6 +43,7 @@ def _save_cache(cache: msal.SerializableTokenCache):
     if cache.has_state_changed:
         CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
         CACHE_PATH.write_text(cache.serialize())
+        CACHE_PATH.chmod(0o600)  # owner read/write only
 
 
 def _build_app(tenant_id: str, client_id: str):
@@ -109,29 +109,38 @@ async def get_access_token(tenant_id: str, client_id: str) -> str:
 
 # ── Graph API helpers ──────────────────────────────────────────────────────────
 
+# Cached client — reuses TCP connections across calls
+_http: httpx.AsyncClient | None = None
+
+
+def _get_http() -> httpx.AsyncClient:
+    global _http
+    if _http is None:
+        _http = httpx.AsyncClient(timeout=15)
+    return _http
+
+
 async def _get(token: str, path: str, params: dict | None = None) -> dict:
-    async with httpx.AsyncClient(timeout=15) as client:
-        r = await client.get(
-            f"{GRAPH_BASE}{path}",
-            headers={"Authorization": f"Bearer {token}"},
-            params=params or {},
-        )
-        r.raise_for_status()
-        return r.json()
+    r = await _get_http().get(
+        f"{GRAPH_BASE}{path}",
+        headers={"Authorization": f"Bearer {token}"},
+        params=params or {},
+    )
+    r.raise_for_status()
+    return r.json()
 
 
 async def _post(token: str, path: str, body: dict) -> dict:
-    async with httpx.AsyncClient(timeout=15) as client:
-        r = await client.post(
-            f"{GRAPH_BASE}{path}",
-            headers={
-                "Authorization": f"Bearer {token}",
-                "Content-Type": "application/json",
-            },
-            json=body,
-        )
-        r.raise_for_status()
-        return r.json() if r.content else {}
+    r = await _get_http().post(
+        f"{GRAPH_BASE}{path}",
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+        },
+        json=body,
+    )
+    r.raise_for_status()
+    return r.json() if r.content else {}
 
 
 # ── Email ──────────────────────────────────────────────────────────────────────

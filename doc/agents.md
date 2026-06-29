@@ -6,7 +6,11 @@ Sub-agents let Potts hand off complex, time-consuming work to a dedicated backgr
 
 ## What Sub-Agents Are
 
-Each agent is an instance of `BaseAgent` — a wrapper around an **AsyncGroq streaming** call. When you trigger a delegation, Potts:
+Each agent is an instance of `BaseAgent` — a wrapper around a **multi-turn tool loop** backed by whichever LLM provider is configured (`POTTS_LLM_PROVIDER`). All providers are supported: Groq, Anthropic, OpenAI, OpenRouter, Cerebras, and Ollama.
+
+By default all agents run through `claude --print` (`POTTS_AGENT_BACKEND=claude_code`), using your Claude Code subscription with the full Claude Code toolset. Set `POTTS_AGENT_BACKEND=builtin` to use the internal LLM tool loop with `POTTS_LLM_PROVIDER` instead. See [configuration.md](configuration.md) for details.
+
+When you trigger a delegation, Potts:
 
 1. Instantiates the appropriate agent class
 2. Registers a run record in `AppState`
@@ -18,6 +22,16 @@ Each agent is an instance of `BaseAgent` — a wrapper around an **AsyncGroq str
 Agents run in parallel with the voice pipeline — you can have multiple agents running at the same time and continue talking to Potts normally while they work.
 
 Each agent run gets a short random ID (e.g. `a3f19c`) and goes through three states: `running` → `done` (or `error`).
+
+### Tool loop
+
+Agents are not single-shot — they have a **tool loop** that lets them call tools and iterate on their results, up to a maximum of 10 iterations per run. This means an agent can:
+
+- Search the web to gather current information
+- Run shell commands to inspect your system
+- Read and write files
+
+Each individual LLM call within the loop has a **60-second timeout**. If an agent reaches the maximum number of iterations without finishing, it returns whatever partial output it has produced up to that point and logs a warning.
 
 ---
 
@@ -34,8 +48,9 @@ Each agent run gets a short random ID (e.g. `a3f19c`) and goes through three sta
 - Refactoring suggestions
 - Generating boilerplate
 
-**System prompt excerpt:**
-> You are an expert software engineer and coding assistant running on an Arch Linux machine. You write clean, idiomatic code. You debug efficiently by reading error messages carefully. When asked to write code, provide complete, working implementations.
+**System prompt focus:** expert software engineer on Arch Linux; writes clean, idiomatic code; debugs by reading error messages carefully; provides complete, working implementations.
+
+When `POTTS_AGENT_BACKEND=claude_code`, this agent runs through `claude --print` and gets the full Claude Code toolset instead of the four basic tools.
 
 **Example delegation:**
 ```
@@ -58,8 +73,7 @@ Potts: Code agent finished. It wrote a script using tail -f and grep
 - Summarising a complex topic
 - Gathering background knowledge before making a decision
 
-**System prompt excerpt:**
-> You are a thorough research assistant. You synthesize information clearly and accurately. Identify what is known vs uncertain, present findings in a structured, readable way, cite sources when possible, and flag caveats.
+**System prompt focus:** thorough research assistant; synthesises information clearly and accurately; identifies what is known vs uncertain; presents findings in a structured way; cites sources and flags caveats.
 
 **Example delegation:**
 ```
@@ -83,8 +97,7 @@ Potts: Research agent finished. The main changes in Tailwind v4 include
 - System maintenance tasks
 - Writing shell scripts for system operations
 
-**System prompt excerpt:**
-> You are a Linux/Arch system administration expert running on an Arch Linux machine with PipeWire audio, systemd, and pacman. Provide exact shell commands that work on Arch Linux. Prefer pacman/yay for package management. Use systemctl for service management.
+**System prompt focus:** Linux/Arch system administration expert; provides exact shell commands that work on Arch Linux; prefers pacman/yay for packages; uses systemctl for services.
 
 **Example delegation:**
 ```
@@ -156,7 +169,9 @@ Cards from the current session persist until Potts is restarted. The WebSocket d
 
 ## Limitations
 
-- **Single pass only.** Agents make one LLM call with up to 4096 output tokens. They cannot use tools, browse the web, or iterate on their results.
+- **Maximum 10 tool iterations.** The agent loop runs up to 10 LLM calls per run. If the task isn't finished by then, the agent returns whatever partial output it has and logs a warning. For most tasks this limit is never reached.
+- **60-second per-call timeout.** Each individual LLM call within the loop must complete within 60 seconds, or the run is aborted with an error.
 - **No cancellation.** Once an agent task is started, it runs to completion. There's no voice command to cancel a running agent.
-- **Sequential within type.** If you start two code agents back-to-back, they both run in parallel (they're separate asyncio tasks), which may increase Groq API rate limit pressure.
-- **Context is isolated.** Agents don't share the voice conversation history. You need to provide full context in the task description if it's needed.
+- **Parallel agents share API quota.** Multiple agents running simultaneously all call the same LLM provider, which may increase rate limit pressure on providers with tight quotas (e.g. free Groq tiers).
+- **Context is isolated.** Agents don't share the voice conversation history. Provide full context in the task description if the agent needs it.
+- **Limited tool set.** Agents have access to `web_search`, `shell`, `read_file`, and `write_file` only. GitHub, vision, and monitor tools are voice-pipeline-only and cannot be called from within an agent run.
