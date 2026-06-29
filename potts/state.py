@@ -52,6 +52,11 @@ class AppState:
             "sessions": 0,
             "agents_launched": 0,
             "blocked_actions": 0,
+            # LLM cost ledger (maintained by potts.llm.gateway)
+            "llm_input_tokens": 0,
+            "llm_output_tokens": 0,
+            "llm_cost_usd": 0.0,
+            "llm_cache_hits": 0,
         }
         self.audit_events: list[AuditEvent] = []
         self._audit_loaded = False

@@ -128,6 +128,18 @@ class Config:
     # Default: 300 (5 minutes). Set lower to save API costs on idle sessions.
     wake_timeout: float = float(os.getenv("POTTS_WAKE_TIMEOUT", "300"))
 
+    # ── LLM gateway (cost control) ────────────────────────────────────────────
+    # Single chokepoint for cloud-LLM calls: cache + budget + cost ledger.
+    # Daily output-token budget; 0 = unlimited. When exceeded, the gateway
+    # refuses further calls until the next day (UTC).
+    llm_daily_token_budget: int = _safe_int(
+        os.getenv("POTTS_LLM_DAILY_TOKEN_BUDGET", "0"), 0
+    )
+    # Cache identical prompts so repeat questions never hit the cloud.
+    llm_cache_enabled: bool = os.getenv("POTTS_LLM_CACHE", "1").lower() in (
+        "1", "true", "yes",
+    )
+
     # ── Dashboard API ─────────────────────────────────────────────────────────
     api_host: str = os.getenv("POTTS_API_HOST", "0.0.0.0")
     api_port: int = _safe_int(os.getenv("POTTS_API_PORT", "7860"), 7860)
