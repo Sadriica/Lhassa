@@ -1,8 +1,8 @@
-"""Tests for potts.memory.session."""
+"""Tests for lhassa.memory.session."""
 
 import pytest
 
-from potts.llm.gateway import BudgetExceeded, CompletionResult
+from lhassa.llm.gateway import BudgetExceeded, CompletionResult
 
 
 def _result(text: str) -> CompletionResult:
@@ -19,7 +19,7 @@ def _result(text: str) -> CompletionResult:
 
 @pytest.mark.asyncio
 async def test_extract_session_payload_routes_through_gateway(monkeypatch):
-    import potts.memory.session as session
+    import lhassa.memory.session as session
 
     calls = {}
 
@@ -40,7 +40,7 @@ async def test_extract_session_payload_routes_through_gateway(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_extract_session_payload_strips_markdown_fence(monkeypatch):
-    import potts.memory.session as session
+    import lhassa.memory.session as session
 
     async def fake_complete(messages, **kwargs):
         return _result('```json\n{"facts":[],"summary":"ok"}\n```')
@@ -53,7 +53,7 @@ async def test_extract_session_payload_strips_markdown_fence(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_close_session_persists_facts_and_summary(monkeypatch):
-    import potts.memory.session as session
+    import lhassa.memory.session as session
 
     saved_facts = []
     saved_summaries = []
@@ -84,7 +84,7 @@ async def test_close_session_persists_facts_and_summary(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_close_session_degrades_on_budget_exceeded(monkeypatch):
-    import potts.memory.session as session
+    import lhassa.memory.session as session
 
     async def fake_complete(messages, **kwargs):
         raise BudgetExceeded("daily budget reached")

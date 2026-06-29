@@ -1,4 +1,4 @@
-"""Tests for potts.config — provider detection, model defaults, validation."""
+"""Tests for lhassa.config — provider detection, model defaults, validation."""
 
 import pytest
 
@@ -12,7 +12,7 @@ def _reload_config():
     """
     import importlib
     import unittest.mock as mock
-    import potts.config as mod
+    import lhassa.config as mod
     with mock.patch("dotenv.load_dotenv"):
         importlib.reload(mod)
     return mod.Config
@@ -47,9 +47,9 @@ def test_detect_provider_priority(clean_env):
 
 
 def test_detect_provider_explicit_override(clean_env):
-    """POTTS_LLM_PROVIDER overrides auto-detection."""
+    """LHASSA_LLM_PROVIDER overrides auto-detection."""
     clean_env.setenv("GROQ_API_KEY", "gsk_test")
-    clean_env.setenv("POTTS_LLM_PROVIDER", "openrouter")
+    clean_env.setenv("LHASSA_LLM_PROVIDER", "openrouter")
     Config = _reload_config()
     assert Config.llm_provider == "openrouter"
 
@@ -76,7 +76,7 @@ def test_default_model_openai(clean_env):
 
 def test_model_override(clean_env):
     clean_env.setenv("GROQ_API_KEY", "gsk_test")
-    clean_env.setenv("POTTS_MODEL", "llama-3.1-8b-instant")
+    clean_env.setenv("LHASSA_MODEL", "llama-3.1-8b-instant")
     Config = _reload_config()
     assert Config.model == "llama-3.1-8b-instant"
 
@@ -84,21 +84,21 @@ def test_model_override(clean_env):
 # ── _safe_int ──────────────────────────────────────────────────────────────────
 
 def test_safe_int_valid(clean_env):
-    from potts.config import _safe_int
+    from lhassa.config import _safe_int
     assert _safe_int("8080", 7860) == 8080
 
 
 def test_safe_int_invalid(clean_env):
-    from potts.config import _safe_int
+    from lhassa.config import _safe_int
     assert _safe_int("not-a-number", 7860) == 7860
 
 
 def test_safe_int_empty(clean_env):
-    from potts.config import _safe_int
+    from lhassa.config import _safe_int
     assert _safe_int("", 7860) == 7860
 
 
-# ── POTTS_WAKE_TIMEOUT ─────────────────────────────────────────────────────────
+# ── LHASSA_WAKE_TIMEOUT ─────────────────────────────────────────────────────────
 
 def test_wake_timeout_default(clean_env):
     Config = _reload_config()
@@ -106,27 +106,27 @@ def test_wake_timeout_default(clean_env):
 
 
 def test_wake_timeout_custom(clean_env):
-    clean_env.setenv("POTTS_WAKE_TIMEOUT", "60")
+    clean_env.setenv("LHASSA_WAKE_TIMEOUT", "60")
     Config = _reload_config()
     assert Config.wake_timeout == 60.0
 
 
-# ── POTTS_MAX_AGENT_ITERATIONS ─────────────────────────────────────────────────
+# ── LHASSA_MAX_AGENT_ITERATIONS ─────────────────────────────────────────────────
 
 def test_max_agent_iterations_default(clean_env):
     _reload_config()
     # MAX_ITERATIONS is at module level in base.py, not Config — just check it parses
-    clean_env.setenv("POTTS_MAX_AGENT_ITERATIONS", "10")
+    clean_env.setenv("LHASSA_MAX_AGENT_ITERATIONS", "10")
     import importlib
-    import potts.agents.base as base_mod
+    import lhassa.agents.base as base_mod
     importlib.reload(base_mod)
     assert base_mod.MAX_ITERATIONS == 10
 
 
 def test_max_agent_iterations_custom(clean_env):
-    clean_env.setenv("POTTS_MAX_AGENT_ITERATIONS", "20")
+    clean_env.setenv("LHASSA_MAX_AGENT_ITERATIONS", "20")
     import importlib
-    import potts.agents.base as base_mod
+    import lhassa.agents.base as base_mod
     importlib.reload(base_mod)
     assert base_mod.MAX_ITERATIONS == 20
 
@@ -153,7 +153,7 @@ def test_validate_raises_on_unknown_provider(clean_env):
     clean_env.setenv("GROQ_API_KEY", "gsk_test")
     clean_env.setenv("DEEPGRAM_API_KEY", "dg_test")
     clean_env.setenv("CARTESIA_API_KEY", "cart_test")
-    clean_env.setenv("POTTS_LLM_PROVIDER", "fakeprovider")
+    clean_env.setenv("LHASSA_LLM_PROVIDER", "fakeprovider")
     Config = _reload_config()
     with pytest.raises(RuntimeError, match="Unknown LLM provider"):
         Config().validate()
@@ -162,7 +162,7 @@ def test_validate_raises_on_unknown_provider(clean_env):
 def test_validate_raises_on_missing_llm_key(clean_env):
     clean_env.setenv("DEEPGRAM_API_KEY", "dg_test")
     clean_env.setenv("CARTESIA_API_KEY", "cart_test")
-    clean_env.setenv("POTTS_LLM_PROVIDER", "groq")
+    clean_env.setenv("LHASSA_LLM_PROVIDER", "groq")
     # No GROQ_API_KEY set
     Config = _reload_config()
     with pytest.raises(RuntimeError, match="GROQ_API_KEY"):

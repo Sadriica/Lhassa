@@ -1,6 +1,6 @@
 # Architecture
 
-This document describes how Potts is built: the data flow for a voice turn, the concurrent task structure, the state singleton, the WebSocket fan-out, and the file layout.
+This document describes how Lhassa is built: the data flow for a voice turn, the concurrent task structure, the state singleton, the WebSocket fan-out, and the file layout.
 
 ---
 
@@ -8,7 +8,7 @@ This document describes how Potts is built: the data flow for a voice turn, the 
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                         Potts Process                           │
+│                         Lhassa Process                           │
 │                                                                 │
 │  ┌──────────┐   ┌───────────┐   ┌─────────────────────────┐   │
 │  │          │   │  Voice    │   │   FastAPI / uvicorn      │   │
@@ -32,7 +32,7 @@ Voice Pipeline (pipecat):
   DeepgramSTTService          ◄── Deepgram API (WebSocket)
       │  (TranscriptionFrame)
       ▼
-  [WakeDebug]  (if POTTS_DEBUG=1)
+  [WakeDebug]  (if LHASSA_DEBUG=1)
       │
       ▼
   LLMContextAggregator.user()
@@ -74,9 +74,9 @@ _context, messages = await run_voice_pipeline()
 
 | Task | Module | What it does |
 |---|---|---|
-| **Voice pipeline** | `potts/voice/pipeline.py` | Microphone → STT → LLM → TTS → speaker. The primary task — when it exits (Ctrl+C), the other two are cancelled. |
-| **API server** | `potts/api/server.py` | Serves REST endpoints, WebSocket fan-out, and the React static files. |
-| **Scheduler** | `potts/scheduler.py` | Polls the database every 30 seconds for due reminders and fires them. |
+| **Voice pipeline** | `lhassa/voice/pipeline.py` | Microphone → STT → LLM → TTS → speaker. The primary task — when it exits (Ctrl+C), the other two are cancelled. |
+| **API server** | `lhassa/api/server.py` | Serves REST endpoints, WebSocket fan-out, and the React static files. |
+| **Scheduler** | `lhassa/scheduler.py` | Polls the database every 30 seconds for due reminders and fires them. |
 
 On shutdown (KeyboardInterrupt / Ctrl+C):
 1. The voice pipeline stops
@@ -96,7 +96,7 @@ On shutdown (KeyboardInterrupt / Ctrl+C):
 2. WAKE WORD DETECTED
    A transcription matches a wake phrase (e.g. "pots").
    → 880 Hz beep plays
-   → "[Potts active]" printed to terminal
+   → "[Lhassa active]" printed to terminal
    → WakePhraseUserTurnStartStrategy signals the aggregator to start a new turn
 
 3. LISTENING
@@ -128,7 +128,7 @@ On shutdown (KeyboardInterrupt / Ctrl+C):
    If no wake word is heard within 5 minutes of the last activation,
    WakePhraseUserTurnStartStrategy fires the timeout callback.
    → 440 Hz beep plays
-   → "[Potts sleeping]" printed to terminal
+   → "[Lhassa sleeping]" printed to terminal
    → Returns to step 1
 ```
 
@@ -136,7 +136,7 @@ On shutdown (KeyboardInterrupt / Ctrl+C):
 
 ## AppState Singleton
 
-`potts/state.py` defines `AppState` — a single shared object that connects the voice pipeline, the API server, the scheduler, and the agents:
+`lhassa/state.py` defines `AppState` — a single shared object that connects the voice pipeline, the API server, the scheduler, and the agents:
 
 ```python
 state = AppState()  # module-level singleton
@@ -193,7 +193,7 @@ Events that trigger broadcasts:
 
 ## SQLite Schema
 
-Database location: `~/.potts/memory.db`
+Database location: `~/.lhassa/memory.db`
 
 ```sql
 CREATE TABLE facts (
@@ -233,7 +233,7 @@ potts/                          ← project root
 ├── pyproject.toml              ← project metadata, dependencies (uv)
 ├── Makefile                    ← install / run / dev / dashboard / clean
 │
-├── potts/                      ← Python package
+├── lhassa/                     ← Python package
 │   ├── config.py               ← Config class, reads all env vars
 │   ├── state.py                ← AppState singleton (shared mutable state)
 │   ├── scheduler.py            ← background reminder poller (30s interval)
@@ -248,7 +248,7 @@ potts/                          ← project root
 │   ├── llm/
 │   │   ├── prompt.py           ← BASE_PROMPT + memory context injection
 │   │   └── provider.py         ← get_agent_client(): returns the right SDK client
-│   │                             for the configured POTTS_LLM_PROVIDER
+│   │                             for the configured LHASSA_LLM_PROVIDER
 │   │
 │   ├── tools/
 │   │   ├── registry.py         ← tool schemas + all handler functions
@@ -308,7 +308,7 @@ potts/                          ← project root
 ## Key Design Decisions
 
 **Why pipecat?**
-Pipecat handles the hard parts of voice pipelines: audio transport, STT/TTS service integration, VAD, frame routing, and interruption support. Potts uses it as the pipeline backbone and extends it with a custom mute strategy and wake word event handlers.
+Pipecat handles the hard parts of voice pipelines: audio transport, STT/TTS service integration, VAD, frame routing, and interruption support. Lhassa uses it as the pipeline backbone and extends it with a custom mute strategy and wake word event handlers.
 
 **Why a singleton AppState instead of passing state around?**
 The three concurrent tasks (voice, API, scheduler) need to share state without complex dependency injection. A module-level singleton imported from anywhere is simple and practical for a personal assistant that runs as a single process.
@@ -320,4 +320,4 @@ Zero dependencies, zero setup, survives restarts, inspectable with standard tool
 The voice pipeline, API server, and scheduler all need to run concurrently. asyncio tasks share a single thread with cooperative multitasking, which is ideal for I/O-bound work like LLM API calls and audio streaming.
 
 **Why abstract the LLM provider?**
-Tying the codebase to a single provider means every user needs that provider's account. By abstracting behind `POTTS_LLM_PROVIDER`, users can pick what they already have (Groq free tier, an existing OpenAI account, a local Ollama instance) without editing code. The pipecat layer handles the voice pipeline side; `potts/llm/provider.py` handles the agent side. Both paths converge on the same tool schemas and notification routing.
+Tying the codebase to a single provider means every user needs that provider's account. By abstracting behind `LHASSA_LLM_PROVIDER`, users can pick what they already have (Groq free tier, an existing OpenAI account, a local Ollama instance) without editing code. The pipecat layer handles the voice pipeline side; `lhassa/llm/provider.py` handles the agent side. Both paths converge on the same tool schemas and notification routing.

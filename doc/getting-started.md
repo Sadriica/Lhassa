@@ -1,6 +1,6 @@
-# Getting Started with Potts
+# Getting Started with Lhassa
 
-Potts is a JARVIS-inspired voice AI assistant. You speak to it; it listens, thinks, and talks back. It can search the web, run shell commands, read and write files, send emails, manage your calendar, set reminders, and hand off complex work to background agents — all through natural conversation.
+Lhassa is a JARVIS-inspired voice AI assistant. You speak to it; it listens, thinks, and talks back. It can search the web, run shell commands, read and write files, send emails, manage your calendar, set reminders, and hand off complex work to background agents — all through natural conversation.
 
 Runs on **Linux, macOS, and Windows**. Everything runs locally except three cloud API calls: Deepgram (speech-to-text), your LLM provider (reasoning), and Cartesia (text-to-speech).
 
@@ -60,7 +60,7 @@ You need **one LLM key** plus two keys for speech. Pick whichever LLM provider y
 | **OpenRouter** | [openrouter.ai](https://openrouter.ai) → Keys | Access many models |
 | **Cerebras** | [cloud.cerebras.ai](https://cloud.cerebras.ai) | Very fast inference |
 
-Potts auto-detects the provider from whichever key you set — **no extra config needed**.
+Lhassa auto-detects the provider from whichever key you set — **no extra config needed**.
 
 If you set `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`, vision tools (`analyze_screen`, `analyze_image`) also work automatically with the same key.
 
@@ -69,7 +69,7 @@ If you set `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`, vision tools (`analyze_scree
 
 **Cartesia** (text-to-speech — pay-as-you-go, very cheap)
 1. [console.cartesia.ai](https://console.cartesia.ai) → API Keys → Generate key
-2. To preview voices: [play.cartesia.ai](https://play.cartesia.ai) — copy a voice ID and set it as `POTTS_VOICE_ID`
+2. To preview voices: [play.cartesia.ai](https://play.cartesia.ai) — copy a voice ID and set it as `LHASSA_VOICE_ID`
 
 ### 3. Configure your environment
 
@@ -96,28 +96,28 @@ DEEPGRAM_API_KEY=...
 CARTESIA_API_KEY=...
 ```
 
-Potts will log which provider and model it resolved at startup, so you can confirm it picked the right one.
+Lhassa will log which provider and model it resolved at startup, so you can confirm it picked the right one.
 
-**Language:** Potts defaults to English (`POTTS_STT_LANGUAGE=en`). If you want a different language, set it in `.env`:
+**Language:** Lhassa defaults to English (`LHASSA_STT_LANGUAGE=en`). If you want a different language, set it in `.env`:
 
 ```dotenv
-POTTS_STT_LANGUAGE=es   # Spanish
-POTTS_STT_LANGUAGE=fr   # French
-POTTS_STT_LANGUAGE=de   # German
+LHASSA_STT_LANGUAGE=es   # Spanish
+LHASSA_STT_LANGUAGE=fr   # French
+LHASSA_STT_LANGUAGE=de   # German
 ```
 
-**Agents:** Potts auto-detects whether to use Claude Code or the built-in LLM for background agents. Check which you have:
+**Agents:** Lhassa auto-detects whether to use Claude Code or the built-in LLM for background agents. Check which you have:
 
 ```bash
 which claude   # prints a path if Claude Code is installed, blank if not
 ```
 
-- **Claude Code found:** agents run via `claude --print` (your Claude subscription). Set `POTTS_AGENT_DIR` to the project directory you want them to operate in.
+- **Claude Code found:** agents run via `claude --print` (your Claude subscription). Set `LHASSA_AGENT_DIR` to the project directory you want them to operate in.
 - **Claude Code not found:** agents use the built-in LLM tool loop with your configured provider. No extra config needed.
 
 ```dotenv
 # Only needed if claude is installed:
-POTTS_AGENT_DIR=/home/yourname/code/myproject
+LHASSA_AGENT_DIR=/home/yourname/code/myproject
 ```
 
 Everything else in `.env` has sensible defaults and can be left as-is.
@@ -130,7 +130,7 @@ make install
 
 This runs `uv sync` (Python deps, including PyTorch for voice activity detection) and `npm install && npm run build` (React dashboard). First run takes 2–5 minutes.
 
-### 5. Run Potts
+### 5. Run Lhassa
 
 ```bash
 make run
@@ -143,38 +143,38 @@ make run
 You should see output like this:
 
 ```
-12:34:01 | INFO     | Starting Potts...
+12:34:01 | INFO     | Starting Lhassa...
 12:34:02 | INFO     | Agent backend: builtin (auto-detected: claude CLI not found)  ...
 12:34:02 | INFO     | Using audio device [3] 'PipeWire'
 12:34:03 | INFO     | No prior memory — first session.
 12:34:04 | INFO     | Dashboard available at http://localhost:7766
 12:34:04 | INFO     | Scheduler started.
-12:34:05 | INFO     | Potts ready. Say 'Potts' to activate.
+12:34:05 | INFO     | Lhassa ready. Say 'Lhassa' to activate.
 
-[Potts sleeping — say 'Potts' to wake]
+[Lhassa sleeping — say 'Lhassa' to wake]
 ```
 
-About 1.5 seconds after startup, Potts speaks a greeting in your configured language — this confirms your speakers and TTS are working.
+About 1.5 seconds after startup, Lhassa speaks a greeting in your configured language — this confirms your speakers and TTS are working.
 
-### Waking Potts
+### Waking Lhassa
 
-Say **"Potts"**. You'll hear a short high beep and see `[Potts active]`. Now speak your request naturally:
+Say **"Lhassa"**. You'll hear a short high beep and see `[Lhassa active]`. Now speak your request naturally:
 
 ```
 You: What's the weather like in London today?
 [searching: weather London today]
-Potts: Currently in London it's 12 degrees and overcast, with rain expected in the afternoon.
+Lhassa: Currently in London it's 12 degrees and overcast, with rain expected in the afternoon.
 ```
 
-After 5 minutes of silence, Potts goes back to sleep automatically — you'll hear a lower beep and see `[Potts sleeping]`. Say "Potts" again to wake it.
+After 5 minutes of silence, Lhassa goes back to sleep automatically — you'll hear a lower beep and see `[Lhassa sleeping]`. Say "Lhassa" again to wake it.
 
 ### The Dashboard
 
-Open [http://localhost:7766](http://localhost:7766) while Potts is running to see live status, agent output, memory, reminders, and metrics. The dashboard is optional — Potts works entirely without it.
+Open [http://localhost:7766](http://localhost:7766) while Lhassa is running to see live status, agent output, memory, reminders, and metrics. The dashboard is optional — Lhassa works entirely without it.
 
-### Stopping Potts
+### Stopping Lhassa
 
-Press **Ctrl+C**. Potts saves the session to memory (extracts facts and writes a summary) before exiting. The next session will start with that context.
+Press **Ctrl+C**. Lhassa saves the session to memory (extracts facts and writes a summary) before exiting. The next session will start with that context.
 
 ---
 
@@ -184,18 +184,18 @@ These require additional setup but are not needed for core voice functionality.
 
 ### Background agents
 
-When you ask Potts to delegate a complex task, it spawns a background agent. The agent backend is auto-detected (see step 3 above), but you can override it:
+When you ask Lhassa to delegate a complex task, it spawns a background agent. The agent backend is auto-detected (see step 3 above), but you can override it:
 
 ```dotenv
-POTTS_AGENT_BACKEND=claude_code   # force claude --print
-POTTS_AGENT_BACKEND=builtin       # force built-in LLM tool loop
+LHASSA_AGENT_BACKEND=claude_code   # force claude --print
+LHASSA_AGENT_BACKEND=builtin       # force built-in LLM tool loop
 ```
 
 See [agents.md](agents.md) for details on what each agent type does.
 
 ### Vision tools (analyze_screen, analyze_image)
 
-If your `POTTS_LLM_PROVIDER` is already `anthropic`, `openai`, or `openrouter`, vision works automatically — no extra config needed.
+If your `LHASSA_LLM_PROVIDER` is already `anthropic`, `openai`, or `openrouter`, vision works automatically — no extra config needed.
 
 Otherwise, set one of:
 ```dotenv
@@ -208,7 +208,7 @@ You also need a screenshot tool for `analyze_screen`:
 sudo pacman -S scrot    # or: maim, imagemagick, spectacle
 ```
 
-See [configuration.md](configuration.md) for advanced options (`POTTS_VISION_PROVIDER`, `POTTS_VISION_MODEL`).
+See [configuration.md](configuration.md) for advanced options (`LHASSA_VISION_PROVIDER`, `LHASSA_VISION_MODEL`).
 
 ### GitHub tools
 
@@ -232,22 +232,22 @@ Falls back to DuckDuckGo if not set.
 
 ## Troubleshooting
 
-**Potts doesn't understand what I'm saying**
+**Lhassa doesn't understand what I'm saying**
 
 1. Run `make dev` to see live transcriptions. You'll see what Deepgram is hearing in real time.
-2. Make sure `POTTS_STT_LANGUAGE` matches the language you're speaking.
-3. Say "Potts" clearly — the wake word detection is tuned for the name "Potts" specifically.
+2. Make sure `LHASSA_STT_LANGUAGE` matches the language you're speaking.
+3. Say "Lhassa" clearly — the wake word detection is tuned for the name "Lhassa" specifically.
 
-**No audio / Potts doesn't speak**
+**No audio / Lhassa doesn't speak**
 
-Check that your speakers are not muted. The startup greeting plays ~1.5 seconds after launch — if you hear nothing, check `POTTS_MIC_NAME`:
+Check that your speakers are not muted. The startup greeting plays ~1.5 seconds after launch — if you hear nothing, check `LHASSA_MIC_NAME`:
 
 ```bash
 # List all audio devices:
 python -c "import pyaudio; p = pyaudio.PyAudio(); [print(i, p.get_device_info_by_index(i)['name']) for i in range(p.get_device_count())]"
 ```
 
-Set `POTTS_MIC_NAME` in `.env` to a substring of the device name you want to use. Set it to `""` (empty) to use the system default.
+Set `LHASSA_MIC_NAME` in `.env` to a substring of the device name you want to use. Set it to `""` (empty) to use the system default.
 
 **"PipeWire not found — using system default audio device"** (Linux)
 
@@ -256,11 +256,11 @@ PipeWire is not running or not named "pipewire" in PyAudio. Check with:
 systemctl --user status pipewire
 pactl info | grep -i "server name"
 ```
-Or set `POTTS_MIC_NAME=` (empty) in `.env` to use the system default device directly.
+Or set `LHASSA_MIC_NAME=` (empty) in `.env` to use the system default device directly.
 
-**"POTTS_AGENT_BACKEND=claude_code but the 'claude' CLI was not found in PATH"**
+**"LHASSA_AGENT_BACKEND=claude_code but the 'claude' CLI was not found in PATH"**
 
-Either install Claude Code (`npm install -g @anthropic-ai/claude-code`) or add `POTTS_AGENT_BACKEND=builtin` to your `.env`.
+Either install Claude Code (`npm install -g @anthropic-ai/claude-code`) or add `LHASSA_AGENT_BACKEND=builtin` to your `.env`.
 
 **"Missing required environment variable: ..."**
 
@@ -276,4 +276,4 @@ Vision tools need their own key — see the Optional Features section above.
 
 **Agent says "claude exited 127" or similar**
 
-`POTTS_AGENT_BACKEND=claude_code` is set but the `claude` binary can't be found. Either install Claude Code or set `POTTS_AGENT_BACKEND=builtin`.
+`LHASSA_AGENT_BACKEND=claude_code` is set but the `claude` binary can't be found. Either install Claude Code or set `LHASSA_AGENT_BACKEND=builtin`.

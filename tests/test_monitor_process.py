@@ -1,4 +1,4 @@
-"""Tests for potts.tools.monitor process selection."""
+"""Tests for lhassa.tools.monitor process selection."""
 
 import sys
 import pytest
@@ -19,7 +19,7 @@ class _ResolvedProc:
 
 
 def test_find_process_rejects_ambiguous_name(monkeypatch):
-    from potts.tools import monitor
+    from lhassa.tools import monitor
 
     class FakePsutil:
         NoSuchProcess = RuntimeError
@@ -39,7 +39,7 @@ def test_find_process_rejects_ambiguous_name(monkeypatch):
 
 
 def test_find_process_returns_single_name_match(monkeypatch):
-    from potts.tools import monitor
+    from lhassa.tools import monitor
 
     class FakePsutil:
         NoSuchProcess = RuntimeError

@@ -1,5 +1,5 @@
 [project]
-name = "potts"
+name = "lhassa"
 version = "0.4.0"
 description = "Personal voice AI assistant — voice pipeline, multi-provider LLM, sub-agents with tools, scheduler, GitHub, Outlook, dashboard"
 requires-python = ">=3.13"
@@ -27,7 +27,7 @@ dependencies = [
 ]
 
 [project.scripts]
-potts = "main:main"
+lhassa = "main:main"
 
 [project.optional-dependencies]
 dev = [

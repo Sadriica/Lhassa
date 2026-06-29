@@ -10,7 +10,7 @@ cp .env.example .env
 
 ## LLM Provider
 
-Potts supports six LLM providers. **You only need to set one API key** — Potts auto-detects the provider from whichever key is present, and that same provider is used for the voice pipeline, the built-in agent tool loop, and vision tools.
+Lhassa supports six LLM providers. **You only need to set one API key** — Lhassa auto-detects the provider from whichever key is present, and that same provider is used for the voice pipeline, the built-in agent tool loop, and vision tools.
 
 ### API keys and auto-detection
 
@@ -27,9 +27,9 @@ Set one (or more) of these keys. The first one found is used:
 
 Auto-detection priority: `ANTHROPIC_API_KEY` → `OPENAI_API_KEY` → `GROQ_API_KEY` → `OPENROUTER_API_KEY` → `CEREBRAS_API_KEY`.
 
-`OLLAMA_BASE_URL` defaults to `http://localhost:11434`. To use Ollama you must set `POTTS_LLM_PROVIDER=ollama` explicitly (no key to detect from).
+`OLLAMA_BASE_URL` defaults to `http://localhost:11434`. To use Ollama you must set `LHASSA_LLM_PROVIDER=ollama` explicitly (no key to detect from).
 
-Potts logs the resolved provider and model at startup so you can confirm it picked the right one:
+Lhassa logs the resolved provider and model at startup so you can confirm it picked the right one:
 ```
 INFO | LLM provider: anthropic (auto-detected from API key)  model=claude-haiku-4-5-20251001
 ```
@@ -40,39 +40,39 @@ If you want to force a specific provider or model, set these explicitly:
 
 | Variable | Default | Description |
 |---|---|---|
-| `POTTS_LLM_PROVIDER` | auto-detected | Override: `groq`, `anthropic`, `openai`, `openrouter`, `cerebras`, `ollama` |
-| `POTTS_MODEL` | provider default | Override: any model name supported by the active provider |
+| `LHASSA_LLM_PROVIDER` | auto-detected | Override: `groq`, `anthropic`, `openai`, `openrouter`, `cerebras`, `ollama` |
+| `LHASSA_MODEL` | provider default | Override: any model name supported by the active provider |
 
 ### Provider examples
 
 **Anthropic (also enables vision automatically):**
 ```dotenv
 ANTHROPIC_API_KEY=sk-ant-...
-# POTTS_MODEL=claude-sonnet-4-6   # optional override; default: claude-haiku-4-5-20251001
+# LHASSA_MODEL=claude-sonnet-4-6   # optional override; default: claude-haiku-4-5-20251001
 ```
 
 **OpenAI (also enables vision automatically):**
 ```dotenv
 OPENAI_API_KEY=sk-...
-# POTTS_MODEL=gpt-4o   # optional; default: gpt-4o-mini
+# LHASSA_MODEL=gpt-4o   # optional; default: gpt-4o-mini
 ```
 
 **Groq (free tier, fast):**
 ```dotenv
 GROQ_API_KEY=gsk_...
-# POTTS_MODEL=llama-3.3-70b-versatile   # default
+# LHASSA_MODEL=llama-3.3-70b-versatile   # default
 ```
 
 **OpenRouter (hundreds of models):**
 ```dotenv
 OPENROUTER_API_KEY=sk-or-...
-POTTS_MODEL=meta-llama/llama-3.3-70b-instruct   # or any OpenRouter model
+LHASSA_MODEL=meta-llama/llama-3.3-70b-instruct   # or any OpenRouter model
 ```
 
 **Ollama (fully local):**
 ```dotenv
-POTTS_LLM_PROVIDER=ollama   # required — no key to auto-detect from
-POTTS_MODEL=llama3.3
+LHASSA_LLM_PROVIDER=ollama   # required — no key to auto-detect from
+LHASSA_MODEL=llama3.3
 # OLLAMA_BASE_URL=http://localhost:11434   # default
 ```
 
@@ -87,7 +87,7 @@ ANTHROPIC_API_KEY=sk-ant-...   # Groq wins provider detection; Anthropic is used
 - **Voice pipeline**: pipecat bundles LLM services for Groq, Anthropic, OpenAI, OpenRouter, Ollama, and Cerebras. All providers use the same wake-word and tool-call flow.
 - **Agents**: all providers use the OpenAI-compatible client except Anthropic, which uses the native Anthropic SDK. The tool loop works the same way for both.
 - **Session memory extraction**: uses the active provider automatically. Anthropic falls back to a text prompt since it doesn't support `response_format: json_object`.
-- **Vision tools** (`analyze_screen`, `analyze_image`): if `POTTS_LLM_PROVIDER` is `anthropic`, `openai`, or `openrouter`, vision uses the same key automatically. Otherwise, vision falls back to `ANTHROPIC_API_KEY` → `OPENAI_API_KEY`.
+- **Vision tools** (`analyze_screen`, `analyze_image`): if `LHASSA_LLM_PROVIDER` is `anthropic`, `openai`, or `openrouter`, vision uses the same key automatically. Otherwise, vision falls back to `ANTHROPIC_API_KEY` → `OPENAI_API_KEY`.
 
 ---
 
@@ -96,13 +96,13 @@ ANTHROPIC_API_KEY=sk-ant-...   # Groq wins provider detection; Anthropic is used
 | Variable | Required | Default | Description |
 |---|---|---|---|
 | `DEEPGRAM_API_KEY` | **Yes** | — | Deepgram API key for live speech recognition. Get one at [console.deepgram.com](https://console.deepgram.com). |
-| `POTTS_STT_LANGUAGE` | No | `en` | BCP-47 language code for speech recognition. See supported languages below. |
+| `LHASSA_STT_LANGUAGE` | No | `en` | BCP-47 language code for speech recognition. See supported languages below. |
 
-Deepgram is configured with the `nova-3-general` model and a keyterm boost for "Potts" to improve wake word recognition.
+Deepgram is configured with the `nova-3-general` model and a keyterm boost for "Lhassa" to improve wake word recognition.
 
 ### Supported languages
 
-Common options for `POTTS_STT_LANGUAGE`:
+Common options for `LHASSA_STT_LANGUAGE`:
 
 | Code | Language |
 |---|---|
@@ -124,16 +124,16 @@ Full list: [developers.deepgram.com/docs/languages](https://developers.deepgram.
 | Variable | Required | Default | Description |
 |---|---|---|---|
 | `CARTESIA_API_KEY` | **Yes** | — | Cartesia API key. Get one at [console.cartesia.ai](https://console.cartesia.ai). |
-| `POTTS_VOICE_ID` | No | `a0e99841-438c-4a64-b679-ae501e7d6091` | Cartesia voice ID used for Potts's speech output. |
+| `LHASSA_VOICE_ID` | No | `a0e99841-438c-4a64-b679-ae501e7d6091` | Cartesia voice ID used for Lhassa's speech output. |
 
-### Changing Potts's voice
+### Changing Lhassa's voice
 
 1. Go to [play.cartesia.ai](https://play.cartesia.ai)
 2. Browse the voice library and preview voices
 3. Click a voice you like and copy its **Voice ID** (a UUID)
 4. Set it in your `.env`:
    ```
-   POTTS_VOICE_ID=your-voice-id-here
+   LHASSA_VOICE_ID=your-voice-id-here
    ```
 
 The default voice ID (`a0e99841-438c-4a64-b679-ae501e7d6091`) is a calm English voice. There are Spanish, British, and many other accent options available.
@@ -144,15 +144,15 @@ The default voice ID (`a0e99841-438c-4a64-b679-ae501e7d6091`) is a calm English 
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
-| `POTTS_MIC_NAME` | No | `pipewire` (Linux) / `""` (macOS, Windows) | Substring matched against PyAudio device names (case-insensitive). Set to `""` to use the system default device. |
+| `LHASSA_MIC_NAME` | No | `pipewire` (Linux) / `""` (macOS, Windows) | Substring matched against PyAudio device names (case-insensitive). Set to `""` to use the system default device. |
 
-The default is `pipewire` on Linux (matches PipeWire's virtual device) and empty on macOS/Windows (uses the OS default). If Potts can't find your microphone, list available devices:
+The default is `pipewire` on Linux (matches PipeWire's virtual device) and empty on macOS/Windows (uses the OS default). If Lhassa can't find your microphone, list available devices:
 
 ```bash
 python -c "import pyaudio; p = pyaudio.PyAudio(); [print(i, p.get_device_info_by_index(i)['name']) for i in range(p.get_device_count())]"
 ```
 
-Then set `POTTS_MIC_NAME` to a substring of the device name you want.
+Then set `LHASSA_MIC_NAME` to a substring of the device name you want.
 
 ---
 
@@ -162,24 +162,24 @@ Then set `POTTS_MIC_NAME` to a substring of the device name you want.
 |---|---|---|---|
 | `BRAVE_API_KEY` | No | — | Brave Search API key. When set, `web_search` uses the Brave Search API instead of DuckDuckGo. Get one at [api.search.brave.com](https://api.search.brave.com). |
 
-Brave Search is generally faster and more reliable than DuckDuckGo. If `BRAVE_API_KEY` is not set, Potts falls back to DuckDuckGo automatically — no configuration needed.
+Brave Search is generally faster and more reliable than DuckDuckGo. If `BRAVE_API_KEY` is not set, Lhassa falls back to DuckDuckGo automatically — no configuration needed.
 
 ---
 
 ## Vision tools
 
-`analyze_screen` and `analyze_image` require a vision-capable LLM. The provider is configured independently of `POTTS_LLM_PROVIDER` so you can, for example, use Groq for voice and Anthropic for vision.
+`analyze_screen` and `analyze_image` require a vision-capable LLM. The provider is configured independently of `LHASSA_LLM_PROVIDER` so you can, for example, use Groq for voice and Anthropic for vision.
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
-| `POTTS_VISION_PROVIDER` | No | `auto` | Vision provider. Options: `auto`, `anthropic`, `openai`, `openrouter`. |
-| `POTTS_VISION_MODEL` | No | provider default | Model to use for vision. Leave empty to use the provider default. |
+| `LHASSA_VISION_PROVIDER` | No | `auto` | Vision provider. Options: `auto`, `anthropic`, `openai`, `openrouter`. |
+| `LHASSA_VISION_MODEL` | No | provider default | Model to use for vision. Leave empty to use the provider default. |
 
 ### Auto-detection
 
-When `POTTS_VISION_PROVIDER=auto` (the default), Potts resolves the provider in this order:
+When `LHASSA_VISION_PROVIDER=auto` (the default), Lhassa resolves the provider in this order:
 
-1. If `POTTS_LLM_PROVIDER` is `anthropic`, `openai`, or `openrouter` **and** the matching key is set → use it (no extra keys needed)
+1. If `LHASSA_LLM_PROVIDER` is `anthropic`, `openai`, or `openrouter` **and** the matching key is set → use it (no extra keys needed)
 2. If `ANTHROPIC_API_KEY` is set → use Anthropic
 3. If `OPENAI_API_KEY` is set → use OpenAI
 4. No vision key found → vision tools disabled (logged as a warning at startup)
@@ -190,7 +190,7 @@ When `POTTS_VISION_PROVIDER=auto` (the default), Potts resolves the provider in 
 |---|---|---|
 | `anthropic` | `claude-haiku-4-5-20251001` | Fast and cheap, excellent at reading screenshots |
 | `openai` | `gpt-4o-mini` | Good all-around vision |
-| `openrouter` | `anthropic/claude-haiku-4-5-20251001` | Set `POTTS_VISION_MODEL` to use a different model |
+| `openrouter` | `anthropic/claude-haiku-4-5-20251001` | Set `LHASSA_VISION_MODEL` to use a different model |
 
 ### Common setups
 
@@ -208,14 +208,14 @@ ANTHROPIC_API_KEY=sk-ant-...   # picked up automatically by vision auto-detectio
 
 **Explicit OpenRouter vision model:**
 ```dotenv
-POTTS_VISION_PROVIDER=openrouter
+LHASSA_VISION_PROVIDER=openrouter
 OPENROUTER_API_KEY=sk-or-...
-POTTS_VISION_MODEL=google/gemini-flash-1.5
+LHASSA_VISION_MODEL=google/gemini-flash-1.5
 ```
 
 ### Screenshot tool requirement
 
-`analyze_screen` needs a screenshot utility. Potts tries each in order until one works:
+`analyze_screen` needs a screenshot utility. Lhassa tries each in order until one works:
 
 **Linux** — install one of:
 ```bash
@@ -237,12 +237,12 @@ pip install Pillow
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
-| `POTTS_AGENT_BACKEND` | No | auto-detected | `claude_code` delegates to `claude --print`; `builtin` uses the internal LLM tool loop with `POTTS_LLM_PROVIDER`. If not set, Potts detects automatically (see below). |
-| `POTTS_AGENT_DIR` | No | cwd at launch | Working directory for `claude --print`. Set this to your project root so Claude Code has the right file context. Only used when `POTTS_AGENT_BACKEND=claude_code`. |
+| `LHASSA_AGENT_BACKEND` | No | auto-detected | `claude_code` delegates to `claude --print`; `builtin` uses the internal LLM tool loop with `LHASSA_LLM_PROVIDER`. If not set, Lhassa detects automatically (see below). |
+| `LHASSA_AGENT_DIR` | No | cwd at launch | Working directory for `claude --print`. Set this to your project root so Claude Code has the right file context. Only used when `LHASSA_AGENT_BACKEND=claude_code`. |
 
 ### Auto-detection
 
-If `POTTS_AGENT_BACKEND` is not set, Potts detects the right backend at startup:
+If `LHASSA_AGENT_BACKEND` is not set, Lhassa detects the right backend at startup:
 
 | Condition | Resolved backend | Startup log |
 |---|---|---|
@@ -253,13 +253,13 @@ You can always override the detected value explicitly.
 
 ### Startup validation
 
-Potts validates the agent backend before the voice pipeline starts, so misconfiguration surfaces immediately with a clear message rather than failing silently later:
+Lhassa validates the agent backend before the voice pipeline starts, so misconfiguration surfaces immediately with a clear message rather than failing silently later:
 
 ```
-# If POTTS_AGENT_BACKEND=claude_code but claude is not installed:
-RuntimeError: POTTS_AGENT_BACKEND=claude_code but the 'claude' CLI was not found in PATH.
+# If LHASSA_AGENT_BACKEND=claude_code but claude is not installed:
+RuntimeError: LHASSA_AGENT_BACKEND=claude_code but the 'claude' CLI was not found in PATH.
 Install Claude Code:  https://claude.ai/code
-Or set POTTS_AGENT_BACKEND=builtin to use the built-in LLM tool loop.
+Or set LHASSA_AGENT_BACKEND=builtin to use the built-in LLM tool loop.
 ```
 
 ### claude_code backend (uses your Claude subscription)
@@ -279,16 +279,16 @@ Recommended setup — Groq (fast, free) for voice, Claude subscription for agent
 GROQ_API_KEY=gsk_...
 
 # Agents — set your project directory (or leave unset to use cwd)
-POTTS_AGENT_DIR=/home/yourname/code/myproject
+LHASSA_AGENT_DIR=/home/yourname/code/myproject
 ```
 
 ### builtin backend (internal LLM tool loop)
 
-When `agent_backend=builtin`, agents use the same provider as the voice pipeline with a 10-iteration tool loop (`web_search`, `shell`, `read_file`, `write_file`). Supports all `POTTS_LLM_PROVIDER` options.
+When `agent_backend=builtin`, agents use the same provider as the voice pipeline with a 10-iteration tool loop (`web_search`, `shell`, `read_file`, `write_file`). Supports all `LHASSA_LLM_PROVIDER` options.
 
 ```dotenv
-POTTS_AGENT_BACKEND=builtin
-# Uses POTTS_LLM_PROVIDER and POTTS_MODEL — no extra config needed
+LHASSA_AGENT_BACKEND=builtin
+# Uses LHASSA_LLM_PROVIDER and LHASSA_MODEL — no extra config needed
 ```
 
 Output streams line by line to the dashboard's Agents panel regardless of which backend is active.
@@ -322,31 +322,31 @@ Both must be set to use email and calendar tools. See [outlook.md](outlook.md) f
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
-| `POTTS_WAKE_TIMEOUT` | No | `300` | Seconds of silence before Potts goes back to sleep after being woken. Lower values save API costs on idle sessions. |
+| `LHASSA_WAKE_TIMEOUT` | No | `300` | Seconds of silence before Lhassa goes back to sleep after being woken. Lower values save API costs on idle sessions. |
 
 ## Agent tuning
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
-| `POTTS_MAX_AGENT_ITERATIONS` | No | `10` | Maximum tool-calling loop iterations per agent run. Increase for complex multi-step tasks; decrease to limit API cost. |
+| `LHASSA_MAX_AGENT_ITERATIONS` | No | `10` | Maximum tool-calling loop iterations per agent run. Increase for complex multi-step tasks; decrease to limit API cost. |
 
 ## General
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
-| `POTTS_LOG_LEVEL` | No | `INFO` | Console log verbosity. Options: `DEBUG`, `INFO`, `WARNING`, `ERROR`. |
-| `POTTS_DEBUG` | No | `0` | Set to `1` to enable WakeDebug mode — shows live STT transcriptions in the terminal. Useful for diagnosing wake word recognition problems. |
+| `LHASSA_LOG_LEVEL` | No | `INFO` | Console log verbosity. Options: `DEBUG`, `INFO`, `WARNING`, `ERROR`. |
+| `LHASSA_DEBUG` | No | `0` | Set to `1` to enable WakeDebug mode — shows live STT transcriptions in the terminal. Useful for diagnosing wake word recognition problems. |
 
 ### Log file
 
-In addition to the console, Potts writes a detailed log to:
+In addition to the console, Lhassa writes a detailed log to:
 
 ```
-~/.potts/potts.log
+~/.lhassa/lhassa.log
 ```
 
 The log file:
-- Always captures `DEBUG` level (regardless of `POTTS_LOG_LEVEL`)
+- Always captures `DEBUG` level (regardless of `LHASSA_LOG_LEVEL`)
 - Includes file name and line number in every entry
 - Rotates at **10 MB**
 - Is kept for **7 days** before being deleted
@@ -354,7 +354,7 @@ The log file:
 To tail the log in real time:
 
 ```bash
-tail -f ~/.potts/potts.log
+tail -f ~/.lhassa/lhassa.log
 ```
 
 ### Debug mode
@@ -364,10 +364,10 @@ tail -f ~/.potts/potts.log
 make dev
 
 # Via env var
-POTTS_DEBUG=1 POTTS_LOG_LEVEL=DEBUG uv run potts
+LHASSA_DEBUG=1 LHASSA_LOG_LEVEL=DEBUG uv run lhassa
 
 # Via .env (persistent)
-POTTS_DEBUG=1
+LHASSA_DEBUG=1
 ```
 
 In debug mode, every STT frame is printed to the terminal:
@@ -375,7 +375,7 @@ In debug mode, every STT frame is printed to the terminal:
 ```
 [i] 'po'
 [i] 'pots'
-[F] 'Potts, what time is it?'
+[F] 'Lhassa, what time is it?'
 ```
 
 ---
@@ -384,8 +384,8 @@ In debug mode, every STT frame is printed to the terminal:
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
-| `POTTS_API_HOST` | No | `127.0.0.1` | Host the API server binds to. Defaults to localhost only (the dashboard is unauthenticated and Potts can run privileged commands). Set `0.0.0.0` only to expose it on your LAN. |
-| `POTTS_API_PORT` | No | `7766` | Port for the dashboard and API. Change this if 7860 is in use. |
+| `LHASSA_API_HOST` | No | `127.0.0.1` | Host the API server binds to. Defaults to localhost only (the dashboard is unauthenticated and Lhassa can run privileged commands). Set `0.0.0.0` only to expose it on your LAN. |
+| `LHASSA_API_PORT` | No | `7766` | Port for the dashboard and API. Change this if 7860 is in use. |
 
 ---
 
@@ -411,33 +411,33 @@ GROQ_API_KEY=gsk_xxxxxxxxxxxxxxxxxxxx
 # OPENROUTER_API_KEY=sk-or-xxxxxxxxxxxx
 #
 # Ollama (local — no key, but must set provider explicitly):
-# POTTS_LLM_PROVIDER=ollama
-# POTTS_MODEL=llama3.3
+# LHASSA_LLM_PROVIDER=ollama
+# LHASSA_MODEL=llama3.3
 # OLLAMA_BASE_URL=http://localhost:11434
 
 # ── Model override (optional — auto-set to provider default if not given) ─────
-# POTTS_MODEL=llama-3.3-70b-versatile
+# LHASSA_MODEL=llama-3.3-70b-versatile
 
 # ── STT language ──────────────────────────────────────────────────────────────
-POTTS_STT_LANGUAGE=en    # en, es, fr, de, pt, nl, hi, ja ...
+LHASSA_STT_LANGUAGE=en    # en, es, fr, de, pt, nl, hi, ja ...
 
 # ── Voice ─────────────────────────────────────────────────────────────────────
-POTTS_VOICE_ID=a0e99841-438c-4a64-b679-ae501e7d6091
+LHASSA_VOICE_ID=a0e99841-438c-4a64-b679-ae501e7d6091
 
 # ── Audio ─────────────────────────────────────────────────────────────────────
-# POTTS_MIC_NAME=         # leave empty for OS default; "pipewire" on Linux
+# LHASSA_MIC_NAME=         # leave empty for OS default; "pipewire" on Linux
 
 # ── Dashboard ─────────────────────────────────────────────────────────────────
-POTTS_API_HOST=127.0.0.1
-POTTS_API_PORT=7860
+LHASSA_API_HOST=127.0.0.1
+LHASSA_API_PORT=7860
 
 # ── Logging ───────────────────────────────────────────────────────────────────
-POTTS_LOG_LEVEL=INFO
-POTTS_DEBUG=0
+LHASSA_LOG_LEVEL=INFO
+LHASSA_DEBUG=0
 
 # ── Wake & agent behaviour ────────────────────────────────────────────────────
-# POTTS_WAKE_TIMEOUT=300          # seconds before auto-sleep (default 300)
-# POTTS_MAX_AGENT_ITERATIONS=10   # max tool-loop steps per agent run (default 10)
+# LHASSA_WAKE_TIMEOUT=300          # seconds before auto-sleep (default 300)
+# LHASSA_MAX_AGENT_ITERATIONS=10   # max tool-loop steps per agent run (default 10)
 
 # ── Web search ────────────────────────────────────────────────────────────────
 # BRAVE_API_KEY=BSA-xxxxxxxxxxxx   # optional; falls back to DuckDuckGo if not set
@@ -445,9 +445,9 @@ POTTS_DEBUG=0
 # ── Agent backend ────────────────────────────────────────────────────────────
 # Auto-detected: claude_code if `claude` CLI is found, builtin otherwise.
 # Uncomment to override:
-# POTTS_AGENT_BACKEND=claude_code   # use `claude --print` (Claude subscription)
-# POTTS_AGENT_BACKEND=builtin       # use internal LLM tool loop
-# POTTS_AGENT_DIR=/home/you/code/myproject   # directory for claude --print
+# LHASSA_AGENT_BACKEND=claude_code   # use `claude --print` (Claude subscription)
+# LHASSA_AGENT_BACKEND=builtin       # use internal LLM tool loop
+# LHASSA_AGENT_DIR=/home/you/code/myproject   # directory for claude --print
 
 # ── GitHub (optional) ─────────────────────────────────────────────────────────
 # GITHUB_TOKEN=github_pat_xxxxxxxxxxxx

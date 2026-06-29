@@ -5,7 +5,7 @@ from pathlib import Path
 
 
 def test_validate_shell_command_blocks_destructive(clean_env):
-    from potts.tools.guardrails import validate_shell_command
+    from lhassa.tools.guardrails import validate_shell_command
 
     error = validate_shell_command("rm -rf /")
     assert error is not None
@@ -13,11 +13,11 @@ def test_validate_shell_command_blocks_destructive(clean_env):
 
 
 def test_validate_shell_command_allows_override(clean_env):
-    clean_env.setenv("POTTS_ALLOW_DESTRUCTIVE_SHELL", "1")
+    clean_env.setenv("LHASSA_ALLOW_DESTRUCTIVE_SHELL", "1")
 
     import importlib
-    import potts.config as config_mod
-    import potts.tools.guardrails as guardrails
+    import lhassa.config as config_mod
+    import lhassa.tools.guardrails as guardrails
 
     importlib.reload(config_mod)
     importlib.reload(guardrails)
@@ -25,11 +25,11 @@ def test_validate_shell_command_allows_override(clean_env):
 
 
 def test_validate_write_path_respects_root(clean_env, tmp_path):
-    clean_env.setenv("POTTS_FILE_WRITE_ROOT", str(tmp_path))
+    clean_env.setenv("LHASSA_FILE_WRITE_ROOT", str(tmp_path))
 
     import importlib
-    import potts.config as config_mod
-    import potts.tools.guardrails as guardrails
+    import lhassa.config as config_mod
+    import lhassa.tools.guardrails as guardrails
 
     importlib.reload(config_mod)
     importlib.reload(guardrails)
@@ -40,4 +40,4 @@ def test_validate_write_path_respects_root(clean_env, tmp_path):
     assert allowed == Path(tmp_path / "ok.txt")
     assert error is None
     assert denied is None
-    assert "outside POTTS_FILE_WRITE_ROOT" in denied_error
+    assert "outside LHASSA_FILE_WRITE_ROOT" in denied_error

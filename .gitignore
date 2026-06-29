@@ -12,7 +12,7 @@ wheels/
 # Secrets — never commit
 .env
 
-# Runtime data (stored in ~/.potts/, not in the repo)
+# Runtime data (stored in ~/.lhassa/, not in the repo)
 *.db
 *.log
 ms_token_cache.json
@@ -30,3 +30,6 @@ dashboard/playwright-report/
 .vscode/
 *.swp
 .DS_Store
+
+# local env backups
+.env.bak*

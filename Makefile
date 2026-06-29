@@ -8,12 +8,12 @@ install:
 # Install + enable the LLM-free PC-state health timer (user unit, no sudo)
 install-health:
 	mkdir -p $(HOME)/.config/systemd/user
-	cp scripts/systemd/potts-health.service scripts/systemd/potts-health.timer $(HOME)/.config/systemd/user/
+	cp scripts/systemd/lhassa-health.service scripts/systemd/lhassa-health.timer $(HOME)/.config/systemd/user/
 	systemctl --user daemon-reload
-	systemctl --user enable --now potts-health.timer
-	@echo "Health checks scheduled. Status: systemctl --user status potts-health.timer"
+	systemctl --user enable --now lhassa-health.timer
+	@echo "Health checks scheduled. Status: systemctl --user status lhassa-health.timer"
 
-# Install the scoped NOPASSWD sudoers drop-in so potts can run admin commands as
+# Install the scoped NOPASSWD sudoers drop-in so lhassa can run admin commands as
 # root (allowlist only). Needs sudo — you'll be prompted for your password.
 install-privileged:
 	sudo bash scripts/install-privileged.sh
@@ -22,13 +22,13 @@ install-privileged:
 dashboard:
 	cd dashboard && npm run build
 
-# Start Potts (voice + API server + scheduler)
+# Start Lhassa (voice + API server + scheduler)
 run:
 	uv run python main.py
 
 # Start with debug mode on (shows live STT transcriptions)
 dev:
-	POTTS_DEBUG=1 POTTS_LOG_LEVEL=DEBUG uv run python main.py
+	LHASSA_DEBUG=1 LHASSA_LOG_LEVEL=DEBUG uv run python main.py
 
 # Dashboard hot-reload dev server (proxies API to :7860)
 dashboard-dev:

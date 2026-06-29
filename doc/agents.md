@@ -1,16 +1,16 @@
 # Background Agents
 
-Sub-agents let Potts hand off complex, time-consuming work to a dedicated background worker while keeping the voice conversation free for other things. You ask Potts to delegate, it starts the agent, and tells you it'll notify you when the work is done.
+Sub-agents let Lhassa hand off complex, time-consuming work to a dedicated background worker while keeping the voice conversation free for other things. You ask Lhassa to delegate, it starts the agent, and tells you it'll notify you when the work is done.
 
 ---
 
 ## What Sub-Agents Are
 
-Each agent is an instance of `BaseAgent` — a wrapper around a **multi-turn tool loop** backed by whichever LLM provider is configured (`POTTS_LLM_PROVIDER`). All providers are supported: Groq, Anthropic, OpenAI, OpenRouter, Cerebras, and Ollama.
+Each agent is an instance of `BaseAgent` — a wrapper around a **multi-turn tool loop** backed by whichever LLM provider is configured (`LHASSA_LLM_PROVIDER`). All providers are supported: Groq, Anthropic, OpenAI, OpenRouter, Cerebras, and Ollama.
 
-By default all agents run through `claude --print` (`POTTS_AGENT_BACKEND=claude_code`), using your Claude Code subscription with the full Claude Code toolset. Set `POTTS_AGENT_BACKEND=builtin` to use the internal LLM tool loop with `POTTS_LLM_PROVIDER` instead. See [configuration.md](configuration.md) for details.
+By default all agents run through `claude --print` (`LHASSA_AGENT_BACKEND=claude_code`), using your Claude Code subscription with the full Claude Code toolset. Set `LHASSA_AGENT_BACKEND=builtin` to use the internal LLM tool loop with `LHASSA_LLM_PROVIDER` instead. See [configuration.md](configuration.md) for details.
 
-When you trigger a delegation, Potts:
+When you trigger a delegation, Lhassa:
 
 1. Instantiates the appropriate agent class
 2. Registers a run record in `AppState`
@@ -19,7 +19,7 @@ When you trigger a delegation, Potts:
 5. Streams every token of the agent's response to the dashboard via WebSocket
 6. Notifies you when the agent finishes
 
-Agents run in parallel with the voice pipeline — you can have multiple agents running at the same time and continue talking to Potts normally while they work.
+Agents run in parallel with the voice pipeline — you can have multiple agents running at the same time and continue talking to Lhassa normally while they work.
 
 Each agent run gets a short random ID (e.g. `a3f19c`) and goes through three states: `running` → `done` (or `error`).
 
@@ -50,16 +50,16 @@ Each individual LLM call within the loop has a **60-second timeout**. If an agen
 
 **System prompt focus:** expert software engineer on Arch Linux; writes clean, idiomatic code; debugs by reading error messages carefully; provides complete, working implementations.
 
-When `POTTS_AGENT_BACKEND=claude_code`, this agent runs through `claude --print` and gets the full Claude Code toolset instead of the four basic tools.
+When `LHASSA_AGENT_BACKEND=claude_code`, this agent runs through `claude --print` and gets the full Claude Code toolset instead of the four basic tools.
 
 **Example delegation:**
 ```
-You: Potts, delegate to the code agent: write a Bash script that monitors
+You: Lhassa, delegate to the code agent: write a Bash script that monitors
      /var/log/syslog and sends me a desktop notification if the word "error"
      appears in a new line.
-Potts: Code agent started in the background. I'll let you know when it's done.
+Lhassa: Code agent started in the background. I'll let you know when it's done.
 [...~15 seconds later...]
-Potts: Code agent finished. It wrote a script using tail -f and grep
+Lhassa: Code agent finished. It wrote a script using tail -f and grep
        that fires notify-send whenever a line containing "error" appears.
 ```
 
@@ -77,11 +77,11 @@ Potts: Code agent finished. It wrote a script using tail -f and grep
 
 **Example delegation:**
 ```
-You: Potts, ask the research agent to compare Tailwind CSS v4 and v3.
+You: Lhassa, ask the research agent to compare Tailwind CSS v4 and v3.
      I want to know the main differences before I upgrade.
-Potts: Research agent started. I'll notify you when it has results.
+Lhassa: Research agent started. I'll notify you when it has results.
 [...~20 seconds later...]
-Potts: Research agent finished. The main changes in Tailwind v4 include
+Lhassa: Research agent finished. The main changes in Tailwind v4 include
        a new CSS-first config approach, a Vite plugin, and performance
        improvements. It breaks the JS config file approach from v3.
 ```
@@ -101,11 +101,11 @@ Potts: Research agent finished. The main changes in Tailwind v4 include
 
 **Example delegation:**
 ```
-You: Potts, have the system agent explain how to set up a user systemd service
+You: Lhassa, have the system agent explain how to set up a user systemd service
      that starts my backup script at login.
-Potts: System agent started in the background.
+Lhassa: System agent started in the background.
 [...~15 seconds later...]
-Potts: System agent finished. It says to create a file at
+Lhassa: System agent finished. It says to create a file at
        ~/.config/systemd/user/backup.service, then enable it with
        systemctl --user enable --now backup.service.
        It also gave you a complete example service file.
@@ -118,10 +118,10 @@ Potts: System agent finished. It says to create a file at
 The most natural phrasing is:
 
 ```
-"Potts, delegate [task description] to the [type] agent."
-"Potts, have the code agent [task]."
-"Potts, ask the research agent to [task]."
-"Potts, use the system agent for [task]."
+"Lhassa, delegate [task description] to the [type] agent."
+"Lhassa, have the code agent [task]."
+"Lhassa, ask the research agent to [task]."
+"Lhassa, use the system agent for [task]."
 ```
 
 The LLM picks the right agent from context. If you don't specify, it defaults to `ResearchAgent`. You can be as detailed as you like in the task description — longer is usually better for complex tasks.
@@ -130,11 +130,11 @@ The LLM picks the right agent from context. If you don't specify, it defaults to
 
 ## Notification When Done
 
-When an agent finishes, Potts routes the notification through the best available channel:
+When an agent finishes, Lhassa routes the notification through the best available channel:
 
-| Potts state | Notification method |
+| Lhassa state | Notification method |
 |---|---|
-| Voice pipeline active (you're in a session) | Potts **speaks** the result summary aloud via TTS |
+| Voice pipeline active (you're in a session) | Lhassa **speaks** the result summary aloud via TTS |
 | Idle / sleeping | **Desktop notification** via `notify-send` |
 | `notify-send` not installed | Falls back to printing to the terminal |
 
@@ -163,7 +163,7 @@ Each card shows:
 - The full streaming output
 - Timestamps (started at, finished at)
 
-Cards from the current session persist until Potts is restarted. The WebSocket delivers a snapshot of existing runs to any new browser tab that connects, so you can open the dashboard mid-session and see all previous agent results.
+Cards from the current session persist until Lhassa is restarted. The WebSocket delivers a snapshot of existing runs to any new browser tab that connects, so you can open the dashboard mid-session and see all previous agent results.
 
 ---
 

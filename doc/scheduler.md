@@ -1,6 +1,6 @@
 # Scheduler
 
-Potts has a built-in reminder system. You can set reminders by voice and Potts will notify you at the right time — speaking the message aloud if you're in an active session, or sending a desktop notification if it's idle.
+Lhassa has a built-in reminder system. You can set reminders by voice and Lhassa will notify you at the right time — speaking the message aloud if you're in an active session, or sending a desktop notification if it's idle.
 
 ---
 
@@ -23,28 +23,28 @@ The scheduler starts automatically with `make run` and stops cleanly when you pr
 ### Relative time (in_minutes)
 
 ```
-"Potts, remind me in 20 minutes to call John."
-"Potts, set a reminder in 5 minutes — the pasta is boiling."
-"Potts, remind me in 2 hours to take my medication."
-"Potts, remind me in 1 hour to check the backup."
+"Lhassa, remind me in 20 minutes to call John."
+"Lhassa, set a reminder in 5 minutes — the pasta is boiling."
+"Lhassa, remind me in 2 hours to take my medication."
+"Lhassa, remind me in 1 hour to check the backup."
 ```
 
-Potts confirms:
+Lhassa confirms:
 ```
-Potts: Reminder 'call John' set for in 20 minutes.
+Lhassa: Reminder 'call John' set for in 20 minutes.
 ```
 
 ### Absolute time (at_time)
 
 ```
-"Potts, remind me at 15:00 to join the standup."
-"Potts, set a reminder at 8:30 tomorrow to take my vitamins."
-"Potts, remind me at 9pm to watch the match."
+"Lhassa, remind me at 15:00 to join the standup."
+"Lhassa, set a reminder at 8:30 tomorrow to take my vitamins."
+"Lhassa, remind me at 9pm to watch the match."
 ```
 
-Potts confirms:
+Lhassa confirms:
 ```
-Potts: Reminder 'standup' set for at 15:00.
+Lhassa: Reminder 'standup' set for at 15:00.
 ```
 
 ### ISO 8601 format
@@ -65,32 +65,32 @@ at_time: "2026-04-01T14:00:00+02:00"
 | ISO 8601 (no tz) | `2026-04-01T14:00:00` | Treated as local time, then converted to UTC |
 | ISO 8601 (with tz) | `2026-04-01T14:00:00+02:00` | Exact UTC moment |
 
-All times are stored internally as UTC ISO 8601 strings. Potts converts HH:MM to UTC using your system's local timezone.
+All times are stored internally as UTC ISO 8601 strings. Lhassa converts HH:MM to UTC using your system's local timezone.
 
 ---
 
 ## Notification Routing
 
-When a reminder fires, Potts routes the notification based on current state:
+When a reminder fires, Lhassa routes the notification based on current state:
 
 | State | How you're notified |
 |---|---|
-| Voice pipeline active (you said the wake word recently) | Potts **speaks the message** via Cartesia TTS |
+| Voice pipeline active (you said the wake word recently) | Lhassa **speaks the message** via Cartesia TTS |
 | Voice pipeline idle / sleeping | **Desktop notification** via `notify-send` |
 | `notify-send` not installed | Message is **printed to the terminal** |
 
-The desktop notification title is always "Potts — Reminder".
+The desktop notification title is always "Lhassa — Reminder".
 
 ### Example: spoken reminder
 
 ```
-[15:00:12] Potts: Reminder — join the standup.
+[15:00:12] Lhassa: Reminder — join the standup.
 ```
 
 ### Example: desktop notification
 
 ```
-Title: Potts — Reminder
+Title: Lhassa — Reminder
 Body: Join the standup.
 ```
 
@@ -99,13 +99,13 @@ Body: Join the standup.
 ## Listing Pending Reminders
 
 ```
-You: Potts, what reminders do I have?
-Potts: You have two pending reminders.
+You: Lhassa, what reminders do I have?
+Lhassa: You have two pending reminders.
        Number one: call John at 14:20.
        Number two: check backup at 16:00.
 
-You: Potts, any upcoming reminders?
-Potts: No pending reminders.
+You: Lhassa, any upcoming reminders?
+Lhassa: No pending reminders.
 ```
 
 The `list_reminders` tool returns all reminders with status `pending`. Fired reminders are marked `done` and don't appear in the list.
@@ -155,22 +155,22 @@ Response format:
 - **30-second granularity** — reminders fire within 30 seconds of the scheduled time, not at the exact second.
 - **No recurring reminders** — each reminder fires once and is marked done. To repeat, set a new one.
 - **No cancellation by voice** — once set, a reminder can't be cancelled by speaking. You can delete it from the SQLite database directly, or wait for it to fire.
-- **No sound if Potts is not running** — if you stop Potts before a reminder fires, it won't trigger. Reminders are not persisted to a system cron.
+- **No sound if Lhassa is not running** — if you stop Lhassa before a reminder fires, it won't trigger. Reminders are not persisted to a system cron.
 
 ---
 
 ## Direct Database Access
 
-Reminders live in `~/.potts/memory.db`, in the `scheduled_tasks` table:
+Reminders live in `~/.lhassa/memory.db`, in the `scheduled_tasks` table:
 
 ```bash
-sqlite3 ~/.potts/memory.db "SELECT * FROM scheduled_tasks WHERE status='pending';"
+sqlite3 ~/.lhassa/memory.db "SELECT * FROM scheduled_tasks WHERE status='pending';"
 ```
 
 To cancel a pending reminder manually:
 
 ```bash
-sqlite3 ~/.potts/memory.db "UPDATE scheduled_tasks SET status='cancelled' WHERE id=3;"
+sqlite3 ~/.lhassa/memory.db "UPDATE scheduled_tasks SET status='cancelled' WHERE id=3;"
 ```
 
 (Any non-`pending` status prevents the scheduler from firing the task.)

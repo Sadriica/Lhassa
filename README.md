@@ -1,6 +1,6 @@
-# Potts
+# Lhassa
 
-[![CI](https://github.com/yourname/potts/actions/workflows/ci.yml/badge.svg)](https://github.com/yourname/potts/actions/workflows/ci.yml)
+[![CI](https://github.com/yourname/lhassa/actions/workflows/ci.yml/badge.svg)](https://github.com/yourname/lhassa/actions/workflows/ci.yml)
 
 Replace `yourname/potts` in the badge URL above if your GitHub remote uses a different owner or repo name.
 
@@ -54,13 +54,13 @@ DEEPGRAM_API_KEY=...
 CARTESIA_API_KEY=...
 ```
 
-Potts auto-detects the LLM provider from the key you set. Setting `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` also enables vision tools automatically.
+Lhassa auto-detects the LLM provider from the key you set. Setting `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` also enables vision tools automatically.
 
 ### 4. Install and run
 
 ```bash
 make install   # first time: installs Python deps + builds the dashboard (~2–5 min)
-make run       # start Potts
+make run       # start Lhassa
 ```
 
 Open [http://localhost:7766](http://localhost:7766) for the live dashboard (optional).
@@ -69,27 +69,27 @@ Open [http://localhost:7766](http://localhost:7766) for the live dashboard (opti
 
 ## Usage
 
-Say **"Potts"** to wake it. Potts listens, calls tools as needed, and replies aloud. After 5 minutes of silence it goes back to sleep — say "Potts" again to wake it. The sleep timeout is configurable via `POTTS_WAKE_TIMEOUT`.
+Say **"Lhassa"** to wake it. Lhassa listens, calls tools as needed, and replies aloud. After 5 minutes of silence it goes back to sleep — say "Lhassa" again to wake it. The sleep timeout is configurable via `LHASSA_WAKE_TIMEOUT`.
 
 ```
-You: Potts, what's the weather in London today?
-Potts: Currently 12 degrees and overcast, with rain expected this afternoon.
+You: Lhassa, what's the weather in London today?
+Lhassa: Currently 12 degrees and overcast, with rain expected this afternoon.
 
-You: Potts, remind me in 20 minutes to take my medication.
-Potts: Reminder set for 20 minutes from now.
+You: Lhassa, remind me in 20 minutes to take my medication.
+Lhassa: Reminder set for 20 minutes from now.
 
-You: Potts, delegate to the code agent: refactor this function to be async.
-Potts: Code agent started in the background. I'll let you know when it's done.
+You: Lhassa, delegate to the code agent: refactor this function to be async.
+Lhassa: Code agent started in the background. I'll let you know when it's done.
 ```
 
-See [doc/examples.md](doc/examples.md) for a full reference of things you can say and what Potts will do.
+See [doc/examples.md](doc/examples.md) for a full reference of things you can say and what Lhassa will do.
 
 ---
 
 ## Features
 
 - **Voice pipeline** — wake word detection, Deepgram STT, Cartesia TTS, VAD
-- **Multi-language** — set `POTTS_STT_LANGUAGE` to speak in Spanish, French, German, Portuguese, and more; Potts responds in the same language
+- **Multi-language** — set `LHASSA_STT_LANGUAGE` to speak in Spanish, French, German, Portuguese, and more; Lhassa responds in the same language
 - **Multi-provider LLM** — Groq, Anthropic, OpenAI, OpenRouter, Cerebras, Ollama
 - **Tools** — web search (Brave/DuckDuckGo), shell, file read/write
 - **Background agents** — code, research, system; powered by Claude Code CLI or built-in tool loop
@@ -108,7 +108,7 @@ See [doc/examples.md](doc/examples.md) for a full reference of things you can sa
 
 | Document | Contents |
 |---|---|
-| [doc/examples.md](doc/examples.md) | **Quick reference — exact phrases to use with Potts** |
+| [doc/examples.md](doc/examples.md) | **Quick reference — exact phrases to use with Lhassa** |
 | [doc/getting-started.md](doc/getting-started.md) | Full setup walkthrough |
 | [doc/configuration.md](doc/configuration.md) | All environment variables |
 | [doc/tools.md](doc/tools.md) | Every tool with examples |

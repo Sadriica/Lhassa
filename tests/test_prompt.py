@@ -1,6 +1,6 @@
-"""Tests for potts.llm.prompt — system prompt builder."""
+"""Tests for lhassa.llm.prompt — system prompt builder."""
 
-from potts.llm.prompt import BASE_PROMPT, build_system_prompt
+from lhassa.llm.prompt import BASE_PROMPT, build_system_prompt
 
 
 # ── Base prompt ────────────────────────────────────────────────────────────────

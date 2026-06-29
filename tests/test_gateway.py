@@ -1,4 +1,4 @@
-"""Tests for potts.llm.gateway — cache, daily budget, and cost ledger.
+"""Tests for lhassa.llm.gateway — cache, daily budget, and cost ledger.
 
 All tests run fully offline: a fake completion callable stands in for the
 provider, and the gateway DB is redirected to a tmp_path file so the real
@@ -8,20 +8,20 @@ home directory is never touched.
 import pytest
 import pytest_asyncio  # noqa: F401  (registers asyncio mode)
 
-from potts.llm.gateway import (
+from lhassa.llm.gateway import (
     BudgetExceeded,
     LedgerGateway,
     estimate_cost,
     price_for,
 )
-from potts.state import state
+from lhassa.state import state
 
 
 # ── Test doubles ────────────────────────────────────────────────────────────
 
 
 class FakeConfig:
-    """Minimal stand-in for potts.config.Config — only the fields the gateway reads."""
+    """Minimal stand-in for lhassa.config.Config — only the fields the gateway reads."""
 
     def __init__(
         self,
@@ -53,7 +53,7 @@ def make_fake_completion(text="hello", input_tokens=100, output_tokens=50):
 
 @pytest.fixture
 def gw(tmp_path):
-    """A gateway whose DB lives in a throwaway tmp file (never ~/.potts)."""
+    """A gateway whose DB lives in a throwaway tmp file (never ~/.lhassa)."""
     return LedgerGateway(db_path=tmp_path / "gateway.db")
 
 

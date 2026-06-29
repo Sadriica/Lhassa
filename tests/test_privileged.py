@@ -1,4 +1,4 @@
-"""Tests for potts.tools.privileged — scoped, allowlisted root execution.
+"""Tests for lhassa.tools.privileged — scoped, allowlisted root execution.
 
 No real sudo is invoked: subprocess creation is mocked, and the audit sink is
 stubbed so nothing touches the real home directory.
@@ -8,13 +8,13 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from potts.state import state
-from potts.tools import privileged
+from lhassa.state import state
+from lhassa.tools import privileged
 
 
 @pytest.fixture(autouse=True)
 def stub_audit(monkeypatch):
-    """Don't write the real ~/.potts/audit.json during tests."""
+    """Don't write the real ~/.lhassa/audit.json during tests."""
     monkeypatch.setattr(state, "record_audit_event", AsyncMock())
 
 
@@ -24,7 +24,7 @@ def test_allowlist_has_expected_defaults():
 
 
 def test_allowlist_extends_via_env(monkeypatch):
-    monkeypatch.setenv("POTTS_PRIVILEGED_ALLOW", "foo, bar")
+    monkeypatch.setenv("LHASSA_PRIVILEGED_ALLOW", "foo, bar")
     allowed = privileged.allowlist()
     assert {"foo", "bar"} <= allowed
 
@@ -36,7 +36,7 @@ async def test_refuses_command_outside_allowlist():
 
 
 async def test_refuses_destructive_even_if_base_allowlisted(monkeypatch):
-    monkeypatch.setenv("POTTS_PRIVILEGED_ALLOW", "dd")
+    monkeypatch.setenv("LHASSA_PRIVILEGED_ALLOW", "dd")
     out = await privileged.run_privileged("dd if=/dev/zero of=/dev/sda")
     assert "destructive" in out.lower()
 

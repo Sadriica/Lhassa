@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 #
-# Install the scoped NOPASSWD sudoers drop-in that lets the potts assistant run a
+# Install the scoped NOPASSWD sudoers drop-in that lets the lhassa assistant run a
 # curated set of admin commands as root. Run with sudo:
 #
 #   sudo bash scripts/install-privileged.sh
 #
-# The allowlist below must stay in sync with potts/tools/privileged.py. The file
+# The allowlist below must stay in sync with lhassa/tools/privileged.py. The file
 # is validated with `visudo -c` before it is installed; a bad file is never put
-# in place. To remove: sudo rm /etc/sudoers.d/potts
+# in place. To remove: sudo rm /etc/sudoers.d/lhassa
 #
 set -euo pipefail
 
@@ -16,23 +16,23 @@ if [[ ${EUID} -ne 0 ]]; then
     exit 1
 fi
 
-# The desktop user that runs potts (the user who invoked sudo).
+# The desktop user that runs lhassa (the user who invoked sudo).
 USER_NAME="${SUDO_USER:-${USER}}"
 if [[ -z "${USER_NAME}" || "${USER_NAME}" == "root" ]]; then
     echo "Could not determine the non-root user. Set SUDO_USER or run via sudo." >&2
     exit 1
 fi
 
-DST="/etc/sudoers.d/potts"
+DST="/etc/sudoers.d/lhassa"
 
-# Curated allowlist — keep in sync with potts/tools/privileged.py.
+# Curated allowlist — keep in sync with lhassa/tools/privileged.py.
 ALLOW="/usr/bin/systemctl, /usr/bin/journalctl, /usr/bin/pacman, /usr/bin/tlp, /usr/bin/tlp-stat, /usr/local/bin/power-mode, /usr/bin/dmesg, /usr/bin/sensors"
 
 TMP="$(mktemp)"
 trap 'rm -f "${TMP}"' EXIT
 {
-    echo "# /etc/sudoers.d/potts — scoped passwordless admin for the potts assistant."
-    echo "# Managed by potts scripts/install-privileged.sh. Keep in sync with potts/tools/privileged.py."
+    echo "# /etc/sudoers.d/lhassa — scoped passwordless admin for the lhassa assistant."
+    echo "# Managed by lhassa scripts/install-privileged.sh. Keep in sync with lhassa/tools/privileged.py."
     echo "${USER_NAME} ALL=(root) NOPASSWD: ${ALLOW}"
 } > "${TMP}"
 
@@ -44,5 +44,5 @@ fi
 
 install -m 0440 -o root -g root "${TMP}" "${DST}"
 echo "Installed ${DST} for user '${USER_NAME}'."
-echo "potts can now run these as root without a password:"
+echo "lhassa can now run these as root without a password:"
 echo "  ${ALLOW}"

@@ -1,59 +1,59 @@
-# Potts — Voice Interaction Examples
+# Lhassa — Voice Interaction Examples
 
-A practical reference of exact things you can say to Potts, organised by category. Say **"Potts"** first to wake it, then speak your request.
+A practical reference of exact things you can say to Lhassa, organised by category. Say **"Lhassa"** first to wake it, then speak your request.
 
 ---
 
 ## Web Search
 
 ```
-Potts, what's the current price of Bitcoin?
+Lhassa, what's the current price of Bitcoin?
 
-Potts, who won the Champions League last night?
+Lhassa, who won the Champions League last night?
 
-Potts, what's the latest version of Python?
+Lhassa, what's the latest version of Python?
 
-Potts, what does HTTP 429 mean?
+Lhassa, what does HTTP 429 mean?
 
-Potts, find me a simple bash script to rename files in bulk.
+Lhassa, find me a simple bash script to rename files in bulk.
 
-Potts, what's the weather in Tokyo this weekend?
+Lhassa, what's the weather in Tokyo this weekend?
 
-Potts, what are the differences between Rust and Go for systems programming?
+Lhassa, what are the differences between Rust and Go for systems programming?
 
-Potts, has the Next.js 15 release been announced?
+Lhassa, has the Next.js 15 release been announced?
 ```
 
 ---
 
 ## Shell Commands
 
-Potts runs shell commands on your machine and summarises the output.
+Lhassa runs shell commands on your machine and summarises the output.
 
 ```
-Potts, how much free disk space do I have?
+Lhassa, how much free disk space do I have?
 
-Potts, what processes are using the most CPU right now?
+Lhassa, what processes are using the most CPU right now?
 
-Potts, is port 8080 open on my machine?
+Lhassa, is port 8080 open on my machine?
 
-Potts, what's my current IP address?
+Lhassa, what's my current IP address?
 
-Potts, list all Docker containers that are running.
+Lhassa, list all Docker containers that are running.
 
-Potts, how long has my machine been running?
+Lhassa, how long has my machine been running?
 
-Potts, show me the last 20 lines of my nginx error log.
+Lhassa, show me the last 20 lines of my nginx error log.
 
-Potts, what packages got updated in my last system upgrade?
+Lhassa, what packages got updated in my last system upgrade?
 
-Potts, is the postgres service running?
+Lhassa, is the postgres service running?
 
-Potts, what's the size of the node_modules folder in my project?
+Lhassa, what's the size of the node_modules folder in my project?
 
-Potts, kill the process on port 3000.
+Lhassa, kill the process on port 3000.
 
-Potts, run my test suite at ~/code/myapp and tell me if anything fails.
+Lhassa, run my test suite at ~/code/myapp and tell me if anything fails.
 ```
 
 ---
@@ -61,18 +61,18 @@ Potts, run my test suite at ~/code/myapp and tell me if anything fails.
 ## Files
 
 ```
-Potts, read my nginx config and tell me what ports it's listening on.
+Lhassa, read my nginx config and tell me what ports it's listening on.
 
-Potts, what's in my todo list at ~/notes/todo.txt?
+Lhassa, what's in my todo list at ~/notes/todo.txt?
 
-Potts, summarise the README at ~/code/myproject/README.md.
+Lhassa, summarise the README at ~/code/myproject/README.md.
 
-Potts, read the last error in ~/logs/app.log.
+Lhassa, read the last error in ~/logs/app.log.
 
-Potts, create a file at ~/notes/meeting.txt with these notes:
+Lhassa, create a file at ~/notes/meeting.txt with these notes:
   "Meeting with Alice on Tuesday at 10am. Topics: Q2 roadmap, budget review."
 
-Potts, write a .gitignore file at ~/code/myproject that ignores
+Lhassa, write a .gitignore file at ~/code/myproject that ignores
   node_modules, .env, and dist folders.
 ```
 
@@ -81,46 +81,46 @@ Potts, write a .gitignore file at ~/code/myproject that ignores
 ## Reminders
 
 ```
-Potts, remind me in 15 minutes to stand up and stretch.
+Lhassa, remind me in 15 minutes to stand up and stretch.
 
-Potts, set a reminder in 2 hours to check the oven.
+Lhassa, set a reminder in 2 hours to check the oven.
 
-Potts, remind me at 9:30 to join the standup.
+Lhassa, remind me at 9:30 to join the standup.
 
-Potts, set a reminder at 17:00 called "end of day" saying "commit your work and push."
+Lhassa, set a reminder at 17:00 called "end of day" saying "commit your work and push."
 
-Potts, what reminders do I have?
+Lhassa, what reminders do I have?
 
-Potts, do I have any pending reminders?
+Lhassa, do I have any pending reminders?
 ```
 
 ---
 
 ## Background Agents
 
-Agents run autonomously in the background. Potts notifies you when they finish. Output streams live to the dashboard.
+Agents run autonomously in the background. Lhassa notifies you when they finish. Output streams live to the dashboard.
 
 ### Code Agent
 
 Best for writing, debugging, or reviewing code.
 
 ```
-Potts, delegate to the code agent: write a Python script that monitors a directory
+Lhassa, delegate to the code agent: write a Python script that monitors a directory
   for new files and sends a desktop notification when one appears.
 
-Potts, delegate to the code agent: find all TODO comments in ~/code/myproject
+Lhassa, delegate to the code agent: find all TODO comments in ~/code/myproject
   and create a summary file at ~/code/myproject/TODO_SUMMARY.md.
 
-Potts, delegate to the code agent: refactor the function get_user_data in
+Lhassa, delegate to the code agent: refactor the function get_user_data in
   ~/code/myapp/api/users.py to be async and add proper error handling.
 
-Potts, delegate to the code agent: review ~/code/myproject/src/auth.py
+Lhassa, delegate to the code agent: review ~/code/myproject/src/auth.py
   and identify any security issues.
 
-Potts, delegate to the code agent: write unit tests for the module at
+Lhassa, delegate to the code agent: write unit tests for the module at
   ~/code/myapp/utils/parser.py.
 
-Potts, delegate to the code agent: explain what the script at ~/scripts/deploy.sh does
+Lhassa, delegate to the code agent: explain what the script at ~/scripts/deploy.sh does
   and suggest improvements.
 ```
 
@@ -129,16 +129,16 @@ Potts, delegate to the code agent: explain what the script at ~/scripts/deploy.s
 Best for synthesising information, comparisons, or in-depth topic analysis.
 
 ```
-Potts, delegate to the research agent: compare PostgreSQL and MongoDB for a
+Lhassa, delegate to the research agent: compare PostgreSQL and MongoDB for a
   high-write, low-read workload and give me a recommendation.
 
-Potts, delegate to the research agent: what are the best practices for
+Lhassa, delegate to the research agent: what are the best practices for
   JWT authentication in 2026?
 
-Potts, delegate to the research agent: research the current state of WebAssembly
+Lhassa, delegate to the research agent: research the current state of WebAssembly
   for server-side use cases and summarise the key projects.
 
-Potts, delegate to the research agent: find 5 alternatives to Celery for
+Lhassa, delegate to the research agent: find 5 alternatives to Celery for
   task queuing in Python and compare their trade-offs.
 ```
 
@@ -147,19 +147,19 @@ Potts, delegate to the research agent: find 5 alternatives to Celery for
 Best for OS administration, package management, configuration, and diagnostics.
 
 ```
-Potts, delegate to the system agent: check why my machine is slow and
+Lhassa, delegate to the system agent: check why my machine is slow and
   identify the top resource consumers.
 
-Potts, delegate to the system agent: set up a systemd service that runs
+Lhassa, delegate to the system agent: set up a systemd service that runs
   ~/scripts/backup.sh every day at 3am.
 
-Potts, delegate to the system agent: diagnose why nginx keeps returning 502
+Lhassa, delegate to the system agent: diagnose why nginx keeps returning 502
   and suggest a fix.
 
-Potts, delegate to the system agent: list all installed packages that haven't
+Lhassa, delegate to the system agent: list all installed packages that haven't
   been updated in over 6 months and flag any with known CVEs.
 
-Potts, delegate to the system agent: configure my SSH server to disable
+Lhassa, delegate to the system agent: configure my SSH server to disable
   password authentication and only allow key-based login.
 ```
 
@@ -170,21 +170,21 @@ Potts, delegate to the system agent: configure my SSH server to disable
 These start monitoring in the background and notify you when the condition is met.
 
 ```
-Potts, watch my ffmpeg process and tell me when it finishes.
+Lhassa, watch my ffmpeg process and tell me when it finishes.
 
-Potts, notify me when PID 12345 exits.
+Lhassa, notify me when PID 12345 exits.
 
-Potts, watch my build at ~/code/myapp and notify me when the build log
+Lhassa, watch my build at ~/code/myapp and notify me when the build log
   contains "build succeeded".
 
-Potts, tail /var/log/syslog and alert me if you see "Out of memory".
+Lhassa, tail /var/log/syslog and alert me if you see "Out of memory".
 
-Potts, check "curl -s http://localhost:8080/health" every 10 seconds
+Lhassa, check "curl -s http://localhost:8080/health" every 10 seconds
   and tell me when it returns "ok".
 
-Potts, poll "systemctl is-active myapp" every 30 seconds until it's active.
+Lhassa, poll "systemctl is-active myapp" every 30 seconds until it's active.
 
-Potts, monitor "kubectl get pods" every 60 seconds until all pods show "Running".
+Lhassa, monitor "kubectl get pods" every 60 seconds until all pods show "Running".
 ```
 
 ---
@@ -194,21 +194,21 @@ Potts, monitor "kubectl get pods" every 60 seconds until all pods show "Running"
 Requires a vision-capable API key (Anthropic or OpenAI). See [configuration.md](configuration.md).
 
 ```
-Potts, what's that error on my screen?
+Lhassa, what's that error on my screen?
 
-Potts, read the text in the dialog box on my screen.
+Lhassa, read the text in the dialog box on my screen.
 
-Potts, describe what's on my screen right now.
+Lhassa, describe what's on my screen right now.
 
-Potts, look at my screen and tell me what the test failure says.
+Lhassa, look at my screen and tell me what the test failure says.
 
-Potts, is there anything unusual in this screenshot at ~/Desktop/error.png?
+Lhassa, is there anything unusual in this screenshot at ~/Desktop/error.png?
 
-Potts, describe the architecture diagram at ~/docs/system-design.png.
+Lhassa, describe the architecture diagram at ~/docs/system-design.png.
 
-Potts, what does the chart at ~/Downloads/metrics.png show?
+Lhassa, what does the chart at ~/Downloads/metrics.png show?
 
-Potts, read the table in ~/Desktop/spreadsheet-screenshot.png and
+Lhassa, read the table in ~/Desktop/spreadsheet-screenshot.png and
   tell me the totals.
 ```
 
@@ -219,22 +219,22 @@ Potts, read the table in ~/Desktop/spreadsheet-screenshot.png and
 Requires `GITHUB_TOKEN` in `.env`.
 
 ```
-Potts, list my GitHub repos.
+Lhassa, list my GitHub repos.
 
-Potts, what are the open issues on my potts repo?
+Lhassa, what are the open issues on my potts repo?
 
-Potts, get issue 42 from torvalds/linux.
+Lhassa, get issue 42 from torvalds/linux.
 
-Potts, are there any open pull requests on my myapp repo?
+Lhassa, are there any open pull requests on my myapp repo?
 
-Potts, summarise PR 7 on my potts repo.
+Lhassa, summarise PR 7 on my potts repo.
 
-Potts, do I have any unread GitHub notifications?
+Lhassa, do I have any unread GitHub notifications?
 
-Potts, comment on issue 12 in my potts repo:
+Lhassa, comment on issue 12 in my potts repo:
   "Fixed in commit abc1234. Please retest and close if resolved."
 
-Potts, what CI checks are failing on PR 3 in my myapp repo?
+Lhassa, what CI checks are failing on PR 3 in my myapp repo?
 ```
 
 ---
@@ -244,21 +244,21 @@ Potts, what CI checks are failing on PR 3 in my myapp repo?
 Requires Microsoft Graph setup. See [outlook.md](outlook.md).
 
 ```
-Potts, do I have any new emails?
+Lhassa, do I have any new emails?
 
-Potts, read my last 3 emails.
+Lhassa, read my last 3 emails.
 
-Potts, send an email to alice@example.com with subject "Quick question"
+Lhassa, send an email to alice@example.com with subject "Quick question"
   and say "Hey Alice, are you free for a call on Thursday afternoon?"
 
-Potts, what's on my calendar today?
+Lhassa, what's on my calendar today?
 
-Potts, what do I have scheduled for the rest of the week?
+Lhassa, what do I have scheduled for the rest of the week?
 
-Potts, create a calendar event called "Sprint planning" for tomorrow at 10am,
+Lhassa, create a calendar event called "Sprint planning" for tomorrow at 10am,
   ending at 11am, in the main conference room.
 
-Potts, add a meeting with Bob to my calendar on Friday at 2pm for one hour,
+Lhassa, add a meeting with Bob to my calendar on Friday at 2pm for one hour,
   subject "Architecture review."
 ```
 
@@ -266,67 +266,67 @@ Potts, add a meeting with Bob to my calendar on Friday at 2pm for one hour,
 
 ## Memory & Context
 
-Potts automatically saves facts about you and a session summary when you shut it down. On the next session it restores that context. You don't need to do anything — but you can prompt it to use what it knows.
+Lhassa automatically saves facts about you and a session summary when you shut it down. On the next session it restores that context. You don't need to do anything — but you can prompt it to use what it knows.
 
 ```
-Potts, what do you remember about me?
+Lhassa, what do you remember about me?
 
-Potts, what did we talk about last time?
+Lhassa, what did we talk about last time?
 
-Potts, remember that my main project is currently called Helix and it's a FastAPI app.
+Lhassa, remember that my main project is currently called Helix and it's a FastAPI app.
 
-Potts, my preferred editor is Neovim, keep that in mind.
+Lhassa, my preferred editor is Neovim, keep that in mind.
 ```
 
 ---
 
 ## General Conversation
 
-Potts responds in whatever language you speak (set `POTTS_STT_LANGUAGE` to match).
+Lhassa responds in whatever language you speak (set `LHASSA_STT_LANGUAGE` to match).
 
 ```
-Potts, what time is it?
+Lhassa, what time is it?
 
-Potts, set a timer for 5 minutes.   (uses schedule_reminder under the hood)
+Lhassa, set a timer for 5 minutes.   (uses schedule_reminder under the hood)
 
-Potts, explain what a race condition is in simple terms.
+Lhassa, explain what a race condition is in simple terms.
 
-Potts, what's the difference between a mutex and a semaphore?
+Lhassa, what's the difference between a mutex and a semaphore?
 
-Potts, write me a haiku about distributed systems.
+Lhassa, write me a haiku about distributed systems.
 
-Potts, I need to focus for the next hour, remind me at the end.
+Lhassa, I need to focus for the next hour, remind me at the end.
 ```
 
 ---
 
-## Spanish examples (set `POTTS_STT_LANGUAGE=es`)
+## Spanish examples (set `LHASSA_STT_LANGUAGE=es`)
 
 ```
-Potts, ¿cuál es el precio actual del euro frente al dólar?
+Lhassa, ¿cuál es el precio actual del euro frente al dólar?
 
-Potts, recuérdame en 20 minutos que tengo que llamar a Juan.
+Lhassa, recuérdame en 20 minutos que tengo que llamar a Juan.
 
-Potts, ¿qué procesos están consumiendo más CPU ahora mismo?
+Lhassa, ¿qué procesos están consumiendo más CPU ahora mismo?
 
-Potts, delega en el agente de código: escribe un script en Python que
+Lhassa, delega en el agente de código: escribe un script en Python que
   monitorice una carpeta y avise cuando aparezca un nuevo archivo.
 
-Potts, ¿tienes algún recordatorio pendiente?
+Lhassa, ¿tienes algún recordatorio pendiente?
 
-Potts, lee el archivo ~/notas/tareas.txt y resúmelo.
+Lhassa, lee el archivo ~/notas/tareas.txt y resúmelo.
 ```
 
 ---
 
 ## Tips
 
-**Be specific about file paths.** Instead of "my project", say "at ~/code/myapp". Potts can't guess directory locations unless you've told it before.
+**Be specific about file paths.** Instead of "my project", say "at ~/code/myapp". Lhassa can't guess directory locations unless you've told it before.
 
-**Agents handle complexity.** If a task needs more than one or two steps, delegate to an agent. Potts's direct responses are intentionally brief for voice.
+**Agents handle complexity.** If a task needs more than one or two steps, delegate to an agent. Lhassa's direct responses are intentionally brief for voice.
 
-**You can interrupt.** If Potts is speaking and you say "Potts" again, it stops and listens immediately.
+**You can interrupt.** If Lhassa is speaking and you say "Lhassa" again, it stops and listens immediately.
 
 **The dashboard shows everything.** Open http://localhost:7766 to see agent output in full, memory facts, session history, and pending reminders.
 
-**Wake timeout.** After 5 minutes of no interaction, Potts goes to sleep (low beep). Say "Potts" to wake it again. Change the timeout with `POTTS_WAKE_TIMEOUT` in `.env`.
+**Wake timeout.** After 5 minutes of no interaction, Lhassa goes to sleep (low beep). Say "Lhassa" to wake it again. Change the timeout with `LHASSA_WAKE_TIMEOUT` in `.env`.
