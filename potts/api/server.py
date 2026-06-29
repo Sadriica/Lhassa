@@ -86,6 +86,34 @@ async def get_metrics():
     return state.metrics
 
 
+@app.get("/api/llm/ledger")
+async def get_llm_ledger():
+    from potts.llm.gateway import gateway
+
+    config = Config()
+    rows = await gateway.ledger_rows()
+    recent = list(reversed(rows[-20:]))  # newest first
+    output_tokens_today = await gateway.daily_output_tokens()
+
+    totals = {
+        "llm_calls": state.metrics.get("llm_calls", 0),
+        "llm_input_tokens": state.metrics.get("llm_input_tokens", 0),
+        "llm_output_tokens": state.metrics.get("llm_output_tokens", 0),
+        "llm_cost_usd": state.metrics.get("llm_cost_usd", 0.0),
+        "llm_cache_hits": state.metrics.get("llm_cache_hits", 0),
+    }
+
+    return {
+        "totals": totals,
+        "budget": {
+            "daily_token_budget": config.llm_daily_token_budget,
+            "output_tokens_today": output_tokens_today,
+        },
+        "cache_enabled": config.llm_cache_enabled,
+        "recent": recent,
+    }
+
+
 @app.get("/api/audit")
 async def get_audit():
     state.load_audit_events()
