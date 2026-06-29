@@ -2,6 +2,7 @@ import { useEffect, useState, useRef, useCallback } from 'react'
 import StatusBar from './components/StatusBar'
 import AgentsPanel from './components/AgentsPanel'
 import MetricsPanel from './components/MetricsPanel'
+import AIUsagePanel from './components/AIUsagePanel'
 import MemoryPanel from './components/MemoryPanel'
 import HistoryPanel from './components/HistoryPanel'
 import ScheduledPanel from './components/ScheduledPanel'
@@ -139,6 +140,7 @@ export default function App() {
         <div className="space-y-4">
           <ErrorBoundary><HealthPanel /></ErrorBoundary>
           <ErrorBoundary><MetricsPanel metrics={metrics} /></ErrorBoundary>
+          <ErrorBoundary><AIUsagePanel metrics={metrics} /></ErrorBoundary>
           <ErrorBoundary><AuditPanel seed={auditEvents} /></ErrorBoundary>
           <ErrorBoundary><ScheduledPanel refreshTick={scheduledTick} /></ErrorBoundary>
           <ErrorBoundary><MemoryPanel /></ErrorBoundary>
