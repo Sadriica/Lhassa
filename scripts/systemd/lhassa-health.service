@@ -12,5 +12,5 @@ After=graphical-session.target
 
 [Service]
 Type=oneshot
-WorkingDirectory=%h/Code/potts
-ExecStart=%h/Code/potts/.venv/bin/python %h/Code/potts/scripts/lhassa-health
+WorkingDirectory=%h/Code/lhassa
+ExecStart=%h/Code/lhassa/.venv/bin/python %h/Code/lhassa/scripts/lhassa-health
