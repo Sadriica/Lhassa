@@ -1,9 +1,22 @@
-.PHONY: install dashboard run dev check test lint clean
+.PHONY: install install-health install-privileged dashboard run dev check test lint clean
 
 # First-time setup: install Python deps + build the dashboard
 install:
 	uv sync
 	cd dashboard && npm install && npm run build
+
+# Install + enable the LLM-free PC-state health timer (user unit, no sudo)
+install-health:
+	mkdir -p $(HOME)/.config/systemd/user
+	cp scripts/systemd/potts-health.service scripts/systemd/potts-health.timer $(HOME)/.config/systemd/user/
+	systemctl --user daemon-reload
+	systemctl --user enable --now potts-health.timer
+	@echo "Health checks scheduled. Status: systemctl --user status potts-health.timer"
+
+# Install the scoped NOPASSWD sudoers drop-in so potts can run admin commands as
+# root (allowlist only). Needs sudo — you'll be prompted for your password.
+install-privileged:
+	sudo bash scripts/install-privileged.sh
 
 # Rebuild the React dashboard (run after editing dashboard/src/)
 dashboard:
