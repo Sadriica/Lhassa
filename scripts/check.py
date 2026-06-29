@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Potts pre-flight check — validates your environment before running `make run`.
+Lhassa pre-flight check — validates your environment before running `make run`.
 
 Usage:
   uv run python scripts/check.py           # quick checks (no API calls)
@@ -57,7 +57,7 @@ major, minor = sys.version_info[:2]
 if (major, minor) >= (3, 13):
     ok(f"Python {major}.{minor} ✓")
 else:
-    fail(f"Python {major}.{minor} — Potts requires 3.13 or newer")
+    fail(f"Python {major}.{minor} — Lhassa requires 3.13 or newer")
 
 
 # ── 2. Node.js ─────────────────────────────────────────────────────────────────
@@ -71,7 +71,7 @@ if node:
     if major_node >= 18:
         ok(f"Node.js {v} ✓")
     else:
-        fail(f"Node.js {v} — Potts requires 18 or newer")
+        fail(f"Node.js {v} — Lhassa requires 18 or newer")
 else:
     fail("node not found in PATH — install Node.js 18+")
 
@@ -84,7 +84,7 @@ if dist.exists() and any(dist.iterdir()):
     ok("Dashboard built (dashboard/dist/ exists)")
 else:
     warn("Dashboard not built — run  make dashboard  to build it")
-    _info("Potts still works without the dashboard; it's optional")
+    _info("Lhassa still works without the dashboard; it's optional")
 
 
 # ── 4. Required env vars ───────────────────────────────────────────────────────
@@ -114,7 +114,7 @@ llm_keys = {
     "CEREBRAS_API_KEY":   "cerebras",
 }
 found_llm = [(env, prov) for env, prov in llm_keys.items() if os.getenv(env)]
-ollama_explicit = os.getenv("POTTS_LLM_PROVIDER", "").lower() == "ollama"
+ollama_explicit = os.getenv("LHASSA_LLM_PROVIDER", "").lower() == "ollama"
 
 if found_llm:
     for env, prov in found_llm:
@@ -123,7 +123,7 @@ if found_llm:
         first_env, first_prov = found_llm[0]
         _info(f"Multiple LLM keys found — {first_prov} wins (auto-detection priority order)")
 elif ollama_explicit:
-    ok("POTTS_LLM_PROVIDER=ollama — no API key required")
+    ok("LHASSA_LLM_PROVIDER=ollama — no API key required")
     ollama_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
     _info(f"Ollama URL: {ollama_url}")
 else:
@@ -192,18 +192,18 @@ try:
     else:
         fail("No audio input devices found — check your microphone")
 
-    mic_name = os.getenv("POTTS_MIC_NAME", "")
+    mic_name = os.getenv("LHASSA_MIC_NAME", "")
     if mic_name:
         matched = [(i, n) for i, n in devices if mic_name.lower() in n.lower()]
         if matched:
-            ok(f"POTTS_MIC_NAME={mic_name!r} matches: [{matched[0][0]}] {matched[0][1]}")
+            ok(f"LHASSA_MIC_NAME={mic_name!r} matches: [{matched[0][0]}] {matched[0][1]}")
         else:
             warn(
-                f"POTTS_MIC_NAME={mic_name!r} did not match any device. "
-                "Potts will fall back to the system default."
+                f"LHASSA_MIC_NAME={mic_name!r} did not match any device. "
+                "Lhassa will fall back to the system default."
             )
     else:
-        _info("POTTS_MIC_NAME not set — using system default input device")
+        _info("LHASSA_MIC_NAME not set — using system default input device")
 
 except ImportError:
     warn("pyaudio not installed — run  make install  first")
@@ -213,28 +213,28 @@ except ImportError:
 
 _head("Agent backend")
 claude_bin = shutil.which("claude")
-agent_backend_env = os.getenv("POTTS_AGENT_BACKEND", "").lower()
+agent_backend_env = os.getenv("LHASSA_AGENT_BACKEND", "").lower()
 
 if agent_backend_env == "builtin":
-    ok("POTTS_AGENT_BACKEND=builtin — built-in LLM tool loop")
+    ok("LHASSA_AGENT_BACKEND=builtin — built-in LLM tool loop")
 elif agent_backend_env == "claude_code":
     if claude_bin:
-        ok(f"POTTS_AGENT_BACKEND=claude_code — claude found at {claude_bin}")
+        ok(f"LHASSA_AGENT_BACKEND=claude_code — claude found at {claude_bin}")
     else:
         fail(
-            "POTTS_AGENT_BACKEND=claude_code but 'claude' not found in PATH. "
-            "Install Claude Code or set POTTS_AGENT_BACKEND=builtin"
+            "LHASSA_AGENT_BACKEND=claude_code but 'claude' not found in PATH. "
+            "Install Claude Code or set LHASSA_AGENT_BACKEND=builtin"
         )
 elif claude_bin:
     ok(f"claude CLI found at {claude_bin} — agents will use claude_code (auto-detected)")
-    agent_dir = os.getenv("POTTS_AGENT_DIR", "")
+    agent_dir = os.getenv("LHASSA_AGENT_DIR", "")
     if agent_dir:
         if Path(agent_dir).exists():
-            ok(f"POTTS_AGENT_DIR={agent_dir!r} ✓")
+            ok(f"LHASSA_AGENT_DIR={agent_dir!r} ✓")
         else:
-            warn(f"POTTS_AGENT_DIR={agent_dir!r} does not exist")
+            warn(f"LHASSA_AGENT_DIR={agent_dir!r} does not exist")
     else:
-        _info(f"POTTS_AGENT_DIR not set — agents will run in {os.getcwd()}")
+        _info(f"LHASSA_AGENT_DIR not set — agents will run in {os.getcwd()}")
 else:
     ok("claude CLI not found — agents will use builtin LLM tool loop (auto-detected)")
 
@@ -326,10 +326,10 @@ if "--full" in sys.argv:
 
 print()
 if errors == 0 and warnings == 0:
-    print("\033[32m✓ All checks passed. Run  make run  to start Potts.\033[0m")
+    print("\033[32m✓ All checks passed. Run  make run  to start Lhassa.\033[0m")
 elif errors == 0:
-    print(f"\033[33m⚠ {warnings} warning(s). Potts will start but some features may be limited.\033[0m")
+    print(f"\033[33m⚠ {warnings} warning(s). Lhassa will start but some features may be limited.\033[0m")
     print("  Run  make run  to start.")
 else:
-    print(f"\033[31m✗ {errors} error(s), {warnings} warning(s). Fix the errors above before running Potts.\033[0m")
+    print(f"\033[31m✗ {errors} error(s), {warnings} warning(s). Fix the errors above before running Lhassa.\033[0m")
     sys.exit(1)

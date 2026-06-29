@@ -1,0 +1,12 @@
+# /etc/sudoers.d/lhassa — scoped passwordless admin for the lhassa assistant.
+#
+# Reference template. Installed (with the real username substituted and validated)
+# by scripts/install-privileged.sh. Keep the command list in sync with the
+# allowlist in lhassa/tools/privileged.py.
+#
+# Scoped on purpose: lhassa can run only these admin binaries as root without a
+# password. Anything else — or anything destructive — is refused both here
+# (kernel-enforced) and in lhassa/tools/privileged.py (application-enforced).
+#
+# Replace <USER> with the desktop user that runs lhassa.
+<USER> ALL=(root) NOPASSWD: /usr/bin/systemctl, /usr/bin/journalctl, /usr/bin/pacman, /usr/bin/tlp, /usr/bin/tlp-stat, /usr/local/bin/power-mode, /usr/bin/dmesg, /usr/bin/sensors

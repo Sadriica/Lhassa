@@ -1,4 +1,4 @@
-"""Tests for potts.api.server REST and WebSocket behaviour."""
+"""Tests for lhassa.api.server REST and WebSocket behaviour."""
 
 import json
 from dataclasses import asdict
@@ -7,8 +7,8 @@ from fastapi.testclient import TestClient
 
 
 def test_status_and_audit_endpoints(monkeypatch):
-    from potts.api.server import app
-    from potts.state import AuditEvent, state
+    from lhassa.api.server import app
+    from lhassa.state import AuditEvent, state
 
     original_metrics = state.metrics.copy()
     original_audit = list(state.audit_events)
@@ -46,9 +46,9 @@ def test_status_and_audit_endpoints(monkeypatch):
 
 
 def test_health_endpoint_reports_runtime_configuration(monkeypatch):
-    import potts.api.server as server
-    from potts.api.server import app
-    from potts.state import state
+    import lhassa.api.server as server
+    from lhassa.api.server import app
+    from lhassa.state import state
 
     original_voice = state.is_voice_active
     original_agents = dict(state.agent_runs)
@@ -60,18 +60,18 @@ def test_health_endpoint_reports_runtime_configuration(monkeypatch):
         state.agent_runs = {"abc": object()}
         state._ws_clients = {object(), object()}
 
-        monkeypatch.setenv("POTTS_LLM_PROVIDER", "openai")
+        monkeypatch.setenv("LHASSA_LLM_PROVIDER", "openai")
         monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
-        monkeypatch.setenv("POTTS_AGENT_BACKEND", "builtin")
-        monkeypatch.setenv("POTTS_VISION_PROVIDER", "openai")
-        monkeypatch.setenv("POTTS_STT_LANGUAGE", "es")
-        monkeypatch.setenv("POTTS_ALLOW_DESTRUCTIVE_SHELL", "1")
-        monkeypatch.setenv("POTTS_FILE_WRITE_ROOT", "/tmp/potts-root")
-        monkeypatch.setenv("POTTS_API_HOST", "127.0.0.1")
-        monkeypatch.setenv("POTTS_API_PORT", "9999")
+        monkeypatch.setenv("LHASSA_AGENT_BACKEND", "builtin")
+        monkeypatch.setenv("LHASSA_VISION_PROVIDER", "openai")
+        monkeypatch.setenv("LHASSA_STT_LANGUAGE", "es")
+        monkeypatch.setenv("LHASSA_ALLOW_DESTRUCTIVE_SHELL", "1")
+        monkeypatch.setenv("LHASSA_FILE_WRITE_ROOT", "/tmp/lhassa-root")
+        monkeypatch.setenv("LHASSA_API_HOST", "127.0.0.1")
+        monkeypatch.setenv("LHASSA_API_PORT", "9999")
 
         import importlib
-        import potts.config as config_mod
+        import lhassa.config as config_mod
 
         importlib.reload(config_mod)
         monkeypatch.setattr(server, "Config", config_mod.Config)
@@ -89,7 +89,7 @@ def test_health_endpoint_reports_runtime_configuration(monkeypatch):
         assert data["vision_provider"] == "openai"
         assert data["stt_language"] == "es"
         assert data["allow_destructive_shell"] is True
-        assert data["file_write_root"] == "/tmp/potts-root"
+        assert data["file_write_root"] == "/tmp/lhassa-root"
         assert data["api_host"] == "127.0.0.1"
         assert data["api_port"] == 9999
     finally:
@@ -100,9 +100,9 @@ def test_health_endpoint_reports_runtime_configuration(monkeypatch):
 
 
 def test_export_endpoint_returns_operational_snapshot(monkeypatch):
-    import potts.api.server as server
-    from potts.api.server import app
-    from potts.state import AuditEvent, state
+    import lhassa.api.server as server
+    from lhassa.api.server import app
+    from lhassa.state import AuditEvent, state
 
     original_metrics = state.metrics.copy()
     original_audit = list(state.audit_events)
@@ -154,8 +154,8 @@ def test_export_endpoint_returns_operational_snapshot(monkeypatch):
 
 
 def test_import_endpoint_restores_audit_and_memory(monkeypatch):
-    import potts.api.server as server
-    from potts.api.server import app
+    import lhassa.api.server as server
+    from lhassa.api.server import app
 
     captured = {}
 
@@ -189,7 +189,7 @@ def test_import_endpoint_restores_audit_and_memory(monkeypatch):
 
 
 def test_import_endpoint_rejects_invalid_payload():
-    from potts.api.server import app
+    from lhassa.api.server import app
 
     client = TestClient(app)
     response = client.post("/api/import", json={"audit": {}, "facts": [], "sessions": [], "scheduled_tasks": []})
@@ -199,8 +199,8 @@ def test_import_endpoint_rejects_invalid_payload():
 
 
 def test_import_endpoint_dry_run_validates_without_persisting(monkeypatch):
-    import potts.api.server as server
-    from potts.api.server import app
+    import lhassa.api.server as server
+    from lhassa.api.server import app
 
     calls = {"replace_memory_snapshot": 0, "replace_audit_events": 0}
 
@@ -228,8 +228,8 @@ def test_import_endpoint_dry_run_validates_without_persisting(monkeypatch):
 
 
 def test_websocket_snapshot_and_audit_event(monkeypatch):
-    from potts.api.server import app
-    from potts.state import AuditEvent, state
+    from lhassa.api.server import app
+    from lhassa.state import AuditEvent, state
 
     original_metrics = state.metrics.copy()
     original_audit = list(state.audit_events)

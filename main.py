@@ -4,15 +4,15 @@ import sys
 from pathlib import Path
 from loguru import logger
 
-from potts.config import Config
-from potts.voice.pipeline import run as run_voice_pipeline
-from potts.memory.session import close_session
-from potts.memory.store import init_db
-from potts.scheduler import run_scheduler
-from potts.api.server import run_api_server
-from potts.state import state
+from lhassa.config import Config
+from lhassa.voice.pipeline import run as run_voice_pipeline
+from lhassa.memory.session import close_session
+from lhassa.memory.store import init_db
+from lhassa.scheduler import run_scheduler
+from lhassa.api.server import run_api_server
+from lhassa.state import state
 
-LOG_DIR = Path.home() / ".potts"
+LOG_DIR = Path.home() / ".lhassa"
 
 
 def setup_logging(level: str):
@@ -26,7 +26,7 @@ def setup_logging(level: str):
     # File — full detail, rotated at 10 MB, kept for 7 days
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     logger.add(
-        LOG_DIR / "potts.log",
+        LOG_DIR / "lhassa.log",
         level="DEBUG",
         format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {name}:{line} | {message}",
         rotation="10 MB",
@@ -38,7 +38,7 @@ def setup_logging(level: str):
 async def _close_http_clients():
     """Close all cached HTTP clients to release connection pools cleanly."""
     # httpx singletons in tool modules
-    from potts.tools import search, github, graph
+    from lhassa.tools import search, github, graph
     for mod in (search, github, graph):
         client = getattr(mod, "_http", None)
         if client is not None:
@@ -48,7 +48,7 @@ async def _close_http_clients():
                 pass
 
     # AsyncAnthropic / AsyncOpenAI singletons in the LLM provider cache
-    from potts.llm import provider
+    from lhassa.llm import provider
     for client in provider._agent_clients.values():
         try:
             await client.aclose()
@@ -60,7 +60,7 @@ async def _close_http_clients():
 async def _periodic_memory_snapshot(interval_s: int):
     """
     Periodically extract facts from the current conversation so they're not lost
-    if Potts crashes before the normal shutdown path runs close_session().
+    if Lhassa crashes before the normal shutdown path runs close_session().
     Only saves when new messages have accumulated since the last snapshot.
     """
     last_count = 0
@@ -97,7 +97,7 @@ async def _run_all(config: Config):
         run_scheduler(),
         name="scheduler",
     )
-    snapshot_interval = max(60, int(os.getenv("POTTS_MEMORY_SNAPSHOT_INTERVAL", "1800")))
+    snapshot_interval = max(60, int(os.getenv("LHASSA_MEMORY_SNAPSHOT_INTERVAL", "1800")))
     snapshot_task = asyncio.create_task(
         _periodic_memory_snapshot(snapshot_interval),
         name="memory-snapshot",
@@ -135,13 +135,13 @@ async def _run_all(config: Config):
 def main():
     config = Config()
     setup_logging(config.log_level)
-    logger.info("Starting Potts...")
+    logger.info("Starting Lhassa...")
 
     try:
         asyncio.run(_run_all(config))
     except KeyboardInterrupt:
         print()  # newline after ^C
-        logger.info("Potts shutting down.")
+        logger.info("Lhassa shutting down.")
     except ConnectionError as e:
         logger.error(f"Connection error: {e}")
         logger.warning("Check your internet connection and API keys.")

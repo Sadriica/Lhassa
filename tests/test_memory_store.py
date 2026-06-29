@@ -1,4 +1,4 @@
-"""Tests for potts.memory.store — SQLite persistence layer."""
+"""Tests for lhassa.memory.store — SQLite persistence layer."""
 
 import pytest
 import pytest_asyncio  # noqa: F401
@@ -7,7 +7,7 @@ import pytest_asyncio  # noqa: F401
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
 async def _init(tmp_db, monkeypatch):
-    import potts.memory.store as store
+    import lhassa.memory.store as store
     monkeypatch.setattr(store, "DB_PATH", tmp_db)
     await store.init_db()
     return store

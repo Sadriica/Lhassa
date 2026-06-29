@@ -2,7 +2,7 @@ export default function StatusBar({ connected, voiceActive }) {
   return (
     <div className="flex items-center justify-between bg-slate-900 border border-slate-700 rounded-lg px-4 py-2">
       <div className="flex items-center gap-3">
-        <span className="text-purple-400 font-bold text-lg tracking-widest">POTTS</span>
+        <span className="text-purple-400 font-bold text-lg tracking-widest">LHASSA</span>
         <span className="text-slate-500 text-xs">v3</span>
       </div>
 

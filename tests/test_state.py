@@ -1,11 +1,11 @@
-"""Tests for potts.state."""
+"""Tests for lhassa.state."""
 
 import pytest
 
 
 @pytest.mark.asyncio
 async def test_set_voice_active_broadcasts_only_on_change():
-    from potts.state import AppState
+    from lhassa.state import AppState
 
     app_state = AppState()
     events = []
@@ -27,7 +27,7 @@ async def test_set_voice_active_broadcasts_only_on_change():
 
 @pytest.mark.asyncio
 async def test_record_audit_event_tracks_and_broadcasts():
-    from potts.state import AppState
+    from lhassa.state import AppState
 
     app_state = AppState()
     events = []
@@ -52,7 +52,7 @@ async def test_record_audit_event_tracks_and_broadcasts():
 
 
 def test_replace_audit_events_replaces_and_recounts():
-    from potts.state import AppState
+    from lhassa.state import AppState
 
     app_state = AppState()
     app_state.replace_audit_events([

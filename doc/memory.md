@@ -1,6 +1,6 @@
 # Memory
 
-Potts remembers you across sessions. After each conversation, it automatically extracts facts about you and saves a summary. The next time you start Potts, that context is injected into the system prompt so the assistant picks up where it left off.
+Lhassa remembers you across sessions. After each conversation, it automatically extracts facts about you and saves a summary. The next time you start Lhassa, that context is injected into the system prompt so the assistant picks up where it left off.
 
 ---
 
@@ -12,20 +12,20 @@ Facts are persistent key/value pairs about you and your preferences. They're ext
 
 > "Extract new or updated facts about the user (name, job, projects, preferences, OS, etc.) and return JSON."
 
-Examples of facts Potts might store:
+Examples of facts Lhassa might store:
 
 | Key | Value |
 |---|---|
 | `name` | Alice |
 | `job` | Software engineer |
-| `current_project` | Potts voice assistant |
+| `current_project` | Lhassa voice assistant |
 | `operating_system` | Arch Linux |
 | `preferred_language` | Python |
 | `timezone` | Europe/Madrid |
 
 Facts are stored with a `key` → `value` schema. If a fact key already exists, it's updated (upserted) — the new value replaces the old one. Keys are `snake_case`.
 
-Facts are **persistent** — they survive restarts and accumulate over many sessions. Once Potts knows your name, it always knows your name.
+Facts are **persistent** — they survive restarts and accumulate over many sessions. Once Lhassa knows your name, it always knows your name.
 
 ### Session Summaries
 
@@ -35,14 +35,14 @@ A session summary is a single sentence describing what was discussed in one conv
 - "Helped debug a Python asyncio issue and explained context managers."
 - "Checked emails, created a calendar event for Friday, and searched for miso soup recipes."
 
-The **5 most recent session summaries** are injected into the system prompt at startup, giving Potts a sense of recent conversational history without overwhelming the context window.
+The **5 most recent session summaries** are injected into the system prompt at startup, giving Lhassa a sense of recent conversational history without overwhelming the context window.
 
 ---
 
 ## Where Memory Is Stored
 
 ```
-~/.potts/memory.db
+~/.lhassa/memory.db
 ```
 
 This is an **SQLite** database. Three tables:
@@ -74,19 +74,19 @@ CREATE TABLE scheduled_tasks (
 );
 ```
 
-The `~/.potts/` directory is created automatically on first run.
+The `~/.lhassa/` directory is created automatically on first run.
 
 ---
 
 ## How Memory Is Injected at Startup
 
-When Potts starts, it reads facts and the 5 most recent sessions from the database and builds a memory block:
+When Lhassa starts, it reads facts and the 5 most recent sessions from the database and builds a memory block:
 
 ```
 ## What you know about the user
 - name: Alice
 - job: Software engineer
-- current_project: Potts voice assistant
+- current_project: Lhassa voice assistant
 - operating_system: Arch Linux
 
 ## Recent conversations
@@ -97,9 +97,9 @@ When Potts starts, it reads facts and the 5 most recent sessions from the databa
 - [2026-03-28]: Checked emails and delegated a code refactor to the code agent.
 ```
 
-This block is appended to the system prompt. Potts "knows" this information at the start of every session without you having to repeat yourself.
+This block is appended to the system prompt. Lhassa "knows" this information at the start of every session without you having to repeat yourself.
 
-On the very first session (empty database), no memory block is injected and Potts logs:
+On the very first session (empty database), no memory block is injected and Lhassa logs:
 
 ```
 No prior memory — first session.
@@ -109,7 +109,7 @@ No prior memory — first session.
 
 ## When Memory Is Saved
 
-Memory is saved **when Potts shuts down** (Ctrl+C or any clean exit). The sequence is:
+Memory is saved **when Lhassa shuts down** (Ctrl+C or any clean exit). The sequence is:
 
 1. The voice pipeline stops
 2. The full conversation history (user and assistant messages) is gathered
@@ -117,9 +117,9 @@ Memory is saved **when Potts shuts down** (Ctrl+C or any clean exit). The sequen
 4. Facts are upserted into the database
 5. A session summary is saved
 
-**Sessions shorter than 2 real exchanges are skipped** — Potts won't burn an API call to remember a one-word wake-word test.
+**Sessions shorter than 2 real exchanges are skipped** — Lhassa won't burn an API call to remember a one-word wake-word test.
 
-If the session save fails (e.g. network timeout), Potts logs a warning but does not crash:
+If the session save fails (e.g. network timeout), Lhassa logs a warning but does not crash:
 
 ```
 12:45:14 | WARNING  | Could not save session: [error details]
@@ -133,7 +133,7 @@ The dashboard at `http://localhost:7766` has two memory-related panels:
 
 ### Memory / Facts panel (right column)
 
-Shows all stored facts as a table with Key, Value, and last-updated timestamp. Refreshes when you load the page. Useful for auditing what Potts knows about you.
+Shows all stored facts as a table with Key, Value, and last-updated timestamp. Refreshes when you load the page. Useful for auditing what Lhassa knows about you.
 
 ### Session History panel (left column)
 
@@ -147,7 +147,7 @@ Since memory is a plain SQLite database, you can inspect or edit it directly:
 
 ```bash
 # Open the database
-sqlite3 ~/.potts/memory.db
+sqlite3 ~/.lhassa/memory.db
 
 # See all facts
 SELECT * FROM facts;
@@ -166,16 +166,16 @@ DELETE FROM sessions;
 Or simply delete the database entirely:
 
 ```bash
-rm ~/.potts/memory.db
+rm ~/.lhassa/memory.db
 ```
 
-Potts will recreate it on next startup.
+Lhassa will recreate it on next startup.
 
 ---
 
 ## Privacy Notes
 
-- Memory is stored only on your machine in `~/.potts/memory.db`.
+- Memory is stored only on your machine in `~/.lhassa/memory.db`.
 - Facts and session summaries are sent to the Groq API once (at shutdown) for extraction, and then stored locally.
 - No memory data is sent to Deepgram or Cartesia.
 - The memory context is sent to Groq with every LLM call during a session (as part of the system prompt).

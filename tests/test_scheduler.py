@@ -1,18 +1,18 @@
-"""Tests for potts.scheduler."""
+"""Tests for lhassa.scheduler."""
 
 import pytest
 
 
 @pytest.mark.asyncio
 async def test_scheduler_does_not_mark_done_when_notify_fails(monkeypatch):
-    import potts.scheduler as scheduler
+    import lhassa.scheduler as scheduler
 
     calls: list[tuple[str, object]] = []
 
     async def fake_load_pending_tasks():
         return [{"id": 1, "name": "reminder", "message": "ping"}]
 
-    async def fake_notify(message: str, title: str = "Potts"):
+    async def fake_notify(message: str, title: str = "Lhassa"):
         raise RuntimeError("speaker offline")
 
     async def fake_mark_task_done(task_id: int):
@@ -40,14 +40,14 @@ async def test_scheduler_does_not_mark_done_when_notify_fails(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_scheduler_marks_done_after_successful_notify(monkeypatch):
-    import potts.scheduler as scheduler
+    import lhassa.scheduler as scheduler
 
     calls: list[tuple[str, object]] = []
 
     async def fake_load_pending_tasks():
         return [{"id": 7, "name": "reminder", "message": "ping", "status": "pending"}]
 
-    async def fake_notify(message: str, title: str = "Potts"):
+    async def fake_notify(message: str, title: str = "Lhassa"):
         calls.append(("notify", message))
 
     async def fake_mark_task_done(task_id: int):

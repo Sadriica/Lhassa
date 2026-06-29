@@ -83,7 +83,7 @@ test.beforeEach(async ({ page }) => {
         vision_provider: 'openai',
         stt_language: 'es',
         allow_destructive_shell: false,
-        file_write_root: '/tmp/potts-root',
+        file_write_root: '/tmp/lhassa-root',
         api_host: '127.0.0.1',
         api_port: 7766,
       },

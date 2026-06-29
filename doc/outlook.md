@@ -1,6 +1,6 @@
 # Outlook Integration (Microsoft Graph)
 
-Potts can read your emails, send emails, read your calendar, and create calendar events — all through voice commands. This is powered by the Microsoft Graph API and requires a free Azure app registration.
+Lhassa can read your emails, send emails, read your calendar, and create calendar events — all through voice commands. This is powered by the Microsoft Graph API and requires a free Azure app registration.
 
 ---
 
@@ -25,7 +25,7 @@ Fill in the form:
 
 | Field | Value |
 |---|---|
-| **Name** | `Potts` (or anything you like) |
+| **Name** | `Lhassa` (or anything you like) |
 | **Supported account types** | Accounts in this organizational directory only — **or** Personal Microsoft accounts |
 | **Redirect URI** | Leave blank |
 
@@ -46,7 +46,7 @@ On the app's overview page, copy:
 3. Set **Allow public client flows** to **Yes**
 4. Click **Save**
 
-This is required for the device flow authentication that Potts uses.
+This is required for the device flow authentication that Lhassa uses.
 
 ### 5. Add API permissions
 
@@ -73,17 +73,17 @@ MS_TENANT_ID=your-tenant-id-here
 MS_CLIENT_ID=your-client-id-here
 ```
 
-No other setup is required. Potts will prompt you to authenticate the first time you use an email or calendar command.
+No other setup is required. Lhassa will prompt you to authenticate the first time you use an email or calendar command.
 
 ---
 
 ## First Authentication: Device Flow
 
-The first time you ask Potts to do anything with email or calendar, it will pause and print an authentication prompt to the terminal:
+The first time you ask Lhassa to do anything with email or calendar, it will pause and print an authentication prompt to the terminal:
 
 ```
 ============================================================
-Potts needs access to your Microsoft account.
+Lhassa needs access to your Microsoft account.
 Go to:  https://microsoft.com/devicelogin
 Code:   ABCD-1234
 ============================================================
@@ -94,7 +94,7 @@ Code:   ABCD-1234
 3. Sign in with your Microsoft account
 4. Accept the permissions
 
-Back in the terminal, Potts will continue automatically once authentication completes:
+Back in the terminal, Lhassa will continue automatically once authentication completes:
 
 ```
 Microsoft Graph: authenticated successfully.
@@ -109,12 +109,12 @@ Then it will proceed with your original request — reading emails, checking the
 After the first authentication, the access token and refresh token are saved to:
 
 ```
-~/.potts/ms_token_cache.json
+~/.lhassa/ms_token_cache.json
 ```
 
-MSAL handles refresh token rotation automatically. As long as you use Potts regularly, you will never need to re-authenticate. The cache survives restarts — Potts loads it silently on each startup.
+MSAL handles refresh token rotation automatically. As long as you use Lhassa regularly, you will never need to re-authenticate. The cache survives restarts — Lhassa loads it silently on each startup.
 
-**Security note:** The token cache contains a refresh token that grants access to your Microsoft account. Keep `~/.potts/` private (`chmod 700 ~/.potts`).
+**Security note:** The token cache contains a refresh token that grants access to your Microsoft account. Keep `~/.lhassa/` private (`chmod 700 ~/.lhassa`).
 
 ---
 
@@ -122,7 +122,7 @@ MSAL handles refresh token rotation automatically. As long as you use Potts regu
 
 ### Corrupted cache
 
-If the token cache file gets corrupted (e.g. a partial write during a crash), Potts detects it automatically:
+If the token cache file gets corrupted (e.g. a partial write during a crash), Lhassa detects it automatically:
 
 ```
 Token cache corrupted — deleting and re-authenticating.
@@ -132,11 +132,11 @@ The file is deleted and you'll see the device flow prompt on your next email/cal
 
 ### Expired token / re-authentication triggered
 
-MSAL's refresh tokens have a rolling expiry of 90 days (for personal accounts). If you haven't used Potts in a while, the refresh may fail and you'll see the device flow again. Complete it and you're good for another 90 days.
+MSAL's refresh tokens have a rolling expiry of 90 days (for personal accounts). If you haven't used Lhassa in a while, the refresh may fail and you'll see the device flow again. Complete it and you're good for another 90 days.
 
 ### "MS_TENANT_ID and MS_CLIENT_ID are required"
 
-You asked for email/calendar but didn't set the env vars. Add them to your `.env` file and restart Potts.
+You asked for email/calendar but didn't set the env vars. Add them to your `.env` file and restart Lhassa.
 
 ### "Device flow failed"
 
@@ -153,28 +153,28 @@ If you get 403 errors from the Graph API, go back to the Azure portal and verify
 ## Example Voice Commands
 
 ```
-You: Potts, do I have any new emails?
-Potts: You have three unread emails. One from Alice about the Q2 roadmap,
+You: Lhassa, do I have any new emails?
+Lhassa: You have three unread emails. One from Alice about the Q2 roadmap,
        one from GitHub with a PR notification, and a newsletter.
 
-You: Potts, send an email to alice@company.com, subject "Re: Q2 roadmap",
+You: Lhassa, send an email to alice@company.com, subject "Re: Q2 roadmap",
      body "Sounds good, let's review it on Thursday."
-Potts: Email sent to alice@company.com.
+Lhassa: Email sent to alice@company.com.
 
-You: Potts, what's on my calendar this week?
-Potts: You have 5 events this week. Standup every morning at 9:30,
+You: Lhassa, what's on my calendar this week?
+Lhassa: You have 5 events this week. Standup every morning at 9:30,
        a one-on-one Thursday at 14:00, and a team dinner Friday at 19:00.
 
-You: Potts, create a calendar event called "Doctor appointment"
+You: Lhassa, create a calendar event called "Doctor appointment"
      tomorrow at 10am for 1 hour.
-Potts: Done. Doctor appointment added for tomorrow at 10:00.
+Lhassa: Done. Doctor appointment added for tomorrow at 10:00.
 ```
 
 ---
 
 ## Disabling the Integration
 
-If you don't use Microsoft 365, simply don't set `MS_TENANT_ID` and `MS_CLIENT_ID`. Potts works fine without them — the email and calendar tools will just return an error message if you try to use them:
+If you don't use Microsoft 365, simply don't set `MS_TENANT_ID` and `MS_CLIENT_ID`. Lhassa works fine without them — the email and calendar tools will just return an error message if you try to use them:
 
 ```
 MS_TENANT_ID and MS_CLIENT_ID are required for Outlook integration. Add them to your .env file.

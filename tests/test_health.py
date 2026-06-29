@@ -1,8 +1,8 @@
-"""Tests for potts.health.checks — focus on the pure parsers + safe aggregation."""
+"""Tests for lhassa.health.checks — focus on the pure parsers + safe aggregation."""
 
 import json
 
-from potts.health import checks
+from lhassa.health import checks
 
 
 # ── parse_failed_units ───────────────────────────────────────────────────────
@@ -70,7 +70,7 @@ def test_meminfo_usage_no_swap_division():
 def test_parse_git_status_dirty_and_tracking():
     text = (
         "## main...origin/main [ahead 2, behind 1]\n"
-        " M potts/health/checks.py\n"
+        " M lhassa/health/checks.py\n"
         "?? scratch.txt\n"
     )
     info = checks.parse_git_status(text)
@@ -227,7 +227,7 @@ def test_run_all_does_not_touch_real_home(tmp_path, monkeypatch):
     monkeypatch.setattr(checks.Path, "home", staticmethod(lambda: tmp_path))
     monkeypatch.setattr(checks.shutil, "which", lambda _name: None)
     digest = checks.run_all(notify=False)
-    assert (tmp_path / ".potts" / "health" / "digest.json").exists()
+    assert (tmp_path / ".lhassa" / "health" / "digest.json").exists()
     assert digest["ok"] in (True, False)
 
 
@@ -237,6 +237,6 @@ def test_run_all_does_not_touch_real_home(tmp_path, monkeypatch):
 def test_format_digest_is_plain_text(tmp_path):
     digest = checks.run_all(out_dir=tmp_path, notify=False)
     text = checks.format_digest(digest)
-    assert "Potts — PC state check" in text
+    assert "Lhassa — PC state check" in text
     for name in checks.CHECKS:
         assert name in text

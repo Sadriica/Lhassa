@@ -1,4 +1,4 @@
-"""Tests for potts.tools.monitor."""
+"""Tests for lhassa.tools.monitor."""
 
 import asyncio
 
@@ -7,7 +7,7 @@ import pytest
 
 @pytest.mark.asyncio
 async def test_monitor_file_change_notifies_on_rewrite(tmp_path, monkeypatch):
-    from potts.tools import monitor
+    from lhassa.tools import monitor
 
     target = tmp_path / "events.log"
     target.write_text("hello\n")
@@ -15,7 +15,7 @@ async def test_monitor_file_change_notifies_on_rewrite(tmp_path, monkeypatch):
     notified = []
     broadcasted = []
 
-    async def fake_notify(message: str, title: str = "Potts"):
+    async def fake_notify(message: str, title: str = "Lhassa"):
         notified.append((title, message))
 
     async def fake_broadcast(event: dict):
@@ -29,13 +29,13 @@ async def test_monitor_file_change_notifies_on_rewrite(tmp_path, monkeypatch):
     target.write_text("rewritten\n")
     await asyncio.wait_for(task, timeout=3)
 
-    assert notified == [("Potts — File Monitor", "File events.log changed.")]
+    assert notified == [("Lhassa — File Monitor", "File events.log changed.")]
     assert broadcasted == [{"type": "file_event", "path": str(target), "line": ""}]
 
 
 @pytest.mark.asyncio
 async def test_monitor_file_pattern_handles_rotation(tmp_path, monkeypatch):
-    from potts.tools import monitor
+    from lhassa.tools import monitor
 
     target = tmp_path / "app.log"
     target.write_text("before\n")
@@ -43,7 +43,7 @@ async def test_monitor_file_pattern_handles_rotation(tmp_path, monkeypatch):
     notified = []
     broadcasted = []
 
-    async def fake_notify(message: str, title: str = "Potts"):
+    async def fake_notify(message: str, title: str = "Lhassa"):
         notified.append((title, message))
 
     async def fake_broadcast(event: dict):
@@ -61,5 +61,5 @@ async def test_monitor_file_pattern_handles_rotation(tmp_path, monkeypatch):
 
     await asyncio.wait_for(task, timeout=3)
 
-    assert notified == [("Potts — File Monitor", "File app.log: service ready")]
+    assert notified == [("Lhassa — File Monitor", "File app.log: service ready")]
     assert broadcasted == [{"type": "file_event", "path": str(target), "line": "service ready"}]

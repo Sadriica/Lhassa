@@ -1,10 +1,10 @@
-"""Tests for potts.agents.local_cli — argv construction, detection, graceful absence."""
+"""Tests for lhassa.agents.local_cli — argv construction, detection, graceful absence."""
 
 from pathlib import Path
 
 import pytest
 
-from potts.agents import local_cli
+from lhassa.agents import local_cli
 
 
 # ── argv construction per CLI ───────────────────────────────────────────────────
@@ -35,12 +35,12 @@ def test_cli_binary():
 # ── auto-detection ──────────────────────────────────────────────────────────────
 
 def test_detect_explicit_env(monkeypatch):
-    monkeypatch.setenv("POTTS_AI_CLI", "Codex")
+    monkeypatch.setenv("LHASSA_AI_CLI", "Codex")
     assert local_cli.detect_ai_cli() == "codex"
 
 
 def test_detect_first_installed(monkeypatch):
-    monkeypatch.delenv("POTTS_AI_CLI", raising=False)
+    monkeypatch.delenv("LHASSA_AI_CLI", raising=False)
     # Only opencode is "installed".
     monkeypatch.setattr(
         local_cli.shutil, "which",
@@ -53,7 +53,7 @@ def test_detect_first_installed(monkeypatch):
 
 
 def test_detect_priority_order(monkeypatch):
-    monkeypatch.delenv("POTTS_AI_CLI", raising=False)
+    monkeypatch.delenv("LHASSA_AI_CLI", raising=False)
     # Both codex and opencode installed → priority picks codex over opencode.
     monkeypatch.setattr(
         local_cli.shutil, "which",
@@ -63,7 +63,7 @@ def test_detect_priority_order(monkeypatch):
 
 
 def test_detect_falls_back_to_claude_when_none(monkeypatch):
-    monkeypatch.delenv("POTTS_AI_CLI", raising=False)
+    monkeypatch.delenv("LHASSA_AI_CLI", raising=False)
     monkeypatch.setattr(local_cli.shutil, "which", lambda name: None)
     assert local_cli.detect_ai_cli() == "claude"
     assert local_cli.available_clis() == []

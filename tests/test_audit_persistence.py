@@ -6,7 +6,7 @@ import pytest
 
 
 def test_load_audit_events_restores_state(tmp_path):
-    from potts.state import AppState
+    from lhassa.state import AppState
 
     app_state = AppState()
     app_state._AUDIT_PATH = tmp_path / "audit.json"
@@ -37,7 +37,7 @@ def test_load_audit_events_restores_state(tmp_path):
 
 
 def test_load_audit_events_ignores_corrupt_file(tmp_path):
-    from potts.state import AppState
+    from lhassa.state import AppState
 
     app_state = AppState()
     app_state._AUDIT_PATH = tmp_path / "audit.json"
@@ -50,7 +50,7 @@ def test_load_audit_events_ignores_corrupt_file(tmp_path):
 
 @pytest.mark.asyncio
 async def test_record_audit_event_persists_limit(tmp_path):
-    from potts.state import AppState
+    from lhassa.state import AppState
 
     app_state = AppState()
     app_state._AUDIT_PATH = tmp_path / "audit.json"

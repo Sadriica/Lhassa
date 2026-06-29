@@ -92,7 +92,7 @@ export default function AgentsPanel({ agents }) {
 
       {agents.length === 0 ? (
         <p className="text-slate-600 text-sm text-center py-8">
-          No agents launched yet. Tell Potts to delegate a task.
+          No agents launched yet. Tell Lhassa to delegate a task.
         </p>
       ) : (
         <div className="space-y-2">

@@ -1,4 +1,4 @@
-"""Tests for potts.agents.claude_code."""
+"""Tests for lhassa.agents.claude_code."""
 
 from pathlib import Path
 
@@ -38,8 +38,8 @@ class _FakeProc:
 
 @pytest.mark.asyncio
 async def test_invoke_drains_stderr_before_wait(monkeypatch):
-    from potts.agents.claude_code import ClaudeCliAgent
-    from potts.state import AgentRun, state
+    from lhassa.agents.claude_code import ClaudeCliAgent
+    from lhassa.state import AgentRun, state
 
     async def fake_create_subprocess_exec(*args, **kwargs):
         return _FakeProc()
@@ -49,7 +49,7 @@ async def test_invoke_drains_stderr_before_wait(monkeypatch):
     async def fake_broadcast(event: dict):
         events.append(event)
 
-    monkeypatch.setattr("potts.agents.claude_code.asyncio.create_subprocess_exec", fake_create_subprocess_exec)
+    monkeypatch.setattr("lhassa.agents.claude_code.asyncio.create_subprocess_exec", fake_create_subprocess_exec)
     monkeypatch.setattr(state, "broadcast", fake_broadcast)
 
     agent = ClaudeCliAgent(name="code")

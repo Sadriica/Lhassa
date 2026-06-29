@@ -1,6 +1,6 @@
 # Dashboard
 
-The Potts dashboard is a real-time web interface for monitoring what Potts is doing. It shows voice status, running agents with their streaming output, memory facts, session history, scheduled reminders, and live metrics.
+The Lhassa dashboard is a real-time web interface for monitoring what Lhassa is doing. It shows voice status, running agents with their streaming output, memory facts, session history, scheduled reminders, and live metrics.
 
 ---
 
@@ -10,7 +10,7 @@ The Potts dashboard is a real-time web interface for monitoring what Potts is do
 http://localhost:7766
 ```
 
-The dashboard is served by the FastAPI backend alongside the REST and WebSocket APIs. The WebSocket connection automatically upgrades to `wss://` when accessed over HTTPS. The server binds to `127.0.0.1` (localhost only) by default — the dashboard is unauthenticated and Potts can run privileged commands, so it must not be exposed on the network. Set `POTTS_API_HOST=0.0.0.0` only if you understand it then becomes reachable by any device on your LAN:
+The dashboard is served by the FastAPI backend alongside the REST and WebSocket APIs. The WebSocket connection automatically upgrades to `wss://` when accessed over HTTPS. The server binds to `127.0.0.1` (localhost only) by default — the dashboard is unauthenticated and Lhassa can run privileged commands, so it must not be exposed on the network. Set `LHASSA_API_HOST=0.0.0.0` only if you understand it then becomes reachable by any device on your LAN:
 
 ```
 http://<your-machine-lan-ip>:7766
@@ -40,7 +40,7 @@ On connection, the WebSocket sends a **full snapshot** of current state immediat
 
 The dashboard automatically reconnects to the WebSocket every 3 seconds if the connection drops. This means:
 
-- If Potts restarts, the dashboard will reconnect and re-render with the new state.
+- If Lhassa restarts, the dashboard will reconnect and re-render with the new state.
 - If your browser goes to sleep and wakes up, it reconnects without a page refresh.
 - Multiple browser tabs can be open simultaneously — each is an independent WebSocket client.
 
@@ -54,7 +54,7 @@ Shows two indicators at a glance:
 
 | Indicator | Description |
 |---|---|
-| **WebSocket** | Green dot = connected to Potts API. Grey = disconnected (Potts not running or restarting). |
+| **WebSocket** | Green dot = connected to Lhassa API. Grey = disconnected (Lhassa not running or restarting). |
 | **Voice** | Green dot = voice pipeline is active. Grey = voice is idle. |
 
 ### Agents Panel (left, 2/3 width)
@@ -66,7 +66,7 @@ Lists all agent runs for the current session. Each card shows:
 - **Task** — the full task description
 - **Output** — streams in real time as the agent generates tokens. Full output is always visible.
 
-Cards are sorted most-recent-first. Agents from the current session persist until Potts is restarted. If you open the dashboard after an agent has already finished, the output is still visible.
+Cards are sorted most-recent-first. Agents from the current session persist until Lhassa is restarted. If you open the dashboard after an agent has already finished, the output is still visible.
 
 ### Session History Panel (left, below Agents)
 
@@ -78,7 +78,7 @@ This is a static snapshot loaded from the REST API when the page opens. Refresh 
 
 ### Metrics Panel (right column, top)
 
-Shows live counters for the current Potts process:
+Shows live counters for the current Lhassa process:
 
 | Metric | What it counts |
 |---|---|
@@ -87,7 +87,7 @@ Shows live counters for the current Potts process:
 | Sessions | Sessions saved to memory |
 | Agents launched | Background agents started |
 
-Metrics are in-memory only — they reset to zero each time Potts starts.
+Metrics are in-memory only — they reset to zero each time Lhassa starts.
 
 ### Scheduled Tasks Panel (right column, middle)
 
@@ -99,7 +99,7 @@ Shows all scheduled reminders from the database (last 50). Each row shows:
 
 ### Memory / Facts Panel (right column, bottom)
 
-Shows all stored facts from `~/.potts/memory.db` as a table:
+Shows all stored facts from `~/.lhassa/memory.db` as a table:
 - Key
 - Value
 - Last updated timestamp
@@ -126,7 +126,7 @@ If the dashboard hasn't been built, visiting `http://localhost:7766` returns a J
 
 ```json
 {
-  "message": "Potts API running. Dashboard not built yet.",
+  "message": "Lhassa API running. Dashboard not built yet.",
   "hint": "Run: cd dashboard && npm run build"
 }
 ```
@@ -143,7 +143,7 @@ make dashboard-dev
 cd dashboard && npm run dev
 ```
 
-This starts Vite's dev server, typically on port **5173**. The dev server proxies `/api` and `/ws` to the real Potts backend at `localhost:7766`, so you need Potts running at the same time:
+This starts Vite's dev server, typically on port **5173**. The dev server proxies `/api` and `/ws` to the real Lhassa backend at `localhost:7766`, so you need Lhassa running at the same time:
 
 ```bash
 # Terminal 1
@@ -222,10 +222,10 @@ curl http://localhost:7766/api/memory/facts
 
 ## Changing the Port
 
-Set `POTTS_API_PORT` in your `.env`:
+Set `LHASSA_API_PORT` in your `.env`:
 
 ```
-POTTS_API_PORT=8080
+LHASSA_API_PORT=8080
 ```
 
 Then access the dashboard at `http://localhost:8080`.
