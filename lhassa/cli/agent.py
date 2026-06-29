@@ -2,17 +2,18 @@
 CLI agent — runs a prompt through Lhassa's existing tool-calling loop.
 
 This reuses the core rather than reimplementing it:
-  - ``get_agent_client(config)``  — the same provider-agnostic async client the
-    voice pipeline and BaseAgent use (Anthropic or OpenAI-compatible).
+  - ``gateway.complete_with_tools`` — the single LLM choke point (cache + daily
+    budget + cost ledger) that every cloud call routes through. It owns provider
+    selection (Anthropic or OpenAI-compatible) and all usage accounting.
   - the full ``lhassa.tools.registry`` tool set (schemas + handlers), so the CLI
     has exactly the same capabilities as the rest of the assistant.
   - ``PERSONA_BLOCK`` for personality, plus a short CLI-appropriate instruction
     (markdown is fine here — unlike the voice BASE_PROMPT's no-markdown rule).
-  - ``estimate_cost`` from the LLM gateway to price the call.
 
 The loop mirrors BaseAgent's two branches (Anthropic tool-use / OpenAI-compatible
-function calling) but additionally accumulates token usage so the CLI can show a
-cost line. No voice pipeline, STT, or TTS is imported.
+function calling). The gateway records token usage in the ledger; here we just sum
+what it reports per turn so the CLI can still print a per-run cost line. No voice
+pipeline, STT, or TTS is imported.
 """
 
 from __future__ import annotations
@@ -24,7 +25,6 @@ import sys
 import uuid
 from dataclasses import dataclass
 
-from lhassa.llm.gateway import estimate_cost
 from lhassa.persona import PERSONA_BLOCK
 
 # Safety cap on tool-calling loops — same env knob the agents use.
@@ -143,98 +143,99 @@ async def _execute_tool(handlers: dict, name: str, args: dict) -> str:
 
 # ── Loops ──────────────────────────────────────────────────────────────────────
 
-async def _run_openai(client, model: str, system: str, prompt: str, handlers: dict) -> CliResult:
-    messages: list = [
-        {"role": "system", "content": system},
-        {"role": "user", "content": prompt},
-    ]
+async def _run_openai(config, model: str, system: str, prompt: str, handlers: dict) -> CliResult:
+    from lhassa.llm.gateway import gateway
+
+    # System is passed to the gateway separately (it prepends it for OpenAI-compat).
+    messages: list = [{"role": "user", "content": prompt}]
     tools = _openai_tools()
     in_tokens = out_tokens = 0
+    cost = 0.0
     answer = ""
 
     for _ in range(MAX_ITERATIONS):
-        resp = await client.chat.completions.create(
+        turn = await gateway.complete_with_tools(
+            messages,
+            tools,
+            config=config,
             model=model,
-            messages=messages,
-            tools=tools,
-            tool_choice="auto",
+            system=system,
             max_tokens=4096,
         )
-        usage = getattr(resp, "usage", None)
-        if usage is not None:
-            in_tokens += getattr(usage, "prompt_tokens", 0) or 0
-            out_tokens += getattr(usage, "completion_tokens", 0) or 0
+        in_tokens += turn.input_tokens
+        out_tokens += turn.output_tokens
+        cost += turn.cost_usd
 
-        msg = resp.choices[0].message
-        finish = resp.choices[0].finish_reason
+        if turn.text:
+            answer = turn.text
 
-        if msg.content:
-            answer = msg.content
-
-        if finish == "stop" or not getattr(msg, "tool_calls", None):
+        if not turn.tool_calls:
             break
 
-        tool_results = []
-        for tc in msg.tool_calls:
-            try:
-                args = json.loads(tc.function.arguments)
-            except json.JSONDecodeError as e:
-                tool_results.append(
-                    {"tool_call_id": tc.id, "role": "tool", "content": f"Error: invalid tool arguments — {e}"}
-                )
-                continue
-            result = await _execute_tool(handlers, tc.function.name, args)
-            tool_results.append({"tool_call_id": tc.id, "role": "tool", "content": result})
+        assistant_tool_calls = [
+            {
+                "id": tc["id"],
+                "type": "function",
+                "function": {"name": tc["name"], "arguments": json.dumps(tc["input"])},
+            }
+            for tc in turn.tool_calls
+        ]
+        messages.append(
+            {"role": "assistant", "content": turn.text or None, "tool_calls": assistant_tool_calls}
+        )
+        for tc in turn.tool_calls:
+            result = await _execute_tool(handlers, tc["name"], tc["input"])
+            messages.append({"tool_call_id": tc["id"], "role": "tool", "content": result})
 
-        messages.append(msg)
-        messages.extend(tool_results)
-
-    return CliResult(answer, model, in_tokens, out_tokens, estimate_cost(model, in_tokens, out_tokens))
+    return CliResult(answer, model, in_tokens, out_tokens, cost)
 
 
-async def _run_anthropic(client, model: str, system: str, prompt: str, handlers: dict) -> CliResult:
+async def _run_anthropic(config, model: str, system: str, prompt: str, handlers: dict) -> CliResult:
+    from lhassa.llm.gateway import gateway
+
     messages: list = [{"role": "user", "content": prompt}]
     tools = _anthropic_tools()
     in_tokens = out_tokens = 0
+    cost = 0.0
     answer = ""
 
     for _ in range(MAX_ITERATIONS):
-        resp = await client.messages.create(
+        turn = await gateway.complete_with_tools(
+            messages,
+            tools,
+            config=config,
             model=model,
             system=system,
-            messages=messages,
-            tools=tools,
             max_tokens=4096,
         )
-        usage = getattr(resp, "usage", None)
-        if usage is not None:
-            in_tokens += getattr(usage, "input_tokens", 0) or 0
-            out_tokens += getattr(usage, "output_tokens", 0) or 0
+        in_tokens += turn.input_tokens
+        out_tokens += turn.output_tokens
+        cost += turn.cost_usd
 
-        text_parts = []
-        tool_calls = []
-        for block in resp.content:
-            if block.type == "text":
-                text_parts.append(block.text)
-            elif block.type == "tool_use":
-                tool_calls.append(block)
+        if turn.text:
+            answer = turn.text
 
-        if text_parts:
-            answer = "".join(text_parts)
-
-        if resp.stop_reason == "end_turn" or not tool_calls:
+        if not turn.tool_calls:
             break
 
-        messages.append({"role": "assistant", "content": resp.content})
+        assistant_content: list = []
+        if turn.text:
+            assistant_content.append({"type": "text", "text": turn.text})
+        for tc in turn.tool_calls:
+            assistant_content.append(
+                {"type": "tool_use", "id": tc["id"], "name": tc["name"], "input": tc["input"]}
+            )
+        messages.append({"role": "assistant", "content": assistant_content})
+
         tool_result_content = []
-        for tc in tool_calls:
-            result = await _execute_tool(handlers, tc.name, tc.input)
+        for tc in turn.tool_calls:
+            result = await _execute_tool(handlers, tc["name"], tc["input"])
             tool_result_content.append(
-                {"type": "tool_result", "tool_use_id": tc.id, "content": result}
+                {"type": "tool_result", "tool_use_id": tc["id"], "content": result}
             )
         messages.append({"role": "user", "content": tool_result_content})
 
-    return CliResult(answer, model, in_tokens, out_tokens, estimate_cost(model, in_tokens, out_tokens))
+    return CliResult(answer, model, in_tokens, out_tokens, cost)
 
 
 async def run_once(prompt: str, *, config=None) -> CliResult:
@@ -248,13 +249,13 @@ async def run_once(prompt: str, *, config=None) -> CliResult:
 
         config = Config()
 
-    from lhassa.llm.provider import get_agent_client
-
-    client, provider = get_agent_client(config)
+    # Provider shape selects the loop branch / tool format; the model round-trip
+    # goes through the gateway (cache + budget + ledger).
+    provider = "anthropic" if config.llm_provider == "anthropic" else "openai"
     handlers = _tool_handlers()
     system = build_system_prompt()
 
     with contextlib.redirect_stdout(sys.stderr):
         if provider == "anthropic":
-            return await _run_anthropic(client, config.model, system, prompt, handlers)
-        return await _run_openai(client, config.model, system, prompt, handlers)
+            return await _run_anthropic(config, config.model, system, prompt, handlers)
+        return await _run_openai(config, config.model, system, prompt, handlers)

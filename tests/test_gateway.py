@@ -11,6 +11,7 @@ import pytest_asyncio  # noqa: F401  (registers asyncio mode)
 from lhassa.llm.gateway import (
     BudgetExceeded,
     LedgerGateway,
+    ToolTurnResult,
     estimate_cost,
     price_for,
 )
@@ -46,6 +47,36 @@ def make_fake_completion(text="hello", input_tokens=100, output_tokens=50):
         return text, input_tokens, output_tokens
 
     return fake, calls
+
+
+def make_fake_tools_completion(
+    text="done", tool_calls=None, input_tokens=100, output_tokens=50, stop_reason="end_turn"
+):
+    """Build a fake tools-completion callable plus a call counter to assert on.
+
+    Matches the ToolCompletionFn signature the gateway invokes:
+    ``(provider, model, messages, tools, system, max_tokens)``.
+    """
+    calls = {"n": 0}
+
+    async def fake(provider, model, messages, tools, system, max_tokens):
+        calls["n"] += 1
+        return text, list(tool_calls or []), input_tokens, output_tokens, stop_reason
+
+    return fake, calls
+
+
+# A representative tool schema (shape is opaque to the gateway — it just hashes it).
+TOOLS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "web_search",
+            "description": "Search the web.",
+            "parameters": {"type": "object", "properties": {"q": {"type": "string"}}},
+        },
+    }
+]
 
 
 # ── Fixtures ────────────────────────────────────────────────────────────────
@@ -240,3 +271,81 @@ async def test_anthropic_provider_resolution(gw, metrics_guard):
     fake, _ = make_fake_completion()
     result = await gw.complete(MESSAGES, config=cfg, completion_fn=fake)
     assert result.provider == "anthropic"
+
+
+# ── Tool-aware turns (complete_with_tools) ───────────────────────────────────
+
+
+async def test_tool_turn_no_tools_updates_ledger_and_caches(gw, metrics_guard):
+    """A no-tool (deterministic) turn updates the ledger AND is cached."""
+    cfg = FakeConfig()
+    fake, calls = make_fake_tools_completion(text="final answer", tool_calls=[])
+
+    base_calls = state.metrics["llm_calls"]
+    before_hits = state.metrics["llm_cache_hits"]
+
+    first = await gw.complete_with_tools(MESSAGES, TOOLS, config=cfg, completion_fn=fake)
+    assert isinstance(first, ToolTurnResult)
+    assert first.text == "final answer"
+    assert first.tool_calls == []
+    assert first.cache_hit is False
+    assert calls["n"] == 1
+    assert state.metrics["llm_calls"] == base_calls + 1
+
+    # Identical call → served from cache; the provider fn is NOT invoked again.
+    second = await gw.complete_with_tools(MESSAGES, TOOLS, config=cfg, completion_fn=fake)
+    assert second.cache_hit is True
+    assert second.text == "final answer"
+    assert second.stop_reason == "end_turn"
+    assert calls["n"] == 1
+    assert state.metrics["llm_cache_hits"] == before_hits + 1
+
+
+async def test_tool_turn_with_tools_updates_ledger_but_not_cached(gw, metrics_guard):
+    """A turn that returns tool calls updates the ledger but is NEVER cached."""
+    cfg = FakeConfig()
+    tool_calls = [{"id": "t1", "name": "web_search", "input": {"q": "weather"}}]
+    fake, calls = make_fake_tools_completion(
+        text="", tool_calls=tool_calls, stop_reason="tool_use"
+    )
+
+    base_calls = state.metrics["llm_calls"]
+
+    first = await gw.complete_with_tools(MESSAGES, TOOLS, config=cfg, completion_fn=fake)
+    assert first.tool_calls == tool_calls
+    assert first.cache_hit is False
+    assert state.metrics["llm_calls"] == base_calls + 1
+
+    # Identical call again → still a live call (no caching of tool turns).
+    second = await gw.complete_with_tools(MESSAGES, TOOLS, config=cfg, completion_fn=fake)
+    assert second.cache_hit is False
+    assert calls["n"] == 2
+    assert state.metrics["llm_calls"] == base_calls + 2
+
+
+async def test_tool_turn_budget_enforced(gw, metrics_guard):
+    cfg = FakeConfig(llm_daily_token_budget=50, llm_cache_enabled=False)
+    fake, _ = make_fake_tools_completion(output_tokens=50, tool_calls=[])
+
+    # First call spends 50 → reaches the limit.
+    await gw.complete_with_tools(MESSAGES, TOOLS, config=cfg, completion_fn=fake)
+    assert await gw.daily_output_tokens() == 50
+
+    # Second call: spent (50) >= budget (50) → refused.
+    with pytest.raises(BudgetExceeded):
+        await gw.complete_with_tools(MESSAGES, TOOLS, config=cfg, completion_fn=fake)
+
+
+async def test_tool_turn_cost_correct_for_known_model(gw, metrics_guard):
+    cfg = FakeConfig(model="claude-opus-4-8-20251101", llm_cache_enabled=False)
+    fake, _ = make_fake_tools_completion(input_tokens=100, output_tokens=50, tool_calls=[])
+
+    result = await gw.complete_with_tools(MESSAGES, TOOLS, config=cfg, completion_fn=fake)
+    expected = (100 * 5.0 + 50 * 25.0) / 1_000_000
+    assert result.cost_usd == pytest.approx(expected)
+    assert result.input_tokens == 100
+    assert result.output_tokens == 50
+
+    rows = await gw.ledger_rows()
+    assert rows[-1]["cache_hit"] == 0
+    assert rows[-1]["cost_usd"] == pytest.approx(expected)
