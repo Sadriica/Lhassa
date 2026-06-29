@@ -1,11 +1,11 @@
-"""CodeAgent — especializado en programación, debugging y análisis de código."""
+"""CodeAgent — specialised in programming, debugging, and code analysis."""
 
 from potts.agents.base import BaseAgent
 
 
 class CodeAgent(BaseAgent):
     name = "code"
-    system_prompt = """You are an expert software engineer and coding assistant running on an Arch Linux machine.
+    system_prompt = """You are an expert software engineer and coding assistant.
 You write clean, idiomatic code. You debug efficiently by reading error messages carefully.
 When asked to write code, provide complete, working implementations.
 When analyzing code, be specific about issues and how to fix them.

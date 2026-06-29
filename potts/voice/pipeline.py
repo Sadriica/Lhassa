@@ -1,4 +1,5 @@
 import asyncio
+from datetime import datetime
 import pyaudio
 from loguru import logger
 
@@ -10,6 +11,7 @@ from pipecat.frames.frames import (
     LLMFullResponseStartFrame,
     LLMTextFrame,
     TranscriptionFrame,
+    TTSSpeakFrame,
 )
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.runner import PipelineRunner
@@ -35,7 +37,7 @@ from potts.memory.store import build_memory_context
 from potts.state import state
 from potts.tools.registry import TOOLS, register_tools
 from potts.voice.beep import play_beep
-from potts.voice.mute_strategy import WAKE_VARIANTS, WakeWordOnlyMuteStrategy
+from potts.voice.mute_strategy import WAKE_PHRASES_CORE, WAKE_PHRASES_ES, WakeWordOnlyMuteStrategy
 
 
 class WakeDebug(FrameProcessor):
@@ -61,7 +63,7 @@ class ChatPrinter(FrameProcessor):
 
         if isinstance(frame, TranscriptionFrame) and frame.text.strip():
             print(f"\n\033[1;36mYou:\033[0m {frame.text.strip()}")
-            print(f"\033[1;35mPotts:\033[0m ", end="", flush=True)
+            print("\033[1;35mPotts:\033[0m ", end="", flush=True)
 
         elif isinstance(frame, LLMFullResponseStartFrame):
             self._potts_speaking = True
@@ -74,6 +76,42 @@ class ChatPrinter(FrameProcessor):
             self._potts_speaking = False
 
         await self.push_frame(frame, direction)
+
+
+_GREETINGS: dict[str, tuple[str, str, str]] = {
+    # lang_code: (morning, afternoon, evening)
+    "es": ("Buenos días. Di Potts cuando me necesites.",
+           "Buenas tardes. Di Potts cuando me necesites.",
+           "Buenas noches. Di Potts cuando me necesites."),
+    "fr": ("Bonjour. Dites Potts quand vous avez besoin de moi.",
+           "Bon après-midi. Dites Potts quand vous avez besoin de moi.",
+           "Bonsoir. Dites Potts quand vous avez besoin de moi."),
+    "de": ("Guten Morgen. Sag Potts, wenn du mich brauchst.",
+           "Guten Tag. Sag Potts, wenn du mich brauchst.",
+           "Guten Abend. Sag Potts, wenn du mich brauchst."),
+    "pt": ("Bom dia. Diga Potts quando precisar de mim.",
+           "Boa tarde. Diga Potts quando precisar de mim.",
+           "Boa noite. Diga Potts quando precisar de mim."),
+}
+_GREETINGS_EN = (
+    "Good morning. Say Potts when you need me.",
+    "Good afternoon. Say Potts when you need me.",
+    "Good evening. Say Potts when you need me.",
+)
+
+
+async def _play_greeting(task, lang: str = "en"):
+    """Speak a time-of-day greeting a moment after the pipeline starts."""
+    await asyncio.sleep(1.5)  # give the pipeline a moment to initialise
+    hour = datetime.now().hour
+    idx = 0 if hour < 12 else (1 if hour < 18 else 2)
+    lang_code = lang.lower().split("-")[0]
+    morning, afternoon, evening = _GREETINGS.get(lang_code, _GREETINGS_EN)
+    greeting = (morning, afternoon, evening)[idx]
+    try:
+        await task.queue_frame(TTSSpeakFrame(text=greeting))
+    except Exception:
+        pass  # Pipeline not ready yet — skip greeting silently
 
 
 def find_device(name: str) -> int:
@@ -93,7 +131,7 @@ async def run():
     config = Config()
 
     memory_context = await build_memory_context()
-    system_prompt = build_system_prompt(memory_context)
+    system_prompt = build_system_prompt(memory_context, stt_language=config.stt_language)
     if memory_context:
         logger.info("Memory loaded.")
     else:
@@ -120,7 +158,7 @@ async def run():
         api_key=config.deepgram_api_key,
         settings=DeepgramSTTService.Settings(
             model="nova-3-general",
-            language="es",
+            language=config.stt_language,
             keyterm=["Potts"],
         ),
     )
@@ -139,30 +177,26 @@ async def run():
         tools=TOOLS,
     )
 
-    # Wake phrases cover common mishearings of "Potts" in Spanish accent
-    wake_phrases = [
-        "potts", "pots", "pods", "pot",
-        "hey potts", "hey pots", "hey pods",
-        "oye potts", "oye pots", "oye pods",
-        "pos", "pues", "box", "bots", "bot",
-        "voz", "vos", "boz", "pox",
-        "a ver potts", "a ver pots",
-    ]
+    # Wake phrases — language-aware; Spanish variants only added for es-* languages
+    lang_extras = WAKE_PHRASES_ES if config.stt_language.lower().startswith("es") else set()
+    wake_phrases = sorted(WAKE_PHRASES_CORE | lang_extras)
 
     wake_strategy = WakePhraseUserTurnStartStrategy(
         phrases=wake_phrases,
-        timeout=300.0,  # 5 minutes before auto-sleep
+        timeout=config.wake_timeout,
     )
 
     @wake_strategy.event_handler("on_wake_phrase_detected")
     async def on_wake(strategy, phrase):
-        print(f"\033[1;33m[Potts active]\033[0m", flush=True)
+        await state.set_voice_active(True)
+        print("\033[1;33m[Potts active]\033[0m", flush=True)
         asyncio.create_task(play_beep(freq=880, duration_ms=120))
 
     @wake_strategy.event_handler("on_wake_phrase_timeout")
     async def on_sleep(strategy):
+        await state.set_voice_active(False)
         asyncio.create_task(play_beep(freq=440, duration_ms=80))
-        print(f"\033[2m[Potts sleeping — say 'Potts' to wake]\033[0m", flush=True)
+        print("\033[2m[Potts sleeping — say 'Potts' to wake]\033[0m", flush=True)
 
     aggregators = LLMContextAggregatorPair(
         context,
@@ -197,9 +231,13 @@ async def run():
     # Expose refs so notifier can inject TTS frames and main can recover messages on shutdown
     state.pipeline_task = task
     state.llm_context = context
+    await state.set_voice_active(False)
 
     logger.info("Potts ready. Say 'Potts' to activate.\n")
     print("\033[2m[Potts sleeping — say 'Potts' to wake]\033[0m\n")
+
+    # Startup greeting — injected after pipeline is running
+    asyncio.create_task(_play_greeting(task, lang=config.stt_language))
 
     runner = PipelineRunner()
 
@@ -210,6 +248,7 @@ async def run():
     except Exception as e:
         logger.error(f"Pipeline error: {e}")
     finally:
+        await state.set_voice_active(False)
         state.pipeline_task = None
         # Keep llm_context alive so _run_all can read messages after cancellation
 

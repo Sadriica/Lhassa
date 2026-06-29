@@ -12,15 +12,22 @@ from pipecat.frames.frames import (
 )
 from pipecat.turns.user_mute.base_user_mute_strategy import BaseUserMuteStrategy
 
-# Canonical set of wake phrase variants (covers common mishearings of "Potts")
-WAKE_VARIANTS: set[str] = {
+# Core wake variants — mishearings of "Potts" in any language
+WAKE_PHRASES_CORE: set[str] = {
     "potts", "pots", "pods", "pot",
     "hey potts", "hey pots", "hey pods",
+    "box", "bots", "bot", "pox",
+}
+
+# Spanish-specific variants — only used when POTTS_STT_LANGUAGE starts with "es"
+WAKE_PHRASES_ES: set[str] = {
     "oye potts", "oye pots", "oye pods",
-    "pos", "pues", "box", "bots", "bot",
-    "voz", "vos", "boz", "pox",
+    "pos", "pues", "voz", "vos", "boz",
     "a ver potts", "a ver pots",
 }
+
+# Full set used by the mute strategy (safety net — keeps all variants for interruption)
+WAKE_VARIANTS: set[str] = WAKE_PHRASES_CORE | WAKE_PHRASES_ES
 
 
 class WakeWordOnlyMuteStrategy(BaseUserMuteStrategy):

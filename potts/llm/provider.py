@@ -14,10 +14,13 @@ Supported providers:
 from __future__ import annotations
 
 from loguru import logger
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from potts.config import Config
+
+# Module-level cache — reuses connection pools across agent instances
+_agent_clients: dict[tuple, Any] = {}
 
 
 # ── Voice pipeline service (Pipecat) ──────────────────────────────────────────
@@ -87,37 +90,53 @@ def get_agent_client(config: "Config"):
     provider = config.llm_provider
 
     if provider == "anthropic":
-        from anthropic import AsyncAnthropic
-        return AsyncAnthropic(api_key=config.anthropic_api_key), "anthropic"
+        key = ("anthropic", config.anthropic_api_key)
+        if key not in _agent_clients:
+            from anthropic import AsyncAnthropic
+            _agent_clients[key] = AsyncAnthropic(api_key=config.anthropic_api_key)
+        return _agent_clients[key], "anthropic"
 
     elif provider == "openai":
-        from openai import AsyncOpenAI
-        return AsyncOpenAI(api_key=config.openai_api_key), "openai"
+        key = ("openai", config.openai_api_key, "")
+        if key not in _agent_clients:
+            from openai import AsyncOpenAI
+            _agent_clients[key] = AsyncOpenAI(api_key=config.openai_api_key)
+        return _agent_clients[key], "openai"
 
     elif provider == "openrouter":
-        from openai import AsyncOpenAI
-        return AsyncOpenAI(
-            api_key=config.openrouter_api_key,
-            base_url="https://openrouter.ai/api/v1",
-        ), "openai"
+        key = ("openai", config.openrouter_api_key, "https://openrouter.ai/api/v1")
+        if key not in _agent_clients:
+            from openai import AsyncOpenAI
+            _agent_clients[key] = AsyncOpenAI(
+                api_key=config.openrouter_api_key,
+                base_url="https://openrouter.ai/api/v1",
+            )
+        return _agent_clients[key], "openai"
 
     elif provider == "ollama":
-        from openai import AsyncOpenAI
-        return AsyncOpenAI(
-            api_key="ollama",  # Ollama ignores the key but requires a non-empty value
-            base_url=config.ollama_base_url + "/v1",
-        ), "openai"
+        base = config.ollama_base_url + "/v1"
+        key = ("openai", "ollama", base)
+        if key not in _agent_clients:
+            from openai import AsyncOpenAI
+            _agent_clients[key] = AsyncOpenAI(api_key="ollama", base_url=base)
+        return _agent_clients[key], "openai"
 
     elif provider == "cerebras":
-        from openai import AsyncOpenAI
-        return AsyncOpenAI(
-            api_key=config.cerebras_api_key,
-            base_url="https://api.cerebras.ai/v1",
-        ), "openai"
+        key = ("openai", config.cerebras_api_key, "https://api.cerebras.ai/v1")
+        if key not in _agent_clients:
+            from openai import AsyncOpenAI
+            _agent_clients[key] = AsyncOpenAI(
+                api_key=config.cerebras_api_key,
+                base_url="https://api.cerebras.ai/v1",
+            )
+        return _agent_clients[key], "openai"
 
-    else:  # groq — use openai-compatible client for unified tool calling
-        from openai import AsyncOpenAI
-        return AsyncOpenAI(
-            api_key=config.groq_api_key,
-            base_url="https://api.groq.com/openai/v1",
-        ), "openai"
+    else:  # groq
+        key = ("openai", config.groq_api_key, "https://api.groq.com/openai/v1")
+        if key not in _agent_clients:
+            from openai import AsyncOpenAI
+            _agent_clients[key] = AsyncOpenAI(
+                api_key=config.groq_api_key,
+                base_url="https://api.groq.com/openai/v1",
+            )
+        return _agent_clients[key], "openai"

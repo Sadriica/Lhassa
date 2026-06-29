@@ -12,13 +12,24 @@ from loguru import logger
 
 import httpx
 
+from potts.config import Config
+
+# Cached client — reuses TCP connections across calls
+_http: httpx.AsyncClient | None = None
+
+
+def _get_http() -> httpx.AsyncClient:
+    global _http
+    if _http is None:
+        _http = httpx.AsyncClient(timeout=10)
+    return _http
+
 
 async def web_search(query: str, max_results: int = 4) -> list[dict]:
     """
     Search the web. Returns a list of {title, body, url} dicts.
     Tries Brave first, falls back to DuckDuckGo.
     """
-    from potts.config import Config
     config = Config()
 
     if config.brave_api_key:
@@ -31,18 +42,17 @@ async def web_search(query: str, max_results: int = 4) -> list[dict]:
 
 
 async def _brave_search(query: str, max_results: int, api_key: str) -> list[dict]:
-    async with httpx.AsyncClient(timeout=10) as client:
-        r = await client.get(
-            "https://api.search.brave.com/res/v1/web/search",
-            headers={
-                "Accept": "application/json",
-                "Accept-Encoding": "gzip",
-                "X-Subscription-Token": api_key,
-            },
-            params={"q": query, "count": max_results, "text_decorations": False},
-        )
-        r.raise_for_status()
-        data = r.json()
+    r = await _get_http().get(
+        "https://api.search.brave.com/res/v1/web/search",
+        headers={
+            "Accept": "application/json",
+            "Accept-Encoding": "gzip",
+            "X-Subscription-Token": api_key,
+        },
+        params={"q": query, "count": max_results, "text_decorations": False},
+    )
+    r.raise_for_status()
+    data = r.json()
 
     results = []
     for item in data.get("web", {}).get("results", [])[:max_results]:
@@ -56,7 +66,8 @@ async def _brave_search(query: str, max_results: int, api_key: str) -> list[dict
 
 async def _ddg_search(query: str, max_results: int) -> list[dict]:
     from duckduckgo_search import DDGS
-    raw = await asyncio.to_thread(
-        lambda: list(DDGS().text(query, max_results=max_results))
+    raw = await asyncio.wait_for(
+        asyncio.to_thread(lambda: list(DDGS().text(query, max_results=max_results))),
+        timeout=15.0,
     )
     return [{"title": r["title"], "body": r["body"], "url": r.get("href", "")} for r in raw]

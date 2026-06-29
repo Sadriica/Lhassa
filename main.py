@@ -1,4 +1,5 @@
 import asyncio
+import os
 import sys
 from pathlib import Path
 from loguru import logger
@@ -34,12 +35,58 @@ def setup_logging(level: str):
     )
 
 
-async def _run_all(config: Config) -> list:
+async def _close_http_clients():
+    """Close all cached HTTP clients to release connection pools cleanly."""
+    # httpx singletons in tool modules
+    from potts.tools import search, github, graph
+    for mod in (search, github, graph):
+        client = getattr(mod, "_http", None)
+        if client is not None:
+            try:
+                await client.aclose()
+            except Exception:
+                pass
+
+    # AsyncAnthropic / AsyncOpenAI singletons in the LLM provider cache
+    from potts.llm import provider
+    for client in provider._agent_clients.values():
+        try:
+            await client.aclose()
+        except Exception:
+            pass
+    provider._agent_clients.clear()
+
+
+async def _periodic_memory_snapshot(interval_s: int):
+    """
+    Periodically extract facts from the current conversation so they're not lost
+    if Potts crashes before the normal shutdown path runs close_session().
+    Only saves when new messages have accumulated since the last snapshot.
+    """
+    last_count = 0
+    while True:
+        await asyncio.sleep(interval_s)
+        if state.llm_context is None:
+            continue
+        try:
+            messages = state.llm_context.get_messages()
+            if len(messages) <= last_count:
+                continue  # nothing new since last snapshot
+            last_count = len(messages)
+            logger.debug("[memory] periodic snapshot — extracting facts...")
+            await close_session(messages)
+        except Exception as e:
+            logger.warning(f"Periodic memory snapshot failed: {e}")
+
+
+async def _run_all(config: Config):
     """
     Run voice pipeline as the primary task, with API server and scheduler as
     background services that are cancelled cleanly when the voice pipeline exits.
+    Saves session memory before returning so everything runs in the same event loop.
     """
     await init_db()
+    state.load_audit_events()
     config.validate()  # Check provider key is present before starting pipeline
 
     api_task = asyncio.create_task(
@@ -50,9 +97,13 @@ async def _run_all(config: Config) -> list:
         run_scheduler(),
         name="scheduler",
     )
+    snapshot_interval = max(60, int(os.getenv("POTTS_MEMORY_SNAPSHOT_INTERVAL", "1800")))
+    snapshot_task = asyncio.create_task(
+        _periodic_memory_snapshot(snapshot_interval),
+        name="memory-snapshot",
+    )
 
     messages: list = []
-    state.is_voice_active = True
     try:
         _context, messages = await run_voice_pipeline()
     except asyncio.CancelledError:
@@ -64,13 +115,21 @@ async def _run_all(config: Config) -> list:
         if state.llm_context is not None:
             messages = state.llm_context.get_messages()
     finally:
-        state.is_voice_active = False
+        await state.set_voice_active(False)
         state.pipeline_task = None
         api_task.cancel()
         scheduler_task.cancel()
-        await asyncio.gather(api_task, scheduler_task, return_exceptions=True)
+        snapshot_task.cancel()
+        await asyncio.gather(api_task, scheduler_task, snapshot_task, return_exceptions=True)
+        await _close_http_clients()
 
-    return messages
+    if messages:
+        logger.info("Saving session to memory...")
+        try:
+            await close_session(messages)
+            logger.info("Session saved.")
+        except Exception as e:
+            logger.warning(f"Could not save session: {e}")
 
 
 def main():
@@ -78,29 +137,16 @@ def main():
     setup_logging(config.log_level)
     logger.info("Starting Potts...")
 
-    messages: list = []
-
     try:
-        messages = asyncio.run(_run_all(config))
+        asyncio.run(_run_all(config))
     except KeyboardInterrupt:
         print()  # newline after ^C
         logger.info("Potts shutting down.")
-        # On hard interrupt, try one more time to read messages from state
-        if not messages and state.llm_context is not None:
-            messages = state.llm_context.get_messages()
     except ConnectionError as e:
         logger.error(f"Connection error: {e}")
         logger.warning("Check your internet connection and API keys.")
     except Exception as e:
         logger.error(f"Unexpected error: {e}")
-
-    if messages:
-        logger.info("Saving session to memory...")
-        try:
-            asyncio.run(close_session(config.groq_api_key, config.model, messages))
-            logger.info("Session saved.")
-        except Exception as e:
-            logger.warning(f"Could not save session: {e}")
 
 
 if __name__ == "__main__":
