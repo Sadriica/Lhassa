@@ -129,7 +129,7 @@ If the session save fails (e.g. network timeout), Potts logs a warning but does 
 
 ## Viewing Memory in the Dashboard
 
-The dashboard at `http://localhost:7860` has two memory-related panels:
+The dashboard at `http://localhost:7766` has two memory-related panels:
 
 ### Memory / Facts panel (right column)
 

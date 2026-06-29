@@ -7,13 +7,13 @@ The Potts dashboard is a real-time web interface for monitoring what Potts is do
 ## URL
 
 ```
-http://localhost:7860
+http://localhost:7766
 ```
 
-The dashboard is served by the FastAPI backend alongside the REST and WebSocket APIs. The WebSocket connection automatically upgrades to `wss://` when accessed over HTTPS. Because the server binds to `0.0.0.0` by default, it's also accessible from other devices on your local network:
+The dashboard is served by the FastAPI backend alongside the REST and WebSocket APIs. The WebSocket connection automatically upgrades to `wss://` when accessed over HTTPS. The server binds to `127.0.0.1` (localhost only) by default — the dashboard is unauthenticated and Potts can run privileged commands, so it must not be exposed on the network. Set `POTTS_API_HOST=0.0.0.0` only if you understand it then becomes reachable by any device on your LAN:
 
 ```
-http://<your-machine-lan-ip>:7860
+http://<your-machine-lan-ip>:7766
 ```
 
 You can find your LAN IP with `ip addr show` or `hostname -I`.
@@ -110,7 +110,7 @@ This is a static snapshot. Refresh the page to see facts updated after a new ses
 
 ## Building the Dashboard
 
-The dashboard must be built before it will appear at `http://localhost:7860`. `make install` does this for you on first setup.
+The dashboard must be built before it will appear at `http://localhost:7766`. `make install` does this for you on first setup.
 
 To rebuild after editing dashboard source files:
 
@@ -122,7 +122,7 @@ cd dashboard && npm run build
 
 The compiled output lands in `dashboard/dist/` and is served directly by FastAPI.
 
-If the dashboard hasn't been built, visiting `http://localhost:7860` returns a JSON message:
+If the dashboard hasn't been built, visiting `http://localhost:7766` returns a JSON message:
 
 ```json
 {
@@ -143,7 +143,7 @@ make dashboard-dev
 cd dashboard && npm run dev
 ```
 
-This starts Vite's dev server, typically on port **5173**. The dev server proxies `/api` and `/ws` to the real Potts backend at `localhost:7860`, so you need Potts running at the same time:
+This starts Vite's dev server, typically on port **5173**. The dev server proxies `/api` and `/ws` to the real Potts backend at `localhost:7766`, so you need Potts running at the same time:
 
 ```bash
 # Terminal 1
@@ -174,7 +174,7 @@ All endpoints return JSON. No authentication is required.
 ### Example: check status
 
 ```bash
-curl http://localhost:7860/api/status
+curl http://localhost:7766/api/status
 ```
 
 ```json
@@ -194,7 +194,7 @@ curl http://localhost:7860/api/status
 ### Example: read facts
 
 ```bash
-curl http://localhost:7860/api/memory/facts
+curl http://localhost:7766/api/memory/facts
 ```
 
 ```json

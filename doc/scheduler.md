@@ -114,7 +114,7 @@ The `list_reminders` tool returns all reminders with status `pending`. Fired rem
 
 ## Viewing Scheduled Tasks in the Dashboard
 
-The **Scheduled Tasks** panel in the dashboard at `http://localhost:7860` shows all tasks from the database (last 50, any status), including:
+The **Scheduled Tasks** panel in the dashboard at `http://localhost:7766` shows all tasks from the database (last 50, any status), including:
 
 - Task name
 - Scheduled time
@@ -131,7 +131,7 @@ You can also query scheduled tasks directly:
 
 ```bash
 # All tasks (last 50)
-curl http://localhost:7860/api/scheduled
+curl http://localhost:7766/api/scheduled
 ```
 
 Response format:

@@ -147,7 +147,7 @@ You should see output like this:
 12:34:02 | INFO     | Agent backend: builtin (auto-detected: claude CLI not found)  ...
 12:34:02 | INFO     | Using audio device [3] 'PipeWire'
 12:34:03 | INFO     | No prior memory — first session.
-12:34:04 | INFO     | Dashboard available at http://localhost:7860
+12:34:04 | INFO     | Dashboard available at http://localhost:7766
 12:34:04 | INFO     | Scheduler started.
 12:34:05 | INFO     | Potts ready. Say 'Potts' to activate.
 
@@ -170,7 +170,7 @@ After 5 minutes of silence, Potts goes back to sleep automatically — you'll he
 
 ### The Dashboard
 
-Open [http://localhost:7860](http://localhost:7860) while Potts is running to see live status, agent output, memory, reminders, and metrics. The dashboard is optional — Potts works entirely without it.
+Open [http://localhost:7766](http://localhost:7766) while Potts is running to see live status, agent output, memory, reminders, and metrics. The dashboard is optional — Potts works entirely without it.
 
 ### Stopping Potts
 
