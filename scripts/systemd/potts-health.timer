@@ -1,0 +1,16 @@
+# Potts — runs the PC-state health checks shortly after boot, then every 10 min.
+#
+# Install as a USER unit (do NOT install system-wide):
+#   systemctl --user enable --now potts-health.timer
+[Unit]
+Description=Run Potts PC-state health checks periodically
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=10min
+AccuracySec=30s
+Persistent=true
+Unit=potts-health.service
+
+[Install]
+WantedBy=timers.target
