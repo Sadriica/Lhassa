@@ -25,6 +25,7 @@ Nothing here is a token cost in itself: the decisions are rules-based and free.
 from __future__ import annotations
 
 import os
+import shutil
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Callable, Optional
 
@@ -84,20 +85,30 @@ def pick_provider(*, sensitive: bool, config: "Config", hard: bool = False) -> M
     Routine/heartbeat thinking (``hard=False``) prefers the LOCAL model when it is
     configured — its ``is_local`` keeps the data on the box, so pseudonymization is
     not applied. ``config.heartbeat_provider`` steers this: ``cloud`` never uses
-    local; ``local`` forces local for the routine path (falling back to cloud with
-    a warning if unconfigured); ``auto`` uses local when ``local_model_url`` is set.
+    local/opencode; ``local`` forces local for the routine path (falling back to
+    cloud with a warning if unconfigured); ``opencode`` forces the opencode CLI;
+    ``auto`` prefers local when ``local_model_url`` is set, else the opencode CLI
+    when its binary is on PATH, else cloud.
 
     The HARD path always goes to the cloud smart model. Sensitive data still
     routes to a zero-retention provider (and warns if none is configured). The
-    cloud path is wrapped in the pseudonymization hook when ``pseudonymize_remote``
-    is on; the local path is never wrapped.
+    cloud path — including opencode, which is a cloud subscription — is wrapped in
+    the pseudonymization hook when ``pseudonymize_remote`` is on; the local path is
+    never wrapped.
     """
     heartbeat = (getattr(config, "heartbeat_provider", "auto") or "auto").lower()
     local_url = (getattr(config, "local_model_url", "") or "").strip()
     routine = not hard
 
-    # Routine/heartbeat path → prefer the local model when allowed.
+    # Routine/heartbeat path → prefer local, then opencode, before falling to cloud.
     if routine and heartbeat != "cloud":
+        # Explicit opencode: use the CLI provider (it degrades at call time if the
+        # binary/credentials are missing). opencode is cloud → privacy hook applies.
+        if heartbeat == "opencode":
+            return _maybe_pseudonymize(
+                get_model_provider(config, name="opencode"), config
+            )
+
         wants_local = heartbeat == "local" or (heartbeat == "auto" and bool(local_url))
         if wants_local:
             if local_url:
@@ -107,6 +118,16 @@ def pick_provider(*, sensitive: bool, config: "Config", hard: bool = False) -> M
                 logger.warning(
                     "router: heartbeat_provider='local' but local_model_url is "
                     "unset — falling back to the cloud provider."
+                )
+
+        # auto + no local backend → prefer the cheap opencode CLI when present.
+        # ``opencode_bin`` defaults to "" here so incomplete config doubles never
+        # trip this; the real Config always sets it ("opencode").
+        if heartbeat == "auto" and not local_url:
+            opencode_bin = (getattr(config, "opencode_bin", "") or "").strip()
+            if opencode_bin and shutil.which(opencode_bin):
+                return _maybe_pseudonymize(
+                    get_model_provider(config, name="opencode"), config
                 )
 
     # Cloud path (hard, cloud-forced, or no local backend available).
@@ -169,6 +190,10 @@ def pick_model(provider: ModelProvider, *, hard: bool, config: "Config") -> str:
     """
     if getattr(provider, "is_local", False):
         return (getattr(config, "local_model", "") or "") or config.model
+    # opencode serves one configured model (free-tier beat). The name proxies
+    # through the pseudonymizing wrapper too, so this catches the wrapped case.
+    if getattr(provider, "name", "") == "opencode":
+        return (getattr(config, "opencode_model", "") or "") or config.model
     if getattr(config, "router_mode", "rules") == "off":
         return config.model
     return config.model_smart if hard else config.model_cheap
