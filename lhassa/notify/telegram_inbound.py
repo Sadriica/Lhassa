@@ -66,6 +66,34 @@ def _enabled(config) -> bool:
     return bool(getattr(config, "telegram_poll_enabled", False)) and telegram.is_configured(config)
 
 
+def _secondary_provider(config, primary):
+    """A reliable CLOUD fallback for the bot when the routine provider flakes.
+
+    The routine provider for a chat turn is usually opencode, which boots a fresh
+    runtime per call and fails intermittently under the long-running poller. This
+    returns a plain :class:`GatewayProvider` (the configured cloud LLM, e.g. Groq)
+    so the owner always gets an answer. Returns ``None`` — disabling the fallback —
+    when the primary already IS the cloud gateway (``name == "default"``) or no
+    cloud provider is configured. This is the seam tests patch to ``None`` (to
+    assert the single-provider path) or to a mock (to assert the fallback fires).
+    """
+    try:
+        from lhassa.llm.provider import GatewayProvider
+
+        if getattr(primary, "name", "") == "default":
+            return None  # primary is already the cloud gateway — nothing to add
+        if not getattr(config, "llm_provider", ""):
+            return None  # no cloud LLM configured → no fallback to offer
+        return GatewayProvider(config)
+    except Exception:
+        return None
+
+
+def _secondary_model(config):
+    """The model the cloud fallback should use (cheap routine model)."""
+    return getattr(config, "model_cheap", "") or getattr(config, "model", "") or None
+
+
 async def _brain_reply(text: str, *, config) -> str:
     """Answer one message via a tool-less brain think. Never raises.
 
@@ -104,9 +132,6 @@ async def _brain_reply(text: str, *, config) -> str:
         # local/opencode heartbeat provider (§3-Fase 6).
         trigger = watchlist.Trigger(kind="telegram", action="responder", params={})
         decision = router.decide(trigger, ctx, config=config)
-        provider = decision.provider
-        if provider is None:
-            raise ProviderNotConfigured("router resolved no provider for telegram turn")
 
         identity = load_identity(instance_id)
         parts = [identity.persona_block]
@@ -116,30 +141,54 @@ async def _brain_reply(text: str, *, config) -> str:
         parts.append(_CHAT_INSTRUCTION)
         system = "\n\n".join(parts)
 
-        result = await provider.complete(
-            [{"role": "user", "content": text}],
-            model=decision.model,
-            max_tokens=_CHAT_MAX_TOKENS,
-            system=system,
-        )
+        # Try the routine provider (opencode/local — $0), then a reliable CLOUD
+        # fallback. opencode boots a fresh runtime per call and flakes under the
+        # long-running poller, so a cloud provider backs it up — the owner always
+        # gets an answer. The fallback is the mockable ``_secondary_provider`` seam.
+        attempts: list[tuple] = []
+        if decision.provider is not None:
+            attempts.append((decision.provider, decision.model))
+        secondary = _secondary_provider(config, decision.provider)
+        if secondary is not None:
+            attempts.append((secondary, _secondary_model(config)))
+        if not attempts:
+            raise ProviderNotConfigured("router resolved no provider for telegram turn")
 
-        reply = (result.text or "").strip() or _FALLBACK_REPLY
-        ep.finish(
-            decision=decision.reason,
-            accion="responder",
-            resultado=reply,
-            costo_usd=result.cost_usd,
-        )
-        return reply
+        last_exc = None
+        for prov, mdl in attempts:
+            try:
+                result = await prov.complete(
+                    [{"role": "user", "content": text}],
+                    model=mdl,
+                    max_tokens=_CHAT_MAX_TOKENS,
+                    system=system,
+                )
+            except (ProviderNotConfigured, BudgetExceeded) as exc:
+                last_exc = exc
+                continue
+            except Exception as exc:  # a flaky provider must not end the turn
+                logger.warning(
+                    f"Telegram inbound: provider {getattr(prov, 'name', '?')!r} failed: {exc}"
+                )
+                last_exc = exc
+                continue
+            reply = (result.text or "").strip() or _FALLBACK_REPLY
+            ep.finish(
+                decision=decision.reason,
+                accion="responder",
+                resultado=reply,
+                costo_usd=result.cost_usd,
+            )
+            return reply
 
-    except (ProviderNotConfigured, BudgetExceeded) as exc:
-        # Known degradation — defer, return the fallback, keep the episode.
+        # Every provider (routine + cloud fallback) failed — defer, keep the episode.
         ep.finish(
             decision=_DEFERRED_DECISION,
             accion="responder",
-            resultado=f"deferred ({type(exc).__name__}): {exc}",
+            resultado=f"deferred: all providers failed ({last_exc})",
         )
         return _FALLBACK_REPLY
+
     except Exception as exc:  # never raise into the poll loop
         logger.warning(f"Telegram inbound: brain think failed: {exc}")
         ep.finish(
