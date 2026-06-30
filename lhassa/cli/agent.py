@@ -277,10 +277,15 @@ async def _run_cli_provider(config, system: str, prompt: str) -> "CliResult":
     from lhassa.llm.provider import ProviderNotConfigured, get_model_provider
 
     prov = get_model_provider(config, name=config.llm_provider)
+    # Honor an EXPLICIT chat model (LHASSA_MODEL / the panel's "Chat model") so the owner
+    # can pick e.g. claude-opus-4-8 / a codex model; otherwise pass None and let the CLI use
+    # its own default. (config.model auto-detects an API default like a Groq id, which would
+    # be wrong to hand a CLI — so only pass it when the owner set it on purpose.)
+    chat_model = config.model if os.getenv("LHASSA_MODEL") else None
     try:
         comp = await prov.complete(
             [{"role": "user", "content": prompt}],
-            model=None,  # let the CLI use its own (subscription) model
+            model=chat_model,
             max_tokens=1024,
             system=system,
         )
