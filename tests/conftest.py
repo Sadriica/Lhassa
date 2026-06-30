@@ -1,8 +1,15 @@
 """Shared pytest fixtures."""
 
+# Isolate the test suite from the owner's runtime overrides: config.py loads
+# ~/.lhassa/settings.env (e.g. LHASSA_LLM_PROVIDER=claude) over .env, which would leak
+# the live machine's settings into tests. Set BEFORE any lhassa import so config.py
+# (imported during collection) skips that load. See lhassa/config.py.
+import os
 
-import pytest
-import pytest_asyncio  # noqa: F401  (registers asyncio mode)
+os.environ.setdefault("LHASSA_NO_RUNTIME_OVERRIDES", "1")
+
+import pytest  # noqa: E402
+import pytest_asyncio  # noqa: E402,F401  (registers asyncio mode)
 
 
 @pytest.fixture

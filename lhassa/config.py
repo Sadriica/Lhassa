@@ -9,8 +9,10 @@ load_dotenv()
 # Runtime overrides written by the settings panel / `lhassa config` live in a
 # dedicated file so secrets in ``.env`` are never rewritten. They load AFTER ``.env``
 # with ``override=True`` so an edited setting wins; new processes (heartbeat, telegram,
-# app) pick them up on next start.
-load_dotenv(Path.home() / ".lhassa" / "settings.env", override=True)
+# app) pick them up on next start. Skipped under tests (LHASSA_NO_RUNTIME_OVERRIDES=1,
+# set by tests/conftest.py) so the owner's live settings.env never leaks into the suite.
+if os.getenv("LHASSA_NO_RUNTIME_OVERRIDES") != "1":
+    load_dotenv(Path.home() / ".lhassa" / "settings.env", override=True)
 
 _PROVIDERS = {"groq", "anthropic", "openai", "openrouter", "ollama", "cerebras"}
 
