@@ -5,6 +5,7 @@ import BrainsPanel from './components/BrainsPanel'
 import SkillsPanel from './components/SkillsPanel'
 import AgentsPanel from './components/AgentsPanel'
 import AgenticPanel from './components/AgenticPanel'
+import WorkflowsPanel from './components/WorkflowsPanel'
 import MetricsPanel from './components/MetricsPanel'
 import AIUsagePanel from './components/AIUsagePanel'
 import MemoryPanel from './components/MemoryPanel'
@@ -34,6 +35,7 @@ const ICONS = {
   overview:  'M4 13h7V4H4v9Z M13 20h7v-9h-7v9Z M13 4v5h7V4h-7Z M4 20h7v-5H4v5Z',
   brains:    'M12 3a4 4 0 0 0-4 4 3 3 0 0 0-1 5.8V17a3 3 0 0 0 5 2 3 3 0 0 0 5-2v-4.2A3 3 0 0 0 16 7a4 4 0 0 0-4-4Z',
   skills:    'M12 2 4 6v6c0 5 3.5 8 8 10 4.5-2 8-5 8-10V6l-8-4Z',
+  flows:     'M5 6a2 2 0 1 1 0-4 2 2 0 0 1 0 4Z M19 13a2 2 0 1 1 0-4 2 2 0 0 1 0 4Z M5 22a2 2 0 1 1 0-4 2 2 0 0 1 0 4Z M7 5h6a4 4 0 0 1 4 4 M7 20h4a4 4 0 0 0 4-4v-2',
   approvals: 'M9 12.5 11 14.5 15.5 10 M12 3 4 6v6c0 5 3.5 8 8 10 4.5-2 8-5 8-10V6l-8-3Z',
   tools:     'M14.7 6.3a4 4 0 0 0-5.2 5.2L3 18l3 3 6.5-6.5a4 4 0 0 0 5.2-5.2l-2.6 2.6-2.5-2.5 2.6-2.6Z',
   reports:   'M5 19V5 M5 19h14 M9 16v-5 M13 16V8 M17 16v-3',
@@ -48,6 +50,7 @@ const SECTIONS = [
   { id: 'overview', label: 'Overview' },
   { id: 'brains', label: 'Brains' },
   { id: 'skills', label: 'Skills' },
+  { id: 'flows', label: 'Flows' },
   { id: 'run', label: 'Run' },
   { id: 'approvals', label: 'Approvals' },
   { id: 'tools', label: 'Tools' },
@@ -211,6 +214,10 @@ export default function App() {
 
           {section === 'skills' && (
             <ErrorBoundary><SkillsPanel /></ErrorBoundary>
+          )}
+
+          {section === 'flows' && (
+            <ErrorBoundary><WorkflowsPanel /></ErrorBoundary>
           )}
 
           {section === 'run' && (
