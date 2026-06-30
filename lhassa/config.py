@@ -169,6 +169,22 @@ class Config:
         "LHASSA_BRAIN_DB_PATH", str(Path.home() / ".lhassa" / "brain.db")
     )
 
+    # The "chica": the persistent working-memory cache, DERIVED from the grande
+    # and independently clearable ("matas la chica → se regenera de la grande").
+    # Its own small SQLite file so it can be wiped without touching the grande.
+    chica_db_path: str = os.getenv(
+        "LHASSA_CHICA_DB_PATH", str(Path.home() / ".lhassa" / "chica.db")
+    )
+    # Threshold at which the chica consolidates (mechanical LRU eviction of the
+    # least-recently-used NON-pinned items down to this count). No tokens, no LLM.
+    chica_max_items: int = _safe_int(os.getenv("LHASSA_CHICA_MAX_ITEMS", "200"), 200)
+
+    # Incremental backup mirror of the grande (brain.db). Cheap to re-run; the
+    # mirror is overwritten/rotated each time. Restorations are verified.
+    backup_dir: str = os.getenv(
+        "LHASSA_BACKUP_DIR", str(Path.home() / ".lhassa" / "backups")
+    )
+
     # ── Security: signing + task-level allowlist (§2.6) ───────────────────────
     # Ed25519 private key location (public key written alongside as <path>.pub).
     # The brain holds the private key and signs Tasks; a machine holds the public

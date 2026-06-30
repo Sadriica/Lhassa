@@ -5,6 +5,28 @@ build. The source of truth for the architecture is `doc/lhassa-brief.md` (a
 living doc — correct it after each phase per §4). This file records the choices
 made along the way. Newest first.
 
+## 2026-06-29 — Phase 1 complete (memory)
+
+Built additively (old `memory/store.py` untouched), 2 slices, behind gates:
+- **1.A** `core/db.py` facts table (Apéndice A, append-only, instance_id) +
+  `memory/facts.py` (`Fact` dato/directiva, contradiction = newest+confianza) +
+  `memory/load.py` (layered `load(token_budget)`: pinned+directivas always →
+  recency → active-tags; truncate by priority; deterministic token estimate; **no
+  embeddings / layer-4**) + `memory/seed.py` (Apéndice B seed facts).
+- **1.B** `memory/chica.py` (persistent working cache; **threshold-LRU
+  `consolidate`** that never evicts pinned/directivas; `regenerate` from the
+  grande) + `memory/backup.py` (WAL-safe online `backup`/`restore`/`verify`).
+
+**DoD met** (offline tests + live SQLite smoke): recover a fact from "days ago" by
+tag · chica fills → consolidates without overflow (23→5, pinned kept) · kill the
+chica → regenerates from the grande · backup → verify True (corrupt → False) →
+restore round-trips. 272 tests, ruff clean.
+
+**Deferred to Phase 2 (per the brief):** semantic memory consolidation (summarize
+similar items / detect contradictions via a cheap LLM) — Phase 1 is mechanical LRU
+only. **Backlog:** reconcile the old `memory/store.py` (voice session facts/
+sessions) with the new typed-facts model.
+
 ## 2026-06-29 — Phase 0 complete (the spine)
 
 Built additively over the existing skeleton, 5 vertical slices, all behind gates
