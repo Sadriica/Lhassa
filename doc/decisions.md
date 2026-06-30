@@ -5,6 +5,42 @@ build. The source of truth for the architecture is `doc/lhassa-brief.md` (a
 living doc — correct it after each phase per §4). This file records the choices
 made along the way. Newest first.
 
+## 2026-06-29 — Phase 5 complete (self-improvement 2b in quarantine)
+
+The brain can write its own tools and graduate them only through objective gates,
+caged. Built (2 slices, gates green):
+- **5.A** `security/quarantine.py` (`run_in_quarantine`: strongest-available sandbox
+  via `unshare`/`firejail`/`bwrap` for **no-network**, a from-scratch **scrubbed env**
+  so no secret leaks, temp cwd, `killpg` on timeout; `str`→`bash -c`, `list`→argv) +
+  `agents/gates.py` — the **four gates of 2b**, deny-by-default, stop-at-first-failure:
+  1 **Segura** (runs caged) · 2 **Correcta** (a command/tests verifier exits 0) ·
+  3 **Mejor** (a `MetricVerifier` beats a concrete baseline; optimización is
+  lower-is-better) · 4 **Retiro** (continuous: `should_retire` demotes a graduated
+  tool that fails in production or goes unused). Gates **reuse** the Phase-3 verifiers
+  and **never call an LLM**.
+- **5.B** `agents/specialists/` (**skills, NOT fine-tuning**: `Specialist` = base model
+  + instructions + tools + `gate_spec`, no model id anywhere; registry keyed by domain,
+  first = `optimizacion`; `build_specialist_prompt` = persona identity + domain skill) +
+  `agents/versioning.py` (**local-git** tool versioning: `create_candidate`→branch,
+  **`approve` = merge** routed through the approval queue as a `tool_graduation`,
+  `rollback` = `git revert`; `_git` never raises and degrades gracefully when git is
+  missing; GitHub-remote PR/merge are **token-gated no-op hooks**, never reached
+  offline) + `/api/tools` + graduate endpoint + `QuarantinePanel` + `tools_repo_dir`.
+
+**DoD met** (offline tests + a live smoke with real git/SQLite/quarantine): the brain
+writes a tool → candidate on its own branch → a good candidate **graduates** (segura+
+correcta+mejor) while a worse one is **rejected at gate 3 with a reason** and an
+incorrect one **at gate 2** (gate 3 never runs); graduation is an approval-queue
+**merge** into `main` (a resolved `aprobada` `tool_graduation` row, content on `main`);
+a graduated tool failing 3/4 in production (or unused) **retires** to cuarentena; and a
+**git revert** rolls it back. "Mejor" is proven by a number (42 < 100), not asserted.
+460 tests, ruff clean, dashboard builds.
+
+**Deferred (token-gated, non-blocking):** the GitHub-remote path (push branch + open/
+merge a real PR) is wired as a no-op hook behind `Config.github_token` — turns on with
+a new token (old one revoked). **Backlog:** more specialist domains are just new
+registry rows; the retirement supervisor's "went unused" grace window is `[SUPUESTO]`.
+
 ## 2026-06-29 — Phase 4 complete (hands: MCP + harnesses)
 
 Decisions: 2nd typed task = **`tracking_postulaciones`**; the owner has all three
