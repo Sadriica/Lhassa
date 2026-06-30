@@ -403,6 +403,14 @@ class Config:
     # A cheap/free model is right for a routine beat (e.g. a free flash tier).
     opencode_model: str = os.getenv("LHASSA_OPENCODE_MODEL", "opencode/deepseek-v4-flash-free")
 
+    # Fallback provider CHAIN for chat/think when the routine provider flakes
+    # (opencode boots a runtime per call and is flaky under a long-running poller).
+    # Tried IN ORDER after the routine provider; each name resolves through the
+    # PROVIDERS registry. Unavailable CLIs (claude/codex not installed) are skipped.
+    # "default" = the cloud gateway. Order keeps the owner on their subscriptions
+    # (claude/codex) before paying for cloud.
+    fallback_providers: str = os.getenv("LHASSA_FALLBACK_PROVIDERS", "claude,codex,default")
+
     # ── Phase 6 — voice (brain ↔ existing pipecat skeleton) ───────────────────
     # Opt-in bridge so the voice pipeline's turns are answered by the brain (memory
     # + provider + episode) instead of a generic LLM. Off by default; needs the
