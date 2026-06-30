@@ -45,6 +45,7 @@ if TYPE_CHECKING:
 __all__ = [
     "CATALOG",
     "catalog_skill",
+    "install_from_catalog",
     "recommend_skills",
     "ensure_seed",
     "create_skill_with_ai",
@@ -202,6 +203,142 @@ CATALOG: list[dict] = [
             "- Report what changed and what was dropped.\n"
         ),
     },
+    # ── the wider catalog (templated bodies derived from the description) ──────
+    {
+        "name": "refactor",
+        "description": "Restructure code for clarity without changing its behaviour, "
+        "kept safe by tests.",
+        "domain": "refactor",
+        "tags": ["code", "cleanup"],
+        "level": 2,
+        "allowed-tools": ["read_file", "write_file", "shell"],
+    },
+    {
+        "name": "migration",
+        "description": "Move code, schema, or data to a new version or system with a "
+        "reversible, staged plan.",
+        "domain": "migration",
+        "tags": ["data", "schema"],
+        "level": 3,
+        "allowed-tools": ["read_file", "write_file", "shell"],
+    },
+    {
+        "name": "incident-triage",
+        "description": "Stabilise a live incident: assess blast radius, mitigate first, "
+        "then find root cause.",
+        "domain": "incident",
+        "tags": ["ops", "triage"],
+        "level": 3,
+        "allowed-tools": ["read_file", "shell"],
+    },
+    {
+        "name": "api-design",
+        "description": "Design clear, consistent, versionable API contracts with sane "
+        "errors and pagination.",
+        "domain": "api",
+        "tags": ["design", "interface"],
+        "level": 2,
+        "allowed-tools": ["read_file", "write_file"],
+    },
+    {
+        "name": "sql-expert",
+        "description": "Write, explain, and optimise SQL queries and schemas for "
+        "correctness and speed.",
+        "domain": "data",
+        "tags": ["sql", "database"],
+        "level": 2,
+        "allowed-tools": ["read_file", "shell"],
+    },
+    {
+        "name": "devops-ci",
+        "description": "Build and harden CI/CD pipelines: reproducible builds, caching, "
+        "and gated deploys.",
+        "domain": "devops",
+        "tags": ["ci", "automation"],
+        "level": 2,
+        "allowed-tools": ["read_file", "write_file", "shell"],
+    },
+    {
+        "name": "dependency-audit",
+        "description": "Inventory dependencies, flag vulnerable or stale ones, and plan "
+        "safe upgrades.",
+        "domain": "security",
+        "tags": ["dependencies", "audit"],
+        "level": 2,
+        "allowed-tools": ["read_file", "shell"],
+    },
+    {
+        "name": "pr-summarizer",
+        "description": "Summarise a pull request: what changed, why, and what a reviewer "
+        "should watch for.",
+        "domain": "review",
+        "tags": ["git", "summary"],
+        "level": 1,
+        "allowed-tools": ["read_file", "shell"],
+    },
+    {
+        "name": "bug-repro",
+        "description": "Turn a vague bug report into a minimal, deterministic reproduction "
+        "and a failing test.",
+        "domain": "debugging",
+        "tags": ["bug", "repro"],
+        "level": 2,
+        "allowed-tools": ["read_file", "write_file", "shell"],
+    },
+    {
+        "name": "performance-profiling",
+        "description": "Profile a hot path to find the real bottleneck before changing any "
+        "code.",
+        "domain": "performance",
+        "tags": ["profiling", "performance"],
+        "level": 2,
+        "allowed-tools": ["read_file", "shell"],
+    },
+    {
+        "name": "accessibility-audit",
+        "description": "Audit a UI for accessibility (contrast, labels, keyboard, ARIA) "
+        "against WCAG and fix gaps.",
+        "domain": "accessibility",
+        "tags": ["a11y", "audit"],
+        "level": 2,
+        "allowed-tools": ["read_file", "write_file"],
+    },
+    {
+        "name": "i18n",
+        "description": "Internationalise strings and formats so the product localises "
+        "cleanly across locales.",
+        "domain": "i18n",
+        "tags": ["localization", "i18n"],
+        "level": 1,
+        "allowed-tools": ["read_file", "write_file"],
+    },
+    {
+        "name": "release-notes",
+        "description": "Turn a set of merged changes into clear, user-facing release notes "
+        "and a changelog entry.",
+        "domain": "documentation",
+        "tags": ["release", "changelog"],
+        "level": 1,
+        "allowed-tools": ["read_file", "shell"],
+    },
+    {
+        "name": "web-scraping",
+        "description": "Extract structured data from web pages politely and robustly, "
+        "respecting robots and rate limits.",
+        "domain": "data",
+        "tags": ["scraping", "web"],
+        "level": 2,
+        "allowed-tools": ["web_search", "read_file", "write_file"],
+    },
+    {
+        "name": "prompt-optimizer",
+        "description": "Tighten an LLM prompt for reliability and cost: clearer task, "
+        "guardrails, fewer tokens.",
+        "domain": "prompts",
+        "tags": ["llm", "prompt"],
+        "level": 2,
+        "allowed-tools": ["read_file", "write_file"],
+    },
 ]
 
 # The starter skills seeded on demand: the optimizacion one mirrors the existing
@@ -209,8 +346,41 @@ CATALOG: list[dict] = [
 _SEED_NAMES = ("optimizacion", "documentation", "code-review")
 
 
+def _catalog_body(entry: dict) -> str:
+    """A sensible SKILL.md instructions body templated from a catalog ``entry``.
+
+    Used for catalog rows that ship only a one-line description (no hand-written
+    ``instructions``): turns the description + domain into a real, structured body
+    so an installed skill carries usable guidance, not an empty file.
+    """
+    name = slugify(entry["name"])
+    desc = (entry.get("description") or "").strip()
+    domain = (entry.get("domain") or "").strip()
+    focus = domain or name
+    when = f"the task calls for {focus} work"
+    if desc:
+        when += f" — {desc[0].lower() + desc[1:]}"
+    goal = desc or f"do the {focus} work well"
+    return (
+        f"# {name}\n\n"
+        f"{desc or f'Operate as the {focus} specialist.'}\n\n"
+        "## When to use\n\n"
+        f"Load this skill when {when}\n\n"
+        "## How to apply\n\n"
+        f"- Keep the goal in view: {goal}.\n"
+        "- Work in the smallest correct steps; check each against reality.\n"
+        "- Never trade correctness for speed; a fast wrong answer still fails.\n"
+        "- Report what you did, what you found, and what is left — plainly.\n"
+    )
+
+
 def catalog_skill(entry: dict) -> Skill:
-    """Materialise a CATALOG ``entry`` into a full :class:`Skill` (with SKILL.md body)."""
+    """Materialise a CATALOG ``entry`` into a full :class:`Skill` (with SKILL.md body).
+
+    A row may ship a hand-written ``instructions`` body; rows that only carry a
+    one-line description get a sensible body templated by :func:`_catalog_body`, so
+    every catalog skill installs as a real, usable SKILL.md.
+    """
     metadata: dict = {"source": "lhassa/catalog"}
     if entry.get("domain"):
         metadata["domain"] = entry["domain"]
@@ -223,10 +393,40 @@ def catalog_skill(entry: dict) -> Skill:
     return Skill(
         name=slugify(entry["name"]),
         description=entry.get("description", ""),
-        instructions=entry.get("instructions", ""),
+        instructions=(entry.get("instructions") or "").strip() or _catalog_body(entry),
         metadata=metadata,
         resources=[],
     )
+
+
+def _catalog_by_name() -> dict[str, dict]:
+    """The CATALOG indexed by slugified name (built fresh — the catalog is small)."""
+    return {slugify(entry["name"]): entry for entry in CATALOG}
+
+
+def install_from_catalog(
+    name: str, *, config: "Optional[Config]" = None
+) -> "Optional[Skill]":
+    """Materialise catalog skill ``name`` into the store as a real SKILL.md.
+
+    This is the bridge from a brain carrying a skill NAME to the skill actually
+    DOING something: it writes ``<skills_dir>/<name>/SKILL.md`` (templated from the
+    catalog entry) so the executor can later load its instructions into a prompt.
+
+    Idempotent: if the skill is already installed it is returned unchanged (nothing
+    is overwritten). Returns ``None`` when ``name`` is not in the catalog.
+    """
+    slug = slugify(name)
+    entry = _catalog_by_name().get(slug)
+    if entry is None:
+        return None
+    store = SkillStore(config)
+    existing = store.get(slug)
+    if existing is not None:
+        return existing  # already installed — skip (idempotent)
+    skill = catalog_skill(entry)
+    store.save(skill)
+    return store.get(slug) or skill
 
 
 # ── recommend (deterministic / offline) ───────────────────────────────────────

@@ -101,12 +101,78 @@ def _result(
     }
 
 
+# ── skills: a brain carries skill NAMES; a skill only DOES something once it is ──
+# INSTALLED (its SKILL.md is loaded into the prompt). These helpers are the seam:
+# resolve the brain's assigned names from the topology, then load the installed
+# ones into the system prompt. Everything degrades to "no skills"; never raises.
+
+
+def _resolve_brain_skills(department: str, config: Config) -> tuple[str, ...]:
+    """The skill NAMES assigned to the brain that owns ``department`` (topology).
+
+    Finds the :class:`BrainNode` whose ``department`` matches (or whose ``id`` ends
+    with the department, e.g. ``"dept:optimizacion"``) and returns its ``.skills``.
+    No match (or the single standalone admin) → no skills, unchanged behaviour.
+    Never raises — a missing/unreadable topology yields ``()``.
+    """
+    if not (department or "").strip():
+        return ()
+    try:
+        from lhassa.org import topology as _topology
+
+        top = _topology.load_topology(config)
+        for node in top.nodes():
+            if node.department == department or node.id.endswith(department):
+                return tuple(node.skills or ())
+    except Exception as exc:
+        logger.warning("org: could not resolve skills for dept:{} — {}", department, exc)
+    return ()
+
+
+def _load_skill_blocks(
+    skill_names, config: Config
+) -> tuple[list[str], list[str]]:
+    """Load assigned skills, splitting installed (loaded) from referenced-not-installed.
+
+    For each name: if it is INSTALLED in the :class:`SkillStore` and carries usable
+    instructions, return a clearly-delimited ``"## Skill: <name>"`` block to inject
+    into the system prompt; otherwise record the name as referenced-but-not-installed
+    (the brain knows the skill by name, but nothing loads until it is installed).
+    Returns ``(blocks, not_installed)``. Never raises.
+    """
+    blocks: list[str] = []
+    not_installed: list[str] = []
+    names = [str(n).strip() for n in (skill_names or ()) if str(n).strip()]
+    if not names:
+        return blocks, not_installed
+    try:
+        from lhassa.skills.store import SkillStore
+
+        store = SkillStore(config)
+    except Exception as exc:  # pragma: no cover - store construction is defensive
+        logger.warning("org: skill store unavailable — {}", exc)
+        return blocks, list(names)
+    for name in names:
+        skill = None
+        try:
+            skill = store.get(name)
+        except Exception as exc:  # pragma: no cover - reads degrade already
+            logger.warning("org: could not read skill {} — {}", name, exc)
+        instructions = (getattr(skill, "instructions", "") or "").strip() if skill else ""
+        if skill is None or getattr(skill, "error", None) or not instructions:
+            not_installed.append(name)
+            continue
+        blocks.append(f"## Skill: {name}\n\n{instructions}")
+    return blocks, not_installed
+
+
 async def brain_executor(
     goal: str,
     *,
     department: str,
     instance_id: Optional[str] = None,
     config: Optional[Config] = None,
+    skills: Optional[list] = None,
 ) -> dict:
     """Run ``goal`` through the department's one-turn brain think path.
 
@@ -118,6 +184,13 @@ async def brain_executor(
     Offline by default: with ``LHASSA_ORG_LIVE`` unset it returns a deterministic
     offline result and makes no model call. Degrades gracefully (never raises) on a
     missing provider, a spent budget, or any unexpected error.
+
+    The brain's assigned **skills** shape the live thinking: ``skills`` (a list of
+    skill names) overrides the lookup, otherwise the names come from this brain's
+    :class:`BrainNode` in the topology. Each INSTALLED skill's ``SKILL.md`` is
+    appended to the system prompt; names that are referenced but NOT installed are
+    skipped and reported (``skills_loaded`` / ``skills_not_installed`` on the
+    result). Skill loading never raises.
     """
     config = config or Config()
     instance_id = (
@@ -156,7 +229,19 @@ async def brain_executor(
         if provider is None:
             raise ProviderNotConfigured("router resolved no provider for org task")
 
+        # Load the brain's assigned skills INTO the prompt: installed skills shape
+        # the thinking; referenced-but-uninstalled names are recorded, not loaded.
+        skill_names = (
+            list(skills) if skills is not None
+            else list(_resolve_brain_skills(department, config))
+        )
+        skill_blocks, skills_not_installed = _load_skill_blocks(skill_names, config)
+        loaded_names = [n for n in skill_names if n not in skills_not_installed]
+
         system = _system_prompt(instance_id, department, ctx)
+        if skill_blocks:
+            system = system + "\n\n" + "\n\n".join(skill_blocks)
+
         messages = [{"role": "user", "content": goal}]
         result = await provider.complete(
             messages,
@@ -166,18 +251,28 @@ async def brain_executor(
         )
 
         summary = (result.text or "").strip() or "(no answer)"
+        skills_note = ""
+        if loaded_names:
+            skills_note += f" skills:{','.join(loaded_names)}"
+        if skills_not_installed:
+            skills_note += f" not-installed:{','.join(skills_not_installed)}"
         ep.finish(
             decision=decision.reason,
-            accion=f"dept:{department} think",
+            accion=f"dept:{department} think{skills_note}",
             resultado=summary,
             costo_usd=result.cost_usd,
         )
-        return _result(
+        out = _result(
             summary=summary,
             department=department,
             cost_usd=result.cost_usd,
             model=result.model or (decision.model or ""),
         )
+        if loaded_names:
+            out["skills_loaded"] = loaded_names
+        if skills_not_installed:
+            out["skills_not_installed"] = skills_not_installed
+        return out
 
     except (ProviderNotConfigured, BudgetExceeded) as exc:
         # Known degradation — a department that can't reach a model still returns a
