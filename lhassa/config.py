@@ -389,6 +389,32 @@ class Config:
     # like ``github_token``). No token → never touches the network.
     telegram_bot_token: str = os.getenv("LHASSA_TELEGRAM_BOT_TOKEN", "")
     telegram_chat_id: str = os.getenv("LHASSA_TELEGRAM_CHAT_ID", "")
+    # Inbound: long-poll Telegram for messages and answer them. Off by default;
+    # requires the bot token + chat id above. Only the configured chat is honored.
+    telegram_poll_enabled: bool = os.getenv("LHASSA_TELEGRAM_POLL", "0") not in ("0", "false", "")
+
+    # ── Phase 6 — heartbeat via opencode (no local model server needed) ───────
+    # The owner has the opencode CLI (no Zen), so the routine/heartbeat thinking can
+    # run through opencode instead of a local model server. ``OpenCodeProvider`` shells
+    # ``opencode run --format json -m <model> <prompt>`` and uses the owner's existing
+    # opencode credentials. Set ``heartbeat_provider=opencode`` (or leave it ``auto``,
+    # which prefers opencode when no ``local_model_url`` is set and opencode is on PATH).
+    opencode_bin: str = os.getenv("LHASSA_OPENCODE_BIN", "opencode")
+    # A cheap/free model is right for a routine beat (e.g. a free flash tier).
+    opencode_model: str = os.getenv("LHASSA_OPENCODE_MODEL", "opencode/deepseek-v4-flash-free")
+
+    # ── Phase 6 — voice (brain ↔ existing pipecat skeleton) ───────────────────
+    # Opt-in bridge so the voice pipeline's turns are answered by the brain (memory
+    # + provider + episode) instead of a generic LLM. Off by default; needs the
+    # Deepgram/Cartesia keys above to actually run audio.
+    voice_enabled: bool = os.getenv("LHASSA_VOICE_ENABLED", "0") not in ("0", "false", "")
+
+    # ── Phase 7 — organizational layer (general + department brains) ──────────
+    # Standalone by default (empty role). ``general`` = the coordinator brain (routes
+    # typed tasks, never executes department work); ``department`` = an executor brain
+    # with its own identity/memory/permissions. Start with TWO brains, never six.
+    org_role: str = os.getenv("LHASSA_ORG_ROLE", "").strip().lower()  # ""|general|department
+    org_department: str = os.getenv("LHASSA_ORG_DEPARTMENT", "")      # this brain's department name
 
     # ── Tool guardrails ───────────────────────────────────────────────────────
     # If true, reject obviously destructive shell commands unless explicitly
