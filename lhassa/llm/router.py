@@ -24,6 +24,7 @@ Nothing here is a token cost in itself: the decisions are rules-based and free.
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Callable, Optional
 
@@ -34,6 +35,7 @@ from lhassa.llm.provider import Completion, ModelProvider, get_model_provider
 if TYPE_CHECKING:
     from lhassa.config import Config
     from lhassa.core.watchlist import Trigger
+    from lhassa.harness.adapter import HarnessAdapter
     from lhassa.memory.load import Context
 
 
@@ -41,16 +43,18 @@ if TYPE_CHECKING:
 class Decision:
     """The router's verdict for one trigger.
 
-    ``kind``     — "think" (run a ModelProvider) or "delegate" (Phase 4 harness).
-    ``provider`` — the chosen ModelProvider (None only for an unresolved delegate).
-    ``model``    — the chosen model id (None for delegate).
+    ``kind``     — "think" (run a ModelProvider) or "delegate" (a harness, Phase 4).
+    ``provider`` — the chosen ModelProvider (None for a delegate).
+    ``model``    — the chosen model id (None for a delegate).
     ``reason``   — a human-readable trace, stored on the episode's ``decision``.
+    ``harness``  — the chosen harness name (set only when ``kind=="delegate"``).
     """
 
     kind: str
     provider: Optional[ModelProvider]
     model: Optional[str]
     reason: str
+    harness: Optional[str] = None
 
 
 # ── Axis 1: provider (cost + data sensitivity) ────────────────────────────────
@@ -75,7 +79,45 @@ def pick_provider(*, sensitive: bool, config: "Config") -> ModelProvider:
     return default
 
 
-# ── Axis 2: model (cheap routine vs smart hard) ───────────────────────────────
+# ── Axis 2 (delegate): pick a harness by cost / capability / plan ─────────────
+
+
+# Lower rank = preferred. Free and metered beat subscription when equivalent
+# (avoid the paths the subscription policy made expensive — §2.4).
+_BILLING_RANK = {"free": 0, "metered": 1, "subscription": 2}
+
+
+def pick_harness(
+    *, config: "Config", available: "Optional[list[HarnessAdapter]]" = None
+) -> "Optional[HarnessAdapter]":
+    """Choose a coding muscle among the available adapters (§2.4).
+
+    Order of selection:
+      1. ``LHASSA_HARNESS`` / ``config.harness`` override — honored if it names a
+         known adapter (availability is enforced later by the runner, which records
+         an error job for a missing CLI; this keeps the override predictable).
+      2. otherwise the cheapest available adapter by billing rank (free < metered <
+         subscription), ties broken by registry/preference order.
+    Returns ``None`` only when nothing is available and no override is set.
+    """
+    from lhassa.harness.adapter import available_adapters, get_adapter
+
+    override = (getattr(config, "harness", "") or os.getenv("LHASSA_HARNESS", "")).strip()
+    if override:
+        try:
+            chosen = get_adapter(override)
+            logger.info(f"router: harness override → {chosen.name}")
+            return chosen
+        except ValueError:
+            logger.warning(f"router: LHASSA_HARNESS={override!r} is unknown — ignoring")
+
+    avail = available_adapters() if available is None else list(available)
+    if not avail:
+        return None
+    return min(avail, key=lambda a: _BILLING_RANK.get(a.billing, 9))
+
+
+# ── Axis 1: model (cheap routine vs smart hard) ───────────────────────────────
 
 
 def pick_model(provider: ModelProvider, *, hard: bool, config: "Config") -> str:
@@ -104,6 +146,16 @@ def _is_hard(trigger: "Trigger", ctx: "Context | None") -> bool:
     return bool(params.get("hard"))
 
 
+def _is_delegate(trigger: "Trigger") -> bool:
+    """Whether this trigger is delegated *code* work (Axis 2) rather than thinking.
+
+    Signalled by an explicit ``delegate=True`` flag in the trigger params or a
+    ``kind=="code"`` trigger. Everything else thinks directly via a provider.
+    """
+    params = getattr(trigger, "params", {}) or {}
+    return bool(params.get("delegate")) or getattr(trigger, "kind", "") == "code"
+
+
 # ── decide ────────────────────────────────────────────────────────────────────
 
 
@@ -121,6 +173,21 @@ def decide(
     ``force_justdo`` (``$justdo``) forces the cheap model — act without
     deliberation this turn. Both override the routine/hard heuristic.
     """
+    # Axis 2 (delegate): agentic code work goes to a harness, not the provider.
+    # ``$think`` forces direct deliberation, so it suppresses delegation this turn.
+    if not force_think and _is_delegate(trigger):
+        harness = pick_harness(config=config)
+        if harness is not None:
+            reason = (
+                f"delegate: harness={harness.name} billing={harness.billing} "
+                f"model_locked={harness.model_locked}"
+            )
+            return Decision(
+                kind="delegate", provider=None, model=None,
+                reason=reason, harness=harness.name,
+            )
+        logger.info("router: delegation requested but no harness available — thinking")
+
     sensitive = _is_sensitive(trigger, ctx)
     provider = pick_provider(sensitive=sensitive, config=config)
 
@@ -131,9 +198,6 @@ def decide(
     else:
         hard = _is_hard(trigger, ctx)
 
-    # Phase 4 TODO: a "delegate" axis — when the trigger is agentic code work,
-    # return Decision(kind="delegate", provider=None, model=None, ...) and let a
-    # HarnessAdapter run it. Phase 2 always thinks directly.
     model = pick_model(provider, hard=hard, config=config)
 
     forced = "think" if force_think else "justdo" if force_justdo else ""

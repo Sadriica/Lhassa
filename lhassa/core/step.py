@@ -15,7 +15,10 @@ Two paths per trigger:
     (``ProviderNotConfigured``) or the daily budget is spent (``BudgetExceeded``),
     the episode degrades to "deferred" — never a crash.
 
-Long work is out of scope — ``step()`` never blocks on a job.
+Long work is NOT done inline — when the router decides to **delegate** code work
+to a harness, ``step()`` LAUNCHES it as a separate process (recording "job PID X")
+and returns immediately. A later tick's ``runner.supervise()`` reaps it via disk;
+``step()`` never blocks on a job ("hace y duerme", §2.1).
 """
 
 from typing import Optional
@@ -24,6 +27,8 @@ from lhassa.agents import verify as verify_agent
 from lhassa.config import Config
 from lhassa.core import actions, db, watchlist
 from lhassa.core.episode import Episode
+from lhassa.harness import runner
+from lhassa.harness.adapter import get_adapter
 from lhassa.llm import router
 from lhassa.llm.gateway import BudgetExceeded
 from lhassa.llm.provider import ModelProvider, ProviderNotConfigured
@@ -126,6 +131,42 @@ async def _judge(
         return False
 
 
+def _delegation_prompt(trigger: "watchlist.Trigger") -> str:
+    """Render the trigger into a single instruction for the coding muscle."""
+    objetivo = f" sobre {trigger.objetivo!r}" if trigger.objetivo else ""
+    extra = (trigger.params or {}).get("prompt") or (trigger.params or {}).get("instruccion")
+    if extra:
+        return str(extra)
+    return f"Tarea de código: {trigger.action}{objetivo}."
+
+
+async def _delegate(
+    trigger: "watchlist.Trigger",
+    ep: Episode,
+    decision: "router.Decision",
+    *,
+    instance_id: str,
+) -> str:
+    """Launch the delegated code work on a harness and record the episode.
+
+    Fire-and-forget: ``runner.launch`` starts the harness as a *separate* process
+    and returns its job_id without blocking; the episode notes the delegation, the
+    job_id and the PID. ``runner.supervise`` (called each tick) reaps it later.
+    Returns the job_id.
+    """
+    adapter = get_adapter(decision.harness)
+    prompt = _delegation_prompt(trigger)
+    job_id = await runner.launch(adapter, prompt, instance_id=instance_id)
+    pid = runner.running_pid(job_id)
+    ep.finish(
+        decision=decision.reason,
+        accion=trigger.action,
+        resultado=f"delegado a {decision.harness}: job {job_id} (PID {pid})",
+        costo_usd=0.0,
+    )
+    return job_id
+
+
 async def step(
     instance_id: Optional[str] = None,
     *,
@@ -151,13 +192,21 @@ async def step(
     config = config or Config()
     await db.init_db()
 
+    # Reap any delegated jobs that finished since the last tick (cheap; disk-only
+    # supervision — never blocks). This is how long work is followed across ticks.
+    reaped = await runner.supervise(instance_id)
+
     triggers = await watchlist.check(instance_id)
     if not triggers:
-        return {"triggers": 0}
+        summary = {"triggers": 0}
+        if reaped:
+            summary["reaped"] = len(reaped)
+        return summary
 
     n_actions = 0
     n_judged = 0
     n_deferred = 0
+    n_delegated = 0
 
     for trigger in triggers:
         ep = Episode.begin(
@@ -176,18 +225,30 @@ async def step(
             n_actions += 1
             ran_model = False
         else:
-            # Judgment — the model wakes for criteria (§2.4). Guarded so a missing
-            # provider or a spent budget degrades to a deferred episode, no crash.
-            ran_model = await _judge(
-                trigger, ep,
-                instance_id=instance_id, config=config,
-                provider=provider, completion_fn=completion_fn,
+            # The trigger needs the model (§2.4). First, a free rules-based decide:
+            # is this delegated CODE work (Axis 2) or direct thinking (Axis 1)?
+            decision = router.decide(
+                trigger, None, config=config,
                 force_think=force_think, force_justdo=force_justdo,
             )
-            if ran_model:
-                n_judged += 1
+            if decision.kind == "delegate":
+                # Long work — LAUNCH a harness process and return; do NOT block.
+                await _delegate(trigger, ep, decision, instance_id=instance_id)
+                n_delegated += 1
+                ran_model = True
             else:
-                n_deferred += 1
+                # Judgment — the model wakes for criteria. Guarded so a missing
+                # provider or a spent budget degrades to a deferred episode, no crash.
+                ran_model = await _judge(
+                    trigger, ep,
+                    instance_id=instance_id, config=config,
+                    provider=provider, completion_fn=completion_fn,
+                    force_think=force_think, force_justdo=force_justdo,
+                )
+                if ran_model:
+                    n_judged += 1
+                else:
+                    n_deferred += 1
 
         await ep.append()
 
@@ -199,9 +260,13 @@ async def step(
                 estado = "diferida"
             await db.set_task_state(instance_id, trigger.task_id, estado)
 
-    return {
+    summary = {
         "triggers": len(triggers),
         "actions": n_actions,
         "judged": n_judged,
         "deferred": n_deferred,
+        "delegated": n_delegated,
     }
+    if reaped:
+        summary["reaped"] = len(reaped)
+    return summary

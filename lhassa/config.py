@@ -308,6 +308,12 @@ class Config:
     # This is independent of agent_backend and never affects it.
     ai_cli: str = _detect_ai_cli()
 
+    # ── Delegated code work — harness override (Axis 2, §2.2/§2.4) ─────────────
+    # Force which HarnessAdapter the router delegates code work to: opencode |
+    # claude | codex. Empty → the router auto-picks the cheapest available muscle
+    # (free/metered before subscription). This is the LHASSA_HARNESS override.
+    harness: str = os.getenv("LHASSA_HARNESS", "").strip().lower()
+
     # ── Vision tools ──────────────────────────────────────────────────────────
     # Provider for analyze_screen / analyze_image.
     # "auto"       — use the active LLM provider if it supports vision, else

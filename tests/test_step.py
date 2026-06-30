@@ -307,6 +307,131 @@ async def test_step_verify_fails_both_records_failed(tmp_path, monkeypatch):
     assert "verificado: failed" in ep["decision"]
 
 
+# ── delegate branch — launches a harness job, never blocks ───────────────────────
+
+
+class _FakeStream:
+    def __init__(self, chunks):
+        self._chunks = list(chunks)
+
+    async def readline(self):
+        if self._chunks:
+            return self._chunks.pop(0)
+        return b""
+
+
+class _FakeProc:
+    def __init__(self, stdout, returncode=0, pid=555):
+        self.stdout = _FakeStream(stdout)
+        self.stderr = _FakeStream([b""])
+        self.returncode = returncode
+        self.pid = pid
+
+    async def wait(self):
+        return self.returncode
+
+    def kill(self):
+        pass
+
+
+@pytest.mark.asyncio
+async def test_step_delegate_launches_job_and_records_episode(tmp_path, monkeypatch):
+    db = await _init(tmp_path, monkeypatch)
+    from lhassa.core import step
+    from lhassa.harness import adapter as ad
+    from lhassa.harness import runner
+
+    runner._JOBS.clear()
+    # Every harness "installed" so pick_harness resolves and launch spawns.
+    monkeypatch.setattr(ad.shutil, "which", lambda name: "/usr/bin/" + name)
+
+    async def fake_broadcast(ev):
+        pass
+
+    async def fake_create(*args, **kwargs):
+        return _FakeProc([b'{"type":"result","total_cost_usd":0.10}\n', b""], pid=4242)
+
+    monkeypatch.setattr(runner.asyncio, "create_subprocess_exec", fake_create)
+    monkeypatch.setattr(runner.state, "broadcast", fake_broadcast)
+
+    # A delegated code task (delegate flag set in params).
+    await db.add_task(
+        "inst_personal", "implementar_feature", "repo_X",
+        params={"delegate": True, "prompt": "añade un endpoint"},
+    )
+
+    summary = await step.step("inst_personal")
+    assert summary["triggers"] == 1
+    assert summary["delegated"] == 1
+    assert summary["judged"] == 0
+    assert summary["actions"] == 0
+
+    # An episode notes the delegation + the PID, and a running job row exists.
+    ep = (await db.load_recent_episodes("inst_personal"))[0]
+    assert ep["decision"].startswith("delegate:")
+    assert "delegado a opencode" in ep["resultado"]
+    assert "PID 4242" in ep["resultado"]
+
+    jobs = await _jobs(db)
+    assert len(jobs) == 1
+    assert jobs[0]["harness"] == "opencode"
+    assert jobs[0]["estado"] == "running"
+
+    # The task is marked done (the delegation happened — the job is tracked apart).
+    assert await db.load_pending_tasks("inst_personal") == []
+
+    # Next tick supervises: the finished job is reaped to done with its cost.
+    job_id = jobs[0]["id"]
+    await runner._JOBS[job_id].task  # let the stream finish
+    summary2 = await step.step("inst_personal")
+    assert summary2.get("reaped") == 1
+    jobs2 = await _jobs(db)
+    assert jobs2[0]["estado"] == "done"
+    assert jobs2[0]["costo_usd"] == pytest.approx(0.10)
+    runner._JOBS.clear()
+
+
+@pytest.mark.asyncio
+async def test_step_delegate_unavailable_harness_degrades_to_error_job(tmp_path, monkeypatch):
+    db = await _init(tmp_path, monkeypatch)
+    from lhassa.core import step
+    from lhassa.harness import adapter as ad
+    from lhassa.harness import runner
+
+    runner._JOBS.clear()
+    # No CLI installed → pick_harness still honors an override, launch records error.
+    monkeypatch.setattr(ad.shutil, "which", lambda name: None)
+    monkeypatch.setenv("LHASSA_HARNESS", "claude")
+
+    async def fake_broadcast(ev):
+        pass
+
+    async def fake_create(*args, **kwargs):
+        raise AssertionError("no subprocess for an absent CLI")
+
+    monkeypatch.setattr(runner.asyncio, "create_subprocess_exec", fake_create)
+    monkeypatch.setattr(runner.state, "broadcast", fake_broadcast)
+
+    await db.add_task("inst_personal", "build_thing", "x", params={"delegate": True})
+
+    summary = await step.step("inst_personal")  # must not raise
+    assert summary["delegated"] == 1
+
+    jobs = await _jobs(db)
+    assert len(jobs) == 1
+    assert jobs[0]["harness"] == "claude"
+    assert jobs[0]["estado"].startswith("error")
+    runner._JOBS.clear()
+
+
+async def _jobs(db):
+    import aiosqlite
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        async with conn.execute("SELECT * FROM jobs ORDER BY creado_en") as cur:
+            return [dict(r) for r in await cur.fetchall()]
+
+
 # ── watchlist.check ──────────────────────────────────────────────────────────────
 
 @pytest.mark.asyncio
