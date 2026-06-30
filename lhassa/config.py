@@ -343,6 +343,16 @@ class Config:
     # ── GitHub (optional) ─────────────────────────────────────────────────────
     github_token: str = os.getenv("GITHUB_TOKEN", "")
 
+    # ── Tool versioning (§2.8 — "versionado/rollback gratis") ─────────────────
+    # Local git repo holding auto-created tools. Each candidate tool is committed
+    # on a ``candidate/<name>`` branch; "aprobación = merge" merges it into main;
+    # rollback is a git revert. Offline-first: this is a plain local repo. When
+    # ``github_token`` is set the versioning layer ALSO pushes the branch and opens
+    # a PR (the remote path) — but never requires a token to work locally.
+    tools_repo_dir: str = os.getenv(
+        "LHASSA_TOOLS_REPO_DIR", str(Path.home() / ".lhassa" / "tools")
+    )
+
     # ── Tool guardrails ───────────────────────────────────────────────────────
     # If true, reject obviously destructive shell commands unless explicitly
     # opted out via LHASSA_ALLOW_DESTRUCTIVE_SHELL=1.

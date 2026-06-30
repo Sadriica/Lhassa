@@ -8,6 +8,7 @@ import HistoryPanel from './components/HistoryPanel'
 import ScheduledPanel from './components/ScheduledPanel'
 import AuditPanel from './components/AuditPanel'
 import ApprovalQueuePanel from './components/ApprovalQueuePanel'
+import QuarantinePanel from './components/QuarantinePanel'
 import HealthPanel from './components/HealthPanel'
 import ErrorBoundary from './components/ErrorBoundary'
 import './index.css'
@@ -140,6 +141,7 @@ export default function App() {
         {/* Right column: metrics, memory, schedule */}
         <div className="space-y-4">
           <ErrorBoundary><ApprovalQueuePanel /></ErrorBoundary>
+          <ErrorBoundary><QuarantinePanel /></ErrorBoundary>
           <ErrorBoundary><HealthPanel /></ErrorBoundary>
           <ErrorBoundary><MetricsPanel metrics={metrics} /></ErrorBoundary>
           <ErrorBoundary><AIUsagePanel metrics={metrics} /></ErrorBoundary>
