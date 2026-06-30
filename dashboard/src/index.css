@@ -1,53 +1,146 @@
 @import "tailwindcss";
 
-/* ── Design tokens ────────────────────────────────────────────────────────────
-   Warp/Oz-inspired dark theme. One place to retheme the whole dashboard:
-   deep near-black canvas, thin low-opacity borders, soft rounded surfaces, a
-   single teal accent used sparingly, semantic colors for ok/warn/alert.        */
+/* ── The Lhasa palette ─────────────────────────────────────────────────────────
+   A high-craft, warm dark theme drawn from the city of Lhasa: temple GOLD (the
+   brand), monk-robe deep RED (a sparing accent — never a harsh bright red),
+   snow-white WHITE walls for the body, sage GREEN for "good / healthy", muted
+   STONE for secondary text. Surfaces are warm near-blacks (no pure black, no cold
+   grays); borders are hairline warm-white. Everything themeable from :root +
+   @theme — a future light/alt theme is a token swap.                              */
 :root {
-  /* canvas + surfaces */
-  --lh-bg:          #0c0c0e;
-  --lh-surface:     #111317;
-  --lh-surface-2:   #16181d;
-  --lh-surface-3:   #1c1f26;
-  /* borders (thin, low opacity) */
-  --lh-border:      rgba(255, 255, 255, 0.08);
-  --lh-border-strong: rgba(255, 255, 255, 0.14);
-  /* text */
-  --lh-text:        #e6e8ec;
-  --lh-text-muted:  #9aa0aa;
-  --lh-text-faint:  #6b7280;
-  /* accent (teal) + semantic */
-  --lh-accent:      #2dd4bf;
-  --lh-accent-dim:  rgba(45, 212, 191, 0.14);
-  --lh-accent-text: #5eead4;
-  --lh-ok:          #34d399;
-  --lh-warn:        #fbbf24;
-  --lh-alert:       #f87171;
-  /* shape + shadow */
-  --lh-radius:      10px;
-  --lh-radius-sm:   7px;
-  --lh-shadow:      0 1px 2px rgba(0,0,0,0.4), 0 8px 24px rgba(0,0,0,0.28);
-  /* fonts */
+  /* ── the five palette roles (match lhassa/cli/theme.py) ─────────────────────── */
+  --lh-gold:        #d9a521;  /* temple gold — primary / brand / active / focus    */
+  --lh-gold-soft:   #e8bf55;  /* lifted gold — hover text / light accents          */
+  --lh-gold-deep:   #b9881a;  /* pressed gold                                       */
+  --lh-red:         #a23e34;  /* monk-robe deep red — accent, used sparingly        */
+  --lh-red-soft:    #c0584c;  /* lifted red — destructive text                      */
+  --lh-white:       #ece4d3;  /* warm snow-white — primary text                     */
+  --lh-green:       #7c9a5b;  /* sage — success / good cost / healthy               */
+  --lh-stone:       #8a8276;  /* muted stone — secondary / dim text                 */
+
+  /* ── canvas + warm-neutral surfaces (lifted, never pure black) ──────────────── */
+  --lh-bg:          #15120d;  /* warm near-black canvas                             */
+  --lh-bg-2:        #100e09;  /* recessed wells (inputs, canvas)                    */
+  --lh-surface:     #1c1813;  /* card                                               */
+  --lh-surface-2:   #221d16;  /* inset row / lifted surface                         */
+  --lh-surface-3:   #2a241b;  /* tags / pressed                                     */
+
+  /* ── hairline borders in warm-white at ~6–9% ───────────────────────────────── */
+  --lh-border:        rgba(236, 228, 211, 0.07);
+  --lh-border-strong: rgba(236, 228, 211, 0.14);
+  --lh-hairline:      rgba(236, 228, 211, 0.06);
+  --lh-highlight:     rgba(236, 228, 211, 0.05); /* faint inner-top highlight       */
+
+  /* ── text scale ─────────────────────────────────────────────────────────────── */
+  --lh-text:        #ece4d3;
+  --lh-text-muted:  #a59d8e;  /* light stone                                        */
+  --lh-text-faint:  #756d60;  /* faint stone                                        */
+
+  /* ── accent (GOLD) + semantic (green/gold/red) ──────────────────────────────── */
+  --lh-accent:      var(--lh-gold);
+  --lh-accent-dim:  rgba(217, 165, 33, 0.13);
+  --lh-accent-text: var(--lh-gold-soft);
+  --lh-accent-on:   #1c1206;   /* text on a solid-gold button                       */
+  --lh-ok:          var(--lh-green);
+  --lh-warn:        var(--lh-gold);
+  --lh-alert:       var(--lh-red-soft);
+
+  /* ── focus ring (gold) ──────────────────────────────────────────────────────── */
+  --lh-ring:        0 0 0 2px var(--lh-bg), 0 0 0 4px rgba(217, 165, 33, 0.55);
+
+  /* ── shape + soft warm shadows ──────────────────────────────────────────────── */
+  --lh-radius:      12px;
+  --lh-radius-sm:   8px;
+  --lh-radius-lg:   14px;
+  --lh-shadow:      0 1px 2px rgba(0,0,0,0.45), 0 10px 30px rgba(0,0,0,0.30);
+  --lh-shadow-sm:   0 1px 2px rgba(0,0,0,0.4);
+  --lh-glow-gold:   0 0 22px rgba(217, 165, 33, 0.16);
+
+  /* ── gradients (subtle, for chrome + primary buttons) ───────────────────────── */
+  --lh-grad-top:    linear-gradient(180deg, #211c14 0%, #1a1610 100%);
+  --lh-grad-gold:   linear-gradient(180deg, #e4b53a 0%, #d9a521 55%, #c79518 100%);
+
+  /* ── fonts ──────────────────────────────────────────────────────────────────── */
   --lh-font-sans:   "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  --lh-font-mono:   ui-monospace, "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace;
+  --lh-font-mono:   "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+
+/* ── Tailwind v4 palette remap ─────────────────────────────────────────────────
+   The panels are sprinkled with Tailwind named-color utilities (slate/amber/green/
+   red/blue…). Remapping the scale variables here folds the WHOLE app into the warm
+   Lhasa family with zero JSX/logic changes — neutrals → warm stone, amber/yellow →
+   gold, green/emerald/lime → sage, red/rose → monk-red, cool blues → gold.         */
+@theme {
+  --font-sans: var(--lh-font-sans);
+  --font-mono: var(--lh-font-mono);
+
+  /* warm neutrals (slate/gray/zinc/neutral) */
+  --color-slate-200: #ece4d3;  --color-gray-200: #ece4d3;  --color-zinc-200: #ece4d3;  --color-neutral-200: #ece4d3;
+  --color-slate-300: #d8cfbe;  --color-gray-300: #d8cfbe;  --color-zinc-300: #d8cfbe;  --color-neutral-300: #d8cfbe;
+  --color-slate-400: #a59d8e;  --color-gray-400: #a59d8e;  --color-zinc-400: #a59d8e;  --color-neutral-400: #a59d8e;
+  --color-slate-500: #8a8276;  --color-gray-500: #8a8276;  --color-zinc-500: #8a8276;  --color-neutral-500: #8a8276;
+  --color-slate-600: #756d60;  --color-gray-600: #756d60;  --color-zinc-600: #756d60;  --color-neutral-600: #756d60;
+  --color-slate-700: #2a241b;  --color-gray-700: #2a241b;  --color-zinc-700: #2a241b;  --color-neutral-700: #2a241b;
+  --color-slate-800: #221d16;  --color-gray-800: #221d16;  --color-zinc-800: #221d16;  --color-neutral-800: #221d16;
+  --color-slate-900: #1c1813;  --color-gray-900: #1c1813;  --color-zinc-900: #1c1813;  --color-neutral-900: #1c1813;
+
+  /* gold family (amber / yellow / orange) */
+  --color-amber-300: #e8bf55;  --color-yellow-300: #e8bf55;  --color-orange-300: #e8bf55;
+  --color-amber-400: #d9a521;  --color-yellow-400: #d9a521;  --color-orange-400: #d9a521;
+  --color-amber-500: #d9a521;  --color-yellow-500: #d9a521;  --color-orange-500: #d9a521;
+  --color-amber-600: #b9881a;  --color-yellow-600: #b9881a;  --color-orange-600: #b9881a;
+  --color-amber-700: #5a4410;  --color-yellow-700: #5a4410;  --color-orange-700: #5a4410;
+  --color-amber-900: #2a2008;  --color-yellow-900: #2a2008;  --color-orange-900: #2a2008;
+
+  /* sage family (green / emerald / lime / teal) */
+  --color-green-300: #9fb87f;  --color-emerald-300: #9fb87f;  --color-lime-300: #9fb87f;  --color-teal-300: #9fb87f;
+  --color-green-400: #7c9a5b;  --color-emerald-400: #7c9a5b;  --color-lime-400: #7c9a5b;  --color-teal-400: #7c9a5b;
+  --color-green-500: #7c9a5b;  --color-emerald-500: #7c9a5b;  --color-lime-500: #7c9a5b;  --color-teal-500: #7c9a5b;
+  --color-green-600: #647d49;  --color-emerald-600: #647d49;  --color-lime-600: #647d49;  --color-teal-600: #647d49;
+  --color-green-700: #2f3a22;  --color-emerald-700: #2f3a22;  --color-lime-700: #2f3a22;  --color-teal-700: #2f3a22;
+  --color-green-900: #18200f;  --color-emerald-900: #18200f;  --color-lime-900: #18200f;  --color-teal-900: #18200f;
+
+  /* monk-red family (red / rose) */
+  --color-red-300: #c97a6f;  --color-rose-300: #c97a6f;
+  --color-red-400: #c0584c;  --color-rose-400: #c0584c;
+  --color-red-500: #a23e34;  --color-rose-500: #a23e34;
+  --color-red-600: #8c352c;  --color-rose-600: #8c352c;
+  --color-red-700: #5a241d;  --color-rose-700: #5a241d;
+  --color-red-800: #43201a;  --color-rose-800: #43201a;
+  --color-red-900: #2a1512;  --color-rose-900: #2a1512;
+  --color-red-950: #1f0f0d;  --color-rose-950: #1f0f0d;
+
+  /* cool blues have no place in a warm Tibetan palette → fold into gold (active/info) */
+  --color-blue-300: #e8bf55;  --color-cyan-300: #e8bf55;  --color-sky-300: #e8bf55;  --color-indigo-300: #e8bf55;
+  --color-blue-400: #d9a521;  --color-cyan-400: #d9a521;  --color-sky-400: #d9a521;  --color-indigo-400: #d9a521;
+  --color-blue-500: #d9a521;  --color-cyan-500: #d9a521;  --color-sky-500: #d9a521;  --color-indigo-500: #d9a521;
 }
 
 html, body {
   margin: 0;
-  background: var(--lh-bg);
+  background:
+    radial-gradient(1200px 600px at 80% -10%, rgba(217,165,33,0.05), transparent 60%),
+    var(--lh-bg);
   color: var(--lh-text);
   font-family: var(--lh-font-sans);
+  font-feature-settings: "cv11", "ss01";
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 #root { min-height: 100vh; }
 
+/* Refined focus ring (gold) for keyboard users across all interactive chrome */
+:where(button, a, input, select, textarea, [tabindex]):focus-visible {
+  outline: none;
+  box-shadow: var(--lh-ring);
+}
+
 /* Scrollbar styling */
-::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar { width: 7px; height: 7px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--lh-border-strong); border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.22); }
+::-webkit-scrollbar-thumb { background: var(--lh-border-strong); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(217,165,33,0.4); }
 
 /* Streaming text animation (kept from the original UX) */
 @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
@@ -59,33 +152,59 @@ html, body {
 }
 
 @layer components {
-  /* Card — the Warp "block". Replaces the old slate card across every panel. */
+  /* ── Card — the elegant "block". Hairline border, soft layered shadow, a faint
+     inner-top highlight so it reads lifted, not flat. ──────────────────────────── */
   .lh-card {
-    background: var(--lh-surface);
+    position: relative;
+    background:
+      linear-gradient(180deg, var(--lh-highlight), transparent 56px),
+      var(--lh-surface);
     border: 1px solid var(--lh-border);
     border-radius: var(--lh-radius);
-    padding: 1rem;
+    padding: 1.1rem;
     box-shadow: var(--lh-shadow);
   }
 
+  /* Refined card header with a hairline divider underneath. */
   .lh-card-title {
     font-size: 0.6875rem;
     font-weight: 600;
-    letter-spacing: 0.08em;
+    letter-spacing: 0.14em;
     text-transform: uppercase;
     color: var(--lh-text-muted);
   }
+  /* Optional: section header that sits over a hairline rule */
+  .lh-card-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding-bottom: 0.7rem;
+    margin-bottom: 0.9rem;
+    border-bottom: 1px solid var(--lh-hairline);
+  }
+
+  /* Uppercase tracked section label (the Oz "USE CASES" look) */
+  .lh-eyebrow {
+    font-size: 0.625rem;
+    font-weight: 600;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--lh-text-faint);
+  }
 
   /* Mono data treatment */
-  .lh-mono { font-family: var(--lh-font-mono); }
+  .lh-mono { font-family: var(--lh-font-mono); font-feature-settings: "zero", "ss01"; }
 
   /* Inset sub-card (rows inside a block) */
   .lh-row {
     background: var(--lh-surface-2);
     border: 1px solid var(--lh-border);
     border-radius: var(--lh-radius-sm);
-    padding: 0.625rem 0.75rem;
+    padding: 0.7rem 0.8rem;
+    transition: border-color 0.15s ease, background 0.15s ease;
   }
+  .lh-row:hover { border-color: var(--lh-border-strong); }
 
   /* Tags (skills) + badges (limits) */
   .lh-tag {
@@ -100,7 +219,7 @@ html, body {
     color: var(--lh-text-muted);
   }
   .lh-tag-accent {
-    border-color: rgba(45, 212, 191, 0.4);
+    border-color: rgba(217, 165, 33, 0.42);
     background: var(--lh-accent-dim);
     color: var(--lh-accent-text);
   }
@@ -123,17 +242,17 @@ html, body {
     align-items: center;
     gap: 0.4rem;
     font-size: 0.75rem;
-    padding: 0.2rem 0.6rem;
+    padding: 0.24rem 0.62rem;
     border-radius: 999px;
     border: 1px solid var(--lh-border);
     background: var(--lh-surface-2);
     color: var(--lh-text-muted);
   }
   .lh-dot { width: 7px; height: 7px; border-radius: 999px; background: var(--lh-text-faint); }
-  .lh-dot-ok    { background: var(--lh-ok); }
-  .lh-dot-accent{ background: var(--lh-accent); }
+  .lh-dot-ok    { background: var(--lh-ok);    box-shadow: 0 0 8px rgba(124,154,91,0.6); }
+  .lh-dot-accent{ background: var(--lh-gold);  box-shadow: 0 0 8px rgba(217,165,33,0.6); }
   .lh-dot-warn  { background: var(--lh-warn); }
-  .lh-dot-alert { background: var(--lh-alert); }
+  .lh-dot-alert { background: var(--lh-alert); box-shadow: 0 0 8px rgba(162,62,52,0.55); }
 
   /* Buttons */
   .lh-btn {
@@ -142,71 +261,100 @@ html, body {
     gap: 0.35rem;
     font-size: 0.75rem;
     font-weight: 500;
-    padding: 0.35rem 0.7rem;
+    padding: 0.4rem 0.75rem;
     border-radius: var(--lh-radius-sm);
     border: 1px solid var(--lh-border-strong);
     background: var(--lh-surface-2);
     color: var(--lh-text);
     cursor: pointer;
-    transition: background 0.12s ease, border-color 0.12s ease;
+    transition: background 0.14s ease, border-color 0.14s ease, transform 0.06s ease;
   }
   .lh-btn:hover { background: var(--lh-surface-3); border-color: var(--lh-border-strong); }
-  .lh-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .lh-btn:active { transform: translateY(0.5px); }
+  .lh-btn:disabled { opacity: 0.45; cursor: not-allowed; }
   .lh-btn-primary {
-    background: var(--lh-accent);
-    border-color: var(--lh-accent);
-    color: #04221d;
+    background: var(--lh-grad-gold);
+    border-color: var(--lh-gold-deep);
+    color: var(--lh-accent-on);
     font-weight: 600;
+    box-shadow: 0 1px 0 rgba(255,255,255,0.18) inset, 0 6px 16px rgba(217,165,33,0.18);
   }
-  .lh-btn-primary:hover { background: var(--lh-accent-text); border-color: var(--lh-accent-text); }
+  .lh-btn-primary:hover { filter: brightness(1.06); }
   .lh-btn-danger {
-    background: rgba(248, 113, 113, 0.12);
-    border-color: rgba(248, 113, 113, 0.4);
-    color: var(--lh-alert);
+    background: rgba(162, 62, 52, 0.14);
+    border-color: rgba(162, 62, 52, 0.5);
+    color: var(--lh-red-soft);
   }
-  .lh-btn-danger:hover { background: rgba(248, 113, 113, 0.2); }
+  .lh-btn-danger:hover { background: rgba(162, 62, 52, 0.24); }
 
   /* Form controls */
   .lh-input, .lh-select {
     width: 100%;
     font-size: 0.8125rem;
     font-family: var(--lh-font-mono);
-    padding: 0.4rem 0.6rem;
+    padding: 0.45rem 0.65rem;
     border-radius: var(--lh-radius-sm);
     border: 1px solid var(--lh-border);
-    background: var(--lh-bg);
+    background: var(--lh-bg-2);
     color: var(--lh-text);
     outline: none;
+    transition: border-color 0.14s ease, box-shadow 0.14s ease;
   }
-  .lh-input:focus, .lh-select:focus { border-color: var(--lh-accent); }
+  .lh-input::placeholder { color: var(--lh-text-faint); }
+  .lh-input:focus, .lh-select:focus {
+    border-color: rgba(217, 165, 33, 0.55);
+    box-shadow: 0 0 0 3px rgba(217, 165, 33, 0.12);
+  }
   .lh-label {
     font-size: 0.6875rem;
     text-transform: uppercase;
-    letter-spacing: 0.06em;
+    letter-spacing: 0.1em;
     color: var(--lh-text-faint);
   }
 
-  /* Sidebar nav items */
+  /* ── Dual-rail nav item: an icon-led row with a gold left-bar active indicator
+     + a faint gold glow when active. Smooth transitions on hover/active. ───────── */
   .lh-nav-item {
+    position: relative;
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: 0.5rem;
+    gap: 0.6rem;
     width: 100%;
     text-align: left;
     font-size: 0.8125rem;
-    padding: 0.5rem 0.7rem;
+    font-weight: 500;
+    padding: 0.55rem 0.7rem 0.55rem 0.85rem;
     border-radius: var(--lh-radius-sm);
     border: 1px solid transparent;
     color: var(--lh-text-muted);
     background: transparent;
     cursor: pointer;
-    transition: background 0.12s ease, color 0.12s ease;
+    transition: background 0.14s ease, color 0.14s ease, border-color 0.14s ease;
+  }
+  /* the left indicator bar (hidden until hover/active) */
+  .lh-nav-item::before {
+    content: "";
+    position: absolute;
+    left: 3px; top: 50%;
+    height: 0; width: 3px;
+    border-radius: 3px;
+    background: var(--lh-gold);
+    transform: translateY(-50%);
+    transition: height 0.18s ease;
   }
   .lh-nav-item:hover { background: var(--lh-surface-2); color: var(--lh-text); }
+  .lh-nav-item:hover::before { height: 40%; opacity: 0.5; }
   .lh-nav-item.active {
     background: var(--lh-accent-dim);
-    border-color: rgba(45, 212, 191, 0.35);
+    border-color: rgba(217, 165, 33, 0.28);
     color: var(--lh-accent-text);
+    box-shadow: var(--lh-glow-gold);
   }
+  .lh-nav-item.active::before { height: 58%; opacity: 1; }
+  .lh-nav-item .lh-nav-icon {
+    width: 16px; height: 16px;
+    flex-shrink: 0;
+    opacity: 0.85;
+  }
+  .lh-nav-item.active .lh-nav-icon { opacity: 1; }
 }

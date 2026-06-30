@@ -19,7 +19,25 @@ import './index.css'
 
 const WS_URL = `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}/ws`
 
-// Sidebar sections (Warp/Oz "blocks" navigation). Brains is the primary section.
+// Minimal stroked line icons for the nav rail (warm, calm, one family).
+const Icon = ({ d, fill }) => (
+  <svg className="lh-nav-icon" viewBox="0 0 24 24" fill="none"
+    stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"
+    aria-hidden="true">
+    {fill ? <path d={d} fill="currentColor" stroke="none" /> : <path d={d} />}
+  </svg>
+)
+const ICONS = {
+  brains:    'M12 3a4 4 0 0 0-4 4 3 3 0 0 0-1 5.8V17a3 3 0 0 0 5 2 3 3 0 0 0 5-2v-4.2A3 3 0 0 0 16 7a4 4 0 0 0-4-4Z',
+  skills:    'M12 2 4 6v6c0 5 3.5 8 8 10 4.5-2 8-5 8-10V6l-8-4Z',
+  approvals: 'M9 12.5 11 14.5 15.5 10 M12 3 4 6v6c0 5 3.5 8 8 10 4.5-2 8-5 8-10V6l-8-3Z',
+  tools:     'M14.7 6.3a4 4 0 0 0-5.2 5.2L3 18l3 3 6.5-6.5a4 4 0 0 0 5.2-5.2l-2.6 2.6-2.5-2.5 2.6-2.6Z',
+  reports:   'M5 19V5 M5 19h14 M9 16v-5 M13 16V8 M17 16v-3',
+  fleet:     'M4 7h16 M4 12h16 M4 17h16 M7 7v10 M13 7v10',
+  activity:  'M3 12h4l3 8 4-16 3 8h4',
+}
+
+// Sidebar sections — the brain's command surfaces. Brains is the primary section.
 const SECTIONS = [
   { id: 'brains', label: 'Brains' },
   { id: 'skills', label: 'Skills' },
@@ -148,19 +166,27 @@ export default function App() {
       <StatusBar connected={connected} voiceActive={voiceActive} />
 
       <div className="flex flex-col lg:flex-row gap-4">
-        {/* Sidebar nav */}
-        <nav className="lg:w-48 lg:shrink-0">
-          <div className="flex lg:flex-col gap-1 flex-row flex-wrap">
-            {SECTIONS.map((s) => (
-              <button
-                key={s.id}
-                type="button"
-                onClick={() => setSection(s.id)}
-                className={`lh-nav-item ${section === s.id ? 'active' : ''}`}
-              >
-                <span>{s.label}</span>
-              </button>
-            ))}
+        {/* Sidebar nav — a slim, elegant rail with icon + section label */}
+        <nav className="lg:w-52 lg:shrink-0">
+          <div
+            className="lg:sticky lg:top-4 p-2 rounded-[12px]"
+            style={{ background: 'var(--lh-surface)', border: '1px solid var(--lh-border)', boxShadow: 'var(--lh-shadow-sm)' }}
+          >
+            <div className="lh-eyebrow px-2 pt-1.5 pb-2 hidden lg:block">Sections</div>
+            <div className="flex lg:flex-col gap-1 flex-row flex-wrap">
+              {SECTIONS.map((s) => (
+                <button
+                  key={s.id}
+                  type="button"
+                  onClick={() => setSection(s.id)}
+                  className={`lh-nav-item ${section === s.id ? 'active' : ''}`}
+                  aria-current={section === s.id ? 'page' : undefined}
+                >
+                  <Icon d={ICONS[s.id]} />
+                  <span>{s.label}</span>
+                </button>
+              ))}
+            </div>
           </div>
         </nav>
 

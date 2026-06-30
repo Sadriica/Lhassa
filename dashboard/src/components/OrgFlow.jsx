@@ -14,8 +14,9 @@ import '@xyflow/react/dist/style.css'
 
 // n8n-style org FLOW editor. Renders the org chart as a node graph: brains are
 // custom nodes, parent→child command links are edges. Lhassa (the admin / root)
-// is visually special and anchored — a teal ring/glow, pinned at the top, with no
-// drag-out handle (it can't be re-parented or deleted). Layout is a tidy layered
+// is visually special and anchored — the sovereign: a gold fill with a thin deep-red
+// ring and soft glow, pinned at the top, with no drag-out handle (it can't be
+// re-parented or deleted). Layout is a tidy layered
 // top-down tree computed from depth; no heavy layout dep.
 //
 // Interactions wired back to BrainsPanel (which owns the API calls):
@@ -78,27 +79,30 @@ function BrainFlowNode({ data }) {
   const limits = node.limits || {}
   const limitKeys = Object.keys(limits)
 
-  const borderColor = selected
-    ? 'rgba(45,212,191,0.7)'
-    : isRouteLeaf
-      ? 'rgba(251,191,36,0.7)'
-      : inRoute
-        ? 'rgba(251,191,36,0.45)'
-        : isAdmin
-          ? 'rgba(45,212,191,0.55)'
+  // The admin (Lhassa) is the sovereign — deep-red ring over a gold-tinted fill.
+  const borderColor = isAdmin
+    ? 'rgba(162,62,52,0.85)'
+    : selected
+      ? 'rgba(217,165,33,0.75)'
+      : isRouteLeaf
+        ? 'rgba(217,165,33,0.7)'
+        : inRoute
+          ? 'rgba(217,165,33,0.4)'
           : 'var(--lh-border-strong)'
 
   const glow = isAdmin
-    ? '0 0 0 1px rgba(45,212,191,0.5), 0 0 22px rgba(45,212,191,0.35)'
+    ? '0 0 0 1px rgba(162,62,52,0.7), 0 0 26px rgba(217,165,33,0.38), inset 0 1px 0 rgba(236,228,211,0.12)'
     : selected
-      ? '0 0 0 1px rgba(45,212,191,0.45)'
+      ? '0 0 0 1px rgba(217,165,33,0.5), 0 0 18px rgba(217,165,33,0.18)'
       : 'var(--lh-shadow)'
 
   return (
     <div
       style={{
         width: NODE_W,
-        background: isAdmin ? 'linear-gradient(180deg, rgba(45,212,191,0.10), var(--lh-surface))' : 'var(--lh-surface)',
+        background: isAdmin
+          ? 'linear-gradient(180deg, rgba(217,165,33,0.24), rgba(217,165,33,0.06) 60%, var(--lh-surface))'
+          : 'var(--lh-surface)',
         border: `1px solid ${borderColor}`,
         borderRadius: 'var(--lh-radius)',
         padding: '0.6rem 0.7rem',
@@ -117,10 +121,20 @@ function BrainFlowNode({ data }) {
           {node.id}
         </span>
         {isAdmin && (
-          <span className="lh-tag lh-tag-accent" title="Lhassa — commands everyone">◆ admin</span>
+          <span
+            className="lh-tag"
+            title="Lhassa — commands everyone"
+            style={{
+              borderColor: 'rgba(162,62,52,0.6)',
+              background: 'rgba(162,62,52,0.16)',
+              color: 'var(--lh-gold-soft)',
+            }}
+          >
+            ◆ admin
+          </span>
         )}
         {isRouteLeaf && (
-          <span className="lh-tag" style={{ borderColor: 'rgba(251,191,36,0.5)', color: 'var(--lh-warn)' }}>
+          <span className="lh-tag" style={{ borderColor: 'rgba(217,165,33,0.5)', color: 'var(--lh-warn)' }}>
             route target
           </span>
         )}
@@ -270,13 +284,14 @@ function FlowInner({ topology, selectedId, routePath, onSelect, onMove }) {
         proOptions={{ hideAttribution: true }}
         colorMode="dark"
       >
-        <Background color="rgba(255,255,255,0.06)" gap={22} />
+        <Background color="rgba(217,165,33,0.07)" gap={22} />
         <MiniMap
           pannable
           zoomable
           style={{ background: 'var(--lh-surface)', border: '1px solid var(--lh-border)' }}
-          maskColor="rgba(0,0,0,0.6)"
-          nodeColor={(n) => (n.data?.isAdmin ? 'var(--lh-accent)' : 'var(--lh-surface-3)')}
+          maskColor="rgba(16,14,9,0.66)"
+          nodeColor={(n) => (n.data?.isAdmin ? 'var(--lh-gold)' : 'var(--lh-surface-3)')}
+          nodeStrokeColor={(n) => (n.data?.isAdmin ? 'var(--lh-red)' : 'transparent')}
         />
         <Controls showInteractive={false} />
       </ReactFlow>

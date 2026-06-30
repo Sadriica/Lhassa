@@ -403,10 +403,10 @@ export default function SkillsPanel() {
       )}
 
       {error && (
-        <div className="lh-row mb-3" style={{ borderColor: 'rgba(248,113,113,0.4)', color: 'var(--lh-alert)' }}>{error}</div>
+        <div className="lh-row mb-3" style={{ borderColor: 'rgba(162,62,52,0.45)', color: 'var(--lh-alert)' }}>{error}</div>
       )}
       {notice && (
-        <div className="lh-row mb-3" style={{ borderColor: 'rgba(45,212,191,0.4)', color: 'var(--lh-accent-text)' }}>{notice}</div>
+        <div className="lh-row mb-3" style={{ borderColor: 'rgba(217,165,33,0.4)', color: 'var(--lh-accent-text)' }}>{notice}</div>
       )}
 
       {loading ? (
