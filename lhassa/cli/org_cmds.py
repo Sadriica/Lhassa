@@ -478,6 +478,58 @@ def skills_cmd(
     _out().print(table)
 
 
+# ── templates (use-case org presets) ───────────────────────────────────────────────
+
+
+def templates_cmd(
+    json_out: bool = typer.Option(False, "--json", help="Emit the catalog as JSON."),
+) -> None:
+    """List the use-case org templates (Code Review, Software Factory, …)."""
+    from lhassa.org import templates
+
+    catalog = templates.list_templates()
+    if json_out:
+        _dump_json(catalog)
+        return
+    from rich.table import Table
+
+    table = Table(title="Org templates")
+    for col in ("id", "name", "category", "brains", "description"):
+        table.add_column(col)
+    for t in catalog:
+        table.add_row(
+            str(t["id"]),
+            str(t["name"]),
+            str(t["category"]),
+            str(t["brain_count"]),
+            str(t["description"]),
+        )
+    _out().print(table)
+
+
+def apply_cmd(
+    template_id: str = typer.Argument(..., help="Template id (see `lhassa org templates`)."),
+    json_out: bool = typer.Option(False, "--json", help="Emit the updated chart as JSON."),
+) -> None:
+    """Apply a template — create its brains under Lhassa (idempotent)."""
+    from lhassa.org import templates
+
+    config = _config()
+    try:
+        result = templates.instantiate(template_id, config=config)
+    except ValueError as exc:
+        _err().print(f"Cannot apply template: {exc}", style="red")
+        raise typer.Exit(code=1)
+    if json_out:
+        _dump_json(result)
+        return
+    out = _out()
+    out.print(
+        f"Applied {template_id!r}: created {', '.join(result['created']) or '—'}"
+        + (f"; skipped {', '.join(result['skipped'])}" if result["skipped"] else "")
+    )
+
+
 # ── registration ──────────────────────────────────────────────────────────────────
 
 org_app.command("tree")(tree_cmd)
@@ -492,3 +544,5 @@ org_app.command("move")(move_cmd)
 org_app.command("promote")(promote_cmd)
 org_app.command("show")(show_cmd)
 org_app.command("skills")(skills_cmd)
+org_app.command("templates")(templates_cmd)
+org_app.command("apply")(apply_cmd)
