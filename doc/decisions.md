@@ -5,6 +5,35 @@ build. The source of truth for the architecture is `doc/lhassa-brief.md` (a
 living doc — correct it after each phase per §4). This file records the choices
 made along the way. Newest first.
 
+## 2026-06-29 — Phase 2 complete (economy + router)
+
+Decision: the user has the **opencode CLI but no Zen** → the first `ModelProvider`
+wraps the existing `.env` key via the gateway (`GatewayProvider`); `OpenCodeZenProvider`
+is a ready stub (swap-in when Zen creds exist, per invariant #3). opencode-as-harness
+is Phase 4.
+
+Built (3 slices, gates green):
+- **2.A** `ModelProvider` Protocol + `GatewayProvider`/`OpenCodeZenProvider`,
+  `llm/router.py` (two axes, `pick_provider`/`pick_model`, cascade cheap→verify→
+  escalate, `$think`/`$justdo`), and `core/step.py`'s judgment branch wired (load
+  context → router → provider; `BudgetExceeded`/`ProviderNotConfigured` degrade to a
+  deferred episode, no crash).
+- **2.B** gateway **kill-switch** (`KillSwitchActive` ⊂ `BudgetExceeded`, refuses
+  before any call) + persisted runtime budget override + `llm/ccusage.py` (defensive
+  `ccusage --json` parser/runner) + `/api/llm/limits` & `/api/llm/ccusage` + dashboard
+  controls (budget setter, kill-switch toggle, cross-harness breakdown).
+- **2.C** `memory/consolidate.py` **semantic consolidation** (cheap model via the
+  provider/gateway: cluster-summarize + detect contradictions; complements the
+  mechanical LRU; only touches the chica; threshold-driven).
+
+**DoD met:** routine routes to the cheap model; the ledger shows the split (real
+per-model pricing, tested); **crossing the cap stops** — verified live (kill-switch
+raises, provider called 0×). 321 tests, ruff clean, dashboard builds.
+
+**[SUPUESTO] to validate later:** ccusage JSON field names (marked in code); and the
+live "a day of heartbeats costs cents" smoke needs real cheap-model calls (deferred —
+won't spend without the owner's go). **Backlog:** swap to opencode Zen when available.
+
 ## 2026-06-29 — Phase 1 complete (memory)
 
 Built additively (old `memory/store.py` untouched), 2 slices, behind gates:
