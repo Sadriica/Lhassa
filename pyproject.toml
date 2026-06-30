@@ -24,6 +24,9 @@ dependencies = [
     # Microsoft Graph (Outlook email + calendar)
     "msal>=1.28.0",
     "psutil>=7.2.2",
+    # Integrations — Model Context Protocol (the official Python SDK).
+    # Imported lazily/defensively; the brain works with no MCP servers configured.
+    "mcp>=1.0.0",
     # Terminal CLI (lightweight — no voice deps)
     "typer>=0.12.0",
     "rich>=13.0.0",

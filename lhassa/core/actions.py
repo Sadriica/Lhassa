@@ -14,9 +14,10 @@ First typed action: ``sync_repo`` (``git pull --ff-only``), per §2.5 — a chec
 reconciliation step, not a push.
 """
 
+import inspect
 import subprocess
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Awaitable, Callable, Union
 
 
 # ── subprocess seam (mockable) ───────────────────────────────────────────────────
@@ -91,12 +92,145 @@ def sync_repo(params: dict) -> str:
     return f"sync_repo failed ({repo_dir}): {err}"
 
 
+async def tracking_postulaciones(params: dict) -> str:
+    """
+    Track job/internship applications (CVs sent) in the brain DB — the second
+    typed task (§2.5) and the first concrete MCP-backed one. Deterministic and
+    offline: all add/update/list work hits the local ``postulaciones`` table.
+
+    ``params``:
+        op / accion — "add" | "update" | "list" (default "list").
+        instance_id — isolation scope (default ``Config.instance_id``).
+        add:    empresa (required), rol, estado, fuente, link, notas.
+        update: id (required), estado (required), notas (optional).
+        list:   estado (optional filter).
+        mcp_pull / mcp_tool — OPTIONAL, guarded external top-up (see below).
+
+    Optional MCP pull (guarded): if ``mcp_pull`` (a sync/async callable returning
+    a list of ``{empresa, rol, estado, fuente, link, notas}`` dicts) is supplied,
+    or ``mcp_tool`` names a registered MCP tool, the action MAY pull updates from
+    an external source (email/sheet) and insert them before answering. The pull is
+    wrapped so a missing SDK / unreachable server NEVER breaks the deterministic
+    core — it just adds nothing. Tests inject ``mcp_pull`` to stay fully offline.
+
+    Returns a short summary string and NEVER raises.
+    """
+    from lhassa.config import Config
+    from lhassa.core import db
+
+    try:
+        if not isinstance(params, dict):
+            params = {}
+        instance_id = (params.get("instance_id") or Config.instance_id)
+        op = str(params.get("op") or params.get("accion") or "list").strip().lower()
+
+        # ── optional, guarded MCP top-up ──────────────────────────────────────
+        pulled = await _pull_postulaciones(instance_id, params)
+        pulled_note = f" (+{pulled} de MCP)" if pulled else ""
+
+        if op == "add":
+            empresa = str(params.get("empresa") or "").strip()
+            if not empresa:
+                return "tracking_postulaciones: 'empresa' is required to add"
+            pid = await db.add_postulacion(
+                instance_id,
+                empresa,
+                str(params.get("rol") or ""),
+                estado=str(params.get("estado") or "pendiente"),
+                fuente=str(params.get("fuente") or ""),
+                link=str(params.get("link") or ""),
+                notas=str(params.get("notas") or ""),
+            )
+            rol = params.get("rol")
+            rol_str = f" ({rol})" if rol else ""
+            return f"tracking_postulaciones: añadida {empresa}{rol_str} [{pid}]{pulled_note}"
+
+        if op == "update":
+            pid = str(params.get("id") or params.get("postulacion_id") or "").strip()
+            estado = str(params.get("estado") or "").strip()
+            if not pid or not estado:
+                return "tracking_postulaciones: 'id' and 'estado' are required to update"
+            notas = params.get("notas")
+            ok = await db.update_postulacion_estado(
+                instance_id, pid, estado,
+                notas=str(notas) if notas is not None else None,
+            )
+            if not ok:
+                return f"tracking_postulaciones: no encontrada {pid}{pulled_note}"
+            return f"tracking_postulaciones: {pid} → {estado}{pulled_note}"
+
+        # default: list
+        estado_filter = params.get("estado")
+        rows = await db.list_postulaciones(
+            instance_id,
+            estado=str(estado_filter) if estado_filter else None,
+        )
+        if not rows:
+            return f"tracking_postulaciones: 0 postulaciones{pulled_note}"
+        head = ", ".join(
+            f"{r['empresa']}{(' ' + r['rol']) if r['rol'] else ''}={r['estado']}"
+            for r in rows[:5]
+        )
+        more = f" …(+{len(rows) - 5})" if len(rows) > 5 else ""
+        return f"tracking_postulaciones: {len(rows)} postulaciones{pulled_note}: {head}{more}"
+    except Exception as exc:  # an action must NEVER raise
+        return f"tracking_postulaciones: error: {exc}"
+
+
+async def _pull_postulaciones(instance_id: str, params: dict) -> int:
+    """Guarded external top-up. Returns the count of rows inserted (0 if none).
+
+    Never raises: a missing/failing source contributes nothing. ``mcp_pull`` (an
+    injectable callable) takes precedence so tests stay offline; otherwise a named
+    ``mcp_tool`` is invoked via the MCP client if one is configured.
+    """
+    from lhassa.core import db
+
+    source = params.get("mcp_pull")
+    try:
+        if source is None:
+            tool_name = params.get("mcp_tool")
+            if not tool_name:
+                return 0
+            from lhassa.tools import mcp_client
+            items = await mcp_client.pull_postulaciones(
+                tool_name, params.get("mcp_args") or {}
+            )
+        else:
+            items = source() if callable(source) else source
+            if inspect.isawaitable(items):
+                items = await items
+        count = 0
+        for it in items or []:
+            if not isinstance(it, dict):
+                continue
+            empresa = str(it.get("empresa") or "").strip()
+            if not empresa:
+                continue
+            await db.add_postulacion(
+                instance_id,
+                empresa,
+                str(it.get("rol") or ""),
+                estado=str(it.get("estado") or "pendiente"),
+                fuente=str(it.get("fuente") or "mcp"),
+                link=str(it.get("link") or ""),
+                notas=str(it.get("notas") or ""),
+            )
+            count += 1
+        return count
+    except Exception:  # guarded: the deterministic core must survive any pull error
+        return 0
+
+
 # ── registry + dispatch ──────────────────────────────────────────────────────────
 
 # The CLOSED set of fixed deterministic actions (no LLM). Membership here is what
 # makes a Trigger "map to a fixed action". Grow this as new typed actions land.
-ACTIONS: dict[str, Callable[[dict], str]] = {
+# An action may be sync (``-> str``) or async (``-> Awaitable[str]``); ``run``
+# awaits the latter so DB-backed actions work without touching ``step()``.
+ACTIONS: dict[str, Callable[[dict], Union[str, Awaitable[str]]]] = {
     "sync_repo": sync_repo,
+    "tracking_postulaciones": tracking_postulaciones,
 }
 
 
@@ -105,6 +239,9 @@ async def run(action: str, params: dict, episode: Any = None) -> str:
     Dispatch ``action`` to the deterministic registry. Unknown action → safe
     error string (never raises). Attaches the action name to ``episode`` if one
     is supplied so observability reflects what ran. NO LLM is ever involved here.
+
+    Actions may be sync or async; a returned awaitable is awaited here so the
+    caller (``step()``) never changes shape.
     """
     if episode is not None:
         episode.accion = action
@@ -114,6 +251,9 @@ async def run(action: str, params: dict, episode: Any = None) -> str:
         return f"unknown action: {action!r}"
 
     try:
-        return fn(params or {})
+        result = fn(params or {})
+        if inspect.isawaitable(result):
+            result = await result
+        return result
     except Exception as exc:  # belt-and-suspenders: dispatch must never raise
         return f"action {action!r} errored: {exc}"

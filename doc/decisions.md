@@ -5,6 +5,31 @@ build. The source of truth for the architecture is `doc/lhassa-brief.md` (a
 living doc — correct it after each phase per §4). This file records the choices
 made along the way. Newest first.
 
+## 2026-06-29 — Phase 4 complete (hands: MCP + harnesses)
+
+Decisions: 2nd typed task = **`tracking_postulaciones`**; the owner has all three
+harnesses (opencode/Claude Code/Codex). Built (2 slices, gates green):
+- **4.A** `harness/adapter.py` (`HarnessAdapter` Protocol + `RunEvent` + stream-json/
+  plain parse; OpenCode/ClaudeCode/Codex adapters auto-detected via `which`; argv
+  flags marked `[SUPUESTO]`) + `harness/runner.py` (`launch` fire-and-forget records a
+  jobs row + PID, streams events, accrues cost; `supervise` reaps each tick) + router
+  `pick_harness` (cheapest available: free<metered<subscription; `LHASSA_HARNESS`
+  override) + `step` delegate branch (launch + episode notes harness/job/PID, no block).
+- **4.B** `tools/mcp_client.py` (`mcp==1.28.1`; loads `~/.config/lhassa/mcp.json`,
+  registers namespaced `mcp__<server>__<tool>` tools onto the LLM; defensive) +
+  `postulaciones` table + `tracking_postulaciones` deterministic action (offline core,
+  optional guarded MCP top-up) + `track_postulaciones` registry tool.
+
+**DoD met** (offline + live runner smoke): an MCP tool is invocable; the brain delegates
+to any of the three harnesses and supervises PID/cost live (a real subprocess launched,
+streamed, reaped to `done` with cost $0.0021); adding an integration is config, not code.
+421 tests, ruff clean.
+
+**Backlog:** cross-restart job supervision by PID-from-disk (the reaper uses the
+in-process registry — a launched-before-restart job isn't reaped after a brain restart);
+validate the adapter argv `[SUPUESTO]` flags with a live harness smoke (spends — owner's
+go); a real opencode/claude/codex delegation smoke is available on request.
+
 ## 2026-06-29 — Phase 3 complete (the arbiter)
 
 Built (2 slices, gates green):

@@ -203,6 +203,30 @@ async def init_db() -> None:
             ON facts(instance_id, tipo, pinned)
         """)
 
+        # postulaciones — the tracking_postulaciones typed task (§2.5): tracked
+        # job/internship applications (CVs sent). A small mutable workbook scoped
+        # to instance_id; ``estado`` advances as an application progresses. An
+        # external source (email/sheet via an MCP tool) MAY top it up, but the
+        # core stays deterministic and offline.
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS postulaciones (
+                id             TEXT PRIMARY KEY,
+                instance_id    TEXT NOT NULL,
+                empresa        TEXT,
+                rol            TEXT,
+                estado         TEXT NOT NULL DEFAULT 'pendiente',
+                fuente         TEXT,
+                link           TEXT,
+                notas          TEXT,
+                creado_en      TEXT NOT NULL,
+                actualizado_en TEXT NOT NULL
+            )
+        """)
+        await db.execute("""
+            CREATE INDEX IF NOT EXISTS postulaciones_by_instance
+            ON postulaciones(instance_id, estado)
+        """)
+
         await db.commit()
 
 
@@ -615,3 +639,86 @@ async def reset_autonomy_streak(instance_id: str, accion: str, actor_id: str) ->
             (instance_id, accion, actor_id, _now()),
         )
         await db.commit()
+
+
+# ── postulaciones (tracked applications — tracking_postulaciones task) ───────────
+
+async def add_postulacion(
+    instance_id: str,
+    empresa: str,
+    rol: str = "",
+    *,
+    estado: str = "pendiente",
+    fuente: str = "",
+    link: str = "",
+    notas: str = "",
+    postulacion_id: Optional[str] = None,
+) -> str:
+    """Insert one tracked application. Returns its id (generated if not supplied).
+
+    Scoped to ``instance_id`` (isolation from day one).
+    """
+    postulacion_id = postulacion_id or _new_id("post")
+    now = _now()
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            """INSERT INTO postulaciones(
+                   id, instance_id, empresa, rol, estado, fuente, link, notas,
+                   creado_en, actualizado_en)
+               VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                postulacion_id, instance_id, empresa, rol, estado, fuente, link,
+                notas, now, now,
+            ),
+        )
+        await db.commit()
+    return postulacion_id
+
+
+async def update_postulacion_estado(
+    instance_id: str,
+    postulacion_id: str,
+    estado: str,
+    *,
+    notas: Optional[str] = None,
+) -> bool:
+    """Advance one application's ``estado`` (and optionally append/replace notas).
+
+    Returns True if a row was updated, False if no such id under ``instance_id``.
+    Scoped to ``instance_id``.
+    """
+    sets = ["estado = ?", "actualizado_en = ?"]
+    args: list[Any] = [estado, _now()]
+    if notas is not None:
+        sets.append("notas = ?")
+        args.append(notas)
+    args.extend([instance_id, postulacion_id])
+    async with aiosqlite.connect(DB_PATH) as db:
+        cur = await db.execute(
+            f"UPDATE postulaciones SET {', '.join(sets)} "
+            "WHERE instance_id = ? AND id = ?",
+            args,
+        )
+        await db.commit()
+        return cur.rowcount > 0
+
+
+async def list_postulaciones(
+    instance_id: str,
+    *,
+    estado: Optional[str] = None,
+) -> list[dict]:
+    """Return tracked applications for ``instance_id`` (newest first).
+
+    Optionally filtered by ``estado``. Always scoped to ``instance_id``.
+    """
+    sql = "SELECT * FROM postulaciones WHERE instance_id = ?"
+    args: list[Any] = [instance_id]
+    if estado is not None:
+        sql += " AND estado = ?"
+        args.append(estado)
+    sql += " ORDER BY creado_en DESC, rowid DESC"
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(sql, args) as cur:
+            return [dict(row) for row in await cur.fetchall()]
