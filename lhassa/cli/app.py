@@ -19,13 +19,35 @@ import json
 import sys
 from typing import List, Optional
 
+import click
 import typer
 from rich.console import Console
 from rich.markdown import Markdown
+from typer.core import TyperGroup
 
 from lhassa.cli import agent
+from lhassa.cli import commands as _commands
 
-app = typer.Typer(add_completion=False)
+
+class _ChatDefaultGroup(TyperGroup):
+    """Route an unrecognized first token to the implicit ``chat`` command.
+
+    The CLI has power subcommands (tools/report/fleet/...) AND must keep its three
+    legacy input modes — ``lhassa "question"``, ``echo x | lhassa``, and bare REPL.
+    A plain Typer group would reject ``lhassa "free text"`` with "No such command".
+    Here, when the first token doesn't match a registered subcommand, we fall back
+    to the hidden ``chat`` command so the free-text prompt still works. (A prompt
+    whose first word IS a subcommand name should be quoted as one argument.)
+    """
+
+    def resolve_command(self, ctx, args):
+        try:
+            return super().resolve_command(ctx, args)
+        except click.exceptions.UsageError:
+            return super().resolve_command(ctx, ["chat", *args])
+
+
+app = typer.Typer(cls=_ChatDefaultGroup, add_completion=False, no_args_is_help=False)
 
 
 def _cost_line(result: "agent.CliResult") -> str:
@@ -105,22 +127,8 @@ def _repl() -> None:
     err.print("Bye.", style="dim")
 
 
-@app.command()
-def chat(
-    prompt: Optional[List[str]] = typer.Argument(
-        None,
-        metavar="[PROMPT]",
-        help="Prompt text. If omitted (and nothing is piped in), starts an interactive REPL.",
-    ),
-    json_out: bool = typer.Option(
-        False,
-        "--json",
-        help="Emit one JSON object {response, model, input_tokens, output_tokens, cost_usd} to stdout.",
-    ),
-) -> None:
-    """Ask Lhassa something from the terminal."""
-    prompt_text = " ".join(prompt).strip() if prompt else ""
-
+def _chat_entry(prompt_text: str, json_out: bool) -> None:
+    """The default behavior: one-shot (arg and/or piped stdin) or interactive REPL."""
     stdin_piped = not sys.stdin.isatty()
     stdin_text = sys.stdin.read() if stdin_piped else ""
 
@@ -140,6 +148,38 @@ def chat(
     err = Console(stderr=True)
     err.print("No prompt given. Pass text as an argument or pipe it via stdin.", style="red")
     raise typer.Exit(code=1)
+
+
+@app.callback(invoke_without_command=True)
+def _root(ctx: typer.Context) -> None:
+    """Lhassa — ask it something, or use a subcommand (tools, approvals, report,
+    memory, fleet). With no subcommand it reads a piped prompt or starts a REPL."""
+    if ctx.invoked_subcommand is not None:
+        return
+    # No subcommand: the legacy bare/piped behavior (REPL or stdin one-shot).
+    _chat_entry("", False)
+
+
+@app.command(hidden=True)
+def chat(
+    prompt: Optional[List[str]] = typer.Argument(
+        None,
+        metavar="[PROMPT]",
+        help="Prompt text. If omitted (and nothing is piped in), starts an interactive REPL.",
+    ),
+    json_out: bool = typer.Option(
+        False,
+        "--json",
+        help="Emit one JSON object {response, model, input_tokens, output_tokens, cost_usd} to stdout.",
+    ),
+) -> None:
+    """Ask Lhassa something from the terminal."""
+    prompt_text = " ".join(prompt).strip() if prompt else ""
+    _chat_entry(prompt_text, json_out)
+
+
+# Attach the power subcommands (tools/approvals/approve/deny/report/memory/fleet).
+_commands.register(app)
 
 
 def main() -> None:
