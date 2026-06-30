@@ -178,6 +178,13 @@ class Config:
     # Threshold at which the chica consolidates (mechanical LRU eviction of the
     # least-recently-used NON-pinned items down to this count). No tokens, no LLM.
     chica_max_items: int = _safe_int(os.getenv("LHASSA_CHICA_MAX_ITEMS", "200"), 200)
+    # Phase 2 — semantic consolidation (the cheap-LLM second pass on top of the
+    # mechanical LRU above). Default ON, but it only ever FIRES when the chica is
+    # over ``chica_max_items`` (threshold-driven, never on a clock). Set to 0 to
+    # disable the LLM pass entirely and keep only the mechanical LRU.
+    semantic_consolidation: bool = os.getenv(
+        "LHASSA_SEMANTIC_CONSOLIDATION", "1"
+    ).lower() in ("1", "true", "yes")
 
     # Incremental backup mirror of the grande (brain.db). Cheap to re-run; the
     # mirror is overwritten/rotated each time. Restorations are verified.
@@ -217,6 +224,13 @@ class Config:
     # Cache identical prompts so repeat questions never hit the cloud.
     llm_cache_enabled: bool = os.getenv("LHASSA_LLM_CACHE", "1").lower() in (
         "1", "true", "yes",
+    )
+    # Kill-switch — a hard manual stop, independent of the daily token budget.
+    # When on, the gateway refuses every cloud-LLM call before it reaches a
+    # provider. Default off; flip it at runtime from the dashboard. This is the
+    # boot default; gateway.set_kill_switch() overrides it for the live process.
+    llm_kill_switch: bool = os.getenv("LHASSA_KILL_SWITCH", "").lower() in (
+        "1", "true", "yes", "on",
     )
 
     # ── Router (§2.4) — two axes + cascade ────────────────────────────────────

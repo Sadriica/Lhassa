@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -34,6 +35,20 @@ if TYPE_CHECKING:
 
 # Default ledger location — mirrors lhassa.memory.store's ~/.lhassa layout.
 DEFAULT_DB_PATH = Path.home() / ".lhassa" / "llm_gateway.db"
+
+# Runtime cost limits that must survive a restart (the daily token budget set
+# from the dashboard). A tiny JSON next to the ledger DB. The kill-switch is
+# deliberately NOT persisted — it defaults from config (LHASSA_KILL_SWITCH) on
+# every boot so a hard stop is always an explicit, in-session decision.
+DEFAULT_LIMITS_PATH = Path.home() / ".lhassa" / "llm_limits.json"
+
+
+def _env_flag(name: str, default: bool = False) -> bool:
+    """Read a boolean env var (1/true/yes/on), returning default when unset."""
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in ("1", "true", "yes", "on")
 
 # Pricing in USD per 1M tokens, as (input_rate, output_rate). Matched by
 # substring against the model id, so dated suffixes (…-20251101) still resolve.
@@ -63,6 +78,13 @@ ToolCompletionFn = Callable[
 
 class BudgetExceeded(Exception):
     """Raised when today's output-token spend has reached the daily budget."""
+
+
+class KillSwitchActive(BudgetExceeded):
+    """Raised when the manual kill-switch is engaged — a hard stop, independent
+    of the daily token budget. Subclasses ``BudgetExceeded`` so existing degrade
+    paths that already catch a spent budget also catch a kill-switch halt.
+    """
 
 
 @dataclass
@@ -182,9 +204,82 @@ def _tools_cache_key(
 class LedgerGateway:
     """Cache + budget + cost ledger wrapper around a chat completion."""
 
-    def __init__(self, db_path: str | Path | None = None):
+    def __init__(
+        self,
+        db_path: str | Path | None = None,
+        *,
+        limits_path: str | Path | None = None,
+        kill_switch: bool | None = None,
+    ):
         self.db_path = Path(db_path) if db_path else DEFAULT_DB_PATH
+        self.limits_path = Path(limits_path) if limits_path else DEFAULT_LIMITS_PATH
         self._initialized = False
+        # Runtime daily-budget override (None → defer to config.llm_daily_token_budget).
+        self._budget_override: int | None = None
+        # Kill-switch: explicit arg wins, else the LHASSA_KILL_SWITCH boot default.
+        self._kill_switch: bool = (
+            _env_flag("LHASSA_KILL_SWITCH", False) if kill_switch is None else bool(kill_switch)
+        )
+        self._load_limits()
+
+    # ── Kill-switch (hard manual stop) ─────────────────────────────────────────
+
+    @property
+    def kill_switch(self) -> bool:
+        """Whether the manual kill-switch is currently engaged."""
+        return self._kill_switch
+
+    def set_kill_switch(self, value: bool) -> None:
+        """Engage or release the kill-switch for the live process."""
+        self._kill_switch = bool(value)
+        logger.warning(
+            f"LLM gateway: kill-switch {'ENGAGED — all cloud-LLM calls halted' if value else 'released'}"
+        )
+
+    def _assert_live(self) -> None:
+        """Refuse the call before any provider work when the kill-switch is on."""
+        if self._kill_switch:
+            logger.warning("LLM gateway: call refused — kill-switch is engaged")
+            raise KillSwitchActive(
+                "LLM kill-switch is engaged; all cloud-LLM calls are halted. "
+                "Release it from the dashboard to resume."
+            )
+
+    # ── Cost limits (runtime budget, persisted) ────────────────────────────────
+
+    def _load_limits(self) -> None:
+        """Load the persisted daily-budget override, if any. Never raises."""
+        try:
+            if self.limits_path.exists():
+                data = json.loads(self.limits_path.read_text())
+                if isinstance(data, dict):
+                    budget = data.get("daily_token_budget")
+                    if isinstance(budget, int) and not isinstance(budget, bool) and budget >= 0:
+                        self._budget_override = budget
+        except Exception:
+            pass
+
+    def _save_limits(self) -> None:
+        """Persist the daily-budget override next to the ledger DB. Never raises."""
+        try:
+            self.limits_path.parent.mkdir(parents=True, exist_ok=True)
+            self.limits_path.write_text(
+                json.dumps({"daily_token_budget": self._budget_override})
+            )
+        except Exception:
+            pass
+
+    def set_daily_token_budget(self, budget: int) -> None:
+        """Set (and persist) the runtime daily output-token budget. 0 = unlimited."""
+        self._budget_override = max(0, int(budget))
+        self._save_limits()
+        logger.info(f"LLM gateway: daily token budget set to {self._budget_override}")
+
+    def effective_daily_budget(self, config: "Config") -> int:
+        """The budget in force: the runtime override if set, else the config value."""
+        if self._budget_override is not None:
+            return self._budget_override
+        return config.llm_daily_token_budget
 
     # ── Schema ────────────────────────────────────────────────────────────────
 
@@ -460,6 +555,9 @@ class LedgerGateway:
 
             config = Config()
 
+        # ── Kill-switch: a hard manual stop, before cache, budget, or provider ──
+        self._assert_live()
+
         await self._ensure_db()
 
         model = model or config.model
@@ -485,7 +583,7 @@ class LedgerGateway:
                 return result
 
         # ── Budget ─────────────────────────────────────────────────────────────
-        budget = config.llm_daily_token_budget
+        budget = self.effective_daily_budget(config)
         if budget > 0:
             day = _today()
             spent = await self.daily_output_tokens(day)
@@ -582,6 +680,9 @@ class LedgerGateway:
 
             config = Config()
 
+        # ── Kill-switch: a hard manual stop, before cache, budget, or provider ──
+        self._assert_live()
+
         await self._ensure_db()
 
         model = model or config.model
@@ -622,7 +723,7 @@ class LedgerGateway:
                 )
 
         # ── Budget ─────────────────────────────────────────────────────────────
-        budget = config.llm_daily_token_budget
+        budget = self.effective_daily_budget(config)
         if budget > 0:
             day = _today()
             spent = await self.daily_output_tokens(day)

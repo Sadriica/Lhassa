@@ -111,12 +111,73 @@ async def get_llm_ledger():
     return {
         "totals": totals,
         "budget": {
-            "daily_token_budget": config.llm_daily_token_budget,
+            "daily_token_budget": gateway.effective_daily_budget(config),
             "output_tokens_today": output_tokens_today,
         },
+        "kill_switch": gateway.kill_switch,
         "cache_enabled": config.llm_cache_enabled,
         "recent": recent,
     }
+
+
+@app.get("/api/llm/limits")
+async def get_llm_limits():
+    """Current cost limits: the effective daily token budget, the kill-switch
+    state, and how many output tokens have been spent today (UTC)."""
+    from lhassa.llm.gateway import gateway
+
+    config = Config()
+    return {
+        "daily_token_budget": gateway.effective_daily_budget(config),
+        "kill_switch": gateway.kill_switch,
+        "output_tokens_today": await gateway.daily_output_tokens(),
+    }
+
+
+@app.post("/api/llm/limits")
+async def set_llm_limits(payload: dict):
+    """Update the runtime daily token budget and/or the kill-switch.
+
+    Body: ``{daily_token_budget?: int >= 0, kill_switch?: bool}``. The budget is
+    persisted so it survives a restart; the kill-switch is in-session. Returns the
+    same shape as ``GET /api/llm/limits``.
+    """
+    from lhassa.llm.gateway import gateway
+
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="limits payload must be a JSON object.")
+
+    if "daily_token_budget" in payload:
+        budget = payload["daily_token_budget"]
+        if isinstance(budget, bool) or not isinstance(budget, int) or budget < 0:
+            raise HTTPException(
+                status_code=400,
+                detail="daily_token_budget must be a non-negative integer (0 = unlimited).",
+            )
+        gateway.set_daily_token_budget(budget)
+
+    if "kill_switch" in payload:
+        kill_switch = payload["kill_switch"]
+        if not isinstance(kill_switch, bool):
+            raise HTTPException(status_code=400, detail="kill_switch must be a boolean.")
+        gateway.set_kill_switch(kill_switch)
+
+    config = Config()
+    return {
+        "daily_token_budget": gateway.effective_daily_budget(config),
+        "kill_switch": gateway.kill_switch,
+        "output_tokens_today": await gateway.daily_output_tokens(),
+    }
+
+
+@app.get("/api/llm/ccusage")
+async def get_llm_ccusage():
+    """Cross-harness accounting from the ``ccusage`` CLI (Claude Code / Codex /
+    opencode subscription usage). Defensive: returns ``available: False`` when the
+    tool is absent or errors — never blocks the dashboard."""
+    from lhassa.llm.ccusage import read_ccusage
+
+    return await read_ccusage()
 
 
 @app.get("/api/audit")
