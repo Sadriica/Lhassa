@@ -82,6 +82,125 @@ function computeLayout(topology) {
   return pos
 }
 
+// ── department grouping ────────────────────────────────────────────────────────
+// Brains that share a `department` get a labeled, subtly-tinted bounding rectangle
+// drawn BEHIND them (the Oz/Lhasa look). A box is only drawn when the department's
+// brains form a clean cluster — i.e. no foreign brain sits inside their bounding
+// box. When a department is scattered through the tree (a foreign node would be
+// swallowed by the box), we fall back to a per-node tint + a colored department
+// chip so it's still identifiable without an ugly overlapping rectangle. The admin
+// and any department-less brains (coordinators) are never grouped.
+const NODE_H_EST = 132 // generous node-height estimate for bbox math
+const DEPT_PAD = 26
+const DEPT_LABEL_H = 16
+// Muted, warm, on-palette tints — red (162,62,52) stays reserved for the sovereign.
+const DEPT_COLORS = [
+  '217,165,33', // gold
+  '120,140,92', // olive
+  '92,128,140', // muted teal
+  '150,112,164', // muted plum
+  '190,138,86', // amber/brown
+  '120,150,120', // sage
+]
+
+function computeDeptGroups(topology, pos) {
+  const nodes = topology?.nodes || []
+  const admin = topology?.admin
+  const byDept = new Map()
+  nodes.forEach((n) => {
+    const d = (n.department || '').trim()
+    if (!d || n.is_admin || n.id === admin) return
+    if (!byDept.has(d)) byDept.set(d, [])
+    byDept.get(d).push(n.id)
+  })
+  const depts = [...byDept.keys()].sort((a, b) => a.localeCompare(b))
+  const colorFor = (d) => DEPT_COLORS[depts.indexOf(d) % DEPT_COLORS.length]
+
+  const groupNodes = []
+  const deptStyle = {} // nodeId → { color, tinted }
+
+  depts.forEach((d) => {
+    const ids = byDept.get(d).filter((id) => pos[id])
+    if (!ids.length) return
+    const color = colorFor(d)
+
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+    ids.forEach((id) => {
+      const p = pos[id]
+      minX = Math.min(minX, p.x)
+      minY = Math.min(minY, p.y)
+      maxX = Math.max(maxX, p.x + NODE_W)
+      maxY = Math.max(maxY, p.y + NODE_H_EST)
+    })
+
+    // Contiguity: a clean box only if no FOREIGN node's center lands inside the bbox.
+    const idset = new Set(ids)
+    const foreignInside = nodes.some((n) => {
+      if (idset.has(n.id) || !pos[n.id]) return false
+      const p = pos[n.id]
+      const cx = p.x + NODE_W / 2
+      const cy = p.y + NODE_H_EST / 2
+      return cx >= minX && cx <= maxX && cy >= minY && cy <= maxY
+    })
+
+    ids.forEach((id) => { deptStyle[id] = { color, tinted: foreignInside } })
+    if (foreignInside) return // scattered → per-node tint + chip instead of a box
+
+    const width = (maxX - minX) + DEPT_PAD * 2
+    const height = (maxY - minY) + DEPT_PAD * 2 + DEPT_LABEL_H
+    groupNodes.push({
+      id: `__deptgroup__:${d}`,
+      type: 'deptGroup',
+      position: { x: minX - DEPT_PAD, y: minY - DEPT_PAD - DEPT_LABEL_H },
+      data: { department: d, color, width, height },
+      width,
+      height,
+      selectable: false,
+      draggable: false,
+      connectable: false,
+      deletable: false,
+      focusable: false,
+      zIndex: 0,
+      style: { pointerEvents: 'none', width, height },
+    })
+  })
+  return { groupNodes, deptStyle }
+}
+
+// A non-interactive, rounded, tinted rectangle with an uppercase tracked label.
+function DeptGroupNode({ data }) {
+  const { department, color, width, height } = data
+  return (
+    <div
+      style={{
+        width,
+        height,
+        boxSizing: 'border-box',
+        position: 'relative',
+        border: `1px solid rgba(${color},0.32)`,
+        background: `rgba(${color},0.05)`,
+        borderRadius: 18,
+        pointerEvents: 'none',
+      }}
+    >
+      <span
+        style={{
+          position: 'absolute',
+          top: 6,
+          left: 14,
+          fontSize: 10,
+          fontWeight: 600,
+          letterSpacing: '0.16em',
+          textTransform: 'uppercase',
+          color: `rgba(${color},0.92)`,
+        }}
+      >
+        {department}
+      </span>
+    </div>
+  )
+}
+
 function formatLimit(v) {
   if (Array.isArray(v)) return v.join(',')
   if (v === null || v === undefined) return '—'
@@ -90,11 +209,14 @@ function formatLimit(v) {
 
 // ── custom brain node ─────────────────────────────────────────────────────────
 function BrainFlowNode({ data }) {
-  const { node, selected, isAdmin, inRoute, isRouteLeaf } = data
+  const { node, selected, isAdmin, inRoute, isRouteLeaf, deptColor, deptTinted } = data
   const limits = node.limits || {}
   const limitKeys = Object.keys(limits)
 
   // The admin (Lhassa) is the sovereign — deep-red ring over a gold-tinted fill.
+  // A scattered-department brain (no group box) carries its department tint on the
+  // border so it's still identifiable; grouped brains keep the neutral border (the
+  // surrounding box already marks them).
   const borderColor = isAdmin
     ? 'rgba(162,62,52,0.85)'
     : selected
@@ -103,7 +225,9 @@ function BrainFlowNode({ data }) {
         ? 'rgba(217,165,33,0.7)'
         : inRoute
           ? 'rgba(217,165,33,0.4)'
-          : 'var(--lh-border-strong)'
+          : (deptTinted && deptColor)
+            ? `rgba(${deptColor},0.6)`
+            : 'var(--lh-border-strong)'
 
   const glow = isAdmin
     ? '0 0 0 1px rgba(162,62,52,0.7), 0 0 26px rgba(217,165,33,0.38), inset 0 1px 0 rgba(236,228,211,0.12)'
@@ -156,10 +280,26 @@ function BrainFlowNode({ data }) {
         {node.is_leaf && !isAdmin && (
           <span style={{ fontSize: 10, color: 'var(--lh-text-faint)' }}>leaf</span>
         )}
+        {node.department && !isAdmin && (
+          <span
+            className="lh-tag"
+            title={`department · ${node.department}`}
+            style={{
+              borderColor: `rgba(${deptColor || '217,165,33'},0.5)`,
+              background: `rgba(${deptColor || '217,165,33'},0.12)`,
+              color: 'var(--lh-text-muted)',
+              textTransform: 'uppercase',
+              letterSpacing: '0.08em',
+              fontSize: 9,
+            }}
+          >
+            {node.department}
+          </span>
+        )}
       </div>
 
       <div style={{ fontSize: 11, marginTop: 2, color: 'var(--lh-text-muted)' }}>
-        {node.role || 'department'}{node.department ? ` · ${node.department}` : ''}
+        {node.role || 'department'}
       </div>
 
       <div style={{ fontSize: 10, marginTop: 2, color: 'var(--lh-text-faint)' }}>
@@ -190,7 +330,7 @@ function BrainFlowNode({ data }) {
   )
 }
 
-const nodeTypes = { brain: BrainFlowNode }
+const nodeTypes = { brain: BrainFlowNode, deptGroup: DeptGroupNode }
 
 // Descendants of `id` (so we can block creating a cycle on re-parent).
 function descendantsOf(id, byId) {
@@ -222,21 +362,30 @@ function FlowInner({ topology, selectedId, routePath, onSelect, onMove }) {
     const nodes = topology?.nodes || []
     const pos = computeLayout(topology)
     const routeLeaf = routePath && routePath.length ? routePath[routePath.length - 1] : null
+    // Department grouping: tinted boxes behind contiguous clusters; per-node tint
+    // for scattered ones. Recomputed here so it tracks every layout/topology change.
+    const { groupNodes, deptStyle } = computeDeptGroups(topology, pos)
 
-    setRfNodes(nodes.map((n) => ({
+    const brainNodes = nodes.map((n) => ({
       id: n.id,
       type: 'brain',
       position: pos[n.id] || { x: 0, y: 0 },
+      zIndex: 1, // above the department group boxes
       data: {
         node: n,
         selected: n.id === selectedId,
         isAdmin: n.is_admin || n.id === admin,
         inRoute: routeSet.has(n.id),
         isRouteLeaf: n.id === routeLeaf,
+        deptColor: deptStyle[n.id]?.color,
+        deptTinted: deptStyle[n.id]?.tinted,
       },
       // keep the admin pinned/anchored; others can be nudged (cosmetic only)
       draggable: !(n.is_admin || n.id === admin),
-    })))
+    }))
+
+    // Group boxes first so they paint behind the brains they enclose.
+    setRfNodes([...groupNodes, ...brainNodes])
 
     const edges = []
     nodes.forEach((n) => {
