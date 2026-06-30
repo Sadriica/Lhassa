@@ -228,6 +228,117 @@ def test_run_offline(tmp_path, monkeypatch):
     assert out["result"]["cost_usd"] == 0.0
 
 
+# ── skills / limits (define what a brain handles + its limitations) ───────────────
+
+
+def test_add_with_skills_and_limits(tmp_path, monkeypatch):
+    topo_file = _use_tmp(tmp_path, monkeypatch)
+    _seed_flat(topo_file)
+    res = runner.invoke(
+        app,
+        [
+            "org", "add", "--id", "dept:doc", "--parent", "general",
+            "--department", "documentacion",
+            "--skills", "optimizacion,writing",
+            "--limits", '{"budget_usd": 1.5}',
+            "--json",
+        ],
+    )
+    assert res.exit_code == 0
+    node = json.loads(res.output)
+    assert node["skills"] == ["optimizacion", "writing"]
+    assert node["limits"] == {"budget_usd": 1.5}
+    persisted = {n["id"]: n for n in json.loads(topo_file.read_text())}
+    assert persisted["dept:doc"]["skills"] == ["optimizacion", "writing"]
+
+
+def test_set_skills_cmd(tmp_path, monkeypatch):
+    topo_file = _use_tmp(tmp_path, monkeypatch)
+    _seed_flat(topo_file)
+    res = runner.invoke(
+        app,
+        ["org", "set-skills", "dept:finanzas", "--skills", "finanzas,budgets", "--json"],
+    )
+    assert res.exit_code == 0
+    assert json.loads(res.output)["skills"] == ["finanzas", "budgets"]
+
+
+def test_set_limits_cmd_kv_pairs(tmp_path, monkeypatch):
+    topo_file = _use_tmp(tmp_path, monkeypatch)
+    _seed_flat(topo_file)
+    res = runner.invoke(
+        app,
+        ["org", "set-limits", "dept:finanzas", "--limits", "max_risk=low,budget_usd=2.5",
+         "--json"],
+    )
+    assert res.exit_code == 0
+    limits = json.loads(res.output)["limits"]
+    assert limits == {"max_risk": "low", "budget_usd": 2.5}
+
+
+# ── move (re-parent) / promote (make root) ─────────────────────────────────────────
+
+
+def test_move_reparents(tmp_path, monkeypatch):
+    topo_file = _use_tmp(tmp_path, monkeypatch)
+    _seed_flat(topo_file)
+    res = runner.invoke(
+        app, ["org", "move", "dept:finanzas", "--parent", "dept:optimizacion"]
+    )
+    assert res.exit_code == 0
+    persisted = {n["id"]: n for n in json.loads(topo_file.read_text())}
+    assert persisted["dept:finanzas"]["parent"] == "dept:optimizacion"
+
+
+def test_promote_makes_root(tmp_path, monkeypatch):
+    topo_file = _use_tmp(tmp_path, monkeypatch)
+    topo_file.write_text(
+        json.dumps([
+            {"id": "general", "role": "general", "parent": None},
+            {"id": "ops", "role": "sub_general", "parent": "general"},
+            {"id": "dept:opt", "role": "department", "department": "optimizacion",
+             "parent": "ops"},
+        ])
+    )
+    res = runner.invoke(app, ["org", "promote", "dept:opt", "--json"])
+    assert res.exit_code == 0
+    by_id = {n["id"]: n for n in json.loads(res.output)}
+    assert by_id["dept:opt"]["parent"] is None
+    assert by_id["ops"]["parent"] == "dept:opt"
+    assert by_id["general"]["parent"] == "ops"
+
+
+# ── show / skills ──────────────────────────────────────────────────────────────────
+
+
+def test_show_one_brain(tmp_path, monkeypatch):
+    topo_file = _use_tmp(tmp_path, monkeypatch)
+    _seed_flat(topo_file)
+    res = runner.invoke(app, ["org", "show", "dept:optimizacion", "--json"])
+    assert res.exit_code == 0
+    payload = json.loads(res.output)
+    assert payload["id"] == "dept:optimizacion"
+    assert payload["is_leaf"] is True
+    assert payload["children"] == []
+
+
+def test_skills_lists_registry_domains(tmp_path, monkeypatch):
+    _use_tmp(tmp_path, monkeypatch)
+    res = runner.invoke(app, ["org", "skills", "--json"])
+    assert res.exit_code == 0
+    domains = {s["domain"] for s in json.loads(res.output)}
+    assert "optimizacion" in domains
+
+
+def test_tree_shows_skills(tmp_path, monkeypatch):
+    topo_file = _use_tmp(tmp_path, monkeypatch)
+    _seed_flat(topo_file)
+    runner.invoke(app, ["org", "set-skills", "dept:optimizacion", "--skills", "optimizacion"])
+    res = runner.invoke(app, ["org", "tree"])
+    assert res.exit_code == 0
+    assert "skills=optimizacion" in res.output
+
+
 # ── the default chat/REPL path is preserved ──────────────────────────────────────
 
 _FAKE = CliResult(

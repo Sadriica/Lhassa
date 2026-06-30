@@ -29,9 +29,9 @@ this module is the pure, side-effect-free shape + its load/save.
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Iterable, Optional
+from typing import TYPE_CHECKING, Iterable, Mapping, Optional
 
 if TYPE_CHECKING:
     from lhassa.config import Config
@@ -59,6 +59,14 @@ class BrainNode:
       - ``department``: the department name/identity this brain owns (optional —
         coordinators may have none; leaves usually do).
       - ``parent``: the id of the parent brain, or ``None`` for the single root.
+      - ``skills``: the skill/specialist domains this brain HANDLES (e.g.
+        ``("optimizacion", "finanzas")``). Free-form strings so the org stays
+        modular; management validates them against the specialist registry where
+        it can and merely warns on an unknown skill. Stored as a tuple (hashable).
+      - ``limits``: the brain's LIMITATIONS — an opaque, forward-compatible mapping
+        (e.g. ``{"max_risk": "high|medium|low", "budget_usd": 1.0,
+        "allowed_actions": [...]}``). Unknown keys are kept verbatim. Excluded from
+        the node hash so adding limits never breaks hashing of a frozen node.
 
     ``children`` are not stored on the node (the tree owns that relation); use
     :meth:`Topology.children_of`.
@@ -68,6 +76,15 @@ class BrainNode:
     role: str = ROLE_GENERAL
     department: Optional[str] = None
     parent: Optional[str] = None
+    skills: tuple[str, ...] = ()
+    limits: Mapping = field(default_factory=dict, hash=False)
+
+    def __post_init__(self) -> None:
+        # Normalise the additive fields so callers may pass a list/None and the
+        # node stays hashable (skills→tuple) and JSON-friendly (limits→dict). The
+        # dataclass is frozen, so mutate through object.__setattr__.
+        object.__setattr__(self, "skills", tuple(self.skills or ()))
+        object.__setattr__(self, "limits", dict(self.limits or {}))
 
     def to_dict(self) -> dict:
         """Serialise to the JSON node shape persisted in the topology file."""
@@ -76,19 +93,35 @@ class BrainNode:
             "role": self.role,
             "department": self.department,
             "parent": self.parent,
+            "skills": list(self.skills),
+            "limits": dict(self.limits),
         }
 
     @classmethod
     def from_dict(cls, data: dict) -> "BrainNode":
-        """Rebuild a node from a persisted/loaded JSON object."""
+        """Rebuild a node from a persisted/loaded JSON object.
+
+        Backward-compatible: a node JSON without ``skills``/``limits`` (the
+        pre-management shape) loads fine — both default to empty.
+        """
         node_id = (data.get("id") or "").strip()
         if not node_id:
             raise TopologyError(f"node is missing an 'id': {data!r}")
+        skills_raw = data.get("skills") or ()
+        if isinstance(skills_raw, str):
+            skills_raw = [skills_raw]
+        limits_raw = data.get("limits") or {}
+        if not isinstance(limits_raw, dict):
+            raise TopologyError(
+                f"brain {node_id!r} 'limits' must be a JSON object, got {limits_raw!r}"
+            )
         return cls(
             id=node_id,
             role=(data.get("role") or ROLE_GENERAL).strip() or ROLE_GENERAL,
             department=data.get("department") or None,
             parent=data.get("parent") or None,
+            skills=tuple(str(s) for s in skills_raw),
+            limits=limits_raw,
         )
 
 
