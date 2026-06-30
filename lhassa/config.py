@@ -353,6 +353,43 @@ class Config:
         "LHASSA_TOOLS_REPO_DIR", str(Path.home() / ".lhassa" / "tools")
     )
 
+    # ── Phase 6 — local heartbeat model (§3-Fase 6, invariant #3) ─────────────
+    # Migrate the heartbeat off the cloud onto a LOCAL model behind the same
+    # ModelProvider interface. ``local_model_url`` is an OpenAI-compatible base URL
+    # (Ollama ``http://127.0.0.1:11434/v1``, llama.cpp/LM Studio, etc.); empty =
+    # no local backend configured (the provider degrades gracefully). ``local_model``
+    # is the served model name. A local model needs no API key.
+    local_model_url: str = os.getenv("LHASSA_LOCAL_MODEL_URL", "")
+    local_model: str = os.getenv("LHASSA_LOCAL_MODEL", "")
+    # Which provider the heartbeat/routine path prefers: ``auto`` uses the local
+    # model when ``local_model_url`` is set (else cloud); ``local`` forces it;
+    # ``cloud`` keeps the gateway. The smart/hard path is unaffected.
+    heartbeat_provider: str = os.getenv("LHASSA_HEARTBEAT_PROVIDER", "auto").lower()
+
+    # ── Phase 6 — privacy / pseudonymization hook (§3-Fase 0/6) ───────────────
+    # Pseudonymize PII before sending context to a NON-local, non-zero-retention
+    # provider (the mandatory hook while the heartbeat used free cloud models).
+    # When the active provider is local the data never leaves the machine, so the
+    # hook RELAXES (no scrubbing) — set by the local provider, overridable here.
+    pseudonymize_remote: bool = os.getenv("LHASSA_PSEUDONYMIZE_REMOTE", "1") not in ("0", "false", "")
+
+    # ── Phase 6 — memory layer 4 (semantic retrieval, "si se ganó") ───────────
+    # The embeddings layer deferred since Phase 1. Off unless explicitly enabled.
+    # When on, ``load()`` adds a semantic layer: facts whose embedding is closest to
+    # the active query, after pinned/recent/tags. ``embedding_model`` names an
+    # embedding model on the local/cloud provider; empty → a deterministic offline
+    # fallback embedder (hashing) so the layer works with no model configured.
+    memory_layer4_enabled: bool = os.getenv("LHASSA_MEMORY_LAYER4", "0") not in ("0", "false", "")
+    embedding_model: str = os.getenv("LHASSA_EMBEDDING_MODEL", "")
+    memory_semantic_topk: int = int(os.getenv("LHASSA_MEMORY_SEMANTIC_TOPK", "5"))
+
+    # ── Phase 6 — Telegram notifications (optional, token-gated) ──────────────
+    # Polished Telegram channel for alerts/reports. Both must be set to enable it;
+    # otherwise the notifier is a no-op (the established credential-gated pattern,
+    # like ``github_token``). No token → never touches the network.
+    telegram_bot_token: str = os.getenv("LHASSA_TELEGRAM_BOT_TOKEN", "")
+    telegram_chat_id: str = os.getenv("LHASSA_TELEGRAM_CHAT_ID", "")
+
     # ── Tool guardrails ───────────────────────────────────────────────────────
     # If true, reject obviously destructive shell commands unless explicitly
     # opted out via LHASSA_ALLOW_DESTRUCTIVE_SHELL=1.
