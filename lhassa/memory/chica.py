@@ -135,6 +135,26 @@ async def touch(instance_id: str, key: str) -> bool:
         await conn.close()
 
 
+async def forget(instance_id: str, key: str) -> bool:
+    """
+    Drop a single item from the chica. Returns True if a row was removed.
+
+    Used by the Phase-2 semantic consolidation pass
+    (:mod:`lhassa.memory.consolidate`) to drop redundant originals once they have
+    been folded into a summary. The grande is untouched, so the raw data survives.
+    """
+    conn = await _open()
+    try:
+        cur = await conn.execute(
+            "DELETE FROM chica WHERE instance_id = ? AND key = ?",
+            (instance_id, key),
+        )
+        await conn.commit()
+        return cur.rowcount > 0
+    finally:
+        await conn.close()
+
+
 async def size(instance_id: str) -> int:
     """Number of items currently cached for ``instance_id``."""
     conn = await _open()

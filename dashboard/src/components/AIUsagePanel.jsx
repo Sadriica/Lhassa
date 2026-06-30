@@ -27,6 +27,10 @@ function fmtTokens(n = 0) {
 
 export default function AIUsagePanel({ metrics = {} }) {
   const [ledger, setLedger] = useState(null)
+  const [limits, setLimits] = useState(null)
+  const [ccusage, setCcusage] = useState(null)
+  const [budgetInput, setBudgetInput] = useState('')
+  const [saving, setSaving] = useState(false)
 
   useEffect(() => {
     let mounted = true
@@ -38,6 +42,18 @@ export default function AIUsagePanel({ metrics = {} }) {
           if (mounted) setLedger(data)
         })
         .catch(() => {})
+      fetch('/api/llm/limits')
+        .then(r => r.json())
+        .then(data => {
+          if (mounted) setLimits(data)
+        })
+        .catch(() => {})
+      fetch('/api/llm/ccusage')
+        .then(r => r.json())
+        .then(data => {
+          if (mounted) setCcusage(data)
+        })
+        .catch(() => {})
     }
 
     load()
@@ -47,6 +63,30 @@ export default function AIUsagePanel({ metrics = {} }) {
       clearInterval(t)
     }
   }, [])
+
+  const postLimits = (body) => {
+    setSaving(true)
+    fetch('/api/llm/limits', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+      .then(r => r.json())
+      .then(data => {
+        setLimits(data)
+        setBudgetInput('')
+      })
+      .catch(() => {})
+      .finally(() => setSaving(false))
+  }
+
+  const killOn = !!limits?.kill_switch
+
+  const saveBudget = () => {
+    const n = parseInt(budgetInput, 10)
+    if (!Number.isFinite(n) || n < 0) return
+    postLimits({ daily_token_budget: n })
+  }
 
   // Headline numbers prefer the live websocket metrics; fall back to ledger totals.
   const totals = ledger?.totals || {}
@@ -104,6 +144,78 @@ export default function AIUsagePanel({ metrics = {} }) {
           <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden">
             <div className={`h-full ${budgetTone} rounded-full`} style={{ width: `${budgetPct}%` }} />
           </div>
+        )}
+      </div>
+
+      <div className="mt-3 pt-3 border-t border-slate-800">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-xs text-slate-500">Cost limits</span>
+          {killOn && <span className="text-xs text-rose-400 font-semibold">KILL-SWITCH ON</span>}
+        </div>
+
+        <div className="flex items-center justify-between gap-2 mb-2">
+          <span className="text-xs text-slate-400">Kill-switch (hard stop)</span>
+          <button
+            type="button"
+            disabled={saving || !limits}
+            onClick={() => postLimits({ kill_switch: !killOn })}
+            className={`text-xs px-2 py-1 rounded font-medium transition-colors disabled:opacity-50 ${
+              killOn
+                ? 'bg-rose-600 hover:bg-rose-500 text-white'
+                : 'bg-slate-700 hover:bg-slate-600 text-slate-200'
+            }`}
+          >
+            {killOn ? 'Engaged — release' : 'Off — engage'}
+          </button>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <input
+            type="number"
+            min="0"
+            value={budgetInput}
+            onChange={(e) => setBudgetInput(e.target.value)}
+            placeholder={budgetUnlimited ? 'unlimited' : String(dailyBudget)}
+            className="flex-1 min-w-0 bg-slate-800 border border-slate-700 rounded px-2 py-1 text-xs text-slate-200 placeholder-slate-600"
+          />
+          <button
+            type="button"
+            disabled={saving || budgetInput === ''}
+            onClick={saveBudget}
+            className="text-xs px-2 py-1 rounded bg-purple-600 hover:bg-purple-500 text-white font-medium disabled:opacity-50"
+          >
+            Set budget
+          </button>
+        </div>
+        <div className="text-[10px] text-slate-600 mt-1">Daily output-token budget · 0 = unlimited</div>
+      </div>
+
+      <div className="mt-3 pt-3 border-t border-slate-800">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-xs text-slate-500">Cross-harness (ccusage)</span>
+          {ccusage && !ccusage.available && (
+            <span className="text-xs text-slate-600">unavailable</span>
+          )}
+        </div>
+        {ccusage && ccusage.available ? (
+          <div className="space-y-1">
+            {Object.entries(ccusage.by_harness || {}).map(([name, h]) => (
+              <div key={name} className="flex items-center justify-between gap-2 text-xs">
+                <span className="text-slate-400 truncate" title={name}>{name}</span>
+                <span className="text-slate-500 whitespace-nowrap">
+                  {fmtTokens(h.tokens)} · {fmtUsd(h.cost_usd)}
+                </span>
+              </div>
+            ))}
+            <div className="flex items-center justify-between gap-2 text-xs pt-1 border-t border-slate-800/60">
+              <span className="text-slate-500">Total</span>
+              <span className="text-emerald-400">{fmtUsd(ccusage.total_cost_usd)}</span>
+            </div>
+          </div>
+        ) : (
+          <p className="text-slate-600 text-xs">
+            ccusage not detected — install it to track Claude Code / Codex / opencode spend.
+          </p>
         )}
       </div>
 
