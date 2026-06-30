@@ -140,10 +140,14 @@ EDITABLE: list[dict] = [
         "attr": "llm_provider",
         "env_var": "LHASSA_LLM_PROVIDER",
         "type": "enum",
-        "options": ["groq", "anthropic", "openai", "openrouter", "ollama", "cerebras"],
+        "options": [
+            "groq", "anthropic", "openai", "openrouter", "cerebras", "ollama",
+            "claude", "codex", "opencode",
+        ],
         "label": "Chat provider (CLI / voice / agent)",
-        "help": "The provider that powers the CLI chat, voice, and the built-in agent. "
-                "Needs that provider's API key set in .env (or a local Ollama).",
+        "help": "Powers the CLI chat, voice, and the built-in agent. API providers "
+                "(groq/anthropic/…) need their key in .env; claude/codex/opencode run the "
+                "LOCAL CLI via your subscription (no API key); ollama is local.",
         "group": "Models",
         "default": "(auto-detected from the key present)",
         "restart": RESTART_NONE,
@@ -286,6 +290,43 @@ EDITABLE: list[dict] = [
 ]
 
 _BY_KEY: dict[str, dict] = {e["key"]: e for e in EDITABLE}
+
+# Chat providers backed by a local CLI (subscription auth, no API key) vs the
+# API providers that need their key in .env.
+_CLI_CHAT_PROVIDERS = ("claude", "codex", "opencode")
+_API_KEY_ATTR = {
+    "groq": "groq_api_key",
+    "anthropic": "anthropic_api_key",
+    "openai": "openai_api_key",
+    "openrouter": "openrouter_api_key",
+    "cerebras": "cerebras_api_key",
+}
+
+
+def _chat_provider_error(provider: str, config) -> "Optional[str]":
+    """Return a reason string if this chat provider can't actually run, else None.
+
+    API providers need their key in ``.env``; the CLI providers (claude/codex/opencode)
+    need the binary on PATH; ollama is always allowed (local server checked at call time).
+    """
+    import shutil
+
+    p = (provider or "").strip().lower()
+    if p in _CLI_CHAT_PROVIDERS:
+        if shutil.which(p) is None:
+            return f"the {p!r} CLI is not installed — install it (it runs via your subscription, no API key)."
+        return None
+    if p == "ollama":
+        return None
+    attr = _API_KEY_ATTR.get(p)
+    if attr is None:
+        return f"unknown chat provider {p!r}."
+    if not getattr(config, attr, ""):
+        return (
+            f"{p!r} needs {attr.upper()} in .env (none is set). Use a provider with a key, "
+            f"or pick claude/codex/opencode to chat via the local CLI with no key."
+        )
+    return None
 
 # Advanced set_env() only accepts names with one of these prefixes (everything else
 # is refused) so the "advanced" panel can never write an arbitrary host env var.
@@ -542,6 +583,12 @@ def set(key: str, value: Any) -> dict:  # noqa: A001 - deliberate panel verb
         coerced = _coerce(entry, value)
     except SettingsError as exc:
         return {"key": key, "value": value, "applied": False, "error": str(exc)}
+    # Guard: don't let the chat provider be set to something that can't actually run
+    # (an API provider with no key, or a CLI that isn't installed) — that breaks chat.
+    if key == "llm_provider":
+        err = _chat_provider_error(coerced, _config())
+        if err:
+            return {"key": key, "value": value, "applied": False, "error": err}
     try:
         _write_env_var(entry["env_var"], _serialize(entry, coerced))
         _apply_live(entry, coerced)
