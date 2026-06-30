@@ -280,6 +280,88 @@ def test_recommend_ranks_by_context(tmp_path):
     assert "matches" in recs[0]["reason"]
 
 
+def test_catalog_is_broad(tmp_path):
+    # The catalog grew to a real spread of Lhassa-relevant skills.
+    names = {slugify(e["name"]) for e in ai_mod.CATALOG}
+    assert len(ai_mod.CATALOG) >= 18
+    assert len(names) == len(ai_mod.CATALOG)  # no duplicate slugs
+    # A sample across the awesome-agent-skills-style categories is present.
+    for expected in (
+        "code-review",
+        "security-audit",
+        "testing",
+        "refactor",
+        "migration",
+        "incident-triage",
+        "api-design",
+        "sql-expert",
+        "devops-ci",
+        "dependency-audit",
+        "performance-profiling",
+        "accessibility-audit",
+        "i18n",
+        "release-notes",
+        "web-scraping",
+        "prompt-optimizer",
+    ):
+        assert expected in names
+    # Every entry carries the required descriptor fields.
+    for entry in ai_mod.CATALOG:
+        assert entry["name"] and entry["description"]
+        assert entry["domain"] and entry["tags"]
+
+
+def test_install_from_catalog_materializes_real_skill_md(tmp_path):
+    cfg = _cfg(tmp_path)
+    store = SkillStore(cfg)
+    assert store.get("refactor") is None  # not installed yet
+
+    skill = ai_mod.install_from_catalog("refactor", config=cfg)
+    assert skill is not None and skill.name == "refactor"
+    # A real SKILL.md landed on disk with a usable templated body.
+    folder = store.folder_for("refactor")
+    assert (folder / "SKILL.md").exists()
+    on_disk = store.get("refactor")
+    assert on_disk is not None
+    assert on_disk.error is None
+    assert on_disk.description
+    assert "When to use" in on_disk.instructions
+    assert "How to apply" in on_disk.instructions
+
+
+def test_install_from_catalog_is_idempotent(tmp_path):
+    cfg = _cfg(tmp_path)
+    store = SkillStore(cfg)
+    first = ai_mod.install_from_catalog("testing", config=cfg)
+    # Mutate the stored copy, then re-install: idempotent, does not overwrite.
+    store.save(Skill(name="testing", description="edited", instructions="my body"))
+    second = ai_mod.install_from_catalog("testing", config=cfg)
+    assert first is not None and second is not None
+    assert store.get("testing").description == "edited"  # not clobbered
+    assert store.get("testing").instructions == "my body"
+
+
+def test_install_from_catalog_unknown_returns_none(tmp_path):
+    cfg = _cfg(tmp_path)
+    assert ai_mod.install_from_catalog("not-a-real-skill", config=cfg) is None
+
+
+def test_is_installed_and_installed_names(tmp_path):
+    from lhassa.skills import store as store_mod
+
+    cfg = _cfg(tmp_path)
+    assert store_mod.is_installed("refactor", cfg) is False
+    assert store_mod.installed_names(cfg) == set()
+
+    ai_mod.install_from_catalog("refactor", config=cfg)
+    ai_mod.install_from_catalog("testing", config=cfg)
+    assert store_mod.is_installed("refactor", cfg) is True
+    assert store_mod.is_installed("testing", cfg) is True
+    assert store_mod.is_installed("security-audit", cfg) is False
+    assert store_mod.installed_names(cfg) == {"refactor", "testing"}
+    assert store_mod.is_installed("", cfg) is False
+
+
 def test_ensure_seed_is_idempotent(tmp_path):
     cfg = _cfg(tmp_path)
     seeded = ai_mod.ensure_seed(cfg)

@@ -40,7 +40,13 @@ from lhassa.skills.skillmd import (
 if TYPE_CHECKING:
     from lhassa.config import Config
 
-__all__ = ["SkillStore", "brains_with_skill", "assign_to_brain"]
+__all__ = [
+    "SkillStore",
+    "is_installed",
+    "installed_names",
+    "brains_with_skill",
+    "assign_to_brain",
+]
 
 SKILL_MD = "SKILL.md"
 SKILL_JSON = "skill.json"
@@ -251,6 +257,34 @@ class SkillStore:
             shutil.rmtree(dest)
         shutil.copytree(src, dest)
         return dest
+
+
+# ── installed-status helpers (the store dir is the source of truth) ───────────
+
+
+def is_installed(name: str, config: "Optional[Config]" = None) -> bool:
+    """Whether a skill named ``name`` is present in the store. Never raises.
+
+    "Installed" means its folder + SKILL.md exist on disk — the precondition for the
+    executor to load its instructions into a brain's prompt. An assigned skill NAME
+    that is not installed does nothing until it is.
+    """
+    if not (name or "").strip():
+        return False
+    try:
+        return SkillStore(config).exists(name)
+    except Exception as exc:  # pragma: no cover - store reads are defensive already
+        logger.warning("skills: is_installed could not read the store — {}", exc)
+        return False
+
+
+def installed_names(config: "Optional[Config]" = None) -> set[str]:
+    """The set of skill names currently installed in the store. Never raises."""
+    try:
+        return {s.name for s in SkillStore(config).list_skills() if s.name}
+    except Exception as exc:  # pragma: no cover - store reads are defensive already
+        logger.warning("skills: installed_names could not read the store — {}", exc)
+        return set()
 
 
 # ── org bridges (read-only imports of the org layer) ──────────────────────────

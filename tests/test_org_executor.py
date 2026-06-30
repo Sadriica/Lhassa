@@ -6,6 +6,9 @@ prompt. Kept offline-testable: the live model path is gated behind LHASSA_ORG_LI
 (default OFF) and the provider/router are monkeypatched so NO real LLM call happens.
 """
 
+import json
+from types import SimpleNamespace
+
 import pytest
 import pytest_asyncio  # noqa: F401
 
@@ -134,6 +137,106 @@ async def test_brain_executor_offline_by_default_makes_no_call(tmp_path, monkeyp
     assert result["model"] == "offline"
     assert result["cost_usd"] == 0.0
     assert "offline" in result["summary"].lower()
+
+
+# ── skills: an INSTALLED skill loads into the prompt; a referenced one is noted ────
+
+def _skills_cfg(tmp_path):
+    """A stub config pointing skills + topology at a tmp dir (real store, no model)."""
+    return SimpleNamespace(
+        skills_dir=str(tmp_path / "skills"),
+        org_topology_file=str(tmp_path / "org.json"),
+        org_role="",
+        org_departments="",
+        context_token_budget=2000,
+        instance_id="inst_personal",
+        root_admin_id="lhassa",
+        memory_layer4_enabled=False,
+    )
+
+
+@pytest.mark.asyncio
+async def test_brain_executor_loads_installed_skill_into_prompt(tmp_path, monkeypatch):
+    await _init(tmp_path, monkeypatch)
+    monkeypatch.setenv("LHASSA_ORG_LIVE", "1")
+    from lhassa.org.executor import brain_executor
+    from lhassa.skills.skillmd import Skill
+    from lhassa.skills.store import SkillStore
+
+    cfg = _skills_cfg(tmp_path)
+    SkillStore(cfg).save(
+        Skill(
+            name="optimizacion",
+            description="make it cheaper",
+            instructions="OPTIMIZE: beat one lower-is-better metric, MAGIC_MARKER_42.",
+        )
+    )
+
+    provider = _FakeProvider(text="done")
+    _patch_router(monkeypatch, provider)
+
+    # one installed skill + one referenced-but-not-installed name
+    result = await brain_executor(
+        "speed it up",
+        department="optimizacion",
+        instance_id="inst_personal",
+        config=cfg,
+        skills=["optimizacion", "ghost-skill"],
+    )
+
+    # the installed skill's instructions were injected into the system prompt
+    assert "## Skill: optimizacion" in provider.seen_system
+    assert "MAGIC_MARKER_42" in provider.seen_system
+    # the uninstalled name is recorded, not loaded — and nothing raised
+    assert result["ok"] is True
+    assert result["skills_loaded"] == ["optimizacion"]
+    assert result["skills_not_installed"] == ["ghost-skill"]
+    # an uninstalled skill never reaches the prompt
+    assert "ghost-skill" not in (provider.seen_system or "")
+
+
+@pytest.mark.asyncio
+async def test_brain_executor_resolves_skills_from_topology(tmp_path, monkeypatch):
+    await _init(tmp_path, monkeypatch)
+    monkeypatch.setenv("LHASSA_ORG_LIVE", "1")
+    from lhassa.org.executor import brain_executor
+    from lhassa.skills.skillmd import Skill
+    from lhassa.skills.store import SkillStore
+
+    cfg = _skills_cfg(tmp_path)
+    # a topology where dept:optimizacion is assigned the "optimizacion" skill
+    (tmp_path / "org.json").write_text(
+        json.dumps(
+            [
+                {"id": "general", "role": "general", "parent": None},
+                {
+                    "id": "dept:optimizacion",
+                    "role": "department",
+                    "department": "optimizacion",
+                    "parent": "general",
+                    "skills": ["optimizacion"],
+                },
+            ]
+        )
+    )
+    SkillStore(cfg).save(
+        Skill(
+            name="optimizacion",
+            description="make it cheaper",
+            instructions="TOPO_LOADED_BODY_77",
+        )
+    )
+
+    provider = _FakeProvider(text="ok")
+    _patch_router(monkeypatch, provider)
+
+    # no skills= → names come from the topology node
+    result = await brain_executor(
+        "tighten it", department="optimizacion", instance_id="inst_personal", config=cfg
+    )
+    assert "TOPO_LOADED_BODY_77" in provider.seen_system
+    assert result["skills_loaded"] == ["optimizacion"]
+    assert "skills_not_installed" not in result
 
 
 # ── DepartmentBrain.handle() with NO executor uses brain_executor ─────────────────
