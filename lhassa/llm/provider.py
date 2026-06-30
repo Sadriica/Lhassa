@@ -13,14 +13,132 @@ Supported providers:
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from loguru import logger
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
     from lhassa.config import Config
 
 # Module-level cache — reuses connection pools across agent instances
 _agent_clients: dict[tuple, Any] = {}
+
+
+# ── Axis 1: ModelProvider — "think directly", no harness (§2.2) ───────────────
+#
+# The durable seam for the brain to reason: heartbeat, classification, decisions,
+# memory consolidation. Phase 2 ships one live implementation (GatewayProvider,
+# wrapping the existing key through the cost gateway) and one ready-to-enable
+# stub (OpenCodeZenProvider, the future free/cheap heartbeat). A local provider
+# (zero_retention=True) replaces the heartbeat later — only this seam changes.
+
+
+class ProviderNotConfigured(RuntimeError):
+    """Raised when a ModelProvider has no usable credentials/backend yet."""
+
+
+@dataclass
+class Completion:
+    """One model answer plus the costing metadata the gateway logged."""
+
+    text: str
+    model: str
+    input_tokens: int = 0
+    output_tokens: int = 0
+    cost_usd: float = 0.0
+
+
+@runtime_checkable
+class ModelProvider(Protocol):
+    """A backend that can *think directly* (no agentic harness).
+
+    ``zero_retention`` records whether the backend trains on the data sent to it.
+    The router (§2.4) routes sensitive data only to ``zero_retention`` providers.
+    """
+
+    name: str
+    zero_retention: bool
+
+    async def complete(
+        self, messages: list[dict], *, model: str | None = None, max_tokens: int = 1024, **opts
+    ) -> Completion: ...
+
+
+# First-party APIs that are not trained on by default → treated as zero-retention.
+# Anything else (free tiers, local proxies, unknown) is conservatively NOT.
+_ZERO_RETENTION_PROVIDERS = {"anthropic", "openai"}
+
+# Keys of ``complete(**opts)`` that the gateway understands; others are dropped so
+# an unknown opt never reaches the provider client.
+_GATEWAY_OPT_KEYS = ("temperature", "system", "completion_fn")
+
+
+class GatewayProvider:
+    """Active provider: routes ``complete()`` through the cost gateway.
+
+    Cache, daily budget, and the cost ledger all apply because every call goes
+    through ``gateway.complete(...)``. ``zero_retention`` is derived conservatively
+    from the configured upstream provider.
+    """
+
+    name = "default"
+
+    def __init__(self, config: "Config", *, gateway: Any | None = None):
+        self._config = config
+        if gateway is None:
+            from lhassa.llm.gateway import gateway as default_gateway
+
+            gateway = default_gateway
+        self._gateway = gateway
+
+    @property
+    def zero_retention(self) -> bool:
+        return getattr(self._config, "llm_provider", "") in _ZERO_RETENTION_PROVIDERS
+
+    async def complete(
+        self, messages: list[dict], *, model: str | None = None, max_tokens: int = 1024, **opts
+    ) -> Completion:
+        kwargs = {k: opts[k] for k in _GATEWAY_OPT_KEYS if k in opts}
+        result = await self._gateway.complete(
+            messages, config=self._config, model=model, max_tokens=max_tokens, **kwargs
+        )
+        return Completion(
+            text=result.text,
+            model=result.model,
+            input_tokens=result.input_tokens,
+            output_tokens=result.output_tokens,
+            cost_usd=result.cost_usd,
+        )
+
+
+class OpenCodeZenProvider:
+    """Future heartbeat provider (opencode Zen) — stub until creds exist.
+
+    Free Zen models may train on the data, so ``zero_retention`` is False. Enable
+    it by implementing ``complete()`` against the Zen gateway once credentials are
+    available; until then every call raises ``ProviderNotConfigured``.
+    """
+
+    name = "zen"
+    zero_retention = False
+
+    def __init__(self, config: "Config | None" = None):
+        self._config = config
+
+    async def complete(
+        self, messages: list[dict], *, model: str | None = None, max_tokens: int = 1024, **opts
+    ) -> Completion:
+        raise ProviderNotConfigured("opencode Zen not configured")
+
+
+def get_model_provider(config: "Config", *, name: str | None = None) -> ModelProvider:
+    """Factory for the active ModelProvider. Defaults to the GatewayProvider.
+
+    ``name="zen"`` returns the (not-yet-configured) opencode Zen stub.
+    """
+    if name == "zen":
+        return OpenCodeZenProvider(config)
+    return GatewayProvider(config)
 
 
 # ── Voice pipeline service (Pipecat) ──────────────────────────────────────────

@@ -219,6 +219,20 @@ class Config:
         "1", "true", "yes",
     )
 
+    # ── Router (§2.4) — two axes + cascade ────────────────────────────────────
+    # "rules" (default) → pick cheap/smart by hardness, route sensitive data to a
+    # zero-retention provider. "off" → always use ``model`` (no routing).
+    router_mode: str = os.getenv("LHASSA_ROUTER", "rules").lower()
+    # Cheap model for routine judgment / smart model for hard judgment. Both
+    # default to ``model`` so a single-model setup needs no extra config.
+    model_cheap: str = os.getenv("LHASSA_MODEL_CHEAP", "") or model
+    model_smart: str = os.getenv("LHASSA_MODEL_SMART", "") or model
+
+    # Token budget for the layered memory load when the brain wakes to think.
+    context_token_budget: int = _safe_int(
+        os.getenv("LHASSA_CONTEXT_TOKEN_BUDGET", "2000"), 2000
+    )
+
     # ── Dashboard API ─────────────────────────────────────────────────────────
     # Bind to localhost only by default — the dashboard is not authenticated and
     # lhassa can run privileged/root commands, so it must not be network-reachable.

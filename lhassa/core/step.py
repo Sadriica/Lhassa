@@ -7,10 +7,15 @@ tokens); if nothing woke it, it sleeps. Otherwise, for each trigger, it opens an
 Episode (observability from the first commit), runs the fixed action when the
 trigger maps to one, records the episode, and marks the originating task done.
 
-This Phase 0 slice is deterministic and LLM-free: every trigger either maps to a
-fixed action (run it) or is **deferred** to the Phase 2 router (recorded as
-"needs judgment", no model called). Long work is out of scope — ``step()`` never
-blocks on a job.
+Two paths per trigger:
+  • **fixed action** — deterministic, LLM-free (§2.4): run it and record.
+  • **judgment** — the trigger needs *criteria*, so the model wakes (Phase 2): the
+    router picks a provider+model, the layered memory is loaded within a token
+    budget, and the provider thinks directly. Guarded: if no provider is usable
+    (``ProviderNotConfigured``) or the daily budget is spent (``BudgetExceeded``),
+    the episode degrades to "deferred" — never a crash.
+
+Long work is out of scope — ``step()`` never blocks on a job.
 """
 
 from typing import Optional
@@ -18,21 +23,106 @@ from typing import Optional
 from lhassa.config import Config
 from lhassa.core import actions, db, watchlist
 from lhassa.core.episode import Episode
+from lhassa.llm import router
+from lhassa.llm.gateway import BudgetExceeded
+from lhassa.llm.provider import ModelProvider, ProviderNotConfigured
+from lhassa.memory import load as memory_load
 
-# Marker the Phase 2 router branch will key off of in the episode log.
+# Marker for an episode that needed judgment but could not run the model.
 DEFERRED_DECISION = "deferred: needs judgment"
 
+# Cap on the judgment answer — a wake-for-criteria is short, not a long job.
+_JUDGMENT_MAX_TOKENS = 512
 
-async def step(instance_id: Optional[str] = None) -> dict:
+
+def _build_messages(trigger: "watchlist.Trigger", ctx: "memory_load.Context") -> list[dict]:
+    """Render the trigger + loaded context into a single user message."""
+    objetivo = f" sobre {trigger.objetivo!r}" if trigger.objetivo else ""
+    body = (
+        f"Disparador: {trigger.kind}:{trigger.action}{objetivo}.\n"
+        "Decide qué hacer y responde de forma concisa."
+    )
+    return [{"role": "user", "content": body}]
+
+
+async def _judge(
+    trigger: "watchlist.Trigger",
+    ep: Episode,
+    *,
+    instance_id: str,
+    config: Config,
+    provider: Optional[ModelProvider],
+    completion_fn,
+    force_think: bool,
+    force_justdo: bool,
+) -> bool:
+    """Run the think-path for a non-fixed trigger. Returns True if the model ran.
+
+    On ``ProviderNotConfigured`` / ``BudgetExceeded`` the episode is finished as
+    ``DEFERRED_DECISION`` and False is returned — the caller counts it as deferred.
+    """
+    try:
+        ctx = await memory_load.load(instance_id, token_budget=config.context_token_budget)
+        decision = router.decide(
+            trigger, ctx, config=config,
+            force_think=force_think, force_justdo=force_justdo,
+        )
+        chosen = provider or decision.provider
+        if chosen is None:
+            raise ProviderNotConfigured("router resolved no provider")
+
+        opts: dict = {}
+        if completion_fn is not None:
+            opts["completion_fn"] = completion_fn
+        system = ctx.to_prompt()
+        if system:
+            opts["system"] = system
+
+        result = await chosen.complete(
+            _build_messages(trigger, ctx),
+            model=decision.model,
+            max_tokens=_JUDGMENT_MAX_TOKENS,
+            **opts,
+        )
+        ep.finish(
+            decision=decision.reason,
+            accion=trigger.action,
+            resultado=result.text,
+            costo_usd=result.cost_usd,
+        )
+        return True
+    except (ProviderNotConfigured, BudgetExceeded) as exc:
+        ep.finish(
+            decision=DEFERRED_DECISION,
+            accion=trigger.action,
+            resultado=f"deferred ({type(exc).__name__}): {exc}",
+        )
+        return False
+
+
+async def step(
+    instance_id: Optional[str] = None,
+    *,
+    config: Optional[Config] = None,
+    provider: Optional[ModelProvider] = None,
+    completion_fn=None,
+    force_think: bool = False,
+    force_justdo: bool = False,
+) -> dict:
     """
     Advance the brain one tick. Returns a summary dict of counts:
-        {"triggers": N, "actions": A, "deferred": D}
+        {"triggers": N, "actions": A, "judged": J, "deferred": D}
     No triggers → ``{"triggers": 0}`` (the brain sleeps; no episode written).
+
+    The judgment branch wakes the model via the router. ``provider`` and
+    ``completion_fn`` are offline injection seams for tests (no network when set);
+    ``force_think`` / ``force_justdo`` are the ``$think`` / ``$justdo`` overrides.
 
     Idempotent-ish: a fixed action marks its task ``hecha`` so the next ``step()``
     finds nothing. ``init_db()`` is called here (idempotent) so callers need not.
     """
     instance_id = instance_id or Config.instance_id
+    config = config or Config()
     await db.init_db()
 
     triggers = await watchlist.check(instance_id)
@@ -40,6 +130,7 @@ async def step(instance_id: Optional[str] = None) -> dict:
         return {"triggers": 0}
 
     n_actions = 0
+    n_judged = 0
     n_deferred = 0
 
     for trigger in triggers:
@@ -57,27 +148,34 @@ async def step(instance_id: Optional[str] = None) -> dict:
                 resultado=result,
             )
             n_actions += 1
+            ran_model = False
         else:
-            # TODO: Phase 2 router — load layered memory within a token budget,
-            # let router.decide(trigger, ctx) pick provider-or-harness, run via
-            # the executor, and verify the result. For now we record the trigger
-            # as needing judgment and call NO model.
-            ep.finish(
-                decision=DEFERRED_DECISION,
-                accion=trigger.action,
-                resultado=f"deferred to router: {trigger.action!r} on {trigger.objetivo!r}",
+            # Judgment — the model wakes for criteria (§2.4). Guarded so a missing
+            # provider or a spent budget degrades to a deferred episode, no crash.
+            ran_model = await _judge(
+                trigger, ep,
+                instance_id=instance_id, config=config,
+                provider=provider, completion_fn=completion_fn,
+                force_think=force_think, force_justdo=force_justdo,
             )
-            n_deferred += 1
+            if ran_model:
+                n_judged += 1
+            else:
+                n_deferred += 1
 
         await ep.append()
 
         # Mark the originating task done so the next tick doesn't re-fire it.
         if trigger.task_id is not None:
-            estado = "hecha" if trigger.maps_to_fixed_action() else "diferida"
+            if trigger.maps_to_fixed_action() or ran_model:
+                estado = "hecha"
+            else:
+                estado = "diferida"
             await db.set_task_state(instance_id, trigger.task_id, estado)
 
     return {
         "triggers": len(triggers),
         "actions": n_actions,
+        "judged": n_judged,
         "deferred": n_deferred,
     }
