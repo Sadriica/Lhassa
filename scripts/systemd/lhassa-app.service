@@ -1,0 +1,34 @@
+# Lhassa — always-on dashboard + REST API + scheduler (the "body" that stays up).
+#
+# Runs the non-voice services in the foreground so the dashboard at
+# http://127.0.0.1:7766 is continuously available and the scheduler keeps
+# ticking. This reuses docker/run_api.py — the API-only entry that main.py would
+# start minus the voice pipeline — so the service needs NO audio devices and NO
+# Deepgram/Cartesia keys (Config.validate() is not called on this path). Data
+# lives under the user's ~/.lhassa (HOME is the real home here, not /data).
+#
+# Install as a USER unit (do NOT install system-wide). The installer does this
+# for you (scripts/install.sh); to do it by hand:
+#   cp scripts/systemd/lhassa-app.service ~/.config/systemd/user/
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now lhassa-app.service
+#   journalctl --user -u lhassa-app -f          # watch it
+#
+# For the service to keep running at boot before you log in, enable lingering:
+#   loginctl enable-linger "$USER"   (may need sudo/polkit)
+#
+# Adjust the paths below if your checkout or venv live elsewhere.
+[Unit]
+Description=Lhassa dashboard + REST API + scheduler
+After=graphical-session.target network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/Code/lhassa
+ExecStart=%h/Code/lhassa/.venv/bin/python %h/Code/lhassa/docker/run_api.py
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target
