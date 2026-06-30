@@ -38,6 +38,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Feature routers (kept in their own modules; mounted here).
+from lhassa.api import code_routes, flow_routes, relationship_routes  # noqa: E402
+
+app.include_router(code_routes.router)
+app.include_router(relationship_routes.router)
+app.include_router(flow_routes.router)
+
 DASHBOARD_DIST = Path(__file__).parent.parent.parent / "dashboard" / "dist"
 
 _START_TIME = time.time()
