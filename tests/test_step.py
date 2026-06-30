@@ -8,6 +8,8 @@ monkeypatched git subprocess. No live network, LLM, or git.
 import pytest
 import pytest_asyncio  # noqa: F401
 
+from lhassa.llm.provider import Completion, ProviderNotConfigured
+
 
 async def _init(tmp_path, monkeypatch):
     import lhassa.core.db as db
@@ -110,7 +112,32 @@ async def test_step_respects_instance_isolation(tmp_path, monkeypatch):
     assert len(await db.load_pending_tasks("inst_other")) == 1
 
 
-# ── unknown action → safe episode, no raise ──────────────────────────────────────
+# ── judgment branch — offline fake provider ──────────────────────────────────────
+
+
+class FakeProvider:
+    """Offline ModelProvider double — records calls, returns a canned Completion."""
+
+    def __init__(self, *, name="fake", zero_retention=False, text="judged it",
+                 cost_usd=0.0012, raises=None):
+        self.name = name
+        self.zero_retention = zero_retention
+        self._text = text
+        self._cost = cost_usd
+        self._raises = raises
+        self.calls = []
+
+    async def complete(self, messages, *, model=None, max_tokens=1024, **opts):
+        self.calls.append({"messages": messages, "model": model, "max_tokens": max_tokens})
+        if self._raises is not None:
+            raise self._raises
+        return Completion(
+            text=self._text, model=model or "m",
+            input_tokens=10, output_tokens=20, cost_usd=self._cost,
+        )
+
+
+# ── unknown action with no usable provider → deferred episode, no raise ───────────
 
 @pytest.mark.asyncio
 async def test_step_unknown_action_is_deferred_safely(tmp_path, monkeypatch):
@@ -119,9 +146,12 @@ async def test_step_unknown_action_is_deferred_safely(tmp_path, monkeypatch):
 
     await db.add_task("inst_personal", "teleport", "marte", params={})
 
-    summary = await step.step("inst_personal")  # must not raise
+    # Provider is not configured → the judgment branch degrades to deferred.
+    prov = FakeProvider(raises=ProviderNotConfigured("nope"))
+    summary = await step.step("inst_personal", provider=prov)  # must not raise
     assert summary["triggers"] == 1
     assert summary["actions"] == 0
+    assert summary["judged"] == 0
     assert summary["deferred"] == 1
 
     eps = await db.load_recent_episodes("inst_personal")
@@ -131,8 +161,58 @@ async def test_step_unknown_action_is_deferred_safely(tmp_path, monkeypatch):
 
     # Not re-fired on the next tick (marked diferida, not pendiente).
     assert await db.load_pending_tasks("inst_personal") == []
-    summary2 = await step.step("inst_personal")
+    summary2 = await step.step("inst_personal", provider=prov)
     assert summary2 == {"triggers": 0}
+
+
+# ── judgment branch — fake provider runs, records decision + cost ─────────────────
+
+@pytest.mark.asyncio
+async def test_step_judgment_runs_provider_and_records(tmp_path, monkeypatch):
+    db = await _init(tmp_path, monkeypatch)
+    from lhassa.core import step
+
+    await db.add_task("inst_personal", "decide_thing", "asunto", params={})
+
+    prov = FakeProvider(text="hice el juicio", cost_usd=0.0034)
+    summary = await step.step("inst_personal", provider=prov)
+    assert summary["triggers"] == 1
+    assert summary["actions"] == 0
+    assert summary["judged"] == 1
+    assert summary["deferred"] == 0
+
+    # The fake provider was actually invoked.
+    assert len(prov.calls) == 1
+
+    eps = await db.load_recent_episodes("inst_personal")
+    assert len(eps) == 1
+    ep = eps[0]
+    assert ep["despertar_por"] == "task:decide_thing"
+    assert ep["accion"] == "decide_thing"
+    assert ep["resultado"] == "hice el juicio"
+    assert ep["decision"].startswith("think:")
+    assert ep["costo_usd"] == pytest.approx(0.0034)
+
+    # Task marked done; not re-fired.
+    assert await db.load_pending_tasks("inst_personal") == []
+
+
+@pytest.mark.asyncio
+async def test_step_judgment_budget_exceeded_degrades(tmp_path, monkeypatch):
+    db = await _init(tmp_path, monkeypatch)
+    from lhassa.core import step
+    from lhassa.llm.gateway import BudgetExceeded
+
+    await db.add_task("inst_personal", "decide_thing", "asunto", params={})
+
+    prov = FakeProvider(raises=BudgetExceeded("spent"))
+    summary = await step.step("inst_personal", provider=prov)  # must not raise
+    assert summary["judged"] == 0
+    assert summary["deferred"] == 1
+
+    eps = await db.load_recent_episodes("inst_personal")
+    assert eps[0]["decision"] == step.DEFERRED_DECISION
+    assert "BudgetExceeded" in eps[0]["resultado"]
 
 
 # ── watchlist.check ──────────────────────────────────────────────────────────────
