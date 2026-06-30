@@ -50,6 +50,46 @@ message via opencode at $0. **Backlog / `[SUPUESTO]`:** adopt the registry in th
 registries (providers/harnesses/verifiers/specialists) as they're touched (continuous); `/status`
 reads the gateway ledger path/schema directly; route ties break by child declaration order.
 
+## 2026-06-30 — Product/UX batch: skills, Lhassa-as-root, org flow, CLI palette, settings, templates, Lhasa reskin
+
+A big autonomous product/UX push. All committed, gates green (full suite 849 → 876), no AI
+attribution. Lhassa is the city's identity now — visually and organizationally.
+- **First-class skills** (`3323996`): `lhassa/skills/` — SKILL.md format (YAML frontmatter +
+  instructions, the skills.md / awesome-agent-skills convention) + JSON form, `SkillStore`
+  (~/.lhassa/skills), AI create/improve (degrade without a model), offline `recommend` with a
+  seed catalog, `brains_with_skill`/`assign_to_brain`. `lhassa skills` + `/api/skills/*`.
+- **Lhassa = permanent root administrator** (`54701bb`): `config.root_admin_id` (default
+  "lhassa") always roots the org; it's never removed/demoted; `promote` makes a brain a top-level
+  child of Lhassa (never unseats it); `default_topology`/`load_topology` pin/migrate the admin;
+  `describe()` exposes `admin`/`is_admin`.
+- **n8n-style org FLOW editor + skills panel** (`95ada50`): React Flow canvas — nodes=brains,
+  drag-to-reparent (→ move), inspector edit/promote/delete, route preview; the Lhassa admin node
+  is anchored (no source handle, not draggable, can't be moved/deleted). SkillsPanel drives the
+  skills API.
+- **CLI redesign** (`05296d7`): `_boot.quiet_logging()` kills loguru's default DEBUG sink (no more
+  pipecat/Tools-registered/gateway-DEBUG spam in the REPL) before the heavy imports; `theme.py` is
+  the **Lhasa palette** — temple GOLD, monk-robe RED (sparing), snow WHITE, sage GREEN, stone DIM;
+  styled prompt `lhassa ›`, cost footer, `/help`. Override via `LHASSA_CLI_LOG_LEVEL`.
+- **Dashboard reskin to the Lhasa palette** (`a0bb2d6`): warm-gold elegant dark UI (same hexes as
+  the CLI), Inter + JetBrains Mono, tracked labels, dual-rail nav with a gold indicator, the org
+  admin node in gold+red; a Tailwind `@theme` remap folds all panels into one warm family (no teal).
+- **Settings service + flow templates** (`b4d960a`): `settings.py` (an EDITABLE allowlist; `set`
+  writes `~/.lhassa/settings.env` — loaded after `.env` with override, secrets in `.env` untouched —
+  and applies to the live Config; `effective()` masks secrets + exposes options/restart hints) +
+  `org/templates.py` (use-case presets built UNDER Lhassa: code-review, bug-investigation,
+  refactor-migration, incident-response, and a multi-level **software-factory** delivery→{frontend,
+  backend,qa,devops}). `lhassa config`, `lhassa org templates|apply`, `GET/PATCH /api/config`,
+  `GET/POST /api/org/templates…`.
+- **Settings panel + templates picker** (`9218ba5`): a Settings section (per-type controls, masked
+  secrets, restart-hint pills, red Budget&Safety group) + a Templates gallery (apply → adopt chart,
+  Software Factory highlighted), in the Lhasa design.
+
+**Live:** the dashboard (http://127.0.0.1:7766, served by `lhassa-app.service`) now has Brains
+(flow/tree/templates) · Skills · Settings · Reports · Fleet · Activity, in the elegant Lhasa
+identity. A global `~/.local/bin/lhassa` launcher was added so the CLI runs from anywhere. Live
+smokes: edit a setting → settings.env + live apply; apply software-factory → 5 brains under the
+Lhassa admin; create+assign a skill; the REPL is clean and colored.
+
 ## 2026-06-30 — Capability batch: fallback chain, capabilities, Docker, org management, Warp dashboard, installer
 
 A large autonomous batch turning Lhassa into a more capable, portable, always-on tool. All
