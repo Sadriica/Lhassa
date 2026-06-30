@@ -19,6 +19,8 @@ import subprocess
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Union
 
+from lhassa.registry import Registry
+
 
 # ── subprocess seam (mockable) ───────────────────────────────────────────────────
 
@@ -224,14 +226,39 @@ async def _pull_postulaciones(instance_id: str, params: dict) -> int:
 
 # ── registry + dispatch ──────────────────────────────────────────────────────────
 
-# The CLOSED set of fixed deterministic actions (no LLM). Membership here is what
-# makes a Trigger "map to a fixed action". Grow this as new typed actions land.
-# An action may be sync (``-> str``) or async (``-> Awaitable[str]``); ``run``
-# awaits the latter so DB-backed actions work without touching ``step()``.
-ACTIONS: dict[str, Callable[[dict], Union[str, Awaitable[str]]]] = {
-    "sync_repo": sync_repo,
-    "tracking_postulaciones": tracking_postulaciones,
-}
+# The set of fixed deterministic actions (no LLM) lives in a ``Registry`` — the
+# shared swap-point primitive (``lhassa/registry.py``). This makes actions a
+# **drop-in** capability: a plugin module can ``@register_action("x")`` a new
+# typed action WITHOUT editing this file (the elastic/modular principle), and a
+# duplicate name is rejected instead of silently clobbering an existing action.
+ActionFn = Callable[[dict], Union[str, Awaitable[str]]]
+_REGISTRY: Registry[ActionFn] = Registry(kind="action")
+
+
+def register_action(name: str, fn: "ActionFn | None" = None, *, override: bool = False):
+    """Register a deterministic action under ``name``.
+
+    Usable as a direct call (``register_action("x", fn)``) or as a decorator
+    (``@register_action("x")``). A duplicate name raises unless ``override=True``.
+    This is the drop-in path for plugins to add a typed action.
+    """
+    return _REGISTRY.register(name, fn, override=override)
+
+
+# Seed the closed Phase-0/4 set. Membership in ``ACTIONS`` is what makes a Trigger
+# "map to a fixed action". An action may be sync (``-> str``) or async
+# (``-> Awaitable[str]``); ``run`` awaits the latter so DB-backed actions work
+# without touching ``step()``.
+register_action("sync_repo", sync_repo)
+register_action("tracking_postulaciones", tracking_postulaciones)
+
+# Backward-compatible module-level mapping. It is a LIVE, read-only view of the
+# registry's backing store, so existing consumers keep working byte-for-byte:
+# ``watchlist`` does ``action in actions.ACTIONS`` and this module's ``run`` reads
+# it — both supported (``in``/``[]``/``.get()``/``len()``/iteration) — while later
+# ``register_action`` calls (incl. from plugins) are reflected automatically. It is
+# read-only so nothing can bypass the registry's duplicate-protection by assigning.
+ACTIONS: "Any" = _REGISTRY.as_mapping()
 
 
 async def run(action: str, params: dict, episode: Any = None) -> str:
@@ -246,7 +273,7 @@ async def run(action: str, params: dict, episode: Any = None) -> str:
     if episode is not None:
         episode.accion = action
 
-    fn = ACTIONS.get(action)
+    fn = _REGISTRY.get_or_none(action)
     if fn is None:
         return f"unknown action: {action!r}"
 
