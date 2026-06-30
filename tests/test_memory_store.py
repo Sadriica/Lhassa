@@ -18,7 +18,7 @@ async def _init(tmp_db, monkeypatch):
 @pytest.mark.asyncio
 async def test_init_db_creates_tables(tmp_db, monkeypatch):
     await _init(tmp_db, monkeypatch)
-    import aiosqlite
+    from lhassa._vendor import aiosqlite
     async with aiosqlite.connect(tmp_db) as db:
         async with db.execute(
             "SELECT name FROM sqlite_master WHERE type='table'"
@@ -100,7 +100,7 @@ async def test_save_session_trims_to_100(tmp_db, monkeypatch):
     store = await _init(tmp_db, monkeypatch)
     for i in range(105):
         await store.save_session(f"Session {i}")
-    import aiosqlite
+    from lhassa._vendor import aiosqlite
     async with aiosqlite.connect(tmp_db) as db:
         async with db.execute("SELECT COUNT(*) FROM sessions") as cur:
             (count,) = await cur.fetchone()

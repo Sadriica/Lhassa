@@ -16,7 +16,7 @@ async def _init(tmp_path, monkeypatch):
 @pytest.mark.asyncio
 async def test_org_messages_table_created(tmp_path, monkeypatch):
     db = await _init(tmp_path, monkeypatch)
-    import aiosqlite
+    from lhassa._vendor import aiosqlite
     async with aiosqlite.connect(db.DB_PATH) as conn:
         async with conn.execute(
             "SELECT name FROM sqlite_master WHERE type='table'"

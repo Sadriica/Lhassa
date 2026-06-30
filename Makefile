@@ -39,7 +39,7 @@ run:
 dev:
 	LHASSA_DEBUG=1 LHASSA_LOG_LEVEL=DEBUG uv run python main.py
 
-# Dashboard hot-reload dev server (proxies API to :7860)
+# Dashboard hot-reload dev server (proxies API to :7766)
 dashboard-dev:
 	cd dashboard && npm run dev
 

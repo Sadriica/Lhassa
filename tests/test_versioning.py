@@ -86,7 +86,7 @@ async def test_approve_merges_into_main_and_routes_through_approval(tools_repo):
     assert all(a.get("tipo") != "tool_graduation" or a.get("estado") != "pendiente"
                for a in pending)
     # And a resolved tool_graduation approval exists.
-    import aiosqlite
+    from lhassa._vendor import aiosqlite
 
     async with aiosqlite.connect(db.DB_PATH) as conn:
         conn.row_factory = aiosqlite.Row

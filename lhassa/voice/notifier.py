@@ -8,7 +8,6 @@ Platform support:
   Windows — PowerShell New-BurntToastNotification or a msg-box fallback
 """
 
-import asyncio
 import platform
 import subprocess
 from loguru import logger
@@ -28,7 +27,7 @@ async def notify(message: str, title: str = "Lhassa"):
         except Exception as e:
             logger.warning(f"TTS notify failed, falling back to desktop: {e}")
 
-    await asyncio.to_thread(_desktop_notify, title, message)
+    _desktop_notify(title, message)
 
 
 def _desktop_notify(title: str, message: str):

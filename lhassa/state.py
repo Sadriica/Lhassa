@@ -88,9 +88,12 @@ class AppState:
             self.audit_events = []
 
     def _save_audit_events(self):
-        self._AUDIT_PATH.parent.mkdir(parents=True, exist_ok=True)
-        payload = [asdict(event) for event in self.audit_events[: self._MAX_AUDIT_EVENTS]]
-        self._AUDIT_PATH.write_text(json.dumps(payload, ensure_ascii=True, indent=2))
+        try:
+            self._AUDIT_PATH.parent.mkdir(parents=True, exist_ok=True)
+            payload = [asdict(event) for event in self.audit_events[: self._MAX_AUDIT_EVENTS]]
+            self._AUDIT_PATH.write_text(json.dumps(payload, ensure_ascii=True, indent=2))
+        except OSError as exc:
+            logger.debug("audit persistence skipped: {}", exc)
 
     def replace_audit_events(self, events: list[dict] | list[AuditEvent]):
         loaded: list[AuditEvent] = []

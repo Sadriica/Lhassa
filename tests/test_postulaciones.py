@@ -21,7 +21,7 @@ async def _init(tmp_path, monkeypatch):
 @pytest.mark.asyncio
 async def test_postulaciones_table_exists_with_instance_id(tmp_path, monkeypatch):
     db = await _init(tmp_path, monkeypatch)
-    import aiosqlite
+    from lhassa._vendor import aiosqlite
     async with aiosqlite.connect(db.DB_PATH) as conn:
         async with conn.execute("PRAGMA table_info(postulaciones)") as cur:
             cols = {row[1] for row in await cur.fetchall()}

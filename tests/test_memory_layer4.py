@@ -28,7 +28,7 @@ class _CfgOff(_Cfg):
 @pytest.mark.asyncio
 async def test_fact_embeddings_table_exists(tmp_path, monkeypatch):
     db = await _init(tmp_path, monkeypatch)
-    import aiosqlite
+    from lhassa._vendor import aiosqlite
     async with aiosqlite.connect(db.DB_PATH) as conn:
         async with conn.execute("PRAGMA table_info(fact_embeddings)") as cur:
             cols = {row[1] for row in await cur.fetchall()}

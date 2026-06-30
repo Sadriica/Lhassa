@@ -25,7 +25,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Awaitable, Callable, Optional
 
-import aiosqlite
+from lhassa._vendor import aiosqlite
 from loguru import logger
 
 from lhassa.state import state

@@ -9,12 +9,11 @@ Discipline matches the rest of :mod:`lhassa.notify`:
 - **configured** == the ``notify-send`` binary exists on ``PATH``;
 - **never raises** — a missing binary or a failed call is logged and yields
   ``False``, so a notification can never break the caller;
-- the blocking ``subprocess`` call runs in a thread so it never stalls the loop.
+- the subprocess call has a short timeout and never propagates errors.
 """
 
 from __future__ import annotations
 
-import asyncio
 import shutil
 import subprocess
 
@@ -53,7 +52,7 @@ class DesktopChannel:
         if shutil.which(_NOTIFY_SEND) is None:
             return False
         try:
-            await asyncio.to_thread(self._notify, text, level)
+            self._notify(text, level)
             return True
         except Exception as exc:  # a Channel never raises
             logger.warning(f"notify: desktop channel failed: {exc}")

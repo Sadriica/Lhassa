@@ -69,7 +69,7 @@ async def _monitor_file_pattern(path: Path, display: str, pattern: str):
         if st.st_size == offset:
             continue
 
-        chunk = await asyncio.to_thread(_read_bytes_from_offset, path, offset)
+        chunk = _read_bytes_from_offset(path, offset)
         offset += len(chunk)
         if not chunk:
             continue

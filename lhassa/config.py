@@ -287,12 +287,17 @@ class Config:
     )
 
     # ── Dashboard API ─────────────────────────────────────────────────────────
-    # Bind to localhost only by default — the dashboard is not authenticated and
-    # lhassa can run privileged/root commands, so it must not be network-reachable.
-    # Set LHASSA_API_HOST=0.0.0.0 only if you accept exposing it on your LAN.
+    # Bind to localhost only by default. If you expose the API beyond loopback,
+    # set LHASSA_API_TOKEN; unauthenticated non-loopback requests are rejected.
     api_host: str = os.getenv("LHASSA_API_HOST", "127.0.0.1")
     # Dedicated port for lhassa (uncommon, unlikely to clash).
     api_port: int = _safe_int(os.getenv("LHASSA_API_PORT", "7766"), 7766)
+    # Optional bearer token for the REST API and WebSocket. Local loopback access
+    # stays usable without a token; network access requires this token.
+    api_token: str = os.getenv("LHASSA_API_TOKEN", "")
+    # CSV list of browser origins allowed to call the API. Empty = localhost dev
+    # origins plus this API port. Avoid "*" because this process can mutate state.
+    api_cors_origins: str = os.getenv("LHASSA_API_CORS_ORIGINS", "")
 
     # ── Microsoft Graph — Outlook email + calendar (optional) ─────────────────
     ms_tenant_id: str = os.getenv("MS_TENANT_ID", "")

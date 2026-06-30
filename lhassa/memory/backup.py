@@ -19,7 +19,7 @@ that monkeypatch it (and the ``BACKUP_DIR`` seam) reroute everything to tmp path
 
 from pathlib import Path
 
-import aiosqlite
+from lhassa._vendor import aiosqlite
 
 from lhassa.config import Config
 from lhassa.core import db

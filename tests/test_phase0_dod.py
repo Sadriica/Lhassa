@@ -66,7 +66,7 @@ def _agent_against_app(monkeypatch):
 
 async def _all_rows(db, table):
     """Raw rows of a table straight from disk (for instance_id / persistence checks)."""
-    import aiosqlite
+    from lhassa._vendor import aiosqlite
 
     async with aiosqlite.connect(db.DB_PATH) as conn:
         conn.row_factory = aiosqlite.Row

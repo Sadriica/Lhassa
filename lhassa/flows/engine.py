@@ -145,6 +145,17 @@ def resolve_brain(node: FlowNode, data: Any, config: Config) -> tuple[str, bool]
 
 async def _default_executor(goal: str, *, department: str, config: Config, **_: Any) -> dict:
     """The default task executor — the org department brain (offline + $0 by default)."""
+    if not _live_enabled():
+        return {
+            "ok": True,
+            "summary": (
+                f"[offline] {department} department handled (live thinking disabled "
+                f"— set LHASSA_ORG_LIVE=1 to think): {goal}"
+            ),
+            "department": department,
+            "cost_usd": 0.0,
+            "model": "offline",
+        }
     from lhassa.org.executor import brain_executor
 
     return await brain_executor(goal, department=department, config=config)

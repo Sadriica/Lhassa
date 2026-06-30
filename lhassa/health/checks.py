@@ -424,7 +424,12 @@ def run_all(out_dir: str | Path | None = None, notify: bool = True) -> dict:
             }
     """
     out_path = Path(out_dir) if out_dir is not None else _default_out_dir()
-    out_path.mkdir(parents=True, exist_ok=True)
+    snapshots_enabled = True
+    try:
+        out_path.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        logger.debug("health snapshot directory unavailable: {}", exc)
+        snapshots_enabled = False
 
     results: dict[str, dict] = {}
     alerted: list[str] = []
@@ -437,12 +442,13 @@ def run_all(out_dir: str | Path | None = None, notify: bool = True) -> dict:
             result = _result(name, "info", f"Check '{name}' errored.", str(exc))
         results[name] = result
 
-        try:
-            (out_path / f"{name}.json").write_text(
-                json.dumps(result, ensure_ascii=True, indent=2)
-            )
-        except OSError as exc:
-            logger.warning("could not write snapshot for {}: {}", name, exc)
+        if snapshots_enabled:
+            try:
+                (out_path / f"{name}.json").write_text(
+                    json.dumps(result, ensure_ascii=True, indent=2)
+                )
+            except OSError as exc:
+                logger.debug("could not write snapshot for {}: {}", name, exc)
 
         if notify and result["level"] in ("warn", "alert"):
             if _notify(result):
@@ -457,12 +463,13 @@ def run_all(out_dir: str | Path | None = None, notify: bool = True) -> dict:
         "ok": overall in ("info", "notice"),
         "alerted": alerted,
     }
-    try:
-        (out_path / "digest.json").write_text(
-            json.dumps(digest, ensure_ascii=True, indent=2)
-        )
-    except OSError as exc:
-        logger.warning("could not write digest: {}", exc)
+    if snapshots_enabled:
+        try:
+            (out_path / "digest.json").write_text(
+                json.dumps(digest, ensure_ascii=True, indent=2)
+            )
+        except OSError as exc:
+            logger.debug("could not write digest: {}", exc)
     return digest
 
 

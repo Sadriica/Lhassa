@@ -197,7 +197,7 @@ async def _today_spend(config) -> Optional[float]:
         from datetime import datetime, timezone
         from pathlib import Path
 
-        import aiosqlite
+        from lhassa._vendor import aiosqlite
 
         override = getattr(config, "llm_gateway_db_path", None)
         path = Path(override) if override else Path.home() / ".lhassa" / "llm_gateway.db"

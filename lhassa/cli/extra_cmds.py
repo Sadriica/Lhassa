@@ -29,8 +29,9 @@ import time
 import typer
 from rich.console import Console
 from rich.markup import escape
+from rich.panel import Panel
 
-from lhassa.cli.theme import LHASSA_THEME
+from lhassa.cli.theme import LHASSA_THEME, PANEL_KWARGS
 
 _ON = "✓"
 _OFF = "–"
@@ -77,7 +78,7 @@ def render_overview(data: dict) -> str:
     tools = data.get("tools", {}) or {}
     errors = data.get("errors", {}) or {}
 
-    lines: list[str] = ["[brand]ᕮ Lhassa[/] [dim]· overview[/]", ""]
+    lines: list[str] = []
 
     shape = "standalone" if brains.get("standalone") else "org"
     lines.append(
@@ -128,7 +129,13 @@ def render_overview(data: dict) -> str:
         lines.append("")
         lines.append("  [warn]Degraded:[/] " + ", ".join(escape(k) for k in errors))
 
-    return "\n".join(lines)
+    body = "\n".join(lines)
+    return Panel(
+        body,
+        title="[brand]ᕮ Lhassa[/] [dim]overview[/]",
+        subtitle="[dim]brains · spend · approvals · activity[/]",
+        **PANEL_KWARGS,
+    )
 
 
 def status_cmd(
@@ -182,11 +189,17 @@ def version_cmd(
         _dump_json(info)
         return
     out = _out()
-    out.print(f"[brand]Lhassa[/] [value]{info['version']}[/] [dim]· Python {info['python']}[/]")
-    out.print(f"[dim]instance[/] [model]{escape(str(info['instance_id']))}[/]")
     toggles = info["toggles"]
     flags = " ".join(f"{k}={_flag(v)}" for k, v in toggles.items())
-    out.print(f"[dim]toggles ·[/] {flags}")
+    out.print(
+        Panel(
+            f"[title]Version[/] [value]{info['version']}[/] [dim]· Python {info['python']}[/]\n"
+            f"[dim]instance[/] [model]{escape(str(info['instance_id']))}[/]\n"
+            f"[dim]toggles[/] {flags}",
+            title="[brand]Lhassa[/]",
+            **PANEL_KWARGS,
+        )
+    )
 
 
 # ── serve (run the dashboard + API) ───────────────────────────────────────────────
@@ -255,17 +268,25 @@ async def _recent_episodes(n: int) -> list[dict]:
 
 def render_activity(rows: list[dict]) -> str:
     """A themed block of the latest episodes (newest first) as Rich markup."""
-    lines = [f"[brand]ᕮ Lhassa[/] [dim]· activity ({time.strftime('%H:%M:%S')})[/]", ""]
+    lines = []
     if not rows:
         lines.append("  [dim](no episodes yet)[/]")
-        return "\n".join(lines)
+        return Panel(
+            "\n".join(lines),
+            title=f"[brand]ᕮ Lhassa[/] [dim]activity {time.strftime('%H:%M:%S')}[/]",
+            **PANEL_KWARGS,
+        )
     for ep in rows:
         when = escape(str(ep.get("creado_en") or "")[:19])
         trigger = escape(str(ep.get("despertar_por") or "?"))
         decision = escape(str(ep.get("decision") or "—"))
         resultado = escape(str(ep.get("resultado") or "")[:80])
         lines.append(f"  [dim]{when}[/] [model]{trigger}[/] [dim]{decision}[/] {resultado}")
-    return "\n".join(lines)
+    return Panel(
+        "\n".join(lines),
+        title=f"[brand]ᕮ Lhassa[/] [dim]activity {time.strftime('%H:%M:%S')}[/]",
+        **PANEL_KWARGS,
+    )
 
 
 def watch_cmd(
