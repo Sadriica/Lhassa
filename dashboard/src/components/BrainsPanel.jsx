@@ -49,6 +49,61 @@ function rowsToLimits(rows) {
   return out
 }
 
+// ── tree helper ───────────────────────────────────────────────────────────────
+// Descendants of `rootId` (so the Move dropdown can exclude them — re-parenting a
+// node under its own descendant would create a cycle).
+function descendantIds(rootId, byId) {
+  const out = new Set()
+  const walk = (id) => (byId[id]?.children || []).forEach((c) => {
+    if (!out.has(c)) { out.add(c); walk(c) }
+  })
+  walk(rootId)
+  return out
+}
+
+// ── department field ──────────────────────────────────────────────────────────
+// A dropdown over the EXISTING departments (distinct non-empty values across the
+// chart) plus a "+ New department…" option that reveals a text input to coin a new
+// one. Creating a department is just assigning a fresh string — no backend change.
+const NEW_DEPT = '__new_dept__'
+function DepartmentField({ value, options, onChange }) {
+  // We're in "type a new one" mode when adding, or when the current value isn't a
+  // known department (e.g. mid-typing a brand new name).
+  const known = options.includes(value)
+  const [adding, setAdding] = useState(value !== '' && !known)
+
+  if (adding) {
+    return (
+      <div className="flex gap-1.5">
+        <input
+          className="lh-input" autoFocus placeholder="new department name"
+          value={value} onChange={(e) => onChange(e.target.value)}
+        />
+        <button
+          type="button" className="lh-btn" title="pick from existing"
+          onClick={() => { setAdding(false); onChange('') }}
+        >
+          ↩
+        </button>
+      </div>
+    )
+  }
+  return (
+    <select
+      className="lh-select"
+      value={known ? value : ''}
+      onChange={(e) => {
+        if (e.target.value === NEW_DEPT) { setAdding(true); onChange('') }
+        else onChange(e.target.value)
+      }}
+    >
+      <option value="">(none)</option>
+      {options.map((d) => <option key={d} value={d}>{d}</option>)}
+      <option value={NEW_DEPT}>+ New department…</option>
+    </select>
+  )
+}
+
 // ── skills picker ───────────────────────────────────────────────────────────
 function SkillPicker({ available, selected, onToggle }) {
   if (available.length === 0) {
@@ -158,20 +213,56 @@ function LimitsEditor({ rows, setRows }) {
 }
 
 // ── inspector for the selected brain ────────────────────────────────────────
-function Inspector({ node, allIds, skills, installedSet, onInstall, onPatch, onMove, onPromote, onDelete, busy }) {
+function Inspector({ node, nodes, departments, skills, installedSet, onInstall, onAddSkill, onPatch, onMove, onPromote, onDelete, busy }) {
   const [role, setRole] = useState(node.role || '')
   const [department, setDepartment] = useState(node.department || '')
   const [pickedSkills, setPickedSkills] = useState(node.skills || [])
   const [limitRows, setLimitRows] = useState(limitsToRows(node.limits))
-  const [moveTo, setMoveTo] = useState('')
+  // The Move dropdown pre-selects the CURRENT parent — if it already reports to
+  // someone, that relationship is shown selected. After a successful move the node
+  // prop updates but this component is NOT remounted (key is node.id), so `moveTo`
+  // keeps reflecting the chosen parent rather than snapping back to a placeholder.
+  const [moveTo, setMoveTo] = useState(node.parent || '')
   const [confirmDelete, setConfirmDelete] = useState(false)
-  // The parent mounts this with key={node.id}, so a new selection remounts the
-  // component with fresh initial state — no reset effect needed.
+  const [recs, setRecs] = useState([])
+  const [addingSkill, setAddingSkill] = useState('')
+
+  // EVERY field is derived from the SELECTED node. The parent keys this component
+  // by node.id so a new selection remounts it fresh; this effect is the explicit
+  // belt-and-suspenders re-init so no field can ever show the previously-selected
+  // brain's data (stale skills/limits/department/role/parent). It keys on node.id
+  // only, so it fires on SELECTION change — not on a save of the same node (which
+  // must keep in-progress edits).
+  useEffect(() => {
+    setRole(node.role || '')
+    setDepartment(node.department || '')
+    setPickedSkills(node.skills || [])
+    setLimitRows(limitsToRows(node.limits))
+    setMoveTo(node.parent || '')
+    setConfirmDelete(false)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [node.id])
+
+  // Recommended skills for THIS brain, ranked by its department (or, if it has
+  // none, its id/role) — the recommend endpoint scores catalog skills by those
+  // words. Refetched whenever the selected brain or its department changes.
+  useEffect(() => {
+    const ctx = (node.department || node.id || node.role || '').trim()
+    let cancelled = false
+    fetch(`/api/skills/recommend?context=${encodeURIComponent(ctx)}`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then((d) => { if (!cancelled) setRecs(Array.isArray(d) ? d.slice(0, 5) : []) })
+      .catch(() => { if (!cancelled) setRecs([]) })
+    return () => { cancelled = true }
+  }, [node.id, node.department, node.role])
 
   const toggleSkill = (d) =>
     setPickedSkills((prev) => (prev.includes(d) ? prev.filter((x) => x !== d) : [...prev, d]))
 
-  const moveTargets = allIds.filter((id) => id !== node.id)
+  const byId = useMemo(() => Object.fromEntries(nodes.map((n) => [n.id, n])), [nodes])
+  const descendants = useMemo(() => descendantIds(node.id, byId), [node.id, byId])
+  // Valid parents: every OTHER node that isn't a descendant (would form a cycle).
+  const moveTargets = nodes.map((n) => n.id).filter((id) => id !== node.id && !descendants.has(id))
   const isAdmin = Boolean(node.is_admin)
 
   return (
@@ -190,7 +281,7 @@ function Inspector({ node, allIds, skills, installedSet, onInstall, onPatch, onM
         </label>
         <label className="space-y-1">
           <span className="lh-label">department</span>
-          <input className="lh-input" value={department} onChange={(e) => setDepartment(e.target.value)} />
+          <DepartmentField value={department} options={departments} onChange={setDepartment} />
         </label>
       </div>
 
@@ -202,6 +293,42 @@ function Inspector({ node, allIds, skills, installedSet, onInstall, onPatch, onM
       <div className="space-y-1">
         <span className="lh-label">carried — install status</span>
         <CarriedSkills skills={pickedSkills} installedSet={installedSet} onInstall={onInstall} />
+      </div>
+
+      <div className="space-y-1">
+        <span className="lh-label">recommended for this brain</span>
+        {recs.filter((r) => !pickedSkills.includes(r.name)).length === 0 ? (
+          <p className="text-[11px]" style={{ color: 'var(--lh-text-faint)' }}>
+            No suggestions{node.department ? ` for ${node.department}` : ''}.
+          </p>
+        ) : (
+          <div className="flex flex-wrap gap-1.5">
+            {recs.filter((r) => !pickedSkills.includes(r.name)).map((r) => (
+              <button
+                key={r.name}
+                type="button"
+                className="lh-tag"
+                style={{ cursor: 'pointer', borderStyle: 'dashed' }}
+                disabled={busy || addingSkill === r.name}
+                title={r.reason ? `${r.description || r.name} · ${r.reason}` : (r.description || r.name)}
+                onClick={async () => {
+                  setAddingSkill(r.name)
+                  const ok = await onAddSkill(node.id, r.name)
+                  if (ok) {
+                    setPickedSkills((prev) => (prev.includes(r.name) ? prev : [...prev, r.name]))
+                    setRecs((prev) => prev.filter((x) => x.name !== r.name))
+                  }
+                  setAddingSkill('')
+                }}
+              >
+                {addingSkill === r.name ? '… ' : '+ '}{r.name}
+              </button>
+            ))}
+          </div>
+        )}
+        <p className="text-[10px]" style={{ color: 'var(--lh-text-faint)' }}>
+          Suggested from this brain&apos;s {node.department ? 'department' : 'name'}. Click to install and assign it.
+        </p>
       </div>
 
       <div className="space-y-1">
@@ -238,7 +365,7 @@ function Inspector({ node, allIds, skills, installedSet, onInstall, onPatch, onM
                 {moveTargets.map((id) => <option key={id} value={id}>{id}</option>)}
               </select>
               <button
-                type="button" className="lh-btn" disabled={busy || !moveTo}
+                type="button" className="lh-btn" disabled={busy || !moveTo || moveTo === node.parent}
                 onClick={() => onMove(node.id, moveTo)}
               >
                 Move
@@ -285,7 +412,7 @@ function Inspector({ node, allIds, skills, installedSet, onInstall, onPatch, onM
 }
 
 // ── create-brain form ───────────────────────────────────────────────────────
-function CreateForm({ allIds, defaultParent, skills, onCreate, onClose, busy }) {
+function CreateForm({ allIds, departments, defaultParent, skills, onCreate, onClose, busy }) {
   const [id, setId] = useState('')
   const [role, setRole] = useState('department')
   const [parent, setParent] = useState(defaultParent || '')
@@ -332,7 +459,7 @@ function CreateForm({ allIds, defaultParent, skills, onCreate, onClose, busy }) 
           </label>
           <label className="space-y-1">
             <span className="lh-label">department</span>
-            <input className="lh-input" value={department} onChange={(e) => setDepartment(e.target.value)} />
+            <DepartmentField value={department} options={departments} onChange={setDepartment} />
           </label>
         </div>
         <div className="space-y-1">
@@ -470,6 +597,33 @@ export default function BrainsPanel() {
   const promoteBrain = (id) =>
     mutate('Promote', () =>
       fetch(`/api/org/brains/${encodeURIComponent(id)}/promote`, { method: 'POST' }))
+  // Add a recommended skill to a brain: install it from the catalog if needed
+  // (ignore 404 — a recommendation may not be a catalog skill), then assign it.
+  // The assign endpoint returns {ok}, not a chart, so we refetch the topology (and
+  // the installed set) to refresh the carried-skills section.
+  const addSkillToBrain = useCallback(async (brainId, name) => {
+    setBusy(true)
+    setError('')
+    try {
+      await fetch(`/api/skills/${encodeURIComponent(name)}/install`, { method: 'POST' }).catch(() => {})
+      const r = await fetch(`/api/skills/${encodeURIComponent(name)}/assign`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ brain_id: brainId }),
+      })
+      if (!r.ok) {
+        const d = await r.json().catch(() => ({}))
+        throw new Error(d.detail || 'Assign failed')
+      }
+      await loadTopology()
+      await loadInstalled()
+      return true
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Assign failed')
+      return false
+    } finally {
+      setBusy(false)
+    }
+  }, [loadTopology, loadInstalled])
+
   const deleteBrain = async (id, force) => {
     const ok = await mutate('Delete', () =>
       fetch(`/api/org/brains/${encodeURIComponent(id)}?force=${force ? 'true' : 'false'}`, { method: 'DELETE' }))
@@ -495,6 +649,15 @@ export default function BrainsPanel() {
 
   const nodes = topology?.nodes || []
   const allIds = useMemo(() => (topology?.nodes || []).map((n) => n.id), [topology])
+  // Existing departments = distinct non-empty `department` values across the chart.
+  const departments = useMemo(() => {
+    const set = new Set()
+    for (const n of topology?.nodes || []) {
+      const d = (n.department || '').trim()
+      if (d) set.add(d)
+    }
+    return [...set].sort((a, b) => a.localeCompare(b))
+  }, [topology])
   const selected = nodes.find((n) => n.id === selectedId) || null
   const routePath = route?.path || []
   const isStandalone = topology?.standalone
@@ -568,7 +731,8 @@ export default function BrainsPanel() {
       {showCreate && (
         <div className="mb-3">
           <CreateForm
-            allIds={allIds} defaultParent={selectedId || topology?.admin || topology?.root} skills={skills}
+            allIds={allIds} departments={departments}
+            defaultParent={selectedId || topology?.admin || topology?.root} skills={skills}
             onCreate={createBrain} onClose={() => setShowCreate(false)} busy={busy}
           />
         </div>
@@ -616,8 +780,8 @@ export default function BrainsPanel() {
             {selected ? (
               <>
                 <Inspector
-                  key={selected.id} node={selected} allIds={allIds} skills={skills}
-                  installedSet={installedSet} onInstall={installSkill}
+                  key={selected.id} node={selected} nodes={nodes} departments={departments} skills={skills}
+                  installedSet={installedSet} onInstall={installSkill} onAddSkill={addSkillToBrain}
                   onPatch={patchBrain} onMove={moveBrain} onPromote={promoteBrain}
                   onDelete={deleteBrain} busy={busy}
                 />
