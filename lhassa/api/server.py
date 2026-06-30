@@ -1022,6 +1022,176 @@ async def assign_skill_endpoint(name: str, payload: dict):
     return {"ok": True, "skill": name, "brain": brain_id}
 
 
+# ── Overview — one defensive aggregate for the dashboard home ──────────────────
+#
+# A single read-only digest for the dashboard's "home" surface and ``lhassa
+# status``: brains, skills, pending approvals, today's cost, health, recent
+# activity, and tool states — everything the owner needs to see (and approve) at a
+# glance. Each sub-section is gathered INDEPENDENTLY and DEFENSIVELY: a failing
+# subsystem is reported under ``errors`` and replaced with a safe default, so the
+# response is always complete and NEVER 500s. LLM-free (no provider is constructed,
+# no model is called). ``build_overview`` is the in-process function the CLI's
+# ``lhassa status`` reuses directly (it does not HTTP back to localhost).
+
+async def _overview_brains() -> dict:
+    """Brain count + permanent admin id + standalone? (from the org topology)."""
+    from lhassa.org import management
+
+    described = management.describe()
+    return {
+        "count": len(described.get("nodes", []) or []),
+        "admin": described.get("admin"),
+        "root": described.get("root"),
+        "standalone": described.get("standalone"),
+    }
+
+
+async def _overview_skills() -> dict:
+    """Installed skill count + recommended (offline catalog minus installed)."""
+    from lhassa.skills.ai import recommend_skills
+    from lhassa.skills.store import SkillStore
+
+    installed = SkillStore(Config).list_skills()
+    recommended = recommend_skills(config=Config)
+    return {"installed": len(installed), "recommended": len(recommended)}
+
+
+async def _overview_approvals() -> dict:
+    """Pending approvals: a count + the queue (id, tipo, payload summary)."""
+    await db.init_db()
+    rows = await approval.pending(Config.instance_id)
+    items = []
+    for r in rows:
+        payload = r.get("payload") or {}
+        items.append(
+            {
+                "id": r.get("id"),
+                "tipo": r.get("tipo"),
+                "accion": payload.get("accion"),
+                "actor_id": payload.get("actor_id"),
+                "summary": payload.get("accion") or r.get("tipo") or "?",
+                "creado_en": r.get("creado_en"),
+            }
+        )
+    return {"pending": len(items), "items": items}
+
+
+async def _overview_cost() -> dict:
+    """Today's spend + the daily budget + the kill-switch (the /api/llm/limits path)."""
+    from lhassa.llm.gateway import gateway
+
+    config = Config()
+    rows = await gateway.ledger_rows()
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    today_cost = 0.0
+    for r in rows:
+        if str(r.get("ts") or "").startswith(today):
+            today_cost += float(r.get("cost_usd") or 0.0)
+    return {
+        "today_cost_usd": round(today_cost, 6),
+        "daily_token_budget": gateway.effective_daily_budget(config),
+        "output_tokens_today": await gateway.daily_output_tokens(),
+        "kill_switch": gateway.kill_switch,
+    }
+
+
+async def _overview_health() -> dict:
+    """Worst level + ok, from the LLM-free PC-state checks (no notifications)."""
+    from lhassa.health import checks
+
+    digest = checks.run_all(notify=False)
+    return {"worst_level": digest.get("worst_level"), "ok": digest.get("ok")}
+
+
+async def _overview_activity() -> dict:
+    """The last few episodes — what the brain has been doing, newest first."""
+    await db.init_db()
+    rows = await db.load_recent_episodes(Config.instance_id, 8)
+    recent = [
+        {
+            "id": r.get("id"),
+            "creado_en": r.get("creado_en"),
+            "despertar_por": r.get("despertar_por"),
+            "decision": r.get("decision"),
+            "resultado": r.get("resultado"),
+        }
+        for r in rows
+    ]
+    return {"recent": recent}
+
+
+async def _overview_tools() -> dict:
+    """Self-written tools: total + a count by estado (cuarentena/graduada/rechazada)."""
+    await db.init_db()
+    rows = await db.list_tools(Config.instance_id)
+    by_estado: dict[str, int] = {}
+    for r in rows:
+        estado = str(r.get("estado") or "?")
+        by_estado[estado] = by_estado.get(estado, 0) + 1
+    return {"count": len(rows), "by_estado": by_estado}
+
+
+_OVERVIEW_SECTIONS = {
+    "brains": _overview_brains,
+    "skills": _overview_skills,
+    "approvals": _overview_approvals,
+    "cost": _overview_cost,
+    "health": _overview_health,
+    "activity": _overview_activity,
+    "tools": _overview_tools,
+}
+
+_OVERVIEW_DEFAULTS: dict[str, dict] = {
+    "brains": {"count": 0, "admin": None, "root": None, "standalone": None},
+    "skills": {"installed": 0, "recommended": 0},
+    "approvals": {"pending": 0, "items": []},
+    "cost": {
+        "today_cost_usd": 0.0,
+        "daily_token_budget": 0,
+        "output_tokens_today": 0,
+        "kill_switch": False,
+    },
+    "health": {"worst_level": "info", "ok": True},
+    "activity": {"recent": []},
+    "tools": {"count": 0, "by_estado": {}},
+}
+
+
+async def build_overview() -> dict:
+    """Assemble the dashboard-home aggregate, section by section, defensively.
+
+    Returns one mapping with a key per section plus ``errors`` (a section→message
+    map of whatever degraded) and a little envelope (``instance_id``,
+    ``generated_at``). A single failing subsystem is reported, never fatal — the
+    response is always complete. LLM-free; reused in-process by ``lhassa status``.
+    """
+    sections: dict = {}
+    errors: dict[str, str] = {}
+    for name, fn in _OVERVIEW_SECTIONS.items():
+        try:
+            sections[name] = await fn()
+        except Exception as exc:  # one degraded subsystem is reported, not fatal
+            errors[name] = f"{type(exc).__name__}: {exc}"
+            sections[name] = dict(_OVERVIEW_DEFAULTS[name])
+    sections["errors"] = errors
+    sections["instance_id"] = Config.instance_id
+    sections["generated_at"] = int(time.time())
+    return sections
+
+
+@app.get("/api/overview")
+async def get_overview():
+    """One defensive aggregate for the dashboard home / ``lhassa status``.
+
+    Sections: ``brains``, ``skills``, ``approvals`` (with the pending list so the
+    owner can approve from here), ``cost`` (today + budget + kill-switch),
+    ``health`` (worst level + ok), ``activity`` (recent episodes) and ``tools``
+    (count by estado). Each is gathered independently; any failure lands in
+    ``errors`` instead of taking the response down. Never 500s; LLM-free.
+    """
+    return await build_overview()
+
+
 # ── WebSocket ──────────────────────────────────────────────────────────────────
 
 @app.websocket("/ws")
