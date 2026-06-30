@@ -415,6 +415,23 @@ class Config:
     # with its own identity/memory/permissions. Start with TWO brains, never six.
     org_role: str = os.getenv("LHASSA_ORG_ROLE", "").strip().lower()  # ""|general|department
     org_department: str = os.getenv("LHASSA_ORG_DEPARTMENT", "")      # this brain's department name
+    # Elastic org: the department set is CONFIG-DRIVEN (comma-separated), not code —
+    # scale the org up/down without editing the registry.
+    org_departments: str = os.getenv(
+        "LHASSA_ORG_DEPARTMENTS", "optimizacion,documentacion,finanzas"
+    )
+
+    # ── Modularity — registries, channels, plugins (elastic & modular) ────────
+    # Which notify CHANNELS are active (comma-separated); each is a registered,
+    # swappable channel. Empty entries are ignored; unknown names are skipped with
+    # a warning. Default: Telegram + desktop notifications.
+    notify_channels: str = os.getenv("LHASSA_NOTIFY_CHANNELS", "telegram,desktop")
+    # Drop-in plugin directory: modules placed here are imported at startup so they
+    # can self-register providers/harnesses/channels/departments/actions WITHOUT
+    # editing core. Empty/missing → no external plugins loaded.
+    plugins_dir: str = os.getenv(
+        "LHASSA_PLUGINS_DIR", str(Path.home() / ".lhassa" / "plugins")
+    )
 
     # ── Tool guardrails ───────────────────────────────────────────────────────
     # If true, reject obviously destructive shell commands unless explicitly
