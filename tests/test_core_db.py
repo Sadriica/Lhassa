@@ -1,0 +1,196 @@
+"""Tests for lhassa.core.db — the append-only "grande" brain DB."""
+
+import pytest
+import pytest_asyncio  # noqa: F401
+
+
+# ── Helpers ────────────────────────────────────────────────────────────────────
+
+async def _init(tmp_path, monkeypatch):
+    import lhassa.core.db as db
+    monkeypatch.setattr(db, "DB_PATH", tmp_path / "test_brain.db")
+    await db.init_db()
+    return db
+
+
+# ── init_db ────────────────────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_init_db_creates_all_tables(tmp_path, monkeypatch):
+    db = await _init(tmp_path, monkeypatch)
+    import aiosqlite
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        async with conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'"
+        ) as cur:
+            tables = {row[0] for row in await cur.fetchall()}
+    expected = {"episodes", "tasks", "jobs", "desired_state", "tools", "approvals"}
+    assert expected.issubset(tables)
+
+
+@pytest.mark.asyncio
+async def test_init_db_enables_wal(tmp_path, monkeypatch):
+    db = await _init(tmp_path, monkeypatch)
+    import aiosqlite
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        async with conn.execute("PRAGMA journal_mode") as cur:
+            (mode,) = await cur.fetchone()
+    assert mode.lower() == "wal"
+
+
+@pytest.mark.asyncio
+async def test_init_db_is_idempotent(tmp_path, monkeypatch):
+    db = await _init(tmp_path, monkeypatch)
+    await db.init_db()  # second call must not raise
+
+
+@pytest.mark.asyncio
+async def test_every_table_has_instance_id(tmp_path, monkeypatch):
+    db = await _init(tmp_path, monkeypatch)
+    import aiosqlite
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        for table in ("episodes", "tasks", "jobs", "desired_state", "tools", "approvals"):
+            async with conn.execute(f"PRAGMA table_info({table})") as cur:
+                cols = {row[1] for row in await cur.fetchall()}
+            assert "instance_id" in cols, f"{table} is missing instance_id"
+
+
+# ── episodes (append-only) ──────────────────────────────────────────────────────
+
+def _make_ep(instance_id, despertar_por="heartbeat"):
+    from lhassa.core.episode import Episode
+    return Episode.begin(despertar_por=despertar_por, instance_id=instance_id)
+
+
+@pytest.mark.asyncio
+async def test_append_and_load_recent_newest_first(tmp_path, monkeypatch):
+    db = await _init(tmp_path, monkeypatch)
+    ids = []
+    for i in range(3):
+        ep = _make_ep("inst_personal", despertar_por=f"trigger_{i}")
+        ep.finish(decision=f"d{i}", accion=f"a{i}", resultado=f"r{i}")
+        ids.append(await db.append_episode(ep))
+
+    rows = await db.load_recent_episodes("inst_personal", n=20)
+    assert [r["id"] for r in rows] == list(reversed(ids))  # newest first
+
+
+@pytest.mark.asyncio
+async def test_load_recent_episodes_filters_by_instance(tmp_path, monkeypatch):
+    db = await _init(tmp_path, monkeypatch)
+    await db.append_episode(_make_ep("inst_a", "from_a"))
+    await db.append_episode(_make_ep("inst_b", "from_b"))
+
+    rows_a = await db.load_recent_episodes("inst_a")
+    assert len(rows_a) == 1
+    assert rows_a[0]["despertar_por"] == "from_a"
+    assert rows_a[0]["instance_id"] == "inst_a"
+
+
+@pytest.mark.asyncio
+async def test_load_recent_episodes_respects_limit(tmp_path, monkeypatch):
+    db = await _init(tmp_path, monkeypatch)
+    for i in range(5):
+        await db.append_episode(_make_ep("inst_personal", f"t{i}"))
+    rows = await db.load_recent_episodes("inst_personal", n=2)
+    assert len(rows) == 2
+
+
+# ── tasks ───────────────────────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_add_and_load_pending_tasks(tmp_path, monkeypatch):
+    db = await _init(tmp_path, monkeypatch)
+    task_id = await db.add_task(
+        "inst_personal", "sync_repo", "proyecto_X",
+        params={"branch": "main"}, origen_trust=1, origen_actor="duenio",
+    )
+    assert isinstance(task_id, str) and task_id
+
+    tasks = await db.load_pending_tasks("inst_personal")
+    assert len(tasks) == 1
+    assert tasks[0]["accion"] == "sync_repo"
+    assert tasks[0]["params"] == {"branch": "main"}  # decoded back to dict
+    assert tasks[0]["origen_actor"] == "duenio"
+
+
+@pytest.mark.asyncio
+async def test_load_pending_tasks_filters_by_instance(tmp_path, monkeypatch):
+    db = await _init(tmp_path, monkeypatch)
+    await db.add_task("inst_a", "sync_repo", "x")
+    await db.add_task("inst_b", "sync_repo", "y")
+    assert len(await db.load_pending_tasks("inst_a")) == 1
+
+
+@pytest.mark.asyncio
+async def test_set_task_state_removes_from_pending(tmp_path, monkeypatch):
+    db = await _init(tmp_path, monkeypatch)
+    task_id = await db.add_task("inst_personal", "sync_repo", "x")
+    await db.set_task_state("inst_personal", task_id, "hecha")
+    assert await db.load_pending_tasks("inst_personal") == []
+
+
+# ── jobs ────────────────────────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_record_and_update_job(tmp_path, monkeypatch):
+    db = await _init(tmp_path, monkeypatch)
+    job_id = await db.record_job("inst_personal", pid=4242, harness="opencode")
+    await db.update_job(
+        "inst_personal", job_id, estado="done", costo_usd=0.01,
+        terminado_en="2026-01-01T00:00:00+00:00",
+    )
+    import aiosqlite
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        async with conn.execute(
+            "SELECT * FROM jobs WHERE instance_id=? AND id=?",
+            ("inst_personal", job_id),
+        ) as cur:
+            row = dict(await cur.fetchone())
+    assert row["estado"] == "done"
+    assert row["costo_usd"] == 0.01
+    assert row["pid"] == 4242
+
+
+# ── desired_state ───────────────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_upsert_and_get_desired_state(tmp_path, monkeypatch):
+    db = await _init(tmp_path, monkeypatch)
+    await db.upsert_desired_state("inst_personal", "pc-casa", "proyecto_X", "abc123")
+    await db.upsert_desired_state("inst_personal", "pc-casa", "proyecto_Y", "def456")
+    state = await db.get_desired_state("inst_personal", "pc-casa")
+    assert state == {"proyecto_X": "abc123", "proyecto_Y": "def456"}
+
+
+@pytest.mark.asyncio
+async def test_upsert_desired_state_overwrites(tmp_path, monkeypatch):
+    db = await _init(tmp_path, monkeypatch)
+    await db.upsert_desired_state("inst_personal", "pc-casa", "proyecto_X", "abc123")
+    await db.upsert_desired_state("inst_personal", "pc-casa", "proyecto_X", "zzz999")
+    state = await db.get_desired_state("inst_personal", "pc-casa")
+    assert state == {"proyecto_X": "zzz999"}
+
+
+@pytest.mark.asyncio
+async def test_get_desired_state_filters_by_instance_and_machine(tmp_path, monkeypatch):
+    db = await _init(tmp_path, monkeypatch)
+    await db.upsert_desired_state("inst_a", "pc-casa", "k", "va")
+    await db.upsert_desired_state("inst_b", "pc-casa", "k", "vb")
+    await db.upsert_desired_state("inst_a", "pc-otra", "k", "vc")
+    assert await db.get_desired_state("inst_a", "pc-casa") == {"k": "va"}
+
+
+# ── approvals ───────────────────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_add_load_and_resolve_approval(tmp_path, monkeypatch):
+    db = await _init(tmp_path, monkeypatch)
+    ap_id = await db.add_approval("inst_personal", "tarea_sensible", {"task": "t_001"})
+    pending = await db.load_pending_approvals("inst_personal")
+    assert len(pending) == 1
+    assert pending[0]["payload"] == {"task": "t_001"}
+
+    await db.resolve_approval("inst_personal", ap_id, "aprobada")
+    assert await db.load_pending_approvals("inst_personal") == []
