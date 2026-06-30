@@ -19,9 +19,9 @@ function NodeRow({ node, root, selectedId, routePath, onSelect }) {
       className="lh-row w-full text-left transition-colors"
       style={{
         borderColor: selected
-          ? 'rgba(45, 212, 191, 0.5)'
+          ? 'rgba(217, 165, 33, 0.5)'
           : inRoute
-            ? 'rgba(251, 191, 36, 0.4)'
+            ? 'rgba(217, 165, 33, 0.35)'
             : 'var(--lh-border)',
         background: selected ? 'var(--lh-accent-dim)' : 'var(--lh-surface-2)',
         marginBottom: '0.4rem',
@@ -37,7 +37,7 @@ function NodeRow({ node, root, selectedId, routePath, onSelect }) {
         {isRouteLeaf && (
           <span
             className="lh-tag"
-            style={{ borderColor: 'rgba(251,191,36,0.5)', color: 'var(--lh-warn)' }}
+            style={{ borderColor: 'rgba(217,165,33,0.5)', color: 'var(--lh-warn)' }}
             title="Where this goal would land"
           >
             route target
