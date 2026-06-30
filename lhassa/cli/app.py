@@ -35,6 +35,7 @@ from lhassa.cli import agent  # noqa: E402  (must follow quiet_logging)
 from lhassa.cli import capabilities as _capabilities  # noqa: E402
 from lhassa.cli import commands as _commands  # noqa: E402
 from lhassa.cli import config_cmds as _config_cmds  # noqa: E402
+from lhassa.cli import extra_cmds as _extra_cmds  # noqa: E402
 from lhassa.cli import org_cmds as _org_cmds  # noqa: E402
 from lhassa.cli import skills_cmds as _skills_cmds  # noqa: E402
 from lhassa.cli.theme import LHASSA_THEME, cost_markup, prompt_fragments  # noqa: E402
@@ -108,9 +109,13 @@ def _emit(result: "agent.CliResult", json_out: bool) -> None:
 
 _REPL_HELP = (
     "[title]Lhassa[/] [dim]— commands:[/]\n"
-    "  [accent]/help[/]   [dim]show this[/]\n"
-    "  [accent]/usage[/]  [dim]tokens + cost this session[/]\n"
-    "  [accent]/exit[/]   [dim]quit (or Ctrl-D)[/]\n"
+    "  [accent]/help[/]    [dim]show this[/]\n"
+    "  [accent]/status[/]  [dim]the brain at a glance (overview)[/]\n"
+    "  [accent]/skills[/]  [dim]installed skills[/]\n"
+    "  [accent]/tools[/]   [dim]self-written tools[/]\n"
+    "  [accent]/usage[/]   [dim]tokens + cost this session[/]\n"
+    "  [accent]/clear[/]   [dim]clear the screen[/]\n"
+    "  [accent]/exit[/]    [dim]quit (or Ctrl-D)[/]\n"
     "[dim]Anything else is a message. For power tools run e.g. "
     "[/][model]lhassa org tree[/][dim], [/][model]lhassa skills[/][dim], "
     "[/][model]lhassa capabilities[/][dim].[/]"
@@ -145,6 +150,27 @@ def _repl() -> None:
             break
         if line in ("/help", "/?"):
             err.print(_REPL_HELP)
+            continue
+        if line == "/clear":
+            out.clear()
+            continue
+        if line in ("/status", "/overview"):
+            try:
+                err.print(_extra_cmds.overview_text())
+            except Exception as e:  # a degraded subsystem must not kill the REPL
+                err.print(f"[error]✗[/] [accent]{e}[/]")
+            continue
+        if line == "/skills":
+            try:
+                err.print(_extra_cmds.skills_text())
+            except Exception as e:
+                err.print(f"[error]✗[/] [accent]{e}[/]")
+            continue
+        if line == "/tools":
+            try:
+                err.print(_extra_cmds.tools_text())
+            except Exception as e:
+                err.print(f"[error]✗[/] [accent]{e}[/]")
             continue
         if line == "/usage":
             err.print(
@@ -219,6 +245,9 @@ def chat(
 
 # Attach the power subcommands (tools/approvals/approve/deny/report/memory/fleet).
 _commands.register(app)
+
+# Attach the action commands (status/overview, version, serve, beat, watch).
+_extra_cmds.register(app)
 
 # Attach `lhassa capabilities` (alias `doctor`): surface what's wired + on/off.
 app.command("capabilities")(_capabilities.capabilities_cmd)
