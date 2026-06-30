@@ -82,3 +82,44 @@ def test_transport_error_returns_false(monkeypatch):
     monkeypatch.setattr(telegram.httpx, "AsyncClient", _RaisingClient)
     cfg = SimpleNamespace(telegram_bot_token="TOKEN", telegram_chat_id="123")
     assert asyncio.run(telegram.send("hi", config=cfg)) is False
+
+
+# ── Dispatcher (notify) ────────────────────────────────────────────────────────
+
+from lhassa.notify import dispatch  # noqa: E402
+
+
+def test_dispatch_unconfigured_is_noop_no_network(monkeypatch):
+    # An unconfigured box must not even build a network call.
+    def _boom(*a, **k):
+        raise AssertionError("no network when unconfigured")
+
+    monkeypatch.setattr(telegram.httpx, "AsyncClient", _boom)
+
+    cfg = SimpleNamespace(telegram_bot_token="", telegram_chat_id="")
+    assert asyncio.run(dispatch.notify("hi", config=cfg)) is False
+
+
+def test_dispatch_configured_calls_send(monkeypatch):
+    sent = {}
+
+    async def _fake_send(text, *, config=None):
+        sent["text"] = text
+        return True
+
+    monkeypatch.setattr(dispatch.telegram, "send", _fake_send)
+
+    cfg = SimpleNamespace(telegram_bot_token="TOKEN", telegram_chat_id="123")
+    assert asyncio.run(dispatch.notify("alert!", level="warning", config=cfg)) is True
+    assert sent["text"] == "alert!"
+
+
+def test_dispatch_swallows_channel_error(monkeypatch):
+    async def _raising_send(text, *, config=None):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(dispatch.telegram, "send", _raising_send)
+
+    cfg = SimpleNamespace(telegram_bot_token="TOKEN", telegram_chat_id="123")
+    # Channel raised → treated as non-delivery, never propagates.
+    assert asyncio.run(dispatch.notify("x", config=cfg)) is False
