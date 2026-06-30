@@ -1,4 +1,4 @@
-.PHONY: install install-health install-privileged dashboard run dev check test lint clean
+.PHONY: install install-health install-heartbeat install-privileged dashboard run dev check test lint clean
 
 # First-time setup: install Python deps + build the dashboard
 install:
@@ -12,6 +12,15 @@ install-health:
 	systemctl --user daemon-reload
 	systemctl --user enable --now lhassa-health.timer
 	@echo "Health checks scheduled. Status: systemctl --user status lhassa-health.timer"
+
+# Install + enable the brain heartbeat timer (user unit, no sudo). Each beat
+# advances the brain one step() tick — deterministic, zero tokens.
+install-heartbeat:
+	mkdir -p $(HOME)/.config/systemd/user
+	cp scripts/systemd/lhassa-heartbeat.service scripts/systemd/lhassa-heartbeat.timer $(HOME)/.config/systemd/user/
+	systemctl --user daemon-reload
+	systemctl --user enable --now lhassa-heartbeat.timer
+	@echo "Heartbeat scheduled. Status: systemctl --user status lhassa-heartbeat.timer"
 
 # Install the scoped NOPASSWD sudoers drop-in so lhassa can run admin commands as
 # root (allowlist only). Needs sudo — you'll be prompted for your password.

@@ -1,0 +1,19 @@
+# Lhassa — the brain's heartbeat (oneshot; "hace y duerme", §2.1).
+#
+# Each beat advances the persistent brain one tick (step()) and exits. Routine
+# beats are deterministic and cost zero tokens — no LLM, no cloud.
+#
+# Install as a USER unit (do NOT install system-wide):
+#   cp scripts/systemd/lhassa-heartbeat.{service,timer} ~/.config/systemd/user/
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now lhassa-heartbeat.timer
+#
+# Adjust the paths below if your checkout or venv live elsewhere.
+[Unit]
+Description=Lhassa brain heartbeat (one step() tick)
+After=graphical-session.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/Code/lhassa
+ExecStart=%h/Code/lhassa/scripts/lhassa-heartbeat
