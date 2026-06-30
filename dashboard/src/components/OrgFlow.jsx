@@ -1,19 +1,25 @@
-import { useCallback, useEffect, useMemo } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   ReactFlow,
   ReactFlowProvider,
   Background,
   Controls,
   MiniMap,
+  Panel,
   Handle,
   Position,
   useNodesState,
   useEdgesState,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
+import { RELATION_KIND_ORDER, kindStyle, relationshipEdge } from './relationshipKinds'
 
 // n8n-style org FLOW editor. Renders the org chart as a node graph: brains are
-// custom nodes, parent→child command links are edges. Lhassa (the admin / root)
+// custom nodes, parent→child command links are SOLID edges (the command spine).
+// On TOP of that spine it draws the typed RELATIONSHIP overlay (reads / notifies /
+// reviews / collaborates) as dashed, animated, per-kind-colored edges with a small
+// kind label and direction arrows — a legend with per-kind layer toggles lets the
+// owner show/hide each kind so the two graphs never get confused. Lhassa (the admin / root)
 // is visually special and anchored — the sovereign: a gold fill with a thin deep-red
 // ring and soft glow, pinned at the top, with no drag-out handle (it can't be
 // re-parented or deleted). Layout is a tidy layered
@@ -332,6 +338,90 @@ function BrainFlowNode({ data }) {
 
 const nodeTypes = { brain: BrainFlowNode, deptGroup: DeptGroupNode }
 
+// ── relationship overlay legend + layer toggles ────────────────────────────────
+// A small on-palette card pinned to the canvas. Each typed kind shows its dashed
+// per-kind swatch (with the direction arrow — a double arrow for the symmetric
+// `collaborates`) and a checkbox that shows/hides that layer so the owner isn't
+// overwhelmed. The command spine is intentionally NOT in here — it's the solid
+// hierarchy, not a toggleable overlay.
+function KindSwatch({ kind }) {
+  const s = kindStyle(kind)
+  return (
+    <svg width="26" height="9" style={{ flex: '0 0 auto' }} aria-hidden="true">
+      {s.symmetric && (
+        <path d="M6 4.5 L1 4.5 M3.5 2.5 L1 4.5 L3.5 6.5" stroke={s.color} strokeWidth="1.2" fill="none" />
+      )}
+      <line x1="3" y1="4.5" x2="23" y2="4.5" stroke={s.color} strokeWidth="1.6" strokeDasharray={s.dash} />
+      <path d="M20 2.5 L25 4.5 L20 6.5" stroke={s.color} strokeWidth="1.2" fill="none" />
+    </svg>
+  )
+}
+
+function RelationshipLegend({ kinds, kindMeta, hiddenKinds, onToggle }) {
+  const metaFor = (k) => (kindMeta || []).find((m) => m.kind === k)
+  return (
+    <div
+      style={{
+        background: 'var(--lh-surface)',
+        border: '1px solid var(--lh-border)',
+        borderRadius: 'var(--lh-radius)',
+        boxShadow: 'var(--lh-shadow)',
+        padding: '0.45rem 0.55rem',
+        minWidth: 132,
+      }}
+    >
+      <div
+        style={{
+          fontSize: 9,
+          fontWeight: 600,
+          letterSpacing: '0.14em',
+          textTransform: 'uppercase',
+          color: 'var(--lh-text-muted)',
+          marginBottom: 5,
+        }}
+      >
+        relationships
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+        {kinds.map((k) => {
+          const m = metaFor(k)
+          const visible = !hiddenKinds.has(k)
+          return (
+            <label
+              key={k}
+              title={m?.description || ''}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                cursor: 'pointer',
+                opacity: visible ? 1 : 0.45,
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={visible}
+                onChange={() => onToggle(k)}
+                style={{ accentColor: kindStyle(k).color, width: 12, height: 12, cursor: 'pointer' }}
+              />
+              <KindSwatch kind={k} />
+              <span style={{ fontSize: 11, color: 'var(--lh-text)' }}>
+                {kindStyle(k).label}
+                <span style={{ color: 'var(--lh-text-faint)', marginLeft: 3 }}>
+                  {m?.symmetric || kindStyle(k).symmetric ? '⇄' : '→'}
+                </span>
+              </span>
+            </label>
+          )
+        })}
+      </div>
+      <div style={{ fontSize: 9, color: 'var(--lh-text-faint)', marginTop: 5, lineHeight: 1.3 }}>
+        Solid = command. Dashed = overlay.
+      </div>
+    </div>
+  )
+}
+
 // Descendants of `id` (so we can block creating a cycle on re-parent).
 function descendantsOf(id, byId) {
   const out = new Set()
@@ -344,7 +434,7 @@ function descendantsOf(id, byId) {
   return out
 }
 
-function FlowInner({ topology, selectedId, routePath, onSelect, onMove }) {
+function FlowInner({ topology, selectedId, routePath, relationships, kindMeta, onSelect, onMove }) {
   const [rfNodes, setRfNodes, onNodesChange] = useNodesState([])
   const [rfEdges, setRfEdges, onEdgesChange] = useEdgesState([])
 
@@ -357,7 +447,25 @@ function FlowInner({ topology, selectedId, routePath, onSelect, onMove }) {
   const routeSet = useMemo(() => new Set(routePath || []), [routePath])
   const admin = topology?.admin
 
-  // (Re)build nodes + edges whenever the chart, selection, or route changes.
+  // Legend layers: which relationship KINDS are visible. Default all on; the owner can
+  // hide a kind to declutter. Stored as the HIDDEN set so a newly-seen kind defaults on.
+  const legendKinds = useMemo(() => {
+    const ks = kindMeta && kindMeta.length ? kindMeta.map((k) => k.kind) : RELATION_KIND_ORDER
+    return ks
+  }, [kindMeta])
+  const [hiddenKinds, setHiddenKinds] = useState(() => new Set())
+  const toggleKind = useCallback((k) => {
+    setHiddenKinds((prev) => {
+      const next = new Set(prev)
+      if (next.has(k)) next.delete(k)
+      else next.add(k)
+      return next
+    })
+  }, [])
+
+  // (Re)build NODES whenever the chart, selection, or route changes. Kept separate from
+  // edges so toggling a relationship layer (an edges-only change) never churns nodes
+  // (which would reset any cosmetic drag the owner nudged).
   useEffect(() => {
     const nodes = topology?.nodes || []
     const pos = computeLayout(topology)
@@ -386,7 +494,13 @@ function FlowInner({ topology, selectedId, routePath, onSelect, onMove }) {
 
     // Group boxes first so they paint behind the brains they enclose.
     setRfNodes([...groupNodes, ...brainNodes])
+  }, [topology, selectedId, routePath, routeSet, admin, setRfNodes])
 
+  // (Re)build EDGES: the solid command spine (parent→child, gold on a route) PLUS the
+  // typed relationship overlay (dashed/animated, per-kind color + label), filtered by
+  // the visible legend layers. Both endpoints must still be real nodes.
+  useEffect(() => {
+    const nodes = topology?.nodes || []
     const edges = []
     nodes.forEach((n) => {
       if (n.parent && byId[n.parent]) {
@@ -403,8 +517,11 @@ function FlowInner({ topology, selectedId, routePath, onSelect, onMove }) {
         })
       }
     })
-    setRfEdges(edges)
-  }, [topology, selectedId, routePath, routeSet, admin, byId, setRfNodes, setRfEdges])
+    const overlay = (relationships || [])
+      .filter((r) => byId[r.from] && byId[r.to] && !hiddenKinds.has(r.kind))
+      .map((r, i) => relationshipEdge(r, i))
+    setRfEdges([...edges, ...overlay])
+  }, [topology, routeSet, byId, relationships, hiddenKinds, setRfEdges])
 
   // Live validity: forbid self, cycles, and moving the anchored admin.
   const isValidConnection = useCallback((conn) => {
@@ -453,6 +570,14 @@ function FlowInner({ topology, selectedId, routePath, onSelect, onMove }) {
         colorMode="dark"
       >
         <Background color="rgba(217,165,33,0.07)" gap={22} />
+        <Panel position="top-left">
+          <RelationshipLegend
+            kinds={legendKinds}
+            kindMeta={kindMeta}
+            hiddenKinds={hiddenKinds}
+            onToggle={toggleKind}
+          />
+        </Panel>
         <MiniMap
           pannable
           zoomable
