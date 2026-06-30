@@ -4,6 +4,7 @@ import OverviewPanel from './components/OverviewPanel'
 import BrainsPanel from './components/BrainsPanel'
 import SkillsPanel from './components/SkillsPanel'
 import AgentsPanel from './components/AgentsPanel'
+import AgenticPanel from './components/AgenticPanel'
 import MetricsPanel from './components/MetricsPanel'
 import AIUsagePanel from './components/AIUsagePanel'
 import MemoryPanel from './components/MemoryPanel'
@@ -38,6 +39,7 @@ const ICONS = {
   reports:   'M5 19V5 M5 19h14 M9 16v-5 M13 16V8 M17 16v-3',
   fleet:     'M4 7h16 M4 12h16 M4 17h16 M7 7v10 M13 7v10',
   activity:  'M3 12h4l3 8 4-16 3 8h4',
+  run:       'M4 5h16v14H4z M7 9l2.5 2L7 13 M12 14h4',
   settings:  'M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6Z M19.4 13a7.8 7.8 0 0 0 0-2l2-1.5-2-3.5-2.4 1a7.8 7.8 0 0 0-1.7-1l-.3-2.5h-4l-.3 2.5a7.8 7.8 0 0 0-1.7 1l-2.4-1-2 3.5 2 1.5a7.8 7.8 0 0 0 0 2l-2 1.5 2 3.5 2.4-1a7.8 7.8 0 0 0 1.7 1l.3 2.5h4l.3-2.5a7.8 7.8 0 0 0 1.7-1l2.4 1 2-3.5-2-1.5Z',
 }
 
@@ -46,6 +48,7 @@ const SECTIONS = [
   { id: 'overview', label: 'Overview' },
   { id: 'brains', label: 'Brains' },
   { id: 'skills', label: 'Skills' },
+  { id: 'run', label: 'Run' },
   { id: 'approvals', label: 'Approvals' },
   { id: 'tools', label: 'Tools' },
   { id: 'reports', label: 'Reports' },
@@ -208,6 +211,10 @@ export default function App() {
 
           {section === 'skills' && (
             <ErrorBoundary><SkillsPanel /></ErrorBoundary>
+          )}
+
+          {section === 'run' && (
+            <ErrorBoundary><AgenticPanel agents={agents} /></ErrorBoundary>
           )}
 
           {section === 'approvals' && (
