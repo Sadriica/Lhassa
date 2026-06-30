@@ -166,6 +166,27 @@ async def init_db() -> None:
             )
         """)
 
+        # facts — typed durable knowledge (dato | directiva). APPEND-ONLY:
+        # a superseding fact is a NEW row; rows are never destructively rewritten.
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS facts (
+                id             TEXT PRIMARY KEY,
+                instance_id    TEXT NOT NULL,
+                tipo           TEXT NOT NULL,
+                contenido      TEXT NOT NULL,
+                pinned         INTEGER NOT NULL DEFAULT 0,
+                tags           TEXT,
+                procedencia    TEXT,
+                confianza      REAL NOT NULL DEFAULT 1.0,
+                creado_en      TEXT NOT NULL,
+                actualizado_en TEXT NOT NULL
+            )
+        """)
+        await db.execute("""
+            CREATE INDEX IF NOT EXISTS facts_by_instance
+            ON facts(instance_id, tipo, pinned)
+        """)
+
         await db.commit()
 
 
@@ -237,6 +258,84 @@ async def load_recent_episodes(instance_id: str, n: int = 20) -> list[dict]:
     for row in rows:
         row["memoria_cargada"] = _loads(row.get("memoria_cargada"), [])
     return rows
+
+
+# ── facts (append-only; superseding = a new row) ─────────────────────────────────
+
+async def insert_fact(row: dict) -> str:
+    """
+    Insert one fact row into the grande. ``row`` is a dict carrying every column
+    (id, instance_id, tipo, contenido, pinned, tags, procedencia, confianza,
+    creado_en, actualizado_en); ``tags`` may be a list (serialized here) or a
+    pre-encoded JSON string. Append-only: this never overwrites an existing fact.
+    Returns the fact id.
+    """
+    tags = row.get("tags")
+    tags_json = tags if isinstance(tags, str) else _dumps(list(tags or []))
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            """INSERT INTO facts(
+                   id, instance_id, tipo, contenido, pinned, tags,
+                   procedencia, confianza, creado_en, actualizado_en)
+               VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                row["id"],
+                row["instance_id"],
+                row["tipo"],
+                row["contenido"],
+                1 if row.get("pinned") else 0,
+                tags_json,
+                row.get("procedencia", ""),
+                float(row.get("confianza", 1.0)),
+                row["creado_en"],
+                row["actualizado_en"],
+            ),
+        )
+        await db.commit()
+    return row["id"]
+
+
+async def query_facts(
+    instance_id: str,
+    *,
+    tipo: Optional[str] = None,
+    pinned: Optional[bool] = None,
+) -> list[dict]:
+    """
+    Return fact rows for ``instance_id`` (oldest first), optionally filtered by
+    ``tipo`` and/or ``pinned``. ``tags`` is decoded back into a list. Always
+    scoped to ``instance_id`` (isolation from day one).
+    """
+    sql = "SELECT * FROM facts WHERE instance_id = ?"
+    args: list[Any] = [instance_id]
+    if tipo is not None:
+        sql += " AND tipo = ?"
+        args.append(tipo)
+    if pinned is not None:
+        sql += " AND pinned = ?"
+        args.append(1 if pinned else 0)
+    sql += " ORDER BY creado_en, rowid"
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(sql, args) as cur:
+            rows = [dict(row) for row in await cur.fetchall()]
+    for row in rows:
+        row["tags"] = _loads(row.get("tags"), [])
+        row["pinned"] = bool(row["pinned"])
+    return rows
+
+
+async def query_facts_by_tags(instance_id: str, tags) -> list[dict]:
+    """
+    Return fact rows for ``instance_id`` whose tag set intersects ``tags``
+    (oldest first). Tag matching is exact membership (NOT semantic). Scoped to
+    ``instance_id``.
+    """
+    wanted = {t for t in (tags or [])}
+    if not wanted:
+        return []
+    rows = await query_facts(instance_id)
+    return [row for row in rows if wanted.intersection(row.get("tags") or [])]
 
 
 # ── tasks ─────────────────────────────────────────────────────────────────────
