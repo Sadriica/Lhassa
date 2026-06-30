@@ -27,7 +27,7 @@ import httpx
 
 from lhassa.core import actions
 from lhassa.core.task import Task
-from lhassa.security import allowlist
+from lhassa.security import allowlist, approval, autonomy
 
 # Result-string fragments that mark a deterministic action as having failed.
 # Actions never raise (they return a short outcome string), so we read the text.
@@ -85,12 +85,47 @@ async def check_in(
     return [Task.from_db_row(t) for t in data.get("tasks", [])]
 
 
+async def _approval_gate(task: Task) -> "dict | None":
+    """Approval frontier (§2.6) for an ALREADY-allowed task.
+
+    Returns a ``pendiente_aprobacion`` report (and parks the task in the approvals
+    queue) when this action needs a human OK and has not earned auto-approval;
+    returns ``None`` to let the task execute. HITL per flow: the decision is
+    per-action/per-actor, and the autonomy knob can lower friction for a repeatedly
+    approved human action — but never for the high-risk always-approve set.
+    """
+    auto = await autonomy.should_auto_approve(
+        task.instance_id, task.accion, task.origen.actor_id
+    )
+    if not approval.needs_approval(task, autonomy=auto):
+        return None
+    ap_id = await approval.request_approval(
+        task.instance_id,
+        tipo=task.accion,
+        payload={
+            "task_id": task.id,
+            "accion": task.accion,
+            "objetivo": task.objetivo,
+            "actor_id": task.origen.actor_id,
+            "origen_trust": int(task.origen.trust),
+        },
+    )
+    return {
+        "task_id": task.id,
+        "outcome": "pendiente_aprobacion",
+        "detail": f"awaiting human approval (approval {ap_id})",
+    }
+
+
 async def run_tasks(tasks: list[Task], *, public_key: Any = None) -> list[dict]:
-    """Gate each Task with the allowlist, run the allowed ones, build reports.
+    """Gate each Task with the allowlist + approval frontier, run the rest, report.
 
     Deny-by-default: ``allowlist.allow`` verifies signature + trust + allowlist.
     A denied task is reported ``rechazada`` and is NEVER executed. An allowed task
-    runs via the deterministic action registry. Never raises on a single task.
+    then crosses the approval frontier (§2.6): if it needs a human OK and has not
+    earned auto-approval it is parked pending and reported ``pendiente_aprobacion``
+    (NOT executed). Otherwise it runs via the deterministic action registry. Never
+    raises on a single task.
     """
     reports: list[dict] = []
     for task in tasks:
@@ -99,6 +134,10 @@ async def run_tasks(tasks: list[Task], *, public_key: Any = None) -> list[dict]:
             reports.append(
                 {"task_id": task.id, "outcome": "rechazada", "detail": decision.reason}
             )
+            continue
+        parked = await _approval_gate(task)
+        if parked is not None:
+            reports.append(parked)
             continue
         try:
             result = await actions.run(task.accion, task.params)

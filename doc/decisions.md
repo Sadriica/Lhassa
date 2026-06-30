@@ -5,6 +5,29 @@ build. The source of truth for the architecture is `doc/lhassa-brief.md` (a
 living doc — correct it after each phase per §4). This file records the choices
 made along the way. Newest first.
 
+## 2026-06-29 — Phase 3 complete (the arbiter)
+
+Built (2 slices, gates green):
+- **3.A** `agents/verify.py` — objective verifiers (`command/tests/lint/health/regex/
+  metric`), **never call an LLM** (no provider/gateway import; asserted in tests) +
+  `make_verifier`/`verify` dispatcher; wired into `core/step.py`'s judgment branch via
+  `router.cascade(verify=…)` (failed verification escalates cheap→smart once; the
+  episode records `verificado: passed/failed`). Reused by Phase-5 gates.
+- **3.B** `security/approval.py` (HITL-**per-flow** `needs_approval`: per-action risk
+  + origin trust + a high-risk always-approve set; parks pending in the `approvals`
+  table) + `security/autonomy.py` (a streak knob: a HUMANO action approved N× becomes
+  automatic; a denial resets it; high-risk never auto-promotes; **never promotes an
+  `Origin`'s trust** — contagion-only) + `local_agent` approval gate + `/api/approvals`
+  + `ApprovalQueuePanel`.
+
+**DoD met** (offline + live smoke): a `mundo`/sensitive action waits for the owner's
+OK; a repeated `humano` action becomes automatic (threshold 3); move-money always
+requires approval even with a streak; a denial resets the streak; the verifier never
+calls an LLM. 369 tests, ruff clean, dashboard builds.
+
+Note: 2 pre-existing eslint warnings in `App.jsx handleEvent` (untouched code) — not
+introduced here; `npm run build` is clean.
+
 ## 2026-06-29 — Phase 2 complete (economy + router)
 
 Decision: the user has the **opencode CLI but no Zen** → the first `ModelProvider`
