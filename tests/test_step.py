@@ -425,7 +425,7 @@ async def test_step_delegate_unavailable_harness_degrades_to_error_job(tmp_path,
 
 
 async def _jobs(db):
-    import aiosqlite
+    from lhassa._vendor import aiosqlite
     async with aiosqlite.connect(db.DB_PATH) as conn:
         conn.row_factory = aiosqlite.Row
         async with conn.execute("SELECT * FROM jobs ORDER BY creado_en") as cur:

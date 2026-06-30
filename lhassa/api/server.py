@@ -10,7 +10,8 @@ from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from loguru import logger
@@ -31,9 +32,68 @@ from lhassa.memory.store import (
 
 app = FastAPI(title="Lhassa Dashboard API", docs_url=None, redoc_url=None)
 
+
+def _cors_origins() -> list[str]:
+    configured = getattr(Config, "api_cors_origins", "")
+    if configured:
+        return [origin.strip() for origin in configured.split(",") if origin.strip()]
+    port = getattr(Config, "api_port", 7766)
+    return [
+        f"http://127.0.0.1:{port}",
+        f"http://localhost:{port}",
+        "http://127.0.0.1:5173",
+        "http://localhost:5173",
+    ]
+
+
+_LOCAL_HOSTS = {"127.0.0.1", "::1", "localhost", "testclient"}
+
+
+def _is_loopback(host: str | None) -> bool:
+    return (host or "").split("%", 1)[0] in _LOCAL_HOSTS
+
+
+def _authorized(token: str, provided: str | None) -> bool:
+    return bool(token) and bool(provided) and provided == token
+
+
+def _http_token(request: Request) -> str | None:
+    auth = request.headers.get("authorization", "")
+    if auth.lower().startswith("bearer "):
+        return auth[7:].strip()
+    return request.headers.get("x-lhassa-api-token")
+
+
+def _ws_token(ws: WebSocket) -> str | None:
+    auth = ws.headers.get("authorization", "")
+    if auth.lower().startswith("bearer "):
+        return auth[7:].strip()
+    return ws.headers.get("x-lhassa-api-token") or ws.query_params.get("token")
+
+
+def _auth_error_detail() -> str:
+    return "LHASSA_API_TOKEN is required for non-local API access."
+
+
+def _request_allowed(client_host: str | None, provided_token: str | None) -> bool:
+    token = getattr(Config, "api_token", "")
+    if _authorized(token, provided_token):
+        return True
+    return not token and _is_loopback(client_host)
+
+
+@app.middleware("http")
+async def require_local_or_token(request: Request, call_next):
+    path = request.url.path
+    if path.startswith(("/api", "/checkin", "/report")):
+        client_host = request.client.host if request.client else None
+        if not _request_allowed(client_host, _http_token(request)):
+            return JSONResponse(status_code=403, content={"detail": _auth_error_detail()})
+    return await call_next(request)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_cors_origins(),
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -626,7 +686,7 @@ async def get_fleet():
     Derived from existing reads: check-in episodes (``despertar_por`` =
     ``checkin:<machine>``) carry the last-seen time; ``desired_state`` carries the
     reconciliation target per machine. A small inline query unions the two."""
-    import aiosqlite
+    from lhassa._vendor import aiosqlite
 
     await db.init_db()
     inst = Config.instance_id
@@ -1223,6 +1283,10 @@ async def get_overview():
 
 @app.websocket("/ws")
 async def websocket_endpoint(ws: WebSocket):
+    client_host = ws.client.host if ws.client else None
+    if not _request_allowed(client_host, _ws_token(ws)):
+        await ws.close(code=1008, reason=_auth_error_detail())
+        return
     await ws.accept()
     q = state.add_ws_client()
     logger.debug("WebSocket client connected")

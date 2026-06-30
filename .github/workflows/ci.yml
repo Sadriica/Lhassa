@@ -44,6 +44,13 @@ jobs:
       - name: Run Python tests
         run: uv run pytest -q -p no:cacheprovider
 
+      - name: Run Python lint
+        run: uv run ruff check .
+
+      - name: Run dashboard lint
+        working-directory: dashboard
+        run: npm run lint
+
       - name: Run dashboard E2E tests
         working-directory: dashboard
         run: npm run test:e2e

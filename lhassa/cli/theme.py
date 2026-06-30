@@ -40,6 +40,19 @@ LHASSA_THEME = Theme(
     }
 )
 
+TABLE_KWARGS = {
+    "show_header": True,
+    "header_style": "title",
+    "border_style": "rule",
+    "row_styles": ["", "dim"],
+    "pad_edge": False,
+}
+
+PANEL_KWARGS = {
+    "border_style": "rule",
+    "padding": (1, 2),
+}
+
 
 def cost_markup(model: str, in_tokens: int, out_tokens: int, cost_usd: float) -> str:
     """The one-line cost footer, as Rich markup (gold model · dim tokens · green cost)."""

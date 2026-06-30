@@ -32,10 +32,10 @@ The function **never raises** and always kills the child on timeout.
 
 from __future__ import annotations
 
-import asyncio
 import os
 import shutil
 import signal
+import subprocess
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -99,34 +99,54 @@ def _scrub_env(workdir: Path) -> dict[str, str]:
 
 def _select_isolation(workdir: Path) -> tuple[list[str], str]:
     """Return ``(prefix_argv, level)`` for the strongest available sandbox tool."""
+    forced = (os.getenv("LHASSA_QUARANTINE_ISOLATION") or "").strip().lower()
+    if forced in {"none", "off", "0"}:
+        return ([], "none")
     if shutil.which("unshare"):
         # -r: map the caller to root inside a new user namespace (no real privilege).
         # -n: a fresh network namespace with no configured interfaces → no route out.
-        return (["unshare", "-rn", "--"], "unshare")
+        prefix = ["unshare", "-rn", "--"]
+        if _sandbox_works(prefix, workdir):
+            return (prefix, "unshare")
     if shutil.which("firejail"):
-        return (
-            ["firejail", "--quiet", "--net=none", f"--private={workdir}", "--"],
-            "firejail",
-        )
+        prefix = ["firejail", "--quiet", "--net=none", f"--private={workdir}", "--"]
+        if _sandbox_works(prefix, workdir):
+            return (prefix, "firejail")
     if shutil.which("bwrap"):
-        return (
-            [
-                "bwrap",
-                "--unshare-net",
-                "--ro-bind", "/usr", "/usr",
-                "--ro-bind", "/etc", "/etc",
-                "--bind", str(workdir), str(workdir),
-                "--proc", "/proc",
-                "--dev", "/dev",
-                "--symlink", "usr/bin", "/bin",
-                "--symlink", "usr/lib", "/lib",
-                "--symlink", "usr/lib64", "/lib64",
-                "--chdir", str(workdir),
-                "--",
-            ],
+        prefix = [
             "bwrap",
-        )
+            "--unshare-net",
+            "--ro-bind", "/usr", "/usr",
+            "--ro-bind", "/etc", "/etc",
+            "--bind", str(workdir), str(workdir),
+            "--proc", "/proc",
+            "--dev", "/dev",
+            "--symlink", "usr/bin", "/bin",
+            "--symlink", "usr/lib", "/lib",
+            "--symlink", "usr/lib64", "/lib64",
+            "--chdir", str(workdir),
+            "--",
+        ]
+        if _sandbox_works(prefix, workdir):
+            return (prefix, "bwrap")
     return ([], "none")
+
+
+def _sandbox_works(prefix: list[str], workdir: Path) -> bool:
+    """Probe a sandbox wrapper before trusting it; some runtimes hang on unshare."""
+    try:
+        proc = subprocess.run(
+            [*prefix, "true"],
+            cwd=str(workdir),
+            env=_scrub_env(workdir),
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=2,
+            start_new_session=True,
+        )
+        return proc.returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        return False
 
 
 def _build_inner(argv_or_code: Union[str, Sequence[str]]) -> list[str]:
@@ -161,26 +181,8 @@ async def run_in_quarantine(
             "network block is best-effort only [SUPUESTO]"
         )
 
-    proc: Optional[asyncio.subprocess.Process] = None
-    timed_out = False
     try:
-        proc = await asyncio.create_subprocess_exec(
-            *cmd,
-            cwd=str(base),
-            env=env,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-            start_new_session=True,  # own process group → killpg cleans up children
-        )
-        try:
-            out_b, err_b = await asyncio.wait_for(proc.communicate(), timeout=timeout)
-        except asyncio.TimeoutError:
-            timed_out = True
-            _kill_group(proc)
-            try:
-                out_b, err_b = await asyncio.wait_for(proc.communicate(), timeout=5)
-            except (asyncio.TimeoutError, ProcessLookupError):
-                out_b, err_b = b"", b""
+        stdout, stderr, exit_code, timed_out = _run_process(cmd, base, env, timeout)
     except (OSError, ValueError) as exc:
         # Wrapper or interpreter could not be launched at all — caged failure.
         return QuarantineResult(
@@ -195,10 +197,6 @@ async def run_in_quarantine(
     finally:
         if owns_dir:
             shutil.rmtree(base, ignore_errors=True)
-
-    stdout = _truncate(out_b.decode("utf-8", "replace"))
-    stderr = _truncate(err_b.decode("utf-8", "replace"))
-    exit_code = proc.returncode
 
     # ``escaped`` is reserved for a detectable break-out of the sandbox. We cannot
     # prove the negative, but a namespace tool that refuses to set up isolation
@@ -223,7 +221,36 @@ async def run_in_quarantine(
     )
 
 
-def _kill_group(proc: asyncio.subprocess.Process) -> None:
+def _run_process(
+    cmd: list[str],
+    cwd: Path,
+    env: dict[str, str],
+    timeout: int,
+) -> tuple[str, str, Optional[int], bool]:
+    proc = subprocess.Popen(
+        cmd,
+        cwd=str(cwd),
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        start_new_session=True,
+    )
+    try:
+        stdout, stderr = proc.communicate(timeout=timeout)
+        return _truncate(stdout), _truncate(stderr), proc.returncode, False
+    except subprocess.TimeoutExpired as exc:
+        _kill_group(proc)
+        try:
+            stdout, stderr = proc.communicate(timeout=5)
+        except subprocess.TimeoutExpired:
+            stdout, stderr = "", ""
+        stdout = stdout if stdout is not None else (exc.stdout or "")
+        stderr = stderr if stderr is not None else (exc.stderr or "")
+        return _truncate(stdout), _truncate(stderr), proc.returncode, True
+
+
+def _kill_group(proc) -> None:
     """SIGKILL the child's whole process group; degrade to the single pid."""
     try:
         os.killpg(os.getpgid(proc.pid), signal.SIGKILL)

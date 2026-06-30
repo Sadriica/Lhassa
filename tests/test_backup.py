@@ -85,7 +85,7 @@ async def test_verify_false_on_missing_file(tmp_path, monkeypatch):
 async def test_verify_false_when_tables_missing(tmp_path, monkeypatch):
     _, backup = await _init(tmp_path, monkeypatch)
     # A valid SQLite file but without the grande's tables.
-    import aiosqlite
+    from lhassa._vendor import aiosqlite
     bare = tmp_path / "bare.db"
     async with aiosqlite.connect(bare) as conn:
         await conn.execute("CREATE TABLE unrelated (x INTEGER)")

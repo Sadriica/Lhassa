@@ -26,7 +26,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
-import aiosqlite
+from lhassa._vendor import aiosqlite
 
 from lhassa.config import Config
 

@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
-import aiosqlite
+from lhassa._vendor import aiosqlite
 
 DB_PATH = Path.home() / ".lhassa" / "memory.db"
 

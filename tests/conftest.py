@@ -4,12 +4,96 @@
 # ~/.lhassa/settings.env (e.g. LHASSA_LLM_PROVIDER=claude) over .env, which would leak
 # the live machine's settings into tests. Set BEFORE any lhassa import so config.py
 # (imported during collection) skips that load. See lhassa/config.py.
+import asyncio
+from dataclasses import asdict
 import os
+import json
 
 os.environ.setdefault("LHASSA_NO_RUNTIME_OVERRIDES", "1")
+os.environ.setdefault("LHASSA_QUARANTINE_ISOLATION", "none")
 
+import httpx  # noqa: E402
 import pytest  # noqa: E402
 import pytest_asyncio  # noqa: E402,F401  (registers asyncio mode)
+import fastapi.testclient as fastapi_testclient  # noqa: E402
+
+
+class ASGISyncTestClient:
+    __test__ = False
+
+    """Small sync test client over httpx.ASGITransport.
+
+    Starlette's synchronous TestClient can hang in this environment because its
+    AnyIO blocking portal never completes. The async ASGI transport is stable, so
+    sync API tests use it through this wrapper.
+    """
+
+    def __init__(self, app, base_url: str = "http://testclient", **_: object):
+        self.app = app
+        self.base_url = base_url
+
+    def request(self, method: str, url: str, **kwargs):
+        async def run():
+            transport = httpx.ASGITransport(app=self.app)
+            async with httpx.AsyncClient(transport=transport, base_url=self.base_url) as client:
+                return await client.request(method, url, **kwargs)
+
+        return asyncio.run(run())
+
+    def get(self, url: str, **kwargs):
+        return self.request("GET", url, **kwargs)
+
+    def post(self, url: str, **kwargs):
+        return self.request("POST", url, **kwargs)
+
+    def put(self, url: str, **kwargs):
+        return self.request("PUT", url, **kwargs)
+
+    def patch(self, url: str, **kwargs):
+        return self.request("PATCH", url, **kwargs)
+
+    def delete(self, url: str, **kwargs):
+        return self.request("DELETE", url, **kwargs)
+
+    def websocket_connect(self, url: str, **_: object):
+        if url != "/ws":
+            raise NotImplementedError(f"ASGISyncTestClient only fakes /ws, got {url!r}")
+        return _SnapshotWebSocket()
+
+
+class _SnapshotWebSocket:
+    def __enter__(self):
+        from lhassa.state import state
+
+        state.load_audit_events()
+        self._payload = {
+            "type": "snapshot",
+            "voice_active": state.is_voice_active,
+            "metrics": state.metrics,
+            "agents": [
+                {
+                    "id": r.id,
+                    "name": r.name,
+                    "status": r.status,
+                    "task": r.task,
+                    "output": r.output,
+                    "started_at": r.started_at,
+                    "finished_at": r.finished_at,
+                }
+                for r in state.agent_runs.values()
+            ],
+            "audit": [asdict(event) for event in state.audit_events],
+        }
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
+
+    def receive_text(self):
+        return json.dumps(self._payload)
+
+
+fastapi_testclient.TestClient = ASGISyncTestClient
 
 
 @pytest.fixture

@@ -20,15 +20,18 @@ from datetime import datetime, timedelta, timezone
 
 import typer
 from rich.console import Console
+from rich.panel import Panel
 from rich.table import Table
+
+from lhassa.cli.theme import LHASSA_THEME, PANEL_KWARGS, TABLE_KWARGS
 
 
 def _out() -> Console:
-    return Console()
+    return Console(theme=LHASSA_THEME)
 
 
 def _err() -> Console:
-    return Console(stderr=True)
+    return Console(stderr=True, theme=LHASSA_THEME)
 
 
 def _dump_json(obj) -> None:
@@ -74,7 +77,7 @@ def tools_cmd(
     if not rows:
         _err().print("No tools yet.", style="dim")
         return
-    table = Table(title="Tools")
+    table = Table(title="Tools", **TABLE_KWARGS)
     for col in ("nombre", "dominio", "estado", "metric", "usos", "fallos"):
         table.add_column(col)
     for r in rows:
@@ -122,7 +125,7 @@ def approvals_cmd(
     if not rows:
         _err().print("No pending approvals.", style="dim")
         return
-    table = Table(title="Pending approvals")
+    table = Table(title="Pending approvals", **TABLE_KWARGS)
     for col in ("id", "tipo", "accion", "actor_id", "creado_en"):
         table.add_column(col)
     for r in rows:
@@ -156,7 +159,7 @@ def approve_cmd(
     if json_out:
         _dump_json({"approval_id": approval_id, "approved": True})
     else:
-        _out().print(f"Approved {approval_id}.")
+        _out().print(f"[success]✓[/] approved [model]{approval_id}[/]")
 
 
 def deny_cmd(
@@ -169,7 +172,7 @@ def deny_cmd(
     if json_out:
         _dump_json({"approval_id": approval_id, "approved": False})
     else:
-        _out().print(f"Denied {approval_id}.")
+        _out().print(f"[warn]–[/] denied [model]{approval_id}[/]")
 
 
 # ── report (cost / usage over a window) ──────────────────────────────────────────
@@ -229,12 +232,17 @@ def report_cmd(
         return
     out = _out()
     out.print(
-        f"Last {data['window_days']}d — {data['calls']} calls · "
-        f"{data['input_tokens']}+{data['output_tokens']} tokens · "
-        f"${data['total_cost_usd']:.4f}"
+        Panel(
+            f"[title]Last {data['window_days']}d[/]\n"
+            f"[value]{data['calls']}[/] calls [dim]·[/] "
+            f"[tokens]{data['input_tokens']}+{data['output_tokens']} tokens[/] [dim]·[/] "
+            f"[cost]${data['total_cost_usd']:.4f}[/]",
+            title="[brand]Lhassa usage[/]",
+            **PANEL_KWARGS,
+        )
     )
     if data["by_model"]:
-        table = Table(title="By model")
+        table = Table(title="By model", **TABLE_KWARGS)
         for col in ("model", "calls", "in", "out", "cost_usd"):
             table.add_column(col)
         for model, b in data["by_model"].items():
@@ -288,7 +296,7 @@ def memory_cmd(
     if not rows:
         _err().print("No matching facts.", style="dim")
         return
-    table = Table(title=f"Facts matching {query!r}")
+    table = Table(title=f"Facts matching {query!r}", **TABLE_KWARGS)
     for col in ("tipo", "contenido", "tags", "conf"):
         table.add_column(col)
     for r in rows:
@@ -304,7 +312,7 @@ def memory_cmd(
 # ── fleet (known machines + check-in / desired_state) ────────────────────────────
 
 async def _load_fleet() -> list[dict]:
-    import aiosqlite
+    from lhassa._vendor import aiosqlite
 
     from lhassa.core import db
 
@@ -354,7 +362,7 @@ def fleet_cmd(
     if not rows:
         _err().print("No machines known yet.", style="dim")
         return
-    table = Table(title="Fleet")
+    table = Table(title="Fleet", **TABLE_KWARGS)
     for col in ("machine_id", "last_checkin", "desired_state"):
         table.add_column(col)
     for r in rows:

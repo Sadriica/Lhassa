@@ -14,7 +14,7 @@ async def _init(tmp_path, monkeypatch):
 @pytest.mark.asyncio
 async def test_org_commons_table_created(tmp_path, monkeypatch):
     db = await _init(tmp_path, monkeypatch)
-    import aiosqlite
+    from lhassa._vendor import aiosqlite
     async with aiosqlite.connect(db.DB_PATH) as conn:
         async with conn.execute(
             "SELECT name FROM sqlite_master WHERE type='table'"
@@ -62,7 +62,7 @@ async def test_single_shared_row_no_per_department_copy(tmp_path, monkeypatch):
                       by_role="general", by_actor="owner", instance_id="inst_personal")
 
     # one curator overwrote the same shared row — exactly one row exists
-    import aiosqlite
+    from lhassa._vendor import aiosqlite
     async with aiosqlite.connect(db.DB_PATH) as conn:
         async with conn.execute(
             "SELECT COUNT(*) FROM org_commons WHERE instance_id=? AND clave=?",

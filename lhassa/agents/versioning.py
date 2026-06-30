@@ -22,7 +22,6 @@ entry point returns an empty/sentinel value instead of throwing).
 
 from __future__ import annotations
 
-import asyncio
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
@@ -84,8 +83,8 @@ def _run_git(args: list[str], cwd: Path) -> GitResult:
 
 
 async def _git(args: list[str], cwd: Optional[Path] = None) -> GitResult:
-    """Async wrapper around :func:`_run_git` (git runs off the event loop)."""
-    return await asyncio.to_thread(_run_git, args, cwd or _repo_dir())
+    """Async-shaped wrapper around :func:`_run_git`."""
+    return _run_git(args, cwd or _repo_dir())
 
 
 def _branch_for(name: str) -> str:

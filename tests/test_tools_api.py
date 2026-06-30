@@ -74,7 +74,7 @@ async def test_graduate_endpoint_marks_graduada_and_resolves_approval(api):
     assert row["estado"] == "graduada"
 
     # A tool_graduation approval was created and resolved (queue is the seam).
-    import aiosqlite
+    from lhassa._vendor import aiosqlite
 
     async with aiosqlite.connect(db.DB_PATH) as conn:
         conn.row_factory = aiosqlite.Row

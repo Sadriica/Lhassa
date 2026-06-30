@@ -18,7 +18,7 @@ async def _init(tmp_path, monkeypatch):
 @pytest.mark.asyncio
 async def test_init_db_creates_all_tables(tmp_path, monkeypatch):
     db = await _init(tmp_path, monkeypatch)
-    import aiosqlite
+    from lhassa._vendor import aiosqlite
     async with aiosqlite.connect(db.DB_PATH) as conn:
         async with conn.execute(
             "SELECT name FROM sqlite_master WHERE type='table'"
@@ -31,7 +31,7 @@ async def test_init_db_creates_all_tables(tmp_path, monkeypatch):
 @pytest.mark.asyncio
 async def test_init_db_enables_wal(tmp_path, monkeypatch):
     db = await _init(tmp_path, monkeypatch)
-    import aiosqlite
+    from lhassa._vendor import aiosqlite
     async with aiosqlite.connect(db.DB_PATH) as conn:
         async with conn.execute("PRAGMA journal_mode") as cur:
             (mode,) = await cur.fetchone()
@@ -47,7 +47,7 @@ async def test_init_db_is_idempotent(tmp_path, monkeypatch):
 @pytest.mark.asyncio
 async def test_every_table_has_instance_id(tmp_path, monkeypatch):
     db = await _init(tmp_path, monkeypatch)
-    import aiosqlite
+    from lhassa._vendor import aiosqlite
     async with aiosqlite.connect(db.DB_PATH) as conn:
         for table in ("episodes", "tasks", "jobs", "desired_state", "tools", "approvals"):
             async with conn.execute(f"PRAGMA table_info({table})") as cur:
@@ -140,7 +140,7 @@ async def test_record_and_update_job(tmp_path, monkeypatch):
         "inst_personal", job_id, estado="done", costo_usd=0.01,
         terminado_en="2026-01-01T00:00:00+00:00",
     )
-    import aiosqlite
+    from lhassa._vendor import aiosqlite
     async with aiosqlite.connect(db.DB_PATH) as conn:
         conn.row_factory = aiosqlite.Row
         async with conn.execute(
