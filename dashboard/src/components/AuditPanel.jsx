@@ -30,9 +30,9 @@ export default function AuditPanel({ seed = [], refreshTick = 0 }) {
   }, [refreshTick])
 
   return (
-    <div className="bg-slate-900 border border-slate-700 rounded-lg p-4">
+    <div className="lh-card">
       <div className="flex items-center justify-between mb-3">
-        <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Audit</h2>
+        <h2 className="lh-card-title">Audit</h2>
         <span className="text-xs text-slate-500">{events.length} recent</span>
       </div>
 

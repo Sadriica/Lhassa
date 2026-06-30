@@ -75,9 +75,9 @@ export default function AgentsPanel({ agents }) {
   const finished = agents.filter(a => a.status !== 'running')
 
   return (
-    <div className="bg-slate-900 border border-slate-700 rounded-lg p-4">
+    <div className="lh-card">
       <div className="flex items-center justify-between mb-3">
-        <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+        <h2 className="lh-card-title">
           Agents
         </h2>
         <div className="flex items-center gap-3 text-xs text-slate-500">

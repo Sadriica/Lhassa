@@ -52,9 +52,9 @@ export default function ApprovalQueuePanel() {
   }
 
   return (
-    <div className="bg-slate-900 border border-slate-700 rounded-lg p-4">
+    <div className="lh-card">
       <div className="flex items-center justify-between mb-3">
-        <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+        <h2 className="lh-card-title">
           Approval queue
         </h2>
         <span className="text-xs text-slate-500">{approvals.length} pending</span>
@@ -69,7 +69,7 @@ export default function ApprovalQueuePanel() {
           {approvals.map(a => {
             const p = a.payload || {}
             return (
-              <li key={a.id} className="border border-slate-800 rounded p-2">
+              <li key={a.id} className="lh-row">
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-xs font-medium text-slate-200">{a.tipo || p.accion || 'action'}</span>
                   <span className="text-[10px] text-slate-500">{a.creado_en}</span>
@@ -86,7 +86,7 @@ export default function ApprovalQueuePanel() {
                     type="button"
                     disabled={busy === a.id}
                     onClick={() => resolve(a.id, true)}
-                    className="text-xs px-2 py-1 rounded bg-green-700 hover:bg-green-600 disabled:bg-slate-700 text-white"
+                    className="lh-btn lh-btn-primary"
                   >
                     {busy === a.id ? '…' : 'Approve'}
                   </button>
@@ -94,7 +94,7 @@ export default function ApprovalQueuePanel() {
                     type="button"
                     disabled={busy === a.id}
                     onClick={() => resolve(a.id, false)}
-                    className="text-xs px-2 py-1 rounded bg-red-800 hover:bg-red-700 disabled:bg-slate-700 text-white"
+                    className="lh-btn lh-btn-danger"
                   >
                     {busy === a.id ? '…' : 'Deny'}
                   </button>

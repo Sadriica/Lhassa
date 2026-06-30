@@ -9,8 +9,8 @@ function Metric({ label, value, color = 'text-purple-400' }) {
 
 export default function MetricsPanel({ metrics }) {
   return (
-    <div className="bg-slate-900 border border-slate-700 rounded-lg p-4">
-      <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Metrics</h2>
+    <div className="lh-card">
+      <h2 className="lh-card-title mb-3">Metrics</h2>
       <div className="grid grid-cols-2 gap-2">
         <Metric label="LLM calls" value={metrics.llm_calls} color="text-purple-400" />
         <Metric label="Tool calls" value={metrics.tool_calls} color="text-blue-400" />

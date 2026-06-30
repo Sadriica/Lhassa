@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
 import StatusBar from './components/StatusBar'
+import BrainsPanel from './components/BrainsPanel'
 import AgentsPanel from './components/AgentsPanel'
 import MetricsPanel from './components/MetricsPanel'
 import AIUsagePanel from './components/AIUsagePanel'
@@ -17,7 +18,18 @@ import './index.css'
 
 const WS_URL = `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}/ws`
 
+// Sidebar sections (Warp/Oz "blocks" navigation). Brains is the primary section.
+const SECTIONS = [
+  { id: 'brains', label: 'Brains' },
+  { id: 'approvals', label: 'Approvals' },
+  { id: 'tools', label: 'Tools' },
+  { id: 'reports', label: 'Reports' },
+  { id: 'fleet', label: 'Fleet' },
+  { id: 'activity', label: 'Activity' },
+]
+
 export default function App() {
+  const [section, setSection] = useState('brains')
   const [connected, setConnected] = useState(false)
   const [voiceActive, setVoiceActive] = useState(false)
   const [metrics, setMetrics] = useState({ llm_calls: 0, tool_calls: 0, sessions: 0, agents_launched: 0 })
@@ -130,29 +142,71 @@ export default function App() {
   const agentList = Object.values(agents).sort((a, b) => (b.started_at || 0) - (a.started_at || 0))
 
   return (
-    <div className="min-h-screen bg-[#0a0a0f] text-slate-200 p-4 space-y-4">
+    <div className="min-h-screen p-4" style={{ background: 'var(--lh-bg)', color: 'var(--lh-text)' }}>
       <StatusBar connected={connected} voiceActive={voiceActive} />
 
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-        {/* Left column: Agents (takes 2 cols) */}
-        <div className="xl:col-span-2 space-y-4">
-          <ErrorBoundary><AgentsPanel agents={agentList} /></ErrorBoundary>
-          <ErrorBoundary><HistoryPanel /></ErrorBoundary>
-        </div>
+      <div className="flex flex-col lg:flex-row gap-4">
+        {/* Sidebar nav */}
+        <nav className="lg:w-48 lg:shrink-0">
+          <div className="flex lg:flex-col gap-1 flex-row flex-wrap">
+            {SECTIONS.map((s) => (
+              <button
+                key={s.id}
+                type="button"
+                onClick={() => setSection(s.id)}
+                className={`lh-nav-item ${section === s.id ? 'active' : ''}`}
+              >
+                <span>{s.label}</span>
+              </button>
+            ))}
+          </div>
+        </nav>
 
-        {/* Right column: metrics, memory, schedule */}
-        <div className="space-y-4">
-          <ErrorBoundary><ApprovalQueuePanel /></ErrorBoundary>
-          <ErrorBoundary><QuarantinePanel /></ErrorBoundary>
-          <ErrorBoundary><FleetPanel /></ErrorBoundary>
-          <ErrorBoundary><ReportsPanel /></ErrorBoundary>
-          <ErrorBoundary><HealthPanel /></ErrorBoundary>
-          <ErrorBoundary><MetricsPanel metrics={metrics} /></ErrorBoundary>
-          <ErrorBoundary><AIUsagePanel metrics={metrics} /></ErrorBoundary>
-          <ErrorBoundary><AuditPanel seed={auditEvents} /></ErrorBoundary>
-          <ErrorBoundary><ScheduledPanel refreshTick={scheduledTick} /></ErrorBoundary>
-          <ErrorBoundary><MemoryPanel /></ErrorBoundary>
-        </div>
+        {/* Main content — one section's blocks at a time */}
+        <main className="flex-1 min-w-0 space-y-4">
+          {section === 'brains' && (
+            <ErrorBoundary><BrainsPanel /></ErrorBoundary>
+          )}
+
+          {section === 'approvals' && (
+            <ErrorBoundary><ApprovalQueuePanel /></ErrorBoundary>
+          )}
+
+          {section === 'tools' && (
+            <ErrorBoundary><QuarantinePanel /></ErrorBoundary>
+          )}
+
+          {section === 'reports' && (
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+              <ErrorBoundary><ReportsPanel /></ErrorBoundary>
+              <div className="space-y-4">
+                <ErrorBoundary><AIUsagePanel metrics={metrics} /></ErrorBoundary>
+                <ErrorBoundary><MetricsPanel metrics={metrics} /></ErrorBoundary>
+              </div>
+            </div>
+          )}
+
+          {section === 'fleet' && (
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+              <ErrorBoundary><FleetPanel /></ErrorBoundary>
+              <ErrorBoundary><HealthPanel /></ErrorBoundary>
+            </div>
+          )}
+
+          {section === 'activity' && (
+            <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+              <div className="xl:col-span-2 space-y-4">
+                <ErrorBoundary><AgentsPanel agents={agentList} /></ErrorBoundary>
+                <ErrorBoundary><HistoryPanel /></ErrorBoundary>
+              </div>
+              <div className="space-y-4">
+                <ErrorBoundary><AuditPanel seed={auditEvents} /></ErrorBoundary>
+                <ErrorBoundary><ScheduledPanel refreshTick={scheduledTick} /></ErrorBoundary>
+                <ErrorBoundary><MemoryPanel /></ErrorBoundary>
+              </div>
+            </div>
+          )}
+        </main>
       </div>
     </div>
   )

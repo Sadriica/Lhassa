@@ -21,8 +21,8 @@ export default function HistoryPanel() {
   }, [])
 
   return (
-    <div className="bg-slate-900 border border-slate-700 rounded-lg p-4">
-      <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">
+    <div className="lh-card">
+      <h2 className="lh-card-title mb-3">
         Session History
       </h2>
 

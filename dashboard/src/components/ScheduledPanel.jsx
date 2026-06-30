@@ -28,9 +28,9 @@ export default function ScheduledPanel({ refreshTick = 0 }) {
   const done = tasks.filter(t => t.status === 'done')
 
   return (
-    <div className="bg-slate-900 border border-slate-700 rounded-lg p-4">
+    <div className="lh-card">
       <div className="flex items-center justify-between mb-3">
-        <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+        <h2 className="lh-card-title">
           Scheduled
         </h2>
         {pending.length > 0 && (

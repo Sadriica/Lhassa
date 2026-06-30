@@ -1,29 +1,212 @@
 @import "tailwindcss";
 
-body {
-  margin: 0;
-  background: #0a0a0f;
-  color: #e2e8f0;
-  font-family: ui-monospace, 'JetBrains Mono', Consolas, monospace;
+/* ── Design tokens ────────────────────────────────────────────────────────────
+   Warp/Oz-inspired dark theme. One place to retheme the whole dashboard:
+   deep near-black canvas, thin low-opacity borders, soft rounded surfaces, a
+   single teal accent used sparingly, semantic colors for ok/warn/alert.        */
+:root {
+  /* canvas + surfaces */
+  --lh-bg:          #0c0c0e;
+  --lh-surface:     #111317;
+  --lh-surface-2:   #16181d;
+  --lh-surface-3:   #1c1f26;
+  /* borders (thin, low opacity) */
+  --lh-border:      rgba(255, 255, 255, 0.08);
+  --lh-border-strong: rgba(255, 255, 255, 0.14);
+  /* text */
+  --lh-text:        #e6e8ec;
+  --lh-text-muted:  #9aa0aa;
+  --lh-text-faint:  #6b7280;
+  /* accent (teal) + semantic */
+  --lh-accent:      #2dd4bf;
+  --lh-accent-dim:  rgba(45, 212, 191, 0.14);
+  --lh-accent-text: #5eead4;
+  --lh-ok:          #34d399;
+  --lh-warn:        #fbbf24;
+  --lh-alert:       #f87171;
+  /* shape + shadow */
+  --lh-radius:      10px;
+  --lh-radius-sm:   7px;
+  --lh-shadow:      0 1px 2px rgba(0,0,0,0.4), 0 8px 24px rgba(0,0,0,0.28);
+  /* fonts */
+  --lh-font-sans:   "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --lh-font-mono:   ui-monospace, "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace;
 }
 
-#root {
-  min-height: 100vh;
+html, body {
+  margin: 0;
+  background: var(--lh-bg);
+  color: var(--lh-text);
+  font-family: var(--lh-font-sans);
+  -webkit-font-smoothing: antialiased;
 }
+
+#root { min-height: 100vh; }
 
 /* Scrollbar styling */
-::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #334155; border-radius: 2px; }
+::-webkit-scrollbar-thumb { background: var(--lh-border-strong); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.22); }
 
-/* Streaming text animation */
-@keyframes blink {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0; }
-}
+/* Streaming text animation (kept from the original UX) */
+@keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
 .cursor-blink::after {
   content: '▊';
   animation: blink 1s step-start infinite;
-  color: #a78bfa;
+  color: var(--lh-accent);
   margin-left: 1px;
+}
+
+@layer components {
+  /* Card — the Warp "block". Replaces the old slate card across every panel. */
+  .lh-card {
+    background: var(--lh-surface);
+    border: 1px solid var(--lh-border);
+    border-radius: var(--lh-radius);
+    padding: 1rem;
+    box-shadow: var(--lh-shadow);
+  }
+
+  .lh-card-title {
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--lh-text-muted);
+  }
+
+  /* Mono data treatment */
+  .lh-mono { font-family: var(--lh-font-mono); }
+
+  /* Inset sub-card (rows inside a block) */
+  .lh-row {
+    background: var(--lh-surface-2);
+    border: 1px solid var(--lh-border);
+    border-radius: var(--lh-radius-sm);
+    padding: 0.625rem 0.75rem;
+  }
+
+  /* Tags (skills) + badges (limits) */
+  .lh-tag {
+    display: inline-flex;
+    align-items: center;
+    font-family: var(--lh-font-mono);
+    font-size: 0.6875rem;
+    padding: 0.125rem 0.5rem;
+    border-radius: 999px;
+    border: 1px solid var(--lh-border-strong);
+    background: var(--lh-surface-3);
+    color: var(--lh-text-muted);
+  }
+  .lh-tag-accent {
+    border-color: rgba(45, 212, 191, 0.4);
+    background: var(--lh-accent-dim);
+    color: var(--lh-accent-text);
+  }
+  .lh-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    font-family: var(--lh-font-mono);
+    font-size: 0.6875rem;
+    padding: 0.125rem 0.5rem;
+    border-radius: var(--lh-radius-sm);
+    border: 1px solid var(--lh-border);
+    background: var(--lh-surface-2);
+    color: var(--lh-text-muted);
+  }
+
+  /* Status pill */
+  .lh-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.75rem;
+    padding: 0.2rem 0.6rem;
+    border-radius: 999px;
+    border: 1px solid var(--lh-border);
+    background: var(--lh-surface-2);
+    color: var(--lh-text-muted);
+  }
+  .lh-dot { width: 7px; height: 7px; border-radius: 999px; background: var(--lh-text-faint); }
+  .lh-dot-ok    { background: var(--lh-ok); }
+  .lh-dot-accent{ background: var(--lh-accent); }
+  .lh-dot-warn  { background: var(--lh-warn); }
+  .lh-dot-alert { background: var(--lh-alert); }
+
+  /* Buttons */
+  .lh-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+    padding: 0.35rem 0.7rem;
+    border-radius: var(--lh-radius-sm);
+    border: 1px solid var(--lh-border-strong);
+    background: var(--lh-surface-2);
+    color: var(--lh-text);
+    cursor: pointer;
+    transition: background 0.12s ease, border-color 0.12s ease;
+  }
+  .lh-btn:hover { background: var(--lh-surface-3); border-color: var(--lh-border-strong); }
+  .lh-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .lh-btn-primary {
+    background: var(--lh-accent);
+    border-color: var(--lh-accent);
+    color: #04221d;
+    font-weight: 600;
+  }
+  .lh-btn-primary:hover { background: var(--lh-accent-text); border-color: var(--lh-accent-text); }
+  .lh-btn-danger {
+    background: rgba(248, 113, 113, 0.12);
+    border-color: rgba(248, 113, 113, 0.4);
+    color: var(--lh-alert);
+  }
+  .lh-btn-danger:hover { background: rgba(248, 113, 113, 0.2); }
+
+  /* Form controls */
+  .lh-input, .lh-select {
+    width: 100%;
+    font-size: 0.8125rem;
+    font-family: var(--lh-font-mono);
+    padding: 0.4rem 0.6rem;
+    border-radius: var(--lh-radius-sm);
+    border: 1px solid var(--lh-border);
+    background: var(--lh-bg);
+    color: var(--lh-text);
+    outline: none;
+  }
+  .lh-input:focus, .lh-select:focus { border-color: var(--lh-accent); }
+  .lh-label {
+    font-size: 0.6875rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--lh-text-faint);
+  }
+
+  /* Sidebar nav items */
+  .lh-nav-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    width: 100%;
+    text-align: left;
+    font-size: 0.8125rem;
+    padding: 0.5rem 0.7rem;
+    border-radius: var(--lh-radius-sm);
+    border: 1px solid transparent;
+    color: var(--lh-text-muted);
+    background: transparent;
+    cursor: pointer;
+    transition: background 0.12s ease, color 0.12s ease;
+  }
+  .lh-nav-item:hover { background: var(--lh-surface-2); color: var(--lh-text); }
+  .lh-nav-item.active {
+    background: var(--lh-accent-dim);
+    border-color: rgba(45, 212, 191, 0.35);
+    color: var(--lh-accent-text);
+  }
 }
