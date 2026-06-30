@@ -1,323 +1,103 @@
-# Architecture
+# Lhassa — architecture overview
 
-This document describes how Lhassa is built: the data flow for a voice turn, the concurrent task structure, the state singleton, the WebSocket fan-out, and the file layout.
+A current, high-level map of the Lhassa "brain". For the full spec read
+[`lhassa-brief.md`](lhassa-brief.md); for the phase-by-phase decisions read
+[`decisions.md`](decisions.md); for the mechanically-enforced layer rules read
+[`architecture-layers.md`](architecture-layers.md).
 
----
+## What Lhassa is
 
-## High-Level Diagram
+An identity-first core (a JARVIS) that runs the **do-and-sleep** loop — state on
+disk + a `step()` that advances it one tick, woken by a systemd **heartbeat** or
+the API. It **orchestrates** models and tools behind two stable interfaces rather
+than depending on any one of them: *build the brain, rent the body*. It is
+local-first, **elastic and modular** (every swap point behind a registry;
+capabilities drop in without editing core), and scales from one brain to an org of
+1..N brains.
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                         Lhassa Process                           │
-│                                                                 │
-│  ┌──────────┐   ┌───────────┐   ┌─────────────────────────┐   │
-│  │          │   │  Voice    │   │   FastAPI / uvicorn      │   │
-│  │ Scheduler│   │ Pipeline  │   │   REST  +  WebSocket     │   │
-│  │  (30s    │   │ (pipecat) │   │   + React static files   │   │
-│  │  poll)   │   │           │   │                          │   │
-│  └────┬─────┘   └─────┬─────┘   └────────────┬─────────────┘   │
-│       │               │                       │                 │
-│       └───────────────┴───────── AppState ────┘                 │
-│                           (singleton)                           │
-└─────────────────────────────────────────────────────────────────┘
+## Layers
 
-Voice Pipeline (pipecat):
+Dependencies point **down** only — inner layers never import an outer shell. The
+guard test (`tests/test_architecture.py`) fails on any new layer-crossing import.
 
-  Microphone
-      │
-      ▼
-  LocalAudioTransport.input()
-      │  (raw PCM frames)
-      ▼
-  DeepgramSTTService          ◄── Deepgram API (WebSocket)
-      │  (TranscriptionFrame)
-      ▼
-  [WakeDebug]  (if LHASSA_DEBUG=1)
-      │
-      ▼
-  LLMContextAggregator.user()
-      │  WakePhraseUserTurnStartStrategy ──► 880 Hz beep on wake
-      │  SileroVADAnalyzer (end-of-speech)  440 Hz beep on sleep
-      │  WakeWordOnlyMuteStrategy
-      │
-      ▼ (complete user turn)
-  LLM Service                 ◄── configured provider (Groq / Anthropic / OpenAI /
-      │  (LLMTextFrame / tool calls)      OpenRouter / Cerebras / Ollama)
-      ▼
-  ChatPrinter  (terminal output)
-      │
-      ▼
-  CartesiaTTSService          ◄── Cartesia API (HTTPS)
-      │  (audio frames)
-      ▼
-  LocalAudioTransport.output()
-      │
-      ▼
-  Speaker (PipeWire)
-      │
-      ▼
-  LLMContextAggregator.assistant()
-```
-
----
-
-## Three Concurrent Tasks
-
-`main.py` runs three asyncio tasks simultaneously:
-
-```python
-api_task       = asyncio.create_task(run_api_server(...))
-scheduler_task = asyncio.create_task(run_scheduler())
-# Voice pipeline runs directly (primary task):
-_context, messages = await run_voice_pipeline()
-```
-
-| Task | Module | What it does |
+| Layer | Subpackages | Role |
 |---|---|---|
-| **Voice pipeline** | `lhassa/voice/pipeline.py` | Microphone → STT → LLM → TTS → speaker. The primary task — when it exits (Ctrl+C), the other two are cancelled. |
-| **API server** | `lhassa/api/server.py` | Serves REST endpoints, WebSocket fan-out, and the React static files. |
-| **Scheduler** | `lhassa/scheduler.py` | Polls the database every 30 seconds for due reminders and fires them. |
+| Leaf infra | `registry.py`, `plugins.py`, `config.py` | Generic machinery; imports no feature code |
+| Spine | `core/` | The do-and-sleep loop: `step`, `heartbeat`, `episode`, `db`, `watchlist`, `actions`, `task` |
+| Interfaces | `memory/`, `security/`, `llm/` | Reusable contracts: typed facts, trust/approval, `ModelProvider` + router |
+| Adapters (hands) | `harness/`, `tools/`, `agents/`, `remote/`, `health/` | The rentable body: harnesses, MCP/tools, specialist agents, the check-in local agent |
+| Shells (outer) | `cli/`, `api/`, `voice/`, `notify/`, `org/`, dashboard (JS) | World-facing surfaces; compose everything below |
 
-On shutdown (KeyboardInterrupt / Ctrl+C):
-1. The voice pipeline stops
-2. `api_task.cancel()` and `scheduler_task.cancel()` are called
-3. Both tasks handle `CancelledError` cleanly
-4. `close_session()` runs to save memory — this is the only step that still uses `asyncio.run()` after the event loop closes
+The two swap axes are kept **independent**: `harness/` (agentic body) must not
+import `llm/` (think-directly providers). The reverse edge — `llm/router.py`
+*choosing* a harness — is the one intentional bridge.
 
----
+## Data dir — `~/.lhassa/`
 
-## How a Voice Turn Works End-to-End
+Every default path derives from `Path.home()`, so pointing `HOME` relocates all
+state (the Docker image sets `HOME=/data`).
 
-```
-1. SLEEPING
-   Deepgram is streaming audio frames to the STT service.
-   WakePhraseUserTurnStartStrategy is scanning transcriptions for wake words.
+| Path | Contents |
+|---|---|
+| `~/.lhassa/brain.db` | The "grande" — append-only SQLite (WAL): facts, episodes, jobs, approvals, org tables, … |
+| `~/.lhassa/chica.db` | The "chica" — persistent working cache (LRU) |
+| `~/.lhassa/backups/` | WAL-safe online backups |
+| `~/.lhassa/keys/ed25519` | Signing key for `Task` provenance |
+| `~/.lhassa/org.json` | The org topology (1..N brains) |
+| `~/.lhassa/plugins/` | Drop-in plugin modules (self-register) |
+| `~/.lhassa/tools/` | Local-git repo for self-written tool versioning |
+| `~/.lhassa/lhassa.log` | Rotated application log |
+| `~/.config/lhassa/mcp.json` | MCP server config (optional) |
 
-2. WAKE WORD DETECTED
-   A transcription matches a wake phrase (e.g. "pots").
-   → 880 Hz beep plays
-   → "[Lhassa active]" printed to terminal
-   → WakePhraseUserTurnStartStrategy signals the aggregator to start a new turn
+## Phase map (0–7)
 
-3. LISTENING
-   SileroVADAnalyzer watches incoming audio for speech.
-   Audio is muted to the LLM while the bot is speaking (WakeWordOnlyMuteStrategy),
-   except wake phrases pass through to allow interruption.
+Built additively over an existing skeleton (extend, never rewrite). From
+`decisions.md`:
 
-4. END OF SPEECH (VAD silence detected)
-   SileroVAD detects that the user has stopped talking.
-   The LLMContextAggregator assembles the full user message and pushes it to the LLM.
+| Phase | Title | One line |
+|---|---|---|
+| 0 | The spine | `instance_id` everywhere, SQLite "grande", structured episodes, the deterministic `step()`/watchlist/actions loop, Ed25519-signed tasks + deny-by-default allowlist, check-in/report, heartbeat + systemd + parametrized identity |
+| 1 | Memory | Typed facts (`dato`/`directiva`) in the grande, layered `load()`, seed facts; the chica working cache (threshold-LRU) + WAL-safe backup/restore |
+| 2 | Economy + router | `ModelProvider` interface + `GatewayProvider`, the two-axis router (cascade cheap→verify→escalate), gateway kill-switch + daily budget + ccusage ledger, semantic consolidation |
+| 3 | The árbitro | Objective verifiers (never call an LLM) wired into the judgment branch; HITL-per-flow approval + the autonomy streak knob |
+| 4 | The hands | `HarnessAdapter` (OpenCode/Claude Code/Codex) + runner/supervisor + `pick_harness`; MCP client + a typed task (`tracking_postulaciones`) |
+| 5 | Self-improvement (caged) | Quarantine sandbox + the four gates (segura/correcta/mejor/retiro); specialists as **skills not fine-tuning** + local-git tool versioning |
+| 6 | Maturity (continuous) | `LocalModelProvider` + PII pseudonymization + router routine→local; memory **layer 4** (semantic embeddings); CLI power subcommands + Telegram + opencode heartbeat + voice brain-bridge |
+| 7 | Org layer | Typed inter-brain messages, read-only commons, RBAC, `GeneralBrain` (coordinates) / `DepartmentBrain` (executes), the validated topology tree (1..N brains) + coordinator/routing/executor + `lhassa org` |
 
-5. LLM CALL
-   The configured LLM service (GroqLLMService, AnthropicLLMService, etc.) sends the
-   context (system prompt + history + user message + tools) to the provider API.
-   state.metrics["llm_calls"] is incremented.
-   LLMTextFrames stream back token by token.
-   → ChatPrinter writes tokens to the terminal in real time
-
-6. TOOL CALL (optional)
-   If the LLM calls a tool (e.g. web_search), the tool handler runs asynchronously.
-   The result is injected back into the context.
-   The LLM continues generating after receiving the result.
-
-7. TTS
-   CartesiaTTSService converts the LLM response to audio.
-   Audio is played through PipeWire via LocalAudioTransport.output().
-
-8. SLEEP TIMEOUT
-   If no wake word is heard within 5 minutes of the last activation,
-   WakePhraseUserTurnStartStrategy fires the timeout callback.
-   → 440 Hz beep plays
-   → "[Lhassa sleeping]" printed to terminal
-   → Returns to step 1
-```
-
----
-
-## AppState Singleton
-
-`lhassa/state.py` defines `AppState` — a single shared object that connects the voice pipeline, the API server, the scheduler, and the agents:
-
-```python
-state = AppState()  # module-level singleton
-```
-
-| Attribute | Type | Set by | Read by |
-|---|---|---|---|
-| `pipeline_task` | `PipelineTask \| None` | Voice pipeline | Notifier (to inject TTS frames) |
-| `llm_context` | `LLMContext \| None` | Voice pipeline | main.py (session recovery on shutdown) |
-| `is_voice_active` | `bool` | main.py | Notifier, API `/api/status` |
-| `agent_runs` | `dict[str, AgentRun]` | Agents | API `/api/agents`, WebSocket |
-| `metrics` | `dict` | Pipeline, agents, tools | API `/api/metrics`, dashboard |
-| `_ws_clients` | `set[asyncio.Queue]` | API WebSocket handler | `state.broadcast()` |
-
-The `broadcast()` method fans out a JSON event to all connected WebSocket queues:
-
-```python
-async def broadcast(self, event: dict):
-    for q in list(self._ws_clients):
-        try:
-            q.put_nowait(event)
-        except asyncio.QueueFull:
-            dead.append(q)  # slow client dropped
-```
-
-Each WebSocket connection gets its own `asyncio.Queue(maxsize=256)`. The API server reads from the queue and sends to the client. If a client falls behind, its queue fills up and it's dropped automatically.
-
----
-
-## WebSocket Fan-Out for Real-Time Dashboard Updates
+## Diagram — the loop, the seams, the tree
 
 ```
-Agent.run() token arrives
-        │
-        ▼
-state.broadcast({"type": "agent_token", "run_id": ..., "token": ...})
-        │
-        ├──► Queue for browser tab 1  ──► ws.send_text(...)
-        ├──► Queue for browser tab 2  ──► ws.send_text(...)
-        └──► Queue for browser tab N  ──► ws.send_text(...)
+        systemd heartbeat timer ──► one fresh process per beat
+                                      │  (re-reads .env)
+                                      ▼
+   ┌──────────────────────────  core.step()  ───────────────────────────┐
+   │  watchlist (0 tokens) ─► fixed action ─► structured episode (instance_id)
+   │                       └─► else: judgment / think ─────────┐         │
+   └────────────────────────────────────────────────────────────┼────────┘
+                                                                 ▼
+                      memory.load(context)  ──►  llm.router  ──► pick
+                                                       │
+        ┌──────────────────────────────────────────────┴──────────────────┐
+        ▼                                                                  ▼
+  ModelProvider (axis 1: think directly)        HarnessAdapter (axis 2: agentic body)
+  PROVIDERS registry:                           ADAPTERS registry:
+    default (gateway) · local · opencode          opencode · claude-code · codex
+    claude · codex · zen(stub)                    pick_harness = cheapest available
+    [PseudonymizingProvider wraps remote]         (the two axes stay independent)
+
+  Surfaces (shells) compose the above:
+    CLI · Telegram (notify) · dashboard + API (:7766) · voice
+
+  Org topology (1..N brains, who-commands-whom):
+                       general  (coordinates, never executes)
+                      /          |              \
+            optimizacion    documentacion     finanzas     ← leaves execute
+            (TASK_ASSIGN down · only leaves run · TASK_RESULT bubbles up)
 ```
 
-Events that trigger broadcasts:
-- `agent_started` — new agent run began
-- `agent_token` — one streaming token from an agent
-- `agent_done` — agent completed successfully
-- `agent_error` — agent failed
-- `scheduled_task_fired` — a reminder was triggered
-- `process_done` — a watched process exited (from `watch_process`)
-- `file_event` — a watched file matched the pattern (from `watch_file`)
-- `command_done` — a watched command succeeded (from `watch_command`)
-
----
-
-## SQLite Schema
-
-Database location: `~/.lhassa/memory.db`
-
-```sql
-CREATE TABLE facts (
-    id       INTEGER PRIMARY KEY AUTOINCREMENT,
-    key      TEXT NOT NULL UNIQUE,   -- snake_case fact name
-    value    TEXT NOT NULL,
-    updated  TEXT NOT NULL           -- ISO 8601 UTC
-);
-
--- facts_key UNIQUE INDEX on key column
-
-CREATE TABLE sessions (
-    id       INTEGER PRIMARY KEY AUTOINCREMENT,
-    date     TEXT NOT NULL,          -- ISO 8601 UTC
-    summary  TEXT NOT NULL           -- one sentence
-);
-
-CREATE TABLE scheduled_tasks (
-    id         INTEGER PRIMARY KEY AUTOINCREMENT,
-    name       TEXT NOT NULL,
-    run_at     TEXT NOT NULL,        -- ISO 8601 UTC
-    message    TEXT NOT NULL,        -- spoken when fired
-    status     TEXT NOT NULL DEFAULT 'pending',  -- pending | done
-    created_at TEXT NOT NULL         -- ISO 8601 UTC
-);
-```
-
----
-
-## File Structure
-
-```
-potts/                          ← project root
-├── .env.example                ← copy to .env and fill in keys
-├── .env                        ← your secrets (gitignored)
-├── main.py                     ← entry point: setup_logging + asyncio.run(_run_all)
-├── pyproject.toml              ← project metadata, dependencies (uv)
-├── Makefile                    ← install / run / dev / dashboard / clean
-│
-├── lhassa/                     ← Python package
-│   ├── config.py               ← Config class, reads all env vars
-│   ├── state.py                ← AppState singleton (shared mutable state)
-│   ├── scheduler.py            ← background reminder poller (30s interval)
-│   │
-│   ├── voice/
-│   │   ├── pipeline.py         ← pipecat pipeline: STT→LLM→TTS, wake word
-│   │   ├── beep.py             ← 880 Hz / 440 Hz audio feedback tones
-│   │   ├── mute_strategy.py    ← mutes mic while bot speaks (wake word exception)
-│   │   └── notifier.py         ← notification router: speaks via TTS when voice is
-│   │                             active, falls back to notify-send when idle
-│   │
-│   ├── llm/
-│   │   ├── prompt.py           ← BASE_PROMPT + memory context injection
-│   │   └── provider.py         ← get_agent_client(): returns the right SDK client
-│   │                             for the configured LHASSA_LLM_PROVIDER
-│   │
-│   ├── tools/
-│   │   ├── registry.py         ← tool schemas + all handler functions
-│   │   ├── graph.py            ← Microsoft Graph: MSAL auth + email/calendar
-│   │   ├── github.py           ← GitHub REST API: repos, issues, PRs, comments,
-│   │   │                         notifications (requires GITHUB_TOKEN)
-│   │   ├── search.py           ← web_search: Brave Search API with DuckDuckGo fallback
-│   │   ├── vision.py           ← analyze_screen / analyze_image: screenshot capture
-│   │   │                         + vision LLM (Claude Haiku or GPT-4o-mini)
-│   │   └── monitor.py          ← watch_process / watch_file / watch_command:
-│   │                             background asyncio monitors with notify routing
-│   │
-│   ├── agents/
-│   │   ├── base.py             ← BaseAgent: multi-provider tool loop, state tracking,
-│   │   │                         60s per-call timeout, MAX_ITERATIONS guard
-│   │   ├── code.py             ← CodeAgent (software engineering)
-│   │   ├── research.py         ← ResearchAgent (information synthesis)
-│   │   └── system.py           ← SystemAgent (Arch Linux administration)
-│   │
-│   ├── memory/
-│   │   ├── store.py            ← SQLite CRUD: facts, sessions, scheduled_tasks
-│   │   └── session.py          ← close_session: LLM fact extraction + summary save
-│   │                             (uses active provider; Anthropic path avoids
-│   │                             response_format JSON restriction)
-│   │
-│   └── api/
-│       └── server.py           ← FastAPI app: REST + WebSocket + static files
-│
-├── dashboard/                  ← React frontend
-│   ├── src/
-│   │   ├── App.jsx             ← root component, WebSocket client, event router
-│   │   └── components/
-│   │       ├── StatusBar.jsx   ← voice active / WebSocket connected indicators
-│   │       ├── AgentsPanel.jsx ← streaming agent output cards
-│   │       ├── MetricsPanel.jsx
-│   │       ├── MemoryPanel.jsx ← facts table
-│   │       ├── HistoryPanel.jsx← session summaries
-│   │       └── ScheduledPanel.jsx
-│   ├── package.json
-│   └── vite.config.js          ← dev proxy: /api + /ws → localhost:7766
-│
-└── doc/                        ← this documentation
-    ├── getting-started.md
-    ├── voice-interaction.md
-    ├── tools.md
-    ├── agents.md
-    ├── memory.md
-    ├── scheduler.md
-    ├── dashboard.md
-    ├── outlook.md
-    ├── configuration.md
-    └── architecture.md
-```
-
----
-
-## Key Design Decisions
-
-**Why pipecat?**
-Pipecat handles the hard parts of voice pipelines: audio transport, STT/TTS service integration, VAD, frame routing, and interruption support. Lhassa uses it as the pipeline backbone and extends it with a custom mute strategy and wake word event handlers.
-
-**Why a singleton AppState instead of passing state around?**
-The three concurrent tasks (voice, API, scheduler) need to share state without complex dependency injection. A module-level singleton imported from anywhere is simple and practical for a personal assistant that runs as a single process.
-
-**Why SQLite?**
-Zero dependencies, zero setup, survives restarts, inspectable with standard tools. Memory and reminders don't need the power of a real database server.
-
-**Why asyncio throughout?**
-The voice pipeline, API server, and scheduler all need to run concurrently. asyncio tasks share a single thread with cooperative multitasking, which is ideal for I/O-bound work like LLM API calls and audio streaming.
-
-**Why abstract the LLM provider?**
-Tying the codebase to a single provider means every user needs that provider's account. By abstracting behind `LHASSA_LLM_PROVIDER`, users can pick what they already have (Groq free tier, an existing OpenAI account, a local Ollama instance) without editing code. The pipecat layer handles the voice pipeline side; `lhassa/llm/provider.py` handles the agent side. Both paths converge on the same tool schemas and notification routing.
+Everything that can be swapped sits behind a `Registry` (`registry.py`) and can be
+added by dropping a self-registering module into `plugins_dir` or a `lhassa.plugins`
+entry point (`plugins.py`) — no core edit. `lhassa capabilities` (alias `doctor`)
+prints the whole wired / on-off picture.
+</content>

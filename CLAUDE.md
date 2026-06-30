@@ -1,118 +1,201 @@
-# Lhassa — Claude Code context
+# Lhassa — agent / developer context
 
 ## What this is
-A cross-platform voice AI assistant (Linux, macOS, Windows). Voice pipeline: Deepgram STT → LLM → Cartesia TTS via pipecat. FastAPI serves the React dashboard and WebSocket fan-out. SQLite stores memory at `~/.lhassa/memory.db`.
 
-## Commands
+Lhassa is a persistent personal **brain** (a JARVIS): an identity-first core that
+**orchestrates** models and tools rather than being one. The execution model is
+**do-and-sleep** — state on disk + a `step()` function that advances it one tick,
+woken by a systemd **heartbeat** timer or on demand via the API. The durable thing
+is *who Lhassa is*; models, harnesses and scripts are interchangeable muscle:
+**build the brain, rent the body.** It is local-first, designed to be **fully
+elastic and highly modular** (every swap point behind an interface + registry;
+capabilities drop in without editing core), and scales from **one brain to an org
+of 1..N brains**.
+
+> This is **not** "a voice assistant" anymore. Voice is one opt-in surface among
+> CLI / Telegram / dashboard. The brain is the product.
+
+The spec is `doc/lhassa-brief.md` (Spanish, living doc). The phase-by-phase
+decisions log is `doc/decisions.md` — read it as the source of truth for what was
+built. The layer rules live in `doc/architecture-layers.md` and a current overview
+in `doc/architecture.md`.
+
+## Dev workflow
+
+Tooling is **uv** + **make**:
+
 ```bash
-make install      # uv sync + npm install + npm run build (first time)
-make run          # start Lhassa
-make dev          # start with LHASSA_DEBUG=1 LHASSA_LOG_LEVEL=DEBUG
-make dashboard    # rebuild React dashboard only
+make install   # uv sync + dashboard build (first time)
+make run       # voice + API + scheduler — uv run python main.py
+make dev       # same with LHASSA_DEBUG=1 LHASSA_LOG_LEVEL=DEBUG
+make test      # uv run --extra dev python -m pytest
+make lint      # uv run --extra dev python -m ruff check .
+make dashboard # rebuild the React/Vite dashboard
+make check     # validate env, no API calls (scripts/check.py)
 ```
 
-## Project layout
-```
-main.py                      # entry point — runs voice + API + scheduler concurrently
-lhassa/config.py              # all config; validate() called once at startup in main.py
-lhassa/voice/pipeline.py      # pipecat pipeline (wake word, VAD, STT, LLM, TTS)
-lhassa/voice/mute_strategy.py # WAKE_PHRASES_CORE + WAKE_PHRASES_ES — single source of truth
-lhassa/voice/notifier.py      # desktop notification router (Linux/macOS/Windows)
-lhassa/llm/provider.py        # multi-provider LLM factory + cached async client singletons
-lhassa/llm/prompt.py          # BASE_PROMPT + build_system_prompt()
-lhassa/tools/registry.py      # all 23 tool schemas + handlers
-lhassa/tools/search.py        # web search — Brave API with DuckDuckGo fallback
-lhassa/tools/vision.py        # screenshot + vision LLM analysis (Linux/macOS/Windows)
-lhassa/tools/monitor.py       # watch_process / watch_file / watch_command (background tasks)
-lhassa/tools/github.py        # GitHub REST API client
-lhassa/tools/graph.py         # Microsoft Graph client (Outlook email + calendar)
-lhassa/agents/base.py         # BaseAgent — built-in tool loop (LHASSA_MAX_AGENT_ITERATIONS, 60s timeout)
-lhassa/agents/claude_code.py  # ClaudeCliAgent — runs `claude --print` as subprocess
-lhassa/agents/code.py         # CodeAgent — software engineering tasks
-lhassa/agents/research.py     # ResearchAgent — research and synthesis
-lhassa/agents/system.py       # SystemAgent — OS-aware system administration
-lhassa/memory/store.py        # SQLite helpers (facts, sessions, scheduled_tasks)
-lhassa/memory/session.py      # close_session() — called on shutdown to extract facts
-lhassa/api/server.py          # FastAPI + WebSocket broadcast
-lhassa/scheduler.py           # polls scheduled_tasks every 30s
-lhassa/state.py               # AppState singleton — metrics, agent runs, WebSocket fan-out
-dashboard/src/               # React + Vite dashboard
-```
+Run a single test file: `uv run --extra dev python -m pytest tests/test_x.py`.
+`tests/test_architecture.py` is the **architecture guard** — a dependency-free
+`ast` walk that fails on any new layer-crossing import. If you add a subpackage,
+slot it into the right layer in that test; if you add a deliberate edge, add a
+precise `ALLOWED_EXCEPTIONS` entry with a reason. Keep the layering clean.
 
-## Key design decisions
+## The layers (and the rule)
 
-### Config is class-level, not instance-level
-`lhassa/config.py` uses class-level attribute assignments evaluated at module import time (after `load_dotenv()`). `validate()` is called once in `main.py` before the pipeline starts — it's the single place all config errors surface. Do not move required key checks into `_require()`-style import-time calls; this was deliberately changed so importing config doesn't crash in tests or tooling.
+Inner layers never import outer shells; dependencies point **down** only.
 
-### Provider auto-detection
-`_detect_provider()` checks API keys in priority order: `ANTHROPIC_API_KEY` → `OPENAI_API_KEY` → `GROQ_API_KEY` → `OPENROUTER_API_KEY` → `CEREBRAS_API_KEY`. Setting one key is enough — no `LHASSA_LLM_PROVIDER` needed. Vision tools auto-detect from the same key.
+| Layer | Subpackages | Role |
+|---|---|---|
+| Leaf infra | `registry.py`, `plugins.py`, `config.py` | Generic machinery; imports no feature code |
+| Spine | `core/` | The do-and-sleep loop (`step`, `heartbeat`, `episode`, `db`, `watchlist`, `actions`) |
+| Interfaces | `memory/`, `security/`, `llm/` | Reusable contracts (facts, trust/approval, provider + router) |
+| Adapters (hands) | `harness/`, `tools/`, `agents/`, `remote/`, `health/` | The rentable body |
+| Shells (outer) | `cli/`, `api/`, `voice/`, `notify/`, `org/`, dashboard (JS) | World-facing surfaces; compose everything below |
 
-### Cached async clients
-`lhassa/llm/provider.py` caches `AsyncAnthropic`/`AsyncOpenAI` instances in `_agent_clients` so multiple agent runs reuse the same connection pool. `lhassa/tools/search.py`, `github.py`, and `graph.py` each cache a single `httpx.AsyncClient` in `_http`. All are closed in `main._close_http_clients()` on shutdown.
+Encoded forbidden directions: spine/interfaces/adapters ↛ shells; `harness/` ⟂
+`llm/` (the two swap axes stay independent — `llm/router.py` *choosing* a harness
+is the one allowed bridge); the keystone (`registry.py`/`plugins.py`) imports no
+feature module. See `doc/architecture-layers.md`.
 
-### Wake phrases — two layers
-- `WAKE_PHRASES_CORE` + `WAKE_PHRASES_ES` in `mute_strategy.py` — single source of truth.
-- `WakeWordOnlyMuteStrategy` uses the full `WAKE_VARIANTS` union (lets audio through during bot speech — false positives are harmless).
-- `WakePhraseUserTurnStartStrategy` in `pipeline.py` uses language-aware set: core always, ES extras only when `LHASSA_STT_LANGUAGE` starts with `"es"`. Keep this distinction.
-- Wake timeout is `config.wake_timeout` (default 300s, override with `LHASSA_WAKE_TIMEOUT`).
+## The do-and-sleep loop
 
-### Agent backends
-- `claude_code`: `claude --print "<task>"` subprocess, streams stdout line-by-line to dashboard
-- `builtin`: `BaseAgent` with OpenAI-compat loop (all providers) or Anthropic loop; same tool set both ways
-- Auto-detected at import time via `shutil.which("claude")`. `LHASSA_AGENT_BACKEND` overrides.
-- Max tool-loop iterations: `LHASSA_MAX_AGENT_ITERATIONS` (default 10).
+- `core/step.py` — one deterministic tick: zero-token **watchlist** check →
+  fixed **action** (from `core/actions.py`) → a structured **episode**. The `else`
+  (judgment) branch is the think path: load memory context → `llm/router.py`
+  picks a provider/model → `provider.complete(...)`. `BudgetExceeded` /
+  `ProviderNotConfigured` **degrade to a deferred episode, never crash**.
+- `core/heartbeat.py` + `scripts/systemd/lhassa-heartbeat.{service,timer}` — each
+  beat is a fresh process that re-reads `.env` and runs one `step()`. Routine beats
+  are deterministic and cost **$0**. `make install-heartbeat` enables the timer.
+- `core/episode.py` — the structured Episode (observability from the first commit;
+  every row carries `instance_id`). `core/db.py` is the append-only SQLite
+  "grande" (WAL).
 
-### System agent — OS-aware prompts
-`agents/system.py` and `agents/claude_code.py` build their system prompts/hints at import time using `platform.system()`. They auto-detect the distro on Linux via `platform.freedesktop_os_release()` and the package manager via `shutil.which`.
+## The two swap interfaces
 
-### WebSocket fan-out
-`state.broadcast(dict)` puts a JSON message on every connected client's `asyncio.Queue`. Agents, monitors, and the scheduler all call this to stream output to the dashboard in real time.
+1. **`ModelProvider`** (`llm/provider.py`) — *think directly*, no harness. Protocol
+   with `complete()`, `zero_retention`, `is_local`. The `PROVIDERS` registry maps a
+   name → factory; built-ins: `default` (`GatewayProvider`, the cost-gateway path),
+   `local` (`LocalModelProvider`, OpenAI-compatible local endpoint, $0), `opencode`
+   (`OpenCodeProvider`, the `opencode run --pure --format json` CLI heartbeat),
+   `claude` / `codex` (subscription CLIs), `zen` (stub). `PseudonymizingProvider`
+   wraps a remote provider to scrub PII at the boundary. Add one with
+   `@register_provider("x")` — no core edit.
+2. **`HarnessAdapter`** (`harness/adapter.py`) — *agentic body*. OpenCode / Claude
+   Code / Codex adapters auto-detected via `which`; `harness/runner.py` launches
+   fire-and-forget (records a job row + PID, streams events, accrues cost) and
+   `supervise` reaps. `llm/router.py:pick_harness` picks the cheapest available
+   (free < metered < subscription; `LHASSA_HARNESS` overrides). `harness/` must not
+   import `llm/`.
 
-### Memory extraction
-`close_session()` in `lhassa/memory/session.py` is called on shutdown. It sends the last 40 conversation turns to the LLM and asks for JSON `{facts, summary}`. Facts are upserted into SQLite; summaries are stored capped at 100 rows. Uses `response_format: json_object` for OpenAI-compat providers; plain system-prompt instruction for Anthropic.
+## Registry + plugins (the keystone)
 
-### Cross-platform
-- **Screenshot**: `screencapture` (macOS), PowerShell + PIL fallback (Windows), scrot/maim/ImageMagick (Linux)
-- **Notifications**: `osascript` via env-var injection (macOS), PowerShell BurntToast (Windows), `notify-send` (Linux)
-- **Mic default**: `"pipewire"` on Linux, `""` (system default) on macOS/Windows
-- **Beep**: PipeWire device scan only on Linux
+`registry.py` is the generic `Registry[T]` (register as call **or** decorator;
+`get`/`get_or_none`/`NotRegistered`; duplicate-protection; `as_mapping` live view).
+Every swap point adopts it: providers (`PROVIDERS`), harnesses (`ADAPTERS`),
+verifiers (`VERIFIERS`), specialists (`SPECIALISTS`), channels (`CHANNELS`),
+commands (`COMMANDS`), actions (`core/actions.ACTIONS`), org departments.
+`plugins.py:load_plugins(config)` imports every module under `plugins_dir` **and**
+every `lhassa.plugins` entry point — self-registration with **no core edit**;
+idempotent, never raises. To add a provider/channel/command/verifier/specialist/
+action, drop a module that calls the matching `register_*` at import time. `lhassa
+capabilities` (alias `doctor`) shows everything wired and on/off.
 
-## Conventions
+## Memory
 
-- Tools are defined in two places: schema in `TOOLS` (ToolsSchema) and handler `handle_<name>` in `registry.py`. When adding a tool, add both and register in `register_tools()`.
-- All tool handlers call `_bump_tool()` to increment the metrics counter.
-- All tool handlers catch exceptions and call `params.result_callback(error_message)` — never let a handler raise.
-- `read_file` enforces a 512 KB size cap in both `registry.py` (voice pipeline) and `agents/base.py` (agent tool loop).
-- Background tasks (agents, monitors) are `asyncio.create_task(...)` — they run concurrently with the voice pipeline.
-- Print statements with ANSI codes (`\033[2m...\033[0m`) are used for terminal UX (dim tool status lines). Logger is for structured logs. Both coexist intentionally.
+- **Grande** (`core/db.py` facts + `memory/facts.py`) — typed facts (`dato` /
+  `directiva`), append-only, contradiction = newest + confianza. `memory/load.py`
+  layers context by priority (pinned + directivas always → recency → active tags →
+  optional **layer 4**), truncating low-priority first.
+- **Chica** (`memory/chica.py`) — persistent working cache; threshold-LRU
+  `consolidate` (never evicts pinned/directivas); `regenerate` from the grande.
+  `memory/backup.py` does WAL-safe online backup/restore/verify.
+- **Layer 4** (`memory/embeddings.py` + `memory/load.py`) — semantic facts via a
+  pluggable `Embedder` (`HashingEmbedder` offline default). Off by default
+  (`LHASSA_MEMORY_LAYER4=1`); it has the lowest priority so it truncates first and
+  never touches the identity core.
+- `memory/consolidate.py` — semantic consolidation via the cheap model (only the
+  chica). `memory/store.py`/`session.py` is the legacy voice-session store.
+
+## The árbitro (verify) + security
+
+- **Verifiers** (`agents/verify.py`) are objective (`command/tests/lint/health/
+  regex/metric`) and **never call an LLM** (no provider import; asserted in tests).
+  Wired into `step`'s judgment branch via `router.cascade(verify=…)` — failed
+  verification escalates cheap→smart once.
+- **Quarantine** (`security/quarantine.py`) — strongest-available sandbox
+  (`unshare`/`firejail`/`bwrap`), no-network, scrubbed env, `killpg` on timeout.
+  Self-written tools graduate only through the four gates (`agents/gates.py`:
+  segura → correcta → mejor → retiro), deny-by-default.
+- **Allowlist** (`security/allowlist.py`) — deny-by-default action allowlist;
+  signed `Task` + `TrustLevel`/`Origin` (degrade = min, never promote) via Ed25519
+  (`security/signing.py`).
+- **Approval** (`security/approval.py`) — HITL-per-flow `needs_approval`; pending
+  parked in the `approvals` table. `security/autonomy.py` is the streak knob (an
+  action approved N× becomes automatic; a denial resets; high-risk never
+  auto-promotes; an `Origin`'s trust is never promoted).
+
+## Notify channels + commands (shell)
+
+`notify/channels.py` — `Channel` protocol + `CHANNELS` registry
+(`@register_channel`); `TelegramChannel` / `DesktopChannel` / `LogChannel`.
+`notify/dispatch.py:notify()` fans out over `active_channels(config)` (from
+`LHASSA_NOTIFY_CHANNELS`). `notify/commands.py` — `COMMANDS` registry
+(`@register_command`): `/start`, `/help`, `/status` (all LLM-free). Inbound
+Telegram (`notify/telegram_inbound.py`, getUpdates poller, honors only the
+configured chat) dispatches a slash command before falling back to a tool-less
+brain think over the routine fallback chain (`opencode → claude → codex → cloud`).
+
+## The org layer (Phase 7)
+
+`org/topology.py` — `BrainNode` / `Topology` (validated tree) + `load/save`,
+config-driven (`LHASSA_ORG_TOPOLOGY_FILE`). Runs **standalone (1 brain)** up to
+arbitrary depth. `org/coordinator.py` walks the tree: typed `TASK_ASSIGN` down,
+**only leaves execute**, results bubble up; `GeneralBrain` **coordinates, never
+executes**; `DepartmentBrain` executes via `org/executor.py:brain_executor` (the
+real one-turn brain path, gated behind `LHASSA_ORG_LIVE`). `org/routing.py` is a
+deterministic, table-driven router (**no LLM**). `org/rbac.py` is deny-by-default
+with cross-department isolation; `org/commons.py` is a read-only shared row (only
+`general` writes). `org/management.py` + `cli/org_cmds.py` create and manage the
+chart (who commands whom). Multi-person approval: proposer ≠ approver for
+high-risk.
+
+## API + dashboard
+
+`api/server.py` (FastAPI) serves the dashboard and the REST surface plus a
+WebSocket `/ws` fan-out (`state.broadcast(dict)`). Routes include `/api/status`,
+`/api/memory/*`, `/api/agents`, `/api/metrics`, `/api/llm/{ledger,limits,ccusage}`,
+`/api/approvals`, `/api/tools` (+ graduate), `/api/reports`, `/api/projections`,
+`/api/fleet`, `/api/org/*`, and `/checkin` + `/report` (check-in, not push). The
+always-on services run **API-only** (no audio); `docker/run_api.py` is the
+audio-free entrypoint.
+
+## Conventions (still true)
+
+- Config is **class-level** in `lhassa/config.py`, evaluated at import after
+  `load_dotenv()`. `validate()` is called once (by `main.py`, the voice
+  entrypoint) — it is the single place required-key errors surface. Do **not** move
+  key validation back into the class body / import-time `_require()`; importing
+  config must never crash tests or tooling. The API/heartbeat roles do **not** call
+  `validate()`, so they run without the voice keys.
+- Provider auto-detection: one API key is enough (`_detect_provider()` priority
+  Anthropic → OpenAI → Groq → OpenRouter → Cerebras). Don't add
+  `LHASSA_LLM_PROVIDER` to examples where the key alone suffices.
+- Cached async clients in `llm/provider.py` (`_agent_clients`) and the tool
+  modules' `_http`; all closed in `main._close_http_clients()`.
+- Voice tools live in two places: schema in `TOOLS` + handler `handle_<name>` in
+  `tools/registry.py`, registered in `register_tools()`. Handlers `_bump_tool()`,
+  catch exceptions and call `result_callback(error)` — never raise.
+- Use `if … raise RuntimeError(...)` for runtime checks, not `assert`.
+- Everything in **English**. Lhassa is an **"it"** (no gender).
 
 ## Do not
-- Move `_require()` / import-time key validation back into `Config` class body.
-- Add Spanish wake phrases to `WAKE_PHRASES_CORE` — they belong in `WAKE_PHRASES_ES`.
-- Use `assert` for runtime checks — use `if ... raise RuntimeError(...)`.
-- Add `LHASSA_LLM_PROVIDER` to examples where auto-detection from the key is sufficient.
-- Change `log_level="warning"` on uvicorn — uvicorn's access logs are intentionally suppressed.
-- Add Linux-specific tools/commands without a cross-platform fallback.
 
-## Required env vars (minimum to run)
-```
-DEEPGRAM_API_KEY=    # STT
-CARTESIA_API_KEY=    # TTS
-GROQ_API_KEY=        # (or any other LLM key — auto-detected)
-```
-
-## Optional env vars (tuning)
-```
-LHASSA_WAKE_TIMEOUT=300               # seconds before sleeping after wake (default 300)
-LHASSA_MAX_AGENT_ITERATIONS=10        # max tool-loop steps per agent run (default 10)
-LHASSA_MIC_NAME=                      # audio device substring; "" = OS default
-LHASSA_STT_LANGUAGE=en                # BCP-47 language code for Deepgram
-LHASSA_AGENT_BACKEND=                 # claude_code | builtin (auto-detected)
-LHASSA_AGENT_DIR=                     # working directory for claude --print agents
-LHASSA_VISION_PROVIDER=auto           # auto | anthropic | openai | openrouter
-LHASSA_DEBUG=0                        # 1 = show live STT in terminal
-LHASSA_AUDIT_MAX=100                  # max audit events kept in memory + audit.json (minimum 10)
-LHASSA_MEMORY_SNAPSHOT_INTERVAL=1800  # seconds between periodic memory snapshots (minimum 60)
-LHASSA_SHELL_OUTPUT_MAX=2000          # max chars captured from shell commands (voice: 2000, agents: 3000 default)
-LHASSA_FILE_CONTENT_MAX=4000          # max chars returned from read_file
-```
+- Add AI / Claude attribution anywhere (no Co-Authored-By, no "generated with").
+- Reintroduce the "cross-platform voice assistant" framing — Lhassa is a brain.
+- Cross a layer boundary (the architecture guard will fail); prefer fixing the
+  layering over adding an exception.
+- Edit core to add a capability that a registry + plugin can drop in.
+- Let `step()` / a heartbeat beat crash on a provider/budget error — degrade to a
+  deferred episode.
+</content>
