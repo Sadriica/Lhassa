@@ -227,6 +227,23 @@ async def init_db() -> None:
             ON postulaciones(instance_id, estado)
         """)
 
+        # fact_embeddings — memory layer 4 (semantic retrieval, §3-Fase 6). One
+        # row per (instance_id, fact_id) holding the fact's embedding as a
+        # JSON-encoded list of floats plus the embedder ``model`` tag. ADDITIVE:
+        # the semantic layer is OFF by default, so this table stays empty unless
+        # an index step (``memory.load.index_facts``) is run. Scoped to instance.
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS fact_embeddings (
+                fact_id     TEXT NOT NULL,
+                instance_id TEXT NOT NULL,
+                dim         INTEGER NOT NULL,
+                vector      TEXT NOT NULL,
+                model       TEXT,
+                creado_en   TEXT NOT NULL,
+                PRIMARY KEY (instance_id, fact_id)
+            )
+        """)
+
         await db.commit()
 
 
@@ -363,6 +380,59 @@ async def query_facts(
         row["tags"] = _loads(row.get("tags"), [])
         row["pinned"] = bool(row["pinned"])
     return rows
+
+
+async def upsert_fact_embedding(
+    instance_id: str,
+    fact_id: str,
+    vector: list,
+    *,
+    model: str = "",
+) -> None:
+    """Store (or replace) one fact's embedding, scoped to ``instance_id``.
+
+    ``vector`` is a list of floats, persisted as JSON. One row per
+    (instance_id, fact_id); re-indexing a fact overwrites its vector.
+    """
+    vec = [float(x) for x in (vector or [])]
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            """INSERT INTO fact_embeddings(
+                   fact_id, instance_id, dim, vector, model, creado_en)
+               VALUES(?, ?, ?, ?, ?, ?)
+               ON CONFLICT(instance_id, fact_id)
+               DO UPDATE SET dim = excluded.dim,
+                             vector = excluded.vector,
+                             model = excluded.model,
+                             creado_en = excluded.creado_en""",
+            (fact_id, instance_id, len(vec), _dumps(vec), model, _now()),
+        )
+        await db.commit()
+
+
+async def get_fact_embeddings(instance_id: str) -> list[dict]:
+    """Return stored fact embeddings for ``instance_id``.
+
+    Each dict has ``fact_id``, the decoded ``vector`` (list of floats) and the
+    ``model`` tag. Always scoped to ``instance_id`` (isolation from day one).
+    """
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            "SELECT fact_id, vector, model FROM fact_embeddings WHERE instance_id = ?",
+            (instance_id,),
+        ) as cur:
+            rows = [dict(row) for row in await cur.fetchall()]
+    out: list[dict] = []
+    for row in rows:
+        out.append(
+            {
+                "fact_id": row["fact_id"],
+                "vector": _loads(row.get("vector"), []),
+                "model": row.get("model") or "",
+            }
+        )
+    return out
 
 
 async def query_facts_by_tags(instance_id: str, tags) -> list[dict]:

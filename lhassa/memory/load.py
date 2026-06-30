@@ -7,24 +7,31 @@ Layers, in priority order:
      persona's own directives are folded in here too).
   2. recency: the recent episodes (continuity).
   3. active context by TAGS (exact membership, NOT semantics).
+  4. semantic retrieval (embeddings): facts whose embedding is closest to the
+     active ``query``. OFF by default — only when ``config.memory_layer4_enabled``
+     and a ``query`` is supplied AND fact embeddings have been indexed. The lowest
+     priority layer; dropped first under budget.
 
 Then :func:`truncate` trims to the token budget, dropping the lowest-priority
-layer first (``priority=["pinned","recent","tags"]``): tags go before recent, and
-the identity core (directives + pinned facts) is never dropped.
+layer first (``priority=["pinned","recent","tags","semantic"]``): semantic goes
+before tags, tags before recent, and the identity core (directives + pinned facts)
+is never dropped.
 
-Token counting is a cheap, deterministic estimate (~4 chars/token). NO LLM, NO
-embeddings. Layer 4 (embeddings) is intentionally NOT built here — default off.
+Token counting is a cheap, deterministic estimate (~4 chars/token). The semantic
+layer (4) is built but default OFF, so the default behavior is byte-for-byte the
+pinned/recent/tags load.
 """
 
 from dataclasses import dataclass, field
 
 from lhassa.config import Config
 from lhassa.core import db
+from lhassa.memory.embeddings import cosine, get_embedder
 from lhassa.memory.facts import Fact, load_by_tags, load_facts, resolve
 from lhassa.persona import load_identity
 
 # Priority of the layers, highest first. Truncation drops from the tail.
-PRIORITY = ["pinned", "recent", "tags"]
+PRIORITY = ["pinned", "recent", "tags", "semantic"]
 
 
 def estimate_tokens(text: str) -> int:
@@ -55,12 +62,13 @@ class Context:
     pinned_facts: list[Fact] = field(default_factory=list)
     tag_facts: list[Fact] = field(default_factory=list)
     episodes: list[dict] = field(default_factory=list)
+    semantic_facts: list[Fact] = field(default_factory=list)
     token_budget: int = 0
 
     @property
     def facts(self) -> list[Fact]:
-        """All selected facts (pinned/identity first, then tag-activated)."""
-        return [*self.pinned_facts, *self.tag_facts]
+        """All selected facts (identity first, then tag-activated, then semantic)."""
+        return [*self.pinned_facts, *self.tag_facts, *self.semantic_facts]
 
     def to_prompt(self) -> str:
         """Render the context as a plain-text block for a system prompt."""
@@ -74,6 +82,9 @@ class Context:
         if self.tag_facts:
             lines = "\n".join(_render_fact(f) for f in self.tag_facts)
             blocks.append(f"Contexto activo:\n{lines}")
+        if self.semantic_facts:
+            lines = "\n".join(_render_fact(f) for f in self.semantic_facts)
+            blocks.append(f"Contexto relacionado:\n{lines}")
         if self.episodes:
             lines = "\n".join(_render_episode(e) for e in self.episodes)
             blocks.append(f"Episodios recientes:\n{lines}")
@@ -106,16 +117,20 @@ def truncate(ctx: Context, token_budget: int) -> Context:
         )
 
     # Optional items, each tagged with a priority rank (lower rank = more
-    # important). Recent episodes outrank tag facts.
+    # important). Recent episodes outrank tag facts, which outrank semantic facts.
     recent_rank = PRIORITY.index("recent")
     tags_rank = PRIORITY.index("tags")
+    semantic_rank = PRIORITY.index("semantic")
     items: list[dict] = []
     for ep in ctx.episodes:
         items.append({"rank": recent_rank, "tok": estimate_tokens(_render_episode(ep)),
                       "kind": "ep", "payload": ep})
     for f in ctx.tag_facts:
         items.append({"rank": tags_rank, "tok": estimate_tokens(_render_fact(f)),
-                      "kind": "fact", "payload": f})
+                      "kind": "tag", "payload": f})
+    for f in ctx.semantic_facts:
+        items.append({"rank": semantic_rank, "tok": estimate_tokens(_render_fact(f)),
+                      "kind": "semantic", "payload": f})
 
     used = mandatory + sum(it["tok"] for it in items)
     # Drop lowest-priority (highest rank) items, from the tail, until we fit.
@@ -125,8 +140,71 @@ def truncate(ctx: Context, token_budget: int) -> Context:
         items.pop(drop_idx)
 
     ctx.episodes = [it["payload"] for it in items if it["kind"] == "ep"]
-    ctx.tag_facts = [it["payload"] for it in items if it["kind"] == "fact"]
+    ctx.tag_facts = [it["payload"] for it in items if it["kind"] == "tag"]
+    ctx.semantic_facts = [it["payload"] for it in items if it["kind"] == "semantic"]
     return ctx
+
+
+async def _semantic_layer(
+    instance_id: str,
+    query: str,
+    config,
+    *,
+    exclude_ids: set,
+    topk: int,
+) -> list[Fact]:
+    """Layer 4: top-``topk`` facts whose embedding is closest to ``query``.
+
+    Reads stored fact embeddings (built by :func:`index_facts`), embeds the query
+    with the same embedder family, ranks by cosine, and returns facts NOT already
+    selected by pinned/tags. A no-op (empty list) when no embeddings are indexed.
+    """
+    stored = await db.get_fact_embeddings(instance_id)
+    if not stored:
+        return []
+    embedder = get_embedder(config)
+    qvec = embedder.embed([query])[0]
+    by_id = {f.id: f for f in await load_facts(instance_id)}
+
+    scored: list[tuple[float, str]] = []
+    for row in stored:
+        fid = row["fact_id"]
+        if fid in exclude_ids or fid not in by_id:
+            continue
+        vec = row.get("vector") or []
+        if len(vec) != len(qvec):  # different embedder dim — skip, don't crash
+            continue
+        sim = cosine(qvec, vec)
+        if sim > 0.0:
+            scored.append((sim, fid))
+
+    # Highest similarity first; fact id breaks ties deterministically.
+    scored.sort(key=lambda s: (-s[0], s[1]))
+    return [by_id[fid] for _, fid in scored[:topk]]
+
+
+async def index_facts(instance_id: str | None = None, config=None) -> int:
+    """Embed and store every fact lacking an embedding. Returns the count indexed.
+
+    Idempotent and cheap: facts that already have a stored embedding are skipped.
+    This is the explicit index step layer 4 retrieves against (run by tests and,
+    later, a heartbeat) — :func:`load` never builds the index implicitly.
+    """
+    config = config or Config
+    instance_id = instance_id or config.instance_id
+    facts = await load_facts(instance_id)
+    if not facts:
+        return 0
+    existing = {row["fact_id"] for row in await db.get_fact_embeddings(instance_id)}
+    pending = [f for f in facts if f.id not in existing]
+    if not pending:
+        return 0
+    embedder = get_embedder(config)
+    vectors = embedder.embed([f.contenido for f in pending])
+    model = getattr(embedder, "name", "")
+    for fact, vec in zip(pending, vectors):
+        await db.upsert_fact_embedding(instance_id, fact.id, vec, model=model)
+    return len(pending)
 
 
 async def load(
@@ -135,15 +213,20 @@ async def load(
     token_budget: int,
     active_tags=(),
     recent_n: int = 20,
+    query: str | None = None,
+    config=None,
 ) -> Context:
     """
     Build the chica for ``instance_id`` by layering the grande, then truncate to
     ``token_budget``. See module docstring for the layers and their priority.
 
-    ``active_tags`` selects layer 2 (active context). Layer 4 (embeddings) is NOT
-    built — default off.
+    ``active_tags`` selects layer 2 (active context). Layer 4 (semantic) is built
+    only when ``config.memory_layer4_enabled`` AND a ``query`` is given AND fact
+    embeddings have been indexed; otherwise ``semantic_facts`` stays empty and the
+    default behavior is unchanged. ``config`` defaults to the module ``Config``.
     """
-    instance_id = instance_id or Config.instance_id
+    config = config or Config
+    instance_id = instance_id or config.instance_id
 
     # Layer 1 — identity: pinned facts + ALL directiva facts (always).
     core_rows = await load_facts(instance_id)
@@ -175,12 +258,25 @@ async def load(
     # Layer 3 — recency (continuity).
     episodes = await db.load_recent_episodes(instance_id, recent_n)
 
+    # Layer 4 — semantic retrieval (embeddings). OFF unless enabled + a query.
+    semantic_facts: list[Fact] = []
+    if getattr(config, "memory_layer4_enabled", False) and query:
+        exclude = core_ids | {f.id for f in tag_facts}
+        semantic_facts = await _semantic_layer(
+            instance_id,
+            query,
+            config,
+            exclude_ids=exclude,
+            topk=getattr(config, "memory_semantic_topk", 5),
+        )
+
     ctx = Context(
         instance_id=instance_id,
         directives=directives,
         pinned_facts=pinned_facts,
         tag_facts=tag_facts,
         episodes=episodes,
+        semantic_facts=semantic_facts,
         token_budget=token_budget,
     )
     return truncate(ctx, token_budget)
