@@ -1,0 +1,27 @@
+# Lhassa — Telegram inbound command poller (long-poll getUpdates).
+#
+# Listens for messages from the configured chat and answers them through the
+# brain (cli.agent.run_once), replying over Telegram. Credential-gated: with no
+# LHASSA_TELEGRAM_BOT_TOKEN / LHASSA_TELEGRAM_CHAT_ID / LHASSA_TELEGRAM_POLL=1 in
+# the .env it logs once and exits — it never touches the network.
+#
+# Install as a USER unit (do NOT install system-wide):
+#   cp scripts/systemd/lhassa-telegram.service ~/.config/systemd/user/
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now lhassa-telegram.service
+#   journalctl --user -u lhassa-telegram -f      # watch it
+#
+# Adjust the paths below if your checkout or venv live elsewhere.
+[Unit]
+Description=Lhassa Telegram inbound poller
+After=graphical-session.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/Code/lhassa
+ExecStart=%h/Code/lhassa/.venv/bin/python -m lhassa.notify.telegram_inbound
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=default.target
