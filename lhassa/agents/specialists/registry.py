@@ -16,7 +16,7 @@ the whole point of "skills, NO fine-tuning … así no dependes de ningún model
 
 The **first domain is ``optimizacion``** — a clean, lower-is-better metric
 (tokens/tiempo/pasos) so "mejor" is provable. Fuzzier domains come later; each new
-domain is just another row in :data:`_REGISTRY`, no new code path.
+domain is just another ``register_specialist(...)`` call, no new code path.
 """
 
 from __future__ import annotations
@@ -25,6 +25,7 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 from lhassa import persona
+from lhassa.registry import Registry
 
 
 @dataclass(frozen=True)
@@ -87,20 +88,42 @@ OPTIMIZACION = Specialist(
 )
 
 
-# Registry keyed by domain. Adding a domain = adding a row here (no new code path).
-_REGISTRY: dict[str, Specialist] = {
-    OPTIMIZACION.domain: OPTIMIZACION,
-}
+# Registry keyed by domain, backed by the shared keystone ``Registry`` (the same
+# primitive that backs actions/channels/commands). Adding a domain = one
+# ``register_specialist(...)`` call — a plugin can drop in a new domain WITHOUT
+# editing this file (the elastic/modular principle), and a duplicate domain is
+# rejected instead of silently clobbering.
+SPECIALISTS: Registry[Specialist] = Registry("specialist")
+
+
+def register_specialist(specialist: Specialist, *, override: bool = False) -> Specialist:
+    """Register ``specialist`` under its ``.domain`` — a wrapper over :data:`SPECIALISTS`.
+
+    A duplicate domain raises unless ``override=True`` — so two plugins can never
+    silently clobber each other. Returns the specialist unchanged. This is the
+    drop-in seam for adding a domain skill without touching core.
+    """
+    SPECIALISTS.register(specialist.domain, specialist, override=override)
+    return specialist
+
+
+# Register the first built-in domain through the seam.
+register_specialist(OPTIMIZACION)
+
+# Backward-compatible alias: a LIVE, read-only ``{domain: specialist}`` view of the
+# registry's backing store, so any historical consumer doing ``_REGISTRY.get(domain)``
+# keeps working while later ``register_specialist`` calls are reflected.
+_REGISTRY = SPECIALISTS.as_mapping()
 
 
 def get_specialist(domain: str) -> Optional[Specialist]:
     """Return the specialist owning ``domain``, or ``None`` if none is registered."""
-    return _REGISTRY.get(domain)
+    return SPECIALISTS.get_or_none(domain)
 
 
 def list_specialists() -> list[Specialist]:
     """Every registered specialist (insertion order — optimización first)."""
-    return list(_REGISTRY.values())
+    return list(SPECIALISTS.all())
 
 
 def build_specialist_prompt(

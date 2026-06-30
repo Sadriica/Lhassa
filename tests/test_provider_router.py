@@ -131,6 +131,52 @@ def test_get_model_provider_zen_stub():
     assert isinstance(get_model_provider(FakeConfig(), name="zen"), OpenCodeZenProvider)
 
 
+def test_get_model_provider_unknown_name_falls_back_to_default():
+    # Historical behaviour: an unknown name degrades to the GatewayProvider.
+    assert isinstance(get_model_provider(FakeConfig(), name="bogus"), GatewayProvider)
+
+
+# ── keystone registry: introspection + drop-in seam ──────────────────────────
+
+
+def test_providers_registry_exposes_builtin_names():
+    from lhassa.llm import provider as P
+    from lhassa.registry import Registry
+
+    assert isinstance(P.PROVIDERS, Registry)
+    assert set(P.PROVIDERS.names()) == {"default", "local", "opencode", "zen"}
+
+
+def test_register_provider_dropin_and_resolves():
+    """A plugin can register a new provider factory, then get_model_provider resolves it."""
+    from lhassa.llm import provider as P
+
+    sentinel = FakeProvider(name="plugin")
+
+    try:
+        P.register_provider("plugin", lambda config: sentinel)
+        got = get_model_provider(FakeConfig(), name="plugin")
+        assert got is sentinel
+        assert "plugin" in P.PROVIDERS.names()
+    finally:
+        P.PROVIDERS.unregister("plugin")
+
+
+def test_register_provider_override_protection():
+    from lhassa.llm import provider as P
+
+    with pytest.raises(ValueError, match="already registered"):
+        P.register_provider("default", lambda config: None)
+    # override=True replaces without raising; restore the original factory after.
+    original = P.PROVIDERS.get("default")
+    try:
+        P.register_provider("default", lambda config: FakeProvider(name="x"), override=True)
+        assert get_model_provider(FakeConfig()).name == "x"
+    finally:
+        P.register_provider("default", original, override=True)
+        assert isinstance(get_model_provider(FakeConfig()), GatewayProvider)
+
+
 # ── Router: pick_provider (sensitivity) ───────────────────────────────────────
 
 
