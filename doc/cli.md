@@ -153,6 +153,26 @@ the brain's prompt at think time (effect). Assigning a skill offers to install i
 
 ---
 
+## Not (yet) in the CLI — dashboard + API only
+
+Two org surfaces have **no dedicated `lhassa` subcommand yet**; drive them from the
+dashboard or the REST API:
+
+- **Typed relationships** — the overlay graph on the command tree (edge kinds
+  `reads` / `notifies` / `reviews` / `collaborates`). Stored at
+  `~/.lhassa/relationships.json` (`LHASSA_ORG_RELATIONSHIPS_FILE`). API:
+  `GET /api/org/relationships` (+ `/kinds`), `POST`/`DELETE /api/org/relationships`.
+  On the dashboard the **Brains** canvas draws them and the inspector edits them.
+- **Work-flows** — n8n-style DAGs wiring `trigger → task → gate → output` (+ branch).
+  Stored at `~/.lhassa/flows.json` (`LHASSA_FLOWS_FILE`). API: `GET/POST /api/flows`,
+  `GET/PUT/PATCH/DELETE /api/flows/{id}`, `POST /api/flows/{id}/run` (offline/stubbed
+  unless `LHASSA_ORG_LIVE`). The dashboard **Flows** section is the editor.
+
+The agentic run surface (`POST /api/code`, the dashboard **Run** section) **does**
+have a CLI door — `lhassa code "<task>"`, documented above.
+
+---
+
 See also: [`architecture.md`](architecture.md) for the layers and data dir,
 [`lhassa-brief.md`](lhassa-brief.md) for the spec, and the `LHASSA_*` config
 table in the [README](../README.md).
