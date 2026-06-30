@@ -101,13 +101,16 @@ def test_dispatch_unconfigured_is_noop_no_network(monkeypatch):
 
 
 def test_dispatch_configured_calls_send(monkeypatch):
+    # No notify_channels attribute → the dispatcher's "telegram" default, so only
+    # the Telegram channel fires (the historical single-channel behaviour).
     sent = {}
 
     async def _fake_send(text, *, config=None):
         sent["text"] = text
         return True
 
-    monkeypatch.setattr(dispatch.telegram, "send", _fake_send)
+    # Patch the telegram module's send; the registered TelegramChannel calls it.
+    monkeypatch.setattr(telegram, "send", _fake_send)
 
     cfg = SimpleNamespace(telegram_bot_token="TOKEN", telegram_chat_id="123")
     assert asyncio.run(dispatch.notify("alert!", level="warning", config=cfg)) is True
@@ -118,7 +121,7 @@ def test_dispatch_swallows_channel_error(monkeypatch):
     async def _raising_send(text, *, config=None):
         raise RuntimeError("boom")
 
-    monkeypatch.setattr(dispatch.telegram, "send", _raising_send)
+    monkeypatch.setattr(telegram, "send", _raising_send)
 
     cfg = SimpleNamespace(telegram_bot_token="TOKEN", telegram_chat_id="123")
     # Channel raised → treated as non-delivery, never propagates.

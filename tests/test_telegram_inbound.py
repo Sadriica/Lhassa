@@ -1,7 +1,10 @@
-"""Tests for the inbound Telegram poller — httpx and run_once fully mocked.
+"""Tests for the inbound Telegram poller — httpx and the brain think fully mocked.
 
-Never hits the real Telegram API and never calls a real LLM: ``getUpdates`` goes
-through a fake httpx client and ``lhassa.cli.agent.run_once`` is monkeypatched.
+Never hits the real Telegram API and never calls a real LLM. ``getUpdates`` goes
+through a fake httpx client; the answer path is exercised at the **provider** level:
+the router is patched to hand back a fake provider, so the test asserts the tool-less
+brain think runs (``provider.complete`` called) and that the 26-tool agent
+(``lhassa.cli.agent.run_once``) is **never** used.
 """
 
 import asyncio
@@ -52,17 +55,55 @@ def _client_returning(payload):
     return _Client
 
 
-def _patch_run_once(monkeypatch, response="the answer"):
-    calls = []
+class _FakeProvider:
+    """Records the tool-less completion calls the brain think makes."""
 
-    async def _fake_run_once(prompt, *, config=None):
-        calls.append(prompt)
-        return SimpleNamespace(response=response)
+    def __init__(self, reply="brain reply", raise_exc=None):
+        self.reply = reply
+        self.raise_exc = raise_exc
+        self.calls = []
 
+    async def complete(self, messages, *, model=None, max_tokens=None, system=None):
+        self.calls.append({"messages": messages, "model": model, "system": system})
+        if self.raise_exc is not None:
+            raise self.raise_exc
+        return SimpleNamespace(text=self.reply, cost_usd=0.0)
+
+
+def _patch_brain(monkeypatch, *, reply="brain reply", raise_exc=None):
+    """Mock the tool-less brain think and forbid the 26-tool agent.
+
+    Returns the fake provider so a test can assert it was (or wasn't) called.
+    """
     import lhassa.cli.agent as agent_mod
+    import lhassa.core.db as db_mod
+    import lhassa.core.episode as episode_mod
+    import lhassa.llm.router as router_mod
+    import lhassa.memory.load as load_mod
 
-    monkeypatch.setattr(agent_mod, "run_once", _fake_run_once)
-    return calls
+    provider = _FakeProvider(reply=reply, raise_exc=raise_exc)
+
+    async def _noop_init():
+        return None
+
+    async def _fake_load(instance_id=None, **kwargs):
+        return SimpleNamespace(to_prompt=lambda: "")
+
+    def _fake_decide(trigger, ctx=None, *, config, **kwargs):
+        return SimpleNamespace(provider=provider, model="cheap", reason="routine:telegram")
+
+    async def _noop_append(self):
+        return "ep"
+
+    async def _boom_agent(*a, **k):
+        raise AssertionError("inbound must not call the 26-tool agent (run_once)")
+
+    monkeypatch.setattr(db_mod, "init_db", _noop_init)
+    monkeypatch.setattr(load_mod, "load", _fake_load)
+    monkeypatch.setattr(router_mod, "decide", _fake_decide)
+    monkeypatch.setattr(episode_mod.Episode, "append", _noop_append)
+    monkeypatch.setattr(agent_mod, "run_once", _boom_agent)
+    return provider
 
 
 def _patch_send(monkeypatch):
@@ -109,12 +150,14 @@ def test_poll_once_answers_allowed_chat_and_advances_offset(monkeypatch):
     monkeypatch.setattr(
         telegram_inbound.httpx, "AsyncClient", _client_returning(payload)
     )
-    calls = _patch_run_once(monkeypatch, response="It is noon.")
+    provider = _patch_brain(monkeypatch, reply="It is noon.")
     sent = _patch_send(monkeypatch)
 
     new_offset = asyncio.run(telegram_inbound.poll_once(_cfg(), offset=None))
 
-    assert calls == ["what time is it"]
+    # Answered via the tool-less brain think (provider.complete), not the agent.
+    assert len(provider.calls) == 1
+    assert provider.calls[0]["messages"] == [{"role": "user", "content": "what time is it"}]
     assert sent == ["It is noon."]
     assert new_offset == 101  # update_id + 1
 
@@ -141,13 +184,13 @@ def test_poll_once_ignores_other_chat_ids(monkeypatch):
     monkeypatch.setattr(
         telegram_inbound.httpx, "AsyncClient", _client_returning(payload)
     )
-    calls = _patch_run_once(monkeypatch)
+    provider = _patch_brain(monkeypatch)
     sent = _patch_send(monkeypatch)
 
     new_offset = asyncio.run(telegram_inbound.poll_once(_cfg(), offset=None))
 
     # Foreign chat → never answered, but the offset still advances past it.
-    assert calls == []
+    assert provider.calls == []
     assert sent == []
     assert new_offset == 8
 
@@ -165,13 +208,14 @@ def test_poll_once_malformed_update_does_not_raise(monkeypatch):
     monkeypatch.setattr(
         telegram_inbound.httpx, "AsyncClient", _client_returning(payload)
     )
-    calls = _patch_run_once(monkeypatch, response="done")
+    provider = _patch_brain(monkeypatch, reply="done")
     sent = _patch_send(monkeypatch)
 
     new_offset = asyncio.run(telegram_inbound.poll_once(_cfg(), offset=None))
 
     # Only the one well-formed, owner message is answered; offset clears the batch.
-    assert calls == ["ok now"]
+    assert len(provider.calls) == 1
+    assert provider.calls[0]["messages"] == [{"role": "user", "content": "ok now"}]
     assert sent == ["done"]
     assert new_offset == 5
 
@@ -223,7 +267,7 @@ def test_run_forever_returns_immediately_when_disabled(monkeypatch):
     asyncio.run(telegram_inbound.run_forever(cfg))
 
 
-def test_run_once_failure_is_caught(monkeypatch):
+def test_brain_failure_falls_back(monkeypatch):
     payload = {
         "ok": True,
         "result": [
@@ -237,15 +281,128 @@ def test_run_once_failure_is_caught(monkeypatch):
         telegram_inbound.httpx, "AsyncClient", _client_returning(payload)
     )
 
-    import lhassa.cli.agent as agent_mod
-
-    async def _raising_run_once(prompt, *, config=None):
-        raise RuntimeError("LLM exploded")
-
-    monkeypatch.setattr(agent_mod, "run_once", _raising_run_once)
+    # The provider raises mid-think → the brain degrades to its fallback reply,
+    # never crashing the poll loop; the offset still advances.
+    _patch_brain(monkeypatch, raise_exc=RuntimeError("LLM exploded"))
     sent = _patch_send(monkeypatch)
 
-    # No raise; offset still advances; a best-effort apology is sent.
     new_offset = asyncio.run(telegram_inbound.poll_once(_cfg(), offset=None))
     assert new_offset == 51
-    assert len(sent) == 1  # the apology
+    assert sent == [telegram_inbound._FALLBACK_REPLY]
+
+
+def test_poll_once_command_replies_without_brain(monkeypatch):
+    # A slash command is answered locally by the command registry — the tool-less
+    # brain think (provider.complete) must NOT run.
+    payload = {
+        "ok": True,
+        "result": [
+            {
+                "update_id": 200,
+                "message": {"chat": {"id": 123}, "text": "/help"},
+            }
+        ],
+    }
+    monkeypatch.setattr(
+        telegram_inbound.httpx, "AsyncClient", _client_returning(payload)
+    )
+    provider = _patch_brain(monkeypatch)  # fake provider; asserts it is unused
+    sent = _patch_send(monkeypatch)
+
+    new_offset = asyncio.run(telegram_inbound.poll_once(_cfg(), offset=None))
+
+    # The command produced a reply; the brain provider was never called.
+    assert provider.calls == []
+    assert len(sent) == 1
+    assert "I'm Lhassa" in sent[0]
+    assert new_offset == 201
+
+
+def test_poll_once_unknown_command_replies_without_brain(monkeypatch):
+    payload = {
+        "ok": True,
+        "result": [
+            {
+                "update_id": 210,
+                "message": {"chat": {"id": 123}, "text": "/nope"},
+            }
+        ],
+    }
+    monkeypatch.setattr(
+        telegram_inbound.httpx, "AsyncClient", _client_returning(payload)
+    )
+    provider = _patch_brain(monkeypatch)
+    sent = _patch_send(monkeypatch)
+
+    asyncio.run(telegram_inbound.poll_once(_cfg(), offset=None))
+
+    # Unknown "/command" → a help hint, still without touching the brain.
+    assert provider.calls == []
+    assert sent == ["Unknown command /nope — try /help."]
+
+
+def test_poll_once_plain_message_still_uses_brain(monkeypatch):
+    # A non-command message must still flow to the tool-less brain think.
+    payload = {
+        "ok": True,
+        "result": [
+            {
+                "update_id": 220,
+                "message": {"chat": {"id": 123}, "text": "how are you"},
+            }
+        ],
+    }
+    monkeypatch.setattr(
+        telegram_inbound.httpx, "AsyncClient", _client_returning(payload)
+    )
+    provider = _patch_brain(monkeypatch, reply="I'm well.")
+    sent = _patch_send(monkeypatch)
+
+    asyncio.run(telegram_inbound.poll_once(_cfg(), offset=None))
+
+    assert len(provider.calls) == 1
+    assert provider.calls[0]["messages"] == [{"role": "user", "content": "how are you"}]
+    assert sent == ["I'm well."]
+
+
+def test_brain_provider_not_configured_falls_back(monkeypatch):
+    payload = {
+        "ok": True,
+        "result": [
+            {
+                "update_id": 60,
+                "message": {"chat": {"id": 123}, "text": "hello"},
+            }
+        ],
+    }
+    monkeypatch.setattr(
+        telegram_inbound.httpx, "AsyncClient", _client_returning(payload)
+    )
+
+    # Router resolves no provider → ProviderNotConfigured path → graceful fallback.
+    import lhassa.core.db as db_mod
+    import lhassa.core.episode as episode_mod
+    import lhassa.llm.router as router_mod
+    import lhassa.memory.load as load_mod
+
+    async def _noop_init():
+        return None
+
+    async def _fake_load(instance_id=None, **kwargs):
+        return SimpleNamespace(to_prompt=lambda: "")
+
+    def _no_provider(trigger, ctx=None, *, config, **kwargs):
+        return SimpleNamespace(provider=None, model=None, reason="no provider")
+
+    async def _noop_append(self):
+        return "ep"
+
+    monkeypatch.setattr(db_mod, "init_db", _noop_init)
+    monkeypatch.setattr(load_mod, "load", _fake_load)
+    monkeypatch.setattr(router_mod, "decide", _no_provider)
+    monkeypatch.setattr(episode_mod.Episode, "append", _noop_append)
+    sent = _patch_send(monkeypatch)
+
+    new_offset = asyncio.run(telegram_inbound.poll_once(_cfg(), offset=None))
+    assert new_offset == 61
+    assert sent == [telegram_inbound._FALLBACK_REPLY]

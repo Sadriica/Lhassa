@@ -1,9 +1,15 @@
 """Inbound Telegram poller — turns Lhassa's Telegram chat into a command channel.
 
 Long-polls the Telegram Bot API ``getUpdates`` (offset-based) over httpx, answers
-each accepted message through the brain's one-turn path
-(:func:`lhassa.cli.agent.run_once`), and replies via the existing outbound
+each accepted message through a **tool-less brain think** (identity + layered
+memory + the router's routine provider → ``provider.complete``, no tools — the same
+shape as :func:`lhassa.voice.brain_bridge.answer`, but logging a
+``despertar_por="telegram"`` episode), and replies via the existing outbound
 :func:`lhassa.notify.telegram.send`.
+
+A tool-less think is deliberate: routing chat through the full 26-tool agent on the
+cheap heartbeat backend produced malformed tool calls and failed replies, whereas a
+plain completion on the routine (opencode) provider answers reliably.
 
 Same discipline as the rest of :mod:`lhassa.notify`:
 - **gated** — runs only when ``config.telegram_poll_enabled`` is true AND both a
@@ -21,11 +27,12 @@ wired into ``main.py`` — that is a later step.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 
 import httpx
 from loguru import logger
 
-from lhassa.notify import telegram
+from lhassa.notify import commands, telegram
 
 # The getUpdates endpoint. ``<token>`` is interpolated per call.
 _GET_UPDATES_URL = "https://api.telegram.org/bot{token}/getUpdates"
@@ -38,28 +45,135 @@ _TIMEOUT = float(_LONG_POLL_SECONDS) + 15.0
 _BACKOFF_START = 1.0
 _BACKOFF_MAX = 60.0
 
+# A chat turn is a short answer, not a long job.
+_CHAT_MAX_TOKENS = 512
+
+# Short fallback when the brain can't reach a model — sent verbatim to the chat.
+_FALLBACK_REPLY = "I can't reach my model right now."
+
+# Marker for an episode whose model could not run (mirrors core/step + voice).
+_DEFERRED_DECISION = "deferred: telegram needs judgment"
+
+# Chat-output instruction layered on the persona (plain text for a chat bubble).
+_CHAT_INSTRUCTION = (
+    "You are answering in a Telegram chat with your owner. Reply in short, natural "
+    "messages. Lead with the answer and keep it brief."
+)
+
 
 def _enabled(config) -> bool:
     """True only when polling is switched on AND credentials are present."""
     return bool(getattr(config, "telegram_poll_enabled", False)) and telegram.is_configured(config)
 
 
-async def _answer(text: str, *, config) -> None:
-    """Run one message through the brain and reply with the result. Never raises."""
+async def _brain_reply(text: str, *, config) -> str:
+    """Answer one message via a tool-less brain think. Never raises.
+
+    Mirrors :func:`lhassa.voice.brain_bridge.answer`: load identity + layered memory
+    (with ``text`` as the semantic query), let the router pick the routine
+    provider+model (so the opencode heartbeat backend is preferred), call
+    ``provider.complete`` with **no tools**, and log a ``despertar_por="telegram"``
+    episode. Degrades to :data:`_FALLBACK_REPLY` on a missing provider / spent
+    budget / any error — it never raises into the poll loop.
+    """
+    from lhassa.core import db, watchlist
+    from lhassa.core.episode import Episode
+    from lhassa.llm import router
+    from lhassa.llm.gateway import BudgetExceeded
+    from lhassa.llm.provider import ProviderNotConfigured
+    from lhassa.memory import load as memory_load
+    from lhassa.persona import load_identity
+
+    instance_id = getattr(config, "instance_id", None) or "inst_personal"
+
+    # Idempotent — a chat turn must work even if it wakes the brain first.
+    await db.init_db()
+
+    ep = Episode.begin(despertar_por="telegram", instance_id=instance_id)
+    reply = _FALLBACK_REPLY
     try:
-        from lhassa.cli.agent import run_once
+        # Layer memory (semantic query = the message; layer 4 fires only when
+        # enabled + indexed, otherwise it's the unchanged pinned/recent/tags).
+        ctx = await memory_load.load(
+            instance_id,
+            token_budget=getattr(config, "context_token_budget", 2000),
+            query=text,
+        )
 
-        result = await run_once(text, config=config)
-    except Exception as exc:
-        logger.warning(f"Telegram inbound: run_once failed: {exc}")
-        # Best-effort apology; still never raise.
-        try:
-            await telegram.send("Sorry — I hit an error handling that.", config=config)
-        except Exception:
-            pass
-        return
+        # Routine path: not delegated, not flagged hard → the router prefers the
+        # local/opencode heartbeat provider (§3-Fase 6).
+        trigger = watchlist.Trigger(kind="telegram", action="responder", params={})
+        decision = router.decide(trigger, ctx, config=config)
+        provider = decision.provider
+        if provider is None:
+            raise ProviderNotConfigured("router resolved no provider for telegram turn")
 
-    reply = getattr(result, "response", None) or str(result)
+        identity = load_identity(instance_id)
+        parts = [identity.persona_block]
+        memory_block = ctx.to_prompt()
+        if memory_block:
+            parts.append(memory_block)
+        parts.append(_CHAT_INSTRUCTION)
+        system = "\n\n".join(parts)
+
+        result = await provider.complete(
+            [{"role": "user", "content": text}],
+            model=decision.model,
+            max_tokens=_CHAT_MAX_TOKENS,
+            system=system,
+        )
+
+        reply = (result.text or "").strip() or _FALLBACK_REPLY
+        ep.finish(
+            decision=decision.reason,
+            accion="responder",
+            resultado=reply,
+            costo_usd=result.cost_usd,
+        )
+        return reply
+
+    except (ProviderNotConfigured, BudgetExceeded) as exc:
+        # Known degradation — defer, return the fallback, keep the episode.
+        ep.finish(
+            decision=_DEFERRED_DECISION,
+            accion="responder",
+            resultado=f"deferred ({type(exc).__name__}): {exc}",
+        )
+        return _FALLBACK_REPLY
+    except Exception as exc:  # never raise into the poll loop
+        logger.warning(f"Telegram inbound: brain think failed: {exc}")
+        ep.finish(
+            decision="telegram: error",
+            accion="responder",
+            resultado=f"error: {type(exc).__name__}: {exc}",
+        )
+        return _FALLBACK_REPLY
+    finally:
+        # Always log the episode; a logging failure must not break the turn.
+        with contextlib.suppress(Exception):
+            await ep.append()
+
+
+async def _answer(text: str, *, config) -> None:
+    """Answer one message and reply with it. Never raises.
+
+    A slash command is handled by the modular command registry
+    (:mod:`lhassa.notify.commands`) — a fast, LLM-free local reply, no brain
+    episode. Anything else (plain language, or an unrecognised command that the
+    registry already turned into a help hint) falls through to the tool-less brain
+    think only when the registry returns ``None`` (i.e. it was not a command).
+    """
+    reply = None
+    try:
+        reply = await commands.dispatch(text, config=config)
+    except Exception as exc:  # dispatch is defensive, but belt-and-braces
+        logger.warning(f"Telegram inbound: command dispatch failed: {exc}")
+        reply = None
+
+    if reply is None:
+        # Not a command → let the brain answer (the existing plain-language path).
+        reply = await _brain_reply(text, config=config)
+
     try:
         await telegram.send(reply, config=config)
     except Exception as exc:
