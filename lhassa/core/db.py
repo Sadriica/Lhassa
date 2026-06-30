@@ -166,6 +166,22 @@ async def init_db() -> None:
             )
         """)
 
+        # autonomy — the friction knob (§2.6, principle #9). One row per
+        # (instance_id, accion, actor_id) holding the count of CONSECUTIVE
+        # human-origin approvals of that action by that actor. The knob only
+        # LOWERS friction for already-human-approved actions; it never changes an
+        # Origin's trust level (no contagion-promotion). A denial resets the streak.
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS autonomy (
+                instance_id    TEXT NOT NULL,
+                accion         TEXT NOT NULL,
+                actor_id       TEXT NOT NULL,
+                streak         INTEGER NOT NULL DEFAULT 0,
+                actualizado_en TEXT NOT NULL,
+                PRIMARY KEY (instance_id, accion, actor_id)
+            )
+        """)
+
         # facts — typed durable knowledge (dato | directiva). APPEND-ONLY:
         # a superseding fact is a NEW row; rows are never destructively rewritten.
         await db.execute("""
@@ -521,6 +537,26 @@ async def load_pending_approvals(instance_id: str) -> list[dict]:
     return rows
 
 
+async def get_approval(instance_id: str, approval_id: str) -> Optional[dict]:
+    """Return a single approval row (payload decoded), or ``None`` if absent.
+
+    Scoped to ``instance_id`` (isolation from day one). Used when resolving an
+    approval so the autonomy knob can be fed the action/actor it was parked for.
+    """
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            "SELECT * FROM approvals WHERE instance_id = ? AND id = ?",
+            (instance_id, approval_id),
+        ) as cur:
+            row = await cur.fetchone()
+    if row is None:
+        return None
+    out = dict(row)
+    out["payload"] = _loads(out.get("payload"), {})
+    return out
+
+
 async def resolve_approval(instance_id: str, approval_id: str, estado: str) -> None:
     """Resolve an approval (e.g. 'aprobada' / 'rechazada'), scoped to instance."""
     async with aiosqlite.connect(DB_PATH) as db:
@@ -529,5 +565,53 @@ async def resolve_approval(instance_id: str, approval_id: str, estado: str) -> N
                SET estado = ?, resuelto_en = ?
                WHERE instance_id = ? AND id = ?""",
             (estado, _now(), instance_id, approval_id),
+        )
+        await db.commit()
+
+
+# ── autonomy (the friction knob — consecutive human approvals) ──────────────────
+
+async def get_autonomy_streak(instance_id: str, accion: str, actor_id: str) -> int:
+    """Return the consecutive-human-approval streak for one (accion, actor_id).
+
+    Scoped to ``instance_id``. Missing row → ``0`` (no autonomy earned yet).
+    """
+    async with aiosqlite.connect(DB_PATH) as db:
+        async with db.execute(
+            """SELECT streak FROM autonomy
+               WHERE instance_id = ? AND accion = ? AND actor_id = ?""",
+            (instance_id, accion, actor_id),
+        ) as cur:
+            row = await cur.fetchone()
+    return int(row[0]) if row else 0
+
+
+async def bump_autonomy_streak(instance_id: str, accion: str, actor_id: str) -> int:
+    """Increment (or create) the streak for one (accion, actor_id). Returns the new value.
+
+    Upsert: a HUMANO-origin approval advances the count by one. This only ever
+    *records* how often a human said yes; it never touches trust levels.
+    """
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            """INSERT INTO autonomy(instance_id, accion, actor_id, streak, actualizado_en)
+               VALUES(?, ?, ?, 1, ?)
+               ON CONFLICT(instance_id, accion, actor_id)
+               DO UPDATE SET streak = streak + 1, actualizado_en = excluded.actualizado_en""",
+            (instance_id, accion, actor_id, _now()),
+        )
+        await db.commit()
+    return await get_autonomy_streak(instance_id, accion, actor_id)
+
+
+async def reset_autonomy_streak(instance_id: str, accion: str, actor_id: str) -> None:
+    """Reset the streak for one (accion, actor_id) to zero (a denial resets it)."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            """INSERT INTO autonomy(instance_id, accion, actor_id, streak, actualizado_en)
+               VALUES(?, ?, ?, 0, ?)
+               ON CONFLICT(instance_id, accion, actor_id)
+               DO UPDATE SET streak = 0, actualizado_en = excluded.actualizado_en""",
+            (instance_id, accion, actor_id, _now()),
         )
         await db.commit()

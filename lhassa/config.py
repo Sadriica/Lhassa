@@ -95,6 +95,11 @@ def _safe_int(val: str, default: int) -> int:
         return default
 
 
+def _parse_csv_set(raw: str) -> "set[str]":
+    """Parse a CSV env var into a set of trimmed, non-empty tokens."""
+    return {item.strip() for item in (raw or "").split(",") if item.strip()}
+
+
 def _parse_repos(raw: str) -> "set[str] | str":
     """Parse LHASSA_ALLOWLIST_REPOS (CSV) into a set, or "*" for "allow any".
 
@@ -204,6 +209,22 @@ class Config:
     # allowlist, separate from the command-level sudo allowlist in tools/privileged.
     allowlist_repos: "set[str] | str" = _parse_repos(
         os.getenv("LHASSA_ALLOWLIST_REPOS", "*")
+    )
+
+    # ── Approval frontier + autonomy knob (§2.6 — HITL per flow) ──────────────
+    # The autonomy knob lowers approval friction for repeatedly-approved human
+    # actions: after this many CONSECUTIVE human-origin approvals of the same
+    # (accion, actor) the action auto-approves ("una humano repetida se vuelve
+    # automática"). A denial resets the streak. Per-action and per-actor, never
+    # global, and it never promotes an Origin's trust level.
+    autonomy_threshold: int = _safe_int(
+        os.getenv("LHASSA_AUTONOMY_THRESHOLD", "3"), 3
+    )
+    # High-risk actions that ALWAYS require human approval, no matter the history
+    # ("mover-dinero exige aprobación aunque un borrador no"). These are NEVER
+    # auto-promoted by the autonomy knob. CSV → set.
+    always_approve_actions: "set[str]" = _parse_csv_set(
+        os.getenv("LHASSA_ALWAYS_APPROVE_ACTIONS", "move_money,delete_data")
     )
 
     # ── General ───────────────────────────────────────────────────────────────
