@@ -26,6 +26,7 @@ from rich.markdown import Markdown
 from typer.core import TyperGroup
 
 from lhassa.cli import agent
+from lhassa.cli import capabilities as _capabilities
 from lhassa.cli import commands as _commands
 from lhassa.cli import org_cmds as _org_cmds
 
@@ -181,6 +182,10 @@ def chat(
 
 # Attach the power subcommands (tools/approvals/approve/deny/report/memory/fleet).
 _commands.register(app)
+
+# Attach `lhassa capabilities` (alias `doctor`): surface what's wired + on/off.
+app.command("capabilities")(_capabilities.capabilities_cmd)
+app.command("doctor")(_capabilities.capabilities_cmd)
 
 # Attach the `lhassa org` management sub-app (topology: 1..N brains + hierarchy).
 app.add_typer(_org_cmds.org_app, name="org")
