@@ -111,10 +111,14 @@ def build_argv(cli: str, task: str) -> list[str]:
 
 
 class LocalCliAgent:
-    def __init__(self, cli: str | None = None, hint: str = "", timeout: int | None = None):
+    def __init__(self, cli: str | None = None, hint: str = "", timeout: int | None = None,
+                 on_line=None):
         self.cli = (cli or detect_ai_cli()).lower()
         self._hint = hint
         self._timeout = timeout if timeout is not None else _DEFAULT_TIMEOUT
+        # Optional sink called with each stdout line as it streams (e.g. the CLI's
+        # `lhassa code` prints them live). Best-effort — a failing sink never stops the run.
+        self._on_line = on_line
 
     async def run(self, task: str) -> str:
         """Dispatch `task` to the selected CLI. Never raises — returns a string."""
@@ -194,6 +198,11 @@ class LocalCliAgent:
                     break
                 line = _ANSI.sub("", line_bytes.decode(errors="replace"))
                 run.output += line
+                if self._on_line is not None:
+                    try:
+                        self._on_line(line)
+                    except Exception:  # a bad sink must never break the run
+                        pass
                 await state.broadcast({"type": "agent_token", "run_id": run_id, "token": line})
 
         async def _drain_stderr():
@@ -223,6 +232,9 @@ class LocalCliAgent:
         return run.output.strip()
 
 
-def make_agent(cli: str | None = None) -> LocalCliAgent:
-    """Return a LocalCliAgent for the given CLI (or the auto-detected default)."""
-    return LocalCliAgent(cli=cli, hint=_OS_HINT)
+def make_agent(cli: str | None = None, on_line=None) -> LocalCliAgent:
+    """Return a LocalCliAgent for the given CLI (or the auto-detected default).
+
+    ``on_line`` is an optional per-stdout-line sink for live streaming.
+    """
+    return LocalCliAgent(cli=cli, hint=_OS_HINT, on_line=on_line)

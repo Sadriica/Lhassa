@@ -359,7 +359,15 @@ def code_cmd(
     if not task_text:
         _err().print('[error]✗[/] give a task, e.g. [model]lhassa code "add a test for utils.py"[/]')
         raise typer.Exit(code=1)
-    agent = make_agent(cli)
+    # Stream the CLI's output LIVE, line by line, straight to stdout as it works.
+    streamed = {"any": False}
+
+    def _emit(line: str) -> None:
+        streamed["any"] = True
+        sys.stdout.write(line)
+        sys.stdout.flush()
+
+    agent = make_agent(cli, on_line=_emit)
     if not is_installed(agent.cli):
         _err().print(
             f"[error]✗[/] the [model]{escape(agent.cli)}[/] CLI is not installed "
@@ -371,10 +379,14 @@ def code_cmd(
     )
     try:
         result = asyncio.run(agent.run(task_text))
-    except Exception as e:  # surface a clean error, never a traceback
-        _err().print(f"[error]✗[/] [accent]{escape(str(e))}[/]")
-        raise typer.Exit(code=1)
-    _out().print(result)
+    except KeyboardInterrupt:
+        _err().print("\n[dim]stopped.[/]")
+        raise typer.Exit(code=130)
+    if streamed["any"]:
+        sys.stdout.write("\n")  # tidy trailing newline after the live stream
+        sys.stdout.flush()
+    elif result:  # nothing streamed (e.g. an error string came back) — show it
+        _out().print(result)
 
 
 def register(app: "typer.Typer") -> None:
