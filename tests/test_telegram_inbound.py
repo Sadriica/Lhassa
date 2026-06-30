@@ -291,6 +291,33 @@ def test_brain_failure_falls_back(monkeypatch):
     assert sent == [telegram_inbound._FALLBACK_REPLY]
 
 
+def test_brain_falls_back_to_cloud_when_routine_provider_flakes(monkeypatch):
+    # The routine provider (opencode) raises, but the cloud fallback answers —
+    # the owner gets a real reply instead of the "can't reach my model" text.
+    payload = {
+        "ok": True,
+        "result": [
+            {"update_id": 70, "message": {"chat": {"id": 123}, "text": "hola"}}
+        ],
+    }
+    monkeypatch.setattr(
+        telegram_inbound.httpx, "AsyncClient", _client_returning(payload)
+    )
+    _patch_brain(monkeypatch, raise_exc=RuntimeError("opencode flaked"))
+    sent = _patch_send(monkeypatch)
+
+    cloud = _FakeProvider(reply="cloud says hi")
+    cloud.name = "default"
+    monkeypatch.setattr(
+        telegram_inbound, "_secondary_provider", lambda config, primary: cloud
+    )
+
+    new_offset = asyncio.run(telegram_inbound.poll_once(_cfg(), offset=None))
+    assert new_offset == 71
+    assert sent == ["cloud says hi"]  # the cloud fallback answered, not the fallback text
+    assert len(cloud.calls) == 1
+
+
 def test_poll_once_command_replies_without_brain(monkeypatch):
     # A slash command is answered locally by the command registry — the tool-less
     # brain think (provider.complete) must NOT run.
