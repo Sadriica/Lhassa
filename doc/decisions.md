@@ -5,6 +5,51 @@ build. The source of truth for the architecture is `doc/lhassa-brief.md` (a
 living doc — correct it after each phase per §4). This file records the choices
 made along the way. Newest first.
 
+## 2026-06-30 — Elastic & modular hardening pass (A–E) + Telegram live + org topology
+
+**Owner principle (now a standing constraint):** Lhassa must be **fully elastic and highly
+modular** — every swap point behind an interface + registry, capabilities **drop-in** (add a
+module without editing core), and the org layer must run **1 brain OR N brains** with a
+**user-defined hierarchy**. Done as 5 slices + config surface (`org_departments`,
+`notify_channels`, `plugins_dir`, `org_topology_file`):
+- **A (keystone)** `registry.py` (`Registry[T]`: register as call/decorator, get/get_or_none/
+  NotRegistered, as_mapping live view, duplicate-protection) + `plugins.py` (`load_plugins`
+  imports from `plugins_dir` AND the `lhassa.plugins` entry-point group — self-registration with
+  no core edit; idempotent, never raises). Adopted in `core/actions.py` (public API preserved;
+  `ACTIONS` is now a live read-only view; `register_action` drop-in seam).
+- **B (channels)** `notify/channels.py` — `Channel` protocol + registry (`@register_channel`);
+  `TelegramChannel`/`DesktopChannel`/`LogChannel`; `dispatch.notify()` fans out over
+  `active_channels(config)` from `notify_channels`. **Fixed the Telegram inbound**: answers with a
+  tool-less brain think (memory + routine opencode provider, `despertar_por='telegram'`) instead
+  of the 26-tool GROQ agent that emitted malformed tool calls (`tool_use_failed` 400s).
+- **B2 (commands)** `notify/commands.py` — Registry-backed slash-command handlers
+  (`@register_command` drop-in): `/start`, `/help` (lists registered commands live), `/status`
+  (provider+model+health+today's spend, **LLM-free**). Inbound dispatches commands before the brain.
+- **C (boundaries)** `tests/test_architecture.py` — an `ast`-based guard (no new dependency)
+  forbidding layer-crossing imports (spine/interfaces/adapters ↛ shells; harness ⟂ llm; keystone
+  imports no feature module), rules measured from the real graph, with self-tests proving teeth.
+  `doc/architecture-layers.md` documents the layers.
+- **E (org topology)** `org/topology.py` — `BrainNode`/`Topology` (validated tree) + `load/save`,
+  config-driven (`org_topology_file`), **standalone 1 brain up to arbitrary depth**;
+  `coordinator.run_goal()` walks the tree (typed TASK_ASSIGN down, **only leaves execute**, result
+  bubbles up; RBAC by coordinate-vs-execute so new roles need no RBAC edit); `lhassa org`
+  tree/list/add/remove/route/run to create & manage the chart. `GeneralBrain`/`DepartmentBrain`
+  unchanged.
+
+**Telegram (live):** new bot **@Lhassa_bot** (old one revoked), token + chat id in `.env`
+(gitignored); outbound verified (real delivery); inbound answers via opencode (no tool errors);
+bot name/description/short-description/commands set in **English** via the Bot API; a
+`scripts/systemd/lhassa-telegram.service` user unit is ready to enable. **Avatar** must be set via
+@BotFather `/setuserpic` (not exposable via the Bot API).
+
+**Verified:** **718 tests** (full suite ×2, stable — the prior telegram test-isolation flake is
+gone), ruff clean, `lhassa --help` lists `org`, dashboard builds. **Live smokes:** a 3-level org
+chart routed goals to the correct leaves (coordinators never executed); a single-brain chart
+executed directly; `/help` + `/status` rendered offline; an inbound poll answered a real Telegram
+message via opencode at $0. **Backlog / `[SUPUESTO]`:** adopt the registry in the remaining
+registries (providers/harnesses/verifiers/specialists) as they're touched (continuous); `/status`
+reads the gateway ledger path/schema directly; route ties break by child declaration order.
+
 ## 2026-06-30 — Phase 7 slice 2 (departments think) + heartbeat wired to opencode
 
 **Ops:** the heartbeat now thinks via **opencode** — set in `~/Code/lhassa/.env`
