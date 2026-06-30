@@ -25,11 +25,23 @@ from rich.console import Console
 from rich.markdown import Markdown
 from typer.core import TyperGroup
 
-from lhassa.cli import agent
-from lhassa.cli import capabilities as _capabilities
-from lhassa.cli import commands as _commands
-from lhassa.cli import org_cmds as _org_cmds
-from lhassa.cli import skills_cmds as _skills_cmds
+# Silence loguru's default DEBUG sink BEFORE importing the heavy lhassa modules
+# (they emit the pipecat banner / "Tools registered" / gateway DEBUG at import time).
+from lhassa.cli._boot import quiet_logging
+
+quiet_logging()
+
+from lhassa.cli import agent  # noqa: E402  (must follow quiet_logging)
+from lhassa.cli import capabilities as _capabilities  # noqa: E402
+from lhassa.cli import commands as _commands  # noqa: E402
+from lhassa.cli import org_cmds as _org_cmds  # noqa: E402
+from lhassa.cli import skills_cmds as _skills_cmds  # noqa: E402
+from lhassa.cli.theme import LHASSA_THEME, cost_markup, prompt_fragments  # noqa: E402
+
+
+def _console(*, stderr: bool = False) -> Console:
+    """A Console wired with the Lhasa theme."""
+    return Console(stderr=stderr, theme=LHASSA_THEME)
 
 
 class _ChatDefaultGroup(TyperGroup):
@@ -53,18 +65,22 @@ class _ChatDefaultGroup(TyperGroup):
 app = typer.Typer(cls=_ChatDefaultGroup, add_completion=False, no_args_is_help=False)
 
 
-def _cost_line(result: "agent.CliResult") -> str:
-    return (
-        f"{result.model} · {result.input_tokens}+{result.output_tokens} tokens "
-        f"· ${result.cost_usd:.4f}"
+def _print_cost(err: Console, result: "agent.CliResult") -> None:
+    err.print(
+        cost_markup(
+            result.model,
+            result.input_tokens,
+            result.output_tokens,
+            result.cost_usd,
+        )
     )
 
 
 def _run_sync(prompt: str) -> "agent.CliResult":
-    """Run one turn, with a stderr spinner when stderr is an interactive terminal."""
-    err = Console(stderr=True)
+    """Run one turn, with a gold stderr spinner when stderr is an interactive terminal."""
+    err = _console(stderr=True)
     if err.is_terminal:
-        with err.status("Thinking…", spinner="dots"):
+        with err.status("[prompt]Thinking…[/]", spinner="dots", spinner_style="prompt"):
             return asyncio.run(agent.run_once(prompt))
     return asyncio.run(agent.run_once(prompt))
 
@@ -83,26 +99,42 @@ def _emit(result: "agent.CliResult", json_out: bool) -> None:
         return
 
     # Console auto-disables color/styling when stdout is not a TTY.
-    out = Console()
-    err = Console(stderr=True)
+    out = _console()
+    err = _console(stderr=True)
     out.print(Markdown(result.response))
-    err.print(_cost_line(result), style="dim")
+    _print_cost(err, result)
+
+
+_REPL_HELP = (
+    "[title]Lhassa[/] [dim]— commands:[/]\n"
+    "  [accent]/help[/]   [dim]show this[/]\n"
+    "  [accent]/usage[/]  [dim]tokens + cost this session[/]\n"
+    "  [accent]/exit[/]   [dim]quit (or Ctrl-D)[/]\n"
+    "[dim]Anything else is a message. For power tools run e.g. "
+    "[/][model]lhassa org tree[/][dim], [/][model]lhassa skills[/][dim], "
+    "[/][model]lhassa capabilities[/][dim].[/]"
+)
 
 
 def _repl() -> None:
     from prompt_toolkit import PromptSession
     from prompt_toolkit.history import InMemoryHistory
 
-    out = Console()
-    err = Console(stderr=True)
+    out = _console()
+    err = _console(stderr=True)
     session: PromptSession = PromptSession(history=InMemoryHistory(), multiline=False)
+    prompt_text, prompt_style = prompt_fragments()
 
     totals = {"in": 0, "out": 0, "cost": 0.0}
-    err.print("Lhassa CLI — /exit or Ctrl-D to quit, /usage for this session's tokens.", style="dim")
+    # A clean, quiet header (no log spam — see _boot.quiet_logging).
+    err.print()
+    err.print("  [brand]ᕮ Lhassa[/]  [dim]· your brain, in the terminal[/]")
+    err.print("  [dim]/help · /exit (Ctrl-D) · /usage[/]")
+    err.print()
 
     while True:
         try:
-            line = session.prompt("lhassa› ")
+            line = session.prompt(prompt_text, style=prompt_style)
         except (EOFError, KeyboardInterrupt):
             break
         line = line.strip()
@@ -110,24 +142,27 @@ def _repl() -> None:
             continue
         if line in ("/exit", "/quit"):
             break
+        if line in ("/help", "/?"):
+            err.print(_REPL_HELP)
+            continue
         if line == "/usage":
             err.print(
-                f"Session usage: {totals['in']}+{totals['out']} tokens · ${totals['cost']:.4f}",
-                style="dim",
+                f"[dim]session ·[/] [tokens]{totals['in']}+{totals['out']} tok[/] "
+                f"[dim]·[/] [cost]${totals['cost']:.4f}[/]"
             )
             continue
         try:
             result = _run_sync(line)
         except Exception as e:  # keep the REPL alive on any single-turn failure
-            err.print(f"Error: {e}", style="red")
+            err.print(f"[error]✗[/] [accent]{e}[/]")
             continue
         out.print(Markdown(result.response))
         totals["in"] += result.input_tokens
         totals["out"] += result.output_tokens
         totals["cost"] += result.cost_usd
-        err.print(_cost_line(result), style="dim")
+        _print_cost(err, result)
 
-    err.print("Bye.", style="dim")
+    err.print("[dim]bye.[/]")
 
 
 def _chat_entry(prompt_text: str, json_out: bool) -> None:
@@ -148,8 +183,8 @@ def _chat_entry(prompt_text: str, json_out: bool) -> None:
         _repl()
         return
 
-    err = Console(stderr=True)
-    err.print("No prompt given. Pass text as an argument or pipe it via stdin.", style="red")
+    err = _console(stderr=True)
+    err.print("[error]✗[/] No prompt given. Pass text as an argument or pipe it via stdin.")
     raise typer.Exit(code=1)
 
 
