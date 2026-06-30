@@ -29,6 +29,7 @@ from lhassa.cli import agent
 from lhassa.cli import capabilities as _capabilities
 from lhassa.cli import commands as _commands
 from lhassa.cli import org_cmds as _org_cmds
+from lhassa.cli import skills_cmds as _skills_cmds
 
 
 class _ChatDefaultGroup(TyperGroup):
@@ -189,6 +190,7 @@ app.command("doctor")(_capabilities.capabilities_cmd)
 
 # Attach the `lhassa org` management sub-app (topology: 1..N brains + hierarchy).
 app.add_typer(_org_cmds.org_app, name="org")
+app.add_typer(_skills_cmds.skills_app, name="skills")
 
 
 def main() -> None:
