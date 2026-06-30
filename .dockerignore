@@ -1,0 +1,41 @@
+# Keep the build context (and the image) lean.
+
+# Python
+.venv/
+__pycache__/
+*.py[oc]
+*.egg-info/
+build/
+wheels/
+.pytest_cache/
+.ruff_cache/
+
+# Node / dashboard — node_modules and the prior dist are rebuilt in the node stage
+dashboard/node_modules/
+dashboard/dist/
+dashboard/test-results/
+dashboard/playwright-report/
+
+# Secrets — never bake them into the image (provided at runtime via env_file)
+.env
+.env.bak*
+ms_token_cache.json
+
+# Runtime data — lives in the mounted volume, not the image
+*.db
+*.db-wal
+*.db-shm
+*.log
+
+# VCS / IDE / OS
+.git/
+.github/
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# Docker artifacts themselves
+Dockerfile
+.dockerignore
+docker-compose.yml

@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+# Lhassa container entrypoint.
+#
+# Selects what this container runs via the LHASSA_RUN env var so the same image
+# can back several compose services:
+#
+#   LHASSA_RUN=api        (default) — dashboard + REST API + scheduler (no voice)
+#   LHASSA_RUN=heartbeat            — run one brain beat, then loop every
+#                                     LHASSA_HEARTBEAT_INTERVAL seconds (default 900).
+#                                     Set the interval to 0 to run a single beat and exit.
+#   LHASSA_RUN=telegram             — the Telegram inbound long-poller
+#
+# Any explicit command/args passed to the container are executed verbatim (so
+# `docker run lhassa:dev python -c "..."` still works for debugging/sanity checks).
+set -euo pipefail
+
+# An explicit command overrides the mode dispatch below.
+if [ "$#" -gt 0 ]; then
+    exec "$@"
+fi
+
+mode="${LHASSA_RUN:-api}"
+
+case "$mode" in
+    api)
+        echo "lhassa: starting dashboard/API + scheduler on ${LHASSA_API_HOST:-0.0.0.0}:${LHASSA_API_PORT:-7766}"
+        exec python /app/docker/run_api.py
+        ;;
+
+    heartbeat)
+        interval="${LHASSA_HEARTBEAT_INTERVAL:-900}"
+        # A non-positive interval means "one beat, then exit" (host cron/systemd
+        # can own the schedule instead — see doc/deployment.md).
+        if ! [[ "$interval" =~ ^[0-9]+$ ]] || [ "$interval" -le 0 ]; then
+            echo "lhassa: single heartbeat beat"
+            exec /app/scripts/lhassa-heartbeat
+        fi
+        echo "lhassa: heartbeat loop every ${interval}s"
+        while true; do
+            /app/scripts/lhassa-heartbeat || echo "lhassa: heartbeat beat failed (continuing)"
+            sleep "$interval"
+        done
+        ;;
+
+    telegram)
+        echo "lhassa: starting Telegram inbound poller"
+        exec python -m lhassa.notify.telegram_inbound
+        ;;
+
+    *)
+        echo "lhassa: unknown LHASSA_RUN='${mode}' (expected api | heartbeat | telegram)" >&2
+        exit 64
+        ;;
+esac
