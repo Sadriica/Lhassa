@@ -13,6 +13,9 @@ Supported providers:
 
 from __future__ import annotations
 
+import asyncio
+import json
+import re
 from dataclasses import dataclass
 from loguru import logger
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
@@ -236,6 +239,308 @@ class LocalModelProvider:
         )
 
 
+# Timeout for a single opencode beat: long enough for a free-tier model, short
+# enough that a stuck CLI degrades the heartbeat instead of hanging it.
+_OPENCODE_TIMEOUT = 120.0
+
+# Strips terminal colour codes from a fallback (non-JSON) stdout.
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
+
+
+def _int(value: Any) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _clean_stdout(stdout: str) -> str:
+    """Last-resort text: strip ANSI codes and surrounding whitespace."""
+    return _ANSI_RE.sub("", stdout).strip()
+
+
+def _iter_json_events(stdout: str):
+    """Yield JSON values from an opencode ``--format json`` stdout, defensively.
+
+    [SUPUESTO] The exact opencode JSON shape is not pinned. We accept three forms
+    and tolerate anything else: (1) the whole stdout is a single JSON object;
+    (2) the whole stdout is a JSON array of events; (3) line-delimited JSON
+    (NDJSON), skipping any non-JSON line (banners, logs, blank lines).
+    """
+    stdout = stdout.strip()
+    if not stdout:
+        return
+    try:
+        whole = json.loads(stdout)
+    except Exception:
+        whole = None
+    if whole is not None:
+        if isinstance(whole, list):
+            yield from whole
+        else:
+            yield whole
+        return
+    for line in stdout.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            yield json.loads(line)
+        except Exception:
+            continue
+
+
+def _extract_text(obj: dict) -> str | None:
+    """Pull the most plausible assistant text from one event dict.
+
+    [SUPUESTO] Field names are assumed. We look, in order, at: ``parts`` (a list
+    of ``{"type":"text","text":...}``), a ``content`` string or list, a flat
+    ``text`` string, a streamed ``part``/``delta`` text, and a nested
+    ``message`` object (recursing once).
+    """
+    # Assistant message carrying a list of typed parts.
+    parts = obj.get("parts")
+    if isinstance(parts, list):
+        texts = [
+            p.get("text")
+            for p in parts
+            if isinstance(p, dict) and isinstance(p.get("text"), str)
+        ]
+        if texts:
+            return "".join(texts)
+    # OpenAI-ish content: a string or a list of text segments.
+    content = obj.get("content")
+    if isinstance(content, str) and content:
+        return content
+    if isinstance(content, list):
+        texts = []
+        for p in content:
+            if isinstance(p, dict) and isinstance(p.get("text"), str):
+                texts.append(p["text"])
+            elif isinstance(p, str):
+                texts.append(p)
+        if texts:
+            return "".join(texts)
+    # Flat text field.
+    text = obj.get("text")
+    if isinstance(text, str) and text:
+        return text
+    # Streamed deltas: {"part": {"text": ...}} / {"part": "..."} / {"delta": {...}}.
+    for key in ("part", "delta"):
+        v = obj.get(key)
+        if isinstance(v, str) and v:
+            return v
+        if isinstance(v, dict) and isinstance(v.get("text"), str) and v["text"]:
+            return v["text"]
+    # Nested assistant message.
+    msg = obj.get("message")
+    if isinstance(msg, dict):
+        return _extract_text(msg)
+    return None
+
+
+def _extract_usage(obj: dict) -> tuple[float, int, int]:
+    """Pull (cost_usd, input_tokens, output_tokens) from one event, if present.
+
+    Verified live: a ``step_finish`` event nests the totals under ``part`` —
+    ``{"part": {"tokens": {"input": N, "output": M, ...}, "cost": 0}}`` — so we look
+    at both the event and its ``part`` child. Several common key spellings are still
+    accepted defensively for other opencode/model versions.
+    """
+    # Look at the event itself and its nested ``part`` (where step_finish totals live).
+    src = obj
+    part = obj.get("part")
+    if isinstance(part, dict) and (part.get("tokens") or part.get("cost") is not None):
+        src = part
+
+    cost = 0.0
+    for key in ("cost", "cost_usd"):
+        v = src.get(key)
+        if isinstance(v, (int, float)) and not isinstance(v, bool):
+            cost = float(v)
+    usage = src.get("usage")
+    if not isinstance(usage, dict):
+        usage = src.get("tokens")
+    in_tok = out_tok = 0
+    if isinstance(usage, dict):
+        in_tok = _int(
+            usage.get("input_tokens")
+            or usage.get("prompt_tokens")
+            or usage.get("input")
+            or 0
+        )
+        out_tok = _int(
+            usage.get("output_tokens")
+            or usage.get("completion_tokens")
+            or usage.get("output")
+            or 0
+        )
+        c = usage.get("cost")
+        if isinstance(c, (int, float)) and not isinstance(c, bool):
+            cost = float(c)
+    return cost, in_tok, out_tok
+
+
+def _parse_opencode_json(stdout: str) -> tuple[str, float, int, int]:
+    """Parse opencode JSON stdout into (text, cost_usd, input_tokens, output_tokens).
+
+    Defensive: a complete assistant message (``parts``/``content``/``text``) wins
+    over streamed deltas; if only deltas are seen they are concatenated; if
+    nothing parses as JSON the cleaned raw stdout is used as the text.
+    """
+    final_text: str | None = None
+    chunks: list[str] = []
+    cost = 0.0
+    in_tok = out_tok = 0
+    parsed_any = False
+
+    for obj in _iter_json_events(stdout):
+        if not isinstance(obj, dict):
+            continue
+        parsed_any = True
+        c, i, o = _extract_usage(obj)
+        if c:
+            cost = c
+        if i:
+            in_tok = i
+        if o:
+            out_tok = o
+        text = _extract_text(obj)
+        if text:
+            # A delta event carries a partial chunk; anything else is treated as
+            # a (possibly final) full message and overwrites. [SUPUESTO]
+            if ("part" in obj or "delta" in obj) and "parts" not in obj:
+                chunks.append(text)
+            else:
+                final_text = text
+
+    if final_text:
+        result = final_text
+    elif chunks:
+        result = "".join(chunks)
+    elif not parsed_any:
+        result = _clean_stdout(stdout)
+    else:
+        result = ""
+    return result, cost, in_tok, out_tok
+
+
+class OpenCodeProvider:
+    """Heartbeat/routine provider backed by the local **opencode CLI**.
+
+    The owner has the opencode CLI (no Zen), so routine thinking can run through
+    it using the owner's existing opencode credentials. ``complete()`` shells
+    ``opencode run --format json -m <model> <prompt>`` via a subprocess and parses
+    the JSON event stream for the assistant's text and (if reported) cost/usage.
+
+    It is a cloud subscription (inference happens upstream), so ``zero_retention``
+    is False and ``is_local`` is False — the router still wraps it in the
+    pseudonymization hook when ``pseudonymize_remote`` is on. A non-zero exit, a
+    missing binary, a timeout, or empty output raises ``ProviderNotConfigured`` so
+    the existing degradation path handles it rather than crashing the heartbeat.
+    """
+
+    name = "opencode"
+    zero_retention = False
+    is_local = False
+
+    def __init__(self, config: "Config", *, runner: Any | None = None):
+        self._config = config
+        # Subprocess seam: an async callable ``(argv) -> (returncode, stdout_bytes,
+        # stderr_bytes)``. Injected by tests so they never spawn real opencode.
+        self._runner = runner
+
+    @staticmethod
+    def _build_prompt(messages: list[dict], system: Any) -> str:
+        """Flatten chat messages into a single prompt string for ``opencode run``.
+
+        A ``system`` opt (and any system-role message) is prepended as plain
+        guidance; user/assistant turns are lightly labelled for multi-turn context.
+        """
+        parts: list[str] = []
+        if isinstance(system, str) and system:
+            parts.append(system)
+        for m in messages:
+            role = m.get("role", "user")
+            content = m.get("content", "")
+            if not isinstance(content, str):
+                content = str(content)
+            if not content:
+                continue
+            if role == "system":
+                parts.append(content)
+            elif role == "assistant":
+                parts.append(f"Assistant: {content}")
+            else:
+                parts.append(f"User: {content}")
+        return "\n\n".join(parts)
+
+    async def _run(self, argv: list[str]) -> tuple[int | None, bytes, bytes]:
+        if self._runner is not None:
+            return await self._runner(argv)
+        proc = await asyncio.create_subprocess_exec(
+            *argv,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        try:
+            stdout, stderr = await asyncio.wait_for(
+                proc.communicate(), timeout=_OPENCODE_TIMEOUT
+            )
+        except asyncio.TimeoutError:
+            try:
+                proc.kill()
+                await proc.wait()
+            except Exception:
+                pass
+            raise
+        return proc.returncode, stdout, stderr
+
+    async def complete(
+        self, messages: list[dict], *, model: str | None = None, max_tokens: int = 1024, **opts
+    ) -> Completion:
+        model = model or (getattr(self._config, "opencode_model", "") or "")
+        binary = (getattr(self._config, "opencode_bin", "") or "") or "opencode"
+        prompt = self._build_prompt(messages, opts.get("system"))
+        # argv (verified live): ``opencode run --pure --format json -m <model> <prompt>``.
+        # ``--pure`` skips external plugins/MCP — without it a routine beat takes >120s
+        # and can hang on plugin/network startup; with it the same call returns in ~8s.
+        argv = [binary, "run", "--pure", "--format", "json", "-m", model, prompt]
+
+        try:
+            returncode, stdout_b, stderr_b = await asyncio.wait_for(
+                self._run(argv), timeout=_OPENCODE_TIMEOUT
+            )
+        except FileNotFoundError as exc:
+            raise ProviderNotConfigured(
+                f"opencode unavailable: binary {binary!r} not found ({exc})"
+            ) from exc
+        except (asyncio.TimeoutError, TimeoutError) as exc:
+            raise ProviderNotConfigured(
+                f"opencode unavailable: timed out after {_OPENCODE_TIMEOUT:.0f}s"
+            ) from exc
+
+        stdout = (stdout_b or b"").decode("utf-8", "replace")
+        stderr = (stderr_b or b"").decode("utf-8", "replace")
+        if returncode not in (0, None):
+            detail = (stderr or stdout).strip()[:300]
+            raise ProviderNotConfigured(
+                f"opencode unavailable: exit {returncode}: {detail}"
+            )
+
+        text, cost, in_tok, out_tok = _parse_opencode_json(stdout)
+        if not text.strip():
+            raise ProviderNotConfigured("opencode unavailable: empty output")
+
+        return Completion(
+            text=text,
+            model=model,
+            input_tokens=in_tok,
+            output_tokens=out_tok,
+            cost_usd=cost,
+        )
+
+
 class PseudonymizingProvider:
     """Wraps a REMOTE ModelProvider to scrub PII before it leaves the machine.
 
@@ -293,11 +598,14 @@ def get_model_provider(config: "Config", *, name: str | None = None) -> ModelPro
 
     ``name="zen"`` returns the (not-yet-configured) opencode Zen stub.
     ``name="local"`` returns the LOCAL OpenAI-compatible heartbeat provider.
+    ``name="opencode"`` returns the opencode-CLI heartbeat provider.
     """
     if name == "zen":
         return OpenCodeZenProvider(config)
     if name == "local":
         return LocalModelProvider(config)
+    if name == "opencode":
+        return OpenCodeProvider(config)
     return GatewayProvider(config)
 
 
