@@ -33,19 +33,21 @@ export default function StatusBar({ connected, voiceActive }) {
       }}
     >
       <div className="flex items-center gap-2.5">
-        <span
-          className="grid place-items-center rounded-[8px]"
-          style={{
-            width: 26, height: 26,
-            background: 'var(--lh-grad-gold)',
-            color: 'var(--lh-accent-on)',
-            boxShadow: '0 0 0 1px rgba(162,62,52,0.45), var(--lh-glow-gold)',
-            fontWeight: 800, fontSize: 13,
-          }}
+        {/* Lhassa mark — the same gold stupa used for the favicon / app icon */}
+        <svg
+          width="26" height="26" viewBox="0 0 48 48"
+          className="rounded-[8px]"
+          style={{ boxShadow: 'var(--lh-glow-gold)', flexShrink: 0 }}
           aria-hidden="true"
         >
-          L
-        </span>
+          <rect width="48" height="48" rx="11" fill="#15120d" />
+          <rect x="0.6" y="0.6" width="46.8" height="46.8" rx="10.4" fill="none" stroke="#d9a521" strokeOpacity="0.22" />
+          <circle cx="24" cy="7.2" r="1.7" fill="#a23e34" />
+          <path fill="#d9a521" d="M24 9.5l4.4 5.2h-8.8L24 9.5z" />
+          <path fill="#d9a521" d="M18.6 17h10.8l1.7 4.4H16.9L18.6 17z" />
+          <path fill="#ece4d3" d="M17.4 23.4h13.2l2.1 5.3H15.3l2.1-5.3z" />
+          <path fill="#d9a521" d="M14.6 30.7h18.8l2.4 8.3H12.2l2.4-8.3z" />
+        </svg>
         <span
           className="font-bold text-lg tracking-[0.2em]"
           style={{ color: 'var(--lh-accent)' }}

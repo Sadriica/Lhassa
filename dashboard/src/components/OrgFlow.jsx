@@ -34,16 +34,17 @@ function computeLayout(topology) {
   const nodes = topology?.nodes || []
   const byId = {}
   nodes.forEach((n) => { byId[n.id] = n })
-  const root = topology?.root
   const pos = {}
   let cursor = 0
 
   // Reingold–Tilford-lite: leaves take the next slot; parents center over kids.
+  // `seen` guards cycles; we never leave a node with a NaN/undefined position
+  // (React Flow silently drops those — the cause of "5 counted, 4 drawn").
   const place = (id, depth, seen) => {
     const node = byId[id]
     if (!node || seen.has(id)) return
     seen.add(id)
-    const kids = (node.children || []).filter((c) => byId[c])
+    const kids = (node.children || []).filter((c) => byId[c] && !seen.has(c))
     const y = depth * ROW_H
     if (kids.length === 0) {
       pos[id] = { x: cursor * (NODE_W + H_GAP), y }
@@ -51,14 +52,28 @@ function computeLayout(topology) {
       return
     }
     kids.forEach((c) => place(c, depth + 1, seen))
-    const xs = kids.map((c) => pos[c].x).filter((v) => v !== undefined)
-    pos[id] = { x: xs.reduce((a, b) => a + b, 0) / xs.length, y }
+    const xs = kids.map((c) => pos[c]?.x).filter((v) => typeof v === 'number' && !Number.isNaN(v))
+    pos[id] = {
+      x: xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : cursor * (NODE_W + H_GAP),
+      y,
+    }
+    if (!xs.length) cursor += 1
   }
 
-  const seen = new Set()
-  if (root && byId[root]) place(root, 0, seen)
+  // The roots to lay out, top-down. We do NOT trust `topology.root` (it can point
+  // below the admin and orphan it). The permanent administrator (Lhassa) is forced
+  // FIRST so it anchors at the very top (depth 0); then every genuinely parentless
+  // node (parent missing/null) seeds its own subtree — so EVERY node is drawn.
+  const admin = topology?.admin
+  const isRootNode = (n) => !n.parent || !byId[n.parent]
+  const rootIds = []
+  if (admin && byId[admin]) rootIds.push(admin)
+  nodes.forEach((n) => { if (isRootNode(n) && !rootIds.includes(n.id)) rootIds.push(n.id) })
 
-  // Anything unreachable from root (defensive) → an extra row at the bottom.
+  const seen = new Set()
+  rootIds.forEach((rid) => place(rid, 0, seen))
+
+  // Anything still unreached (a detached cycle, defensive) → an extra bottom row.
   const orphans = nodes.filter((n) => !seen.has(n.id))
   if (orphans.length > 0) {
     const orphanY = (Object.keys(pos).length ? Math.max(...Object.values(pos).map((p) => p.y)) : 0) + ROW_H
@@ -145,6 +160,10 @@ function BrainFlowNode({ data }) {
 
       <div style={{ fontSize: 11, marginTop: 2, color: 'var(--lh-text-muted)' }}>
         {node.role || 'department'}{node.department ? ` · ${node.department}` : ''}
+      </div>
+
+      <div style={{ fontSize: 10, marginTop: 2, color: 'var(--lh-text-faint)' }}>
+        {node.parent ? `reports to ${node.parent}` : 'root · commands everyone'}
       </div>
 
       {(node.skills?.length > 0 || limitKeys.length > 0) && (

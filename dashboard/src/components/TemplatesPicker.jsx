@@ -36,11 +36,21 @@ function TemplateCard({ tpl, onApply, confirming, onConfirm, onCancel, applying,
 
       <p className="text-[12px] mt-2 leading-snug" style={{ color: 'var(--lh-text-muted)' }}>{tpl.description}</p>
 
-      <div className="flex items-center gap-2 mt-3">
-        <span className="lh-badge">{brainCount} brain{brainCount === 1 ? '' : 's'}</span>
+      <div className="flex items-center gap-2 mt-3 flex-wrap">
+        <span
+          className="lh-badge"
+          title="Brains this template ADDS (namespaced under Lhassa) — not the live org total"
+        >
+          adds {brainCount} brain{brainCount === 1 ? '' : 's'}
+        </span>
         {Array.isArray(tpl.brains) && tpl.brains.slice(0, 4).map((b) => (
           <span key={b.id} className="lh-mono text-[10px]" style={{ color: 'var(--lh-text-faint)' }}>{b.id}</span>
         ))}
+        {Array.isArray(tpl.brains) && tpl.brains.length > 4 && (
+          <span className="lh-mono text-[10px]" style={{ color: 'var(--lh-text-faint)' }}>
+            +{tpl.brains.length - 4} more
+          </span>
+        )}
       </div>
 
       <div className="mt-3 pt-3" style={{ borderTop: '1px solid var(--lh-hairline)' }}>

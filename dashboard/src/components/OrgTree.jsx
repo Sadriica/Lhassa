@@ -111,16 +111,23 @@ export default function OrgTree({ topology, selectedId, routePath = [], onSelect
   }
   const byId = {}
   nodes.forEach((n) => { byId[n.id] = n })
-  const root = topology.root
+  // The display root: prefer the permanent administrator (Lhassa), else the
+  // declared root, else the first genuinely parentless node — so the sovereign
+  // is rendered AS the root (★) and never demoted to "standalone".
+  const parentless = nodes.find((n) => !n.parent || !byId[n.parent])
+  const root = (topology.admin && byId[topology.admin] ? topology.admin : null)
+    || (topology.root && byId[topology.root] ? topology.root : null)
+    || parentless?.id
 
-  // Anything not reachable from root (defensive — a valid chart is one tree).
+  // Every node reachable from each genuine root (a valid chart is one tree, but be
+  // defensive so no node is ever silently dropped from the list).
   const reachable = new Set()
   const walk = (id) => {
     if (!byId[id] || reachable.has(id)) return
     reachable.add(id)
     ;(byId[id].children || []).forEach(walk)
   }
-  walk(root)
+  if (root) walk(root)
   const orphans = nodes.filter((n) => !reachable.has(n.id))
 
   const rowProps = { root, selectedId, routePath, onSelect }
@@ -128,7 +135,7 @@ export default function OrgTree({ topology, selectedId, routePath = [], onSelect
   return (
     <div>
       <ul className="space-y-0">
-        <Subtree id={root} byId={byId} {...rowProps} />
+        {root && <Subtree id={root} byId={byId} {...rowProps} />}
       </ul>
       {orphans.length > 0 && (
         <div className="mt-3">

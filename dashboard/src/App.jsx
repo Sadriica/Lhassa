@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
 import StatusBar from './components/StatusBar'
+import OverviewPanel from './components/OverviewPanel'
 import BrainsPanel from './components/BrainsPanel'
 import SkillsPanel from './components/SkillsPanel'
 import AgentsPanel from './components/AgentsPanel'
@@ -29,6 +30,7 @@ const Icon = ({ d, fill }) => (
   </svg>
 )
 const ICONS = {
+  overview:  'M4 13h7V4H4v9Z M13 20h7v-9h-7v9Z M13 4v5h7V4h-7Z M4 20h7v-5H4v5Z',
   brains:    'M12 3a4 4 0 0 0-4 4 3 3 0 0 0-1 5.8V17a3 3 0 0 0 5 2 3 3 0 0 0 5-2v-4.2A3 3 0 0 0 16 7a4 4 0 0 0-4-4Z',
   skills:    'M12 2 4 6v6c0 5 3.5 8 8 10 4.5-2 8-5 8-10V6l-8-4Z',
   approvals: 'M9 12.5 11 14.5 15.5 10 M12 3 4 6v6c0 5 3.5 8 8 10 4.5-2 8-5 8-10V6l-8-3Z',
@@ -41,6 +43,7 @@ const ICONS = {
 
 // Sidebar sections — the brain's command surfaces. Brains is the primary section.
 const SECTIONS = [
+  { id: 'overview', label: 'Overview' },
   { id: 'brains', label: 'Brains' },
   { id: 'skills', label: 'Skills' },
   { id: 'approvals', label: 'Approvals' },
@@ -52,7 +55,7 @@ const SECTIONS = [
 ]
 
 export default function App() {
-  const [section, setSection] = useState('brains')
+  const [section, setSection] = useState('overview')
   const [connected, setConnected] = useState(false)
   const [voiceActive, setVoiceActive] = useState(false)
   const [metrics, setMetrics] = useState({ llm_calls: 0, tool_calls: 0, sessions: 0, agents_launched: 0 })
@@ -195,6 +198,10 @@ export default function App() {
 
         {/* Main content — one section's blocks at a time */}
         <main className="flex-1 min-w-0 space-y-4">
+          {section === 'overview' && (
+            <ErrorBoundary><OverviewPanel /></ErrorBoundary>
+          )}
+
           {section === 'brains' && (
             <ErrorBoundary><BrainsPanel /></ErrorBoundary>
           )}
