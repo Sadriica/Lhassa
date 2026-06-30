@@ -1,0 +1,16 @@
+# Lhassa — pulses the brain shortly after boot, then every 2 minutes.
+#
+# Install as a USER unit (do NOT install system-wide):
+#   systemctl --user enable --now lhassa-heartbeat.timer
+[Unit]
+Description=Run the Lhassa brain heartbeat periodically
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=2min
+AccuracySec=15s
+Persistent=true
+Unit=lhassa-heartbeat.service
+
+[Install]
+WantedBy=timers.target

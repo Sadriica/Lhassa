@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+# Lhassa — the brain's heartbeat runner (§2.1).
+#
+# Advances the persistent brain one tick under the "hace y duerme" pattern:
+# ensures the brain DB, runs step() once via core.heartbeat.beat(), prints a
+# one-line summary, and exits. No LLM, no cloud — a routine beat is deterministic
+# and costs zero tokens. Fired by the systemd USER timer
+# (scripts/systemd/lhassa-heartbeat.timer).
+#
+# Usage:
+#   scripts/lhassa-heartbeat           # one beat + print summary
+#   scripts/lhassa-heartbeat --quiet   # one beat, no terminal output
+set -euo pipefail
+
+# Resolve the repo root from this script's location, and prefer the venv python.
+LHASSA_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+export LHASSA_ROOT
+PY="$LHASSA_ROOT/.venv/bin/python"
+if [ ! -x "$PY" ]; then
+  PY="python3"
+fi
+
+exec "$PY" - "$@" <<'PYEOF'
+import asyncio
+import os
+import sys
+
+# Make `lhassa` importable regardless of where the script was launched from.
+sys.path.insert(0, os.environ.get("LHASSA_ROOT", os.getcwd()))
+
+from lhassa.core.heartbeat import beat
+
+
+def _summarize(summary: dict) -> str:
+    triggers = summary.get("triggers", 0)
+    if not triggers:
+        return "heartbeat: nothing to do — sleeping."
+    actions = summary.get("actions", 0)
+    deferred = summary.get("deferred", 0)
+    return f"heartbeat: {triggers} trigger(s) — {actions} action(s), {deferred} deferred."
+
+
+quiet = "--quiet" in set(sys.argv[1:])
+summary = asyncio.run(beat())
+if not quiet:
+    print(_summarize(summary))
+PYEOF

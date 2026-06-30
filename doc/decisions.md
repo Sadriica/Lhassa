@@ -5,6 +5,37 @@ build. The source of truth for the architecture is `doc/lhassa-brief.md` (a
 living doc — correct it after each phase per §4). This file records the choices
 made along the way. Newest first.
 
+## 2026-06-29 — Phase 0 complete (the spine)
+
+Built additively over the existing skeleton, 5 vertical slices, all behind gates
+(no AI attribution, pytest green, ruff clean):
+- **0.1** `core/db.py` (SQLite WAL "grande", append-only, `instance_id` on every
+  table/query) + `core/episode.py` (structured Episode from the first commit).
+- **0.2** `core/step.py` + `core/watchlist.py` + `core/actions.py` — the
+  deterministic do-and-sleep loop (zero-token watchlist → fixed action → episode);
+  the `else` branch is the Phase-2 router seam.
+- **0.4** `security/`: signed `Task`, `TrustLevel`/`Origin` (degrade=min, never
+  promote), Ed25519 signing, deny-by-default allowlist (= §2.6) with HITL-per-flow.
+- **0.3** `/checkin` + `/report` + `remote/local_agent.py` — check-in-not-push with
+  desired_state reconciliation; the allowlist gate runs on the machine.
+- **0.5** `core/heartbeat.py` + systemd `lhassa-heartbeat.{service,timer}` +
+  parametrized identity (`Identity`/`load_identity`, org hook #2; directives loaded
+  as identity; `PERSONA_BLOCK` kept stable) + the end-to-end DoD test.
+
+**DoD met** (offline tests + a live in-process smoke with real Ed25519/SQLite/git):
+timer pulses → check-in → reconcile → signed `sync_repo` → allowlist gate → action
+runs → report → two episodes explain *why* → state persists across a DB reopen →
+every row carries `instance_id`. 229 tests, ruff clean.
+
+**Living-doc correction (§4/§7):** the brief lists `OpenCodeAdapter`/`ModelProvider`
+under Phase 0, but Phase 0's loop is deterministic-only and never exercises them —
+so they're **deferred to Phase 2 (ModelProvider, the router/think path) and Phase 4
+(HarnessAdapter)**, where they're actually used. The three org hooks are in place.
+
+Open Phase-0 polish (backlog, not blocking): `desired_state` should map repo names
+→ real paths (the smoke's `sync_repo` failed gracefully because the objetivo wasn't
+resolved to a path); single-writer staging buffer (§2.7) is a later refinement.
+
 ## 2026-06-29 — adopting the implementation brief
 
 - **Brief adopted** as the plan: Lhassa becomes a persistent "brain" (JARVIS) with
