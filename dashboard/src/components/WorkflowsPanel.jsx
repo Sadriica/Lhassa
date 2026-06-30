@@ -1,0 +1,229 @@
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import WorkflowEditor from './WorkflowEditor'
+
+// The "Flows" section: an n8n-style work-flow surface. It lists the stored flows
+// (GET /api/flows) and opens the canvas editor for one. A flow wires
+// trigger → task → gate → output (with branches) and is executable
+// (POST /api/flows/{id}/run). This panel owns the API calls; WorkflowEditor owns
+// the canvas. Task nodes need the org's brains (to pin) + skills (to auto-route by),
+// loaded once and handed to the editor.
+
+function starterFlow() {
+  // A fresh flow opens with its single, required trigger already placed.
+  const id = `flow-${Math.random().toString(36).slice(2, 8)}`
+  return {
+    id,
+    name: 'New flow',
+    description: '',
+    nodes: [{ id: 'trigger-1', kind: 'trigger', config: { type: 'manual' }, label: 'Start' }],
+    edges: [],
+  }
+}
+
+function kindCount(flow, kind) {
+  return (flow.nodes || []).filter((n) => n.kind === kind).length
+}
+
+// ── one flow row in the list ────────────────────────────────────────────────────
+function FlowRow({ flow, onOpen, onDelete, busy }) {
+  const [confirm, setConfirm] = useState(false)
+  const n = (flow.nodes || []).length
+  return (
+    <div className="lh-row" style={{ background: 'var(--lh-surface-2)', display: 'flex', alignItems: 'center', gap: 10 }}>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-sm font-semibold" style={{ color: 'var(--lh-text)' }}>{flow.name || flow.id}</span>
+          <span className="lh-mono text-[10px]" style={{ color: 'var(--lh-text-faint)' }}>{flow.id}</span>
+        </div>
+        {flow.description && (
+          <div className="text-[11px] mt-0.5" style={{ color: 'var(--lh-text-muted)' }}>{flow.description}</div>
+        )}
+        <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+          <span className="lh-badge" title="nodes">{n} node{n === 1 ? '' : 's'}</span>
+          {kindCount(flow, 'task') > 0 && <span className="lh-badge">{kindCount(flow, 'task')} task</span>}
+          {kindCount(flow, 'gate') > 0 && <span className="lh-badge">{kindCount(flow, 'gate')} gate</span>}
+          {kindCount(flow, 'output') > 0 && <span className="lh-badge">{kindCount(flow, 'output')} output</span>}
+          {kindCount(flow, 'branch') > 0 && <span className="lh-badge">{kindCount(flow, 'branch')} branch</span>}
+        </div>
+      </div>
+      <div className="flex gap-1.5 items-center shrink-0">
+        <button type="button" className="lh-btn lh-btn-primary" onClick={() => onOpen(flow.id)} disabled={busy}>Open</button>
+        {confirm ? (
+          <>
+            <button type="button" className="lh-btn lh-btn-danger" onClick={() => onDelete(flow.id)} disabled={busy}>Confirm</button>
+            <button type="button" className="lh-btn" onClick={() => setConfirm(false)}>Cancel</button>
+          </>
+        ) : (
+          <button type="button" className="lh-btn lh-btn-danger" onClick={() => setConfirm(true)} disabled={busy}>Delete</button>
+        )}
+      </div>
+    </div>
+  )
+}
+
+export default function WorkflowsPanel() {
+  const [flows, setFlows] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [editing, setEditing] = useState(null) // the open flow dict (or null = list)
+  const [isNew, setIsNew] = useState(false)
+  const [brains, setBrains] = useState([])
+  const [skills, setSkills] = useState([])
+
+  const loadFlows = useCallback(async () => {
+    try {
+      const r = await fetch('/api/flows')
+      if (!r.ok) throw new Error('flows fetch failed')
+      const d = await r.json()
+      setFlows(Array.isArray(d) ? d : [])
+      setError('')
+    } catch {
+      setError('Could not load flows.')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    loadFlows()
+    // The org context task nodes route against: brains to pin, skills to auto-route.
+    fetch('/api/org/topology')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => setBrains(Array.isArray(d?.nodes) ? d.nodes : []))
+      .catch(() => setBrains([]))
+    fetch('/api/org/skills')
+      .then((r) => (r.ok ? r.json() : []))
+      .then((d) => setSkills(Array.isArray(d) ? d : []))
+      .catch(() => setSkills([]))
+  }, [loadFlows])
+
+  const openFlow = useCallback(async (id) => {
+    setBusy(true)
+    setError('')
+    try {
+      const r = await fetch(`/api/flows/${encodeURIComponent(id)}`)
+      if (!r.ok) throw new Error('open failed')
+      const d = await r.json()
+      setEditing(d)
+      setIsNew(false)
+    } catch {
+      setError('Could not open that flow.')
+    } finally {
+      setBusy(false)
+    }
+  }, [])
+
+  const newFlow = useCallback(() => {
+    setEditing(starterFlow())
+    setIsNew(true)
+  }, [])
+
+  const deleteFlow = useCallback(async (id) => {
+    setBusy(true)
+    setError('')
+    try {
+      const r = await fetch(`/api/flows/${encodeURIComponent(id)}`, { method: 'DELETE' })
+      if (!r.ok && r.status !== 404) throw new Error('delete failed')
+      if (editing?.id === id) { setEditing(null); setIsNew(false) }
+      await loadFlows()
+    } catch {
+      setError('Could not delete that flow.')
+    } finally {
+      setBusy(false)
+    }
+  }, [editing, loadFlows])
+
+  // Save the canvas: POST a new flow, PUT an existing one. Returns {ok, flow|detail}
+  // so the editor can show a 400 {detail} inline.
+  const saveFlow = useCallback(async (flowDict) => {
+    try {
+      const url = isNew ? '/api/flows' : `/api/flows/${encodeURIComponent(flowDict.id)}`
+      const method = isNew ? 'POST' : 'PUT'
+      const r = await fetch(url, {
+        method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(flowDict),
+      })
+      const d = await r.json().catch(() => ({}))
+      if (!r.ok) return { ok: false, detail: d.detail || `Save failed (${r.status})` }
+      setIsNew(false)
+      setEditing(d) // adopt the canonical stored flow (same id → editor keeps the canvas)
+      await loadFlows()
+      return { ok: true, flow: d }
+    } catch {
+      return { ok: false, detail: 'Save failed — network error.' }
+    }
+  }, [isNew, loadFlows])
+
+  const runFlow = useCallback(async (id) => {
+    try {
+      const r = await fetch(`/api/flows/${encodeURIComponent(id)}/run`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}),
+      })
+      const d = await r.json().catch(() => ({}))
+      if (!r.ok) return { ok: false, detail: d.detail || `Run failed (${r.status})` }
+      return { ok: true, run: d }
+    } catch {
+      return { ok: false, detail: 'Run failed — network error.' }
+    }
+  }, [])
+
+  const closeEditor = useCallback(() => { setEditing(null); setIsNew(false) }, [])
+
+  const sorted = useMemo(
+    () => [...flows].sort((a, b) => (a.name || a.id).localeCompare(b.name || b.id)),
+    [flows],
+  )
+
+  if (editing) {
+    return (
+      <div className="lh-card">
+        <WorkflowEditor
+          flow={editing}
+          isNew={isNew}
+          brains={brains}
+          skills={skills}
+          onSave={saveFlow}
+          onRun={runFlow}
+          onClose={closeEditor}
+        />
+      </div>
+    )
+  }
+
+  return (
+    <div className="lh-card">
+      <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+        <div className="flex items-center gap-2">
+          <h2 className="lh-card-title">Flows</h2>
+          <span className="text-[11px]" style={{ color: 'var(--lh-text-faint)' }}>
+            {flows.length} flow{flows.length === 1 ? '' : 's'} · trigger → task → gate → output
+          </span>
+        </div>
+        <div className="flex gap-2 items-center">
+          <button type="button" className="lh-btn" onClick={loadFlows} disabled={busy}>Refresh</button>
+          <button type="button" className="lh-btn lh-btn-primary" onClick={newFlow}>+ New flow</button>
+        </div>
+      </div>
+
+      {error && (
+        <div className="lh-row mb-3" style={{ borderColor: 'rgba(162,62,52,0.45)', color: 'var(--lh-alert)' }}>
+          {error}
+        </div>
+      )}
+
+      {loading ? (
+        <p className="text-xs" style={{ color: 'var(--lh-text-faint)' }}>Loading flows…</p>
+      ) : sorted.length === 0 ? (
+        <div className="lh-row" style={{ color: 'var(--lh-text-faint)' }}>
+          No flows yet. Create one — it starts with a single trigger you can wire into tasks, gates, and outputs.
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {sorted.map((f) => (
+            <FlowRow key={f.id} flow={f} onOpen={openFlow} onDelete={deleteFlow} busy={busy} />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
