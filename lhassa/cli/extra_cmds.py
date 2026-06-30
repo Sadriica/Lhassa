@@ -337,6 +337,46 @@ def tools_text() -> str:
 
 # ── registration ──────────────────────────────────────────────────────────────────
 
+# ── code (run an agentic task through a local AI CLI) ─────────────────────────────
+
+def code_cmd(
+    task: "list[str]" = typer.Argument(..., metavar="TASK", help="The coding task to run."),
+    cli: str = typer.Option(
+        None, "--cli", "-c", help="Which CLI: claude | codex | opencode (auto-detected if omitted)."
+    ),
+) -> None:
+    """Run an AGENTIC coding task through a local AI CLI (claude / codex / opencode).
+
+    Unlike ``lhassa "…"`` (a chat that just answers), this hands the task to the real
+    agentic CLI — it can read/edit files and run tools in the CURRENT directory — using
+    the owner's subscription (no API key), and prints its output.
+    """
+    import os
+
+    from lhassa.agents.local_cli import is_installed, make_agent
+
+    task_text = " ".join(task).strip()
+    if not task_text:
+        _err().print('[error]✗[/] give a task, e.g. [model]lhassa code "add a test for utils.py"[/]')
+        raise typer.Exit(code=1)
+    agent = make_agent(cli)
+    if not is_installed(agent.cli):
+        _err().print(
+            f"[error]✗[/] the [model]{escape(agent.cli)}[/] CLI is not installed "
+            "(claude / codex / opencode)."
+        )
+        raise typer.Exit(code=1)
+    _err().print(
+        f"[dim]running via[/] [model]{escape(agent.cli)}[/] [dim]in {escape(os.getcwd())} …[/]"
+    )
+    try:
+        result = asyncio.run(agent.run(task_text))
+    except Exception as e:  # surface a clean error, never a traceback
+        _err().print(f"[error]✗[/] [accent]{escape(str(e))}[/]")
+        raise typer.Exit(code=1)
+    _out().print(result)
+
+
 def register(app: "typer.Typer") -> None:
     """Attach the action commands to the main Typer app."""
     app.command("status")(status_cmd)
@@ -345,3 +385,4 @@ def register(app: "typer.Typer") -> None:
     app.command("serve")(serve_cmd)
     app.command("beat")(beat_cmd)
     app.command("watch")(watch_cmd)
+    app.command("code")(code_cmd)
