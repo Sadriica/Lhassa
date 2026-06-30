@@ -434,6 +434,19 @@ class Config:
     org_topology_file: str = os.getenv(
         "LHASSA_ORG_TOPOLOGY_FILE", str(Path.home() / ".lhassa" / "org.json")
     )
+    # Lhassa is the PERMANENT root administrator — the default/main brain that always
+    # sits at the top of any org and is never removed or demoted ("orbits everything").
+    # Reorganizing or adding brains happens beneath it.
+    root_admin_id: str = os.getenv("LHASSA_ROOT_ADMIN", "lhassa")
+
+    # ── Skills (first-class, SKILL.md format) ─────────────────────────────────
+    # Skills live as folders here, each with a SKILL.md (YAML frontmatter
+    # name/description/metadata + markdown instructions + optional resources) — the
+    # skills.md / Agent-Skills convention — or a home-grown JSON form. Brains
+    # reference skills by name in BrainNode.skills.
+    skills_dir: str = os.getenv(
+        "LHASSA_SKILLS_DIR", str(Path.home() / ".lhassa" / "skills")
+    )
 
     # ── Modularity — registries, channels, plugins (elastic & modular) ────────
     # Which notify CHANNELS are active (comma-separated); each is a registered,
