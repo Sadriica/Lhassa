@@ -20,6 +20,7 @@ Long work is out of scope — ``step()`` never blocks on a job.
 
 from typing import Optional
 
+from lhassa.agents import verify as verify_agent
 from lhassa.config import Config
 from lhassa.core import actions, db, watchlist
 from lhassa.core.episode import Episode
@@ -77,15 +78,40 @@ async def _judge(
         system = ctx.to_prompt()
         if system:
             opts["system"] = system
+        messages = _build_messages(trigger, ctx)
 
-        result = await chosen.complete(
-            _build_messages(trigger, ctx),
-            model=decision.model,
-            max_tokens=_JUDGMENT_MAX_TOKENS,
-            **opts,
-        )
+        # An objective verify spec on the trigger turns this into a *checked*
+        # judgment: the cheap model answers, the LLM-free verifier inspects it,
+        # and a failed check escalates cheap→smart once (the §2.8 cascade). The
+        # verifier never calls a model — it only reads the produced text.
+        vspec = (getattr(trigger, "params", {}) or {}).get("verify")
+        decision_note = decision.reason
+        if vspec:
+            def _check(completion) -> bool:
+                # Pure, LLM-free gate over the answer text. Errors → not good.
+                return verify_agent.verify(completion.text, spec=vspec).passed
+
+            result = await router.cascade(
+                messages,
+                config=config,
+                provider=chosen,
+                verify=_check,
+                max_tokens=_JUDGMENT_MAX_TOKENS,
+                **opts,
+            )
+            vres = verify_agent.verify(result.text, spec=vspec)
+            verdict = "passed" if vres.passed else "failed"
+            decision_note = f"{decision.reason} | verificado: {verdict}"
+        else:
+            result = await chosen.complete(
+                messages,
+                model=decision.model,
+                max_tokens=_JUDGMENT_MAX_TOKENS,
+                **opts,
+            )
+
         ep.finish(
-            decision=decision.reason,
+            decision=decision_note,
             accion=trigger.action,
             resultado=result.text,
             costo_usd=result.cost_usd,

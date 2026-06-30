@@ -215,6 +215,98 @@ async def test_step_judgment_budget_exceeded_degrades(tmp_path, monkeypatch):
     assert "BudgetExceeded" in eps[0]["resultado"]
 
 
+# ── judgment branch with a verify spec — records result, escalates via cascade ───
+
+
+class ModelAwareProvider:
+    """Offline provider whose answer depends on the model (cheap vs smart)."""
+
+    def __init__(self, *, good_text="GOOD answer", bad_text="bad answer"):
+        self.name = "fake"
+        self.zero_retention = False
+        self._good = good_text
+        self._bad = bad_text
+        self.calls = []
+
+    async def complete(self, messages, *, model=None, max_tokens=1024, **opts):
+        self.calls.append(model)
+        text = self._good if model == "smart-m" else self._bad
+        return Completion(
+            text=text, model=model or "m", input_tokens=5, output_tokens=7,
+            cost_usd=0.002,
+        )
+
+
+def _cascade_config():
+    """A Config whose cheap/smart models differ so the cascade is observable."""
+    from lhassa.config import Config
+
+    cfg = Config()
+    cfg.router_mode = "rules"
+    cfg.model_cheap = "cheap-m"
+    cfg.model_smart = "smart-m"
+    return cfg
+
+
+@pytest.mark.asyncio
+async def test_step_verify_passes_on_cheap_no_escalation(tmp_path, monkeypatch):
+    db = await _init(tmp_path, monkeypatch)
+    from lhassa.core import step
+
+    # Verifier passes on the cheap answer → no escalation.
+    await db.add_task(
+        "inst_personal", "decide_thing", "asunto",
+        params={"verify": {"type": "regex", "pattern": "bad answer"}},
+    )
+    prov = ModelAwareProvider()
+    summary = await step.step("inst_personal", provider=prov, config=_cascade_config())
+    assert summary["judged"] == 1
+
+    # Only the cheap model was called — verify accepted it.
+    assert prov.calls == ["cheap-m"]
+    ep = (await db.load_recent_episodes("inst_personal"))[0]
+    assert "verificado: passed" in ep["decision"]
+    assert ep["resultado"] == "bad answer"
+
+
+@pytest.mark.asyncio
+async def test_step_verify_fails_cheap_escalates_to_smart(tmp_path, monkeypatch):
+    db = await _init(tmp_path, monkeypatch)
+    from lhassa.core import step
+
+    # Cheap answer lacks "GOOD" → verifier fails → cascade escalates once.
+    await db.add_task(
+        "inst_personal", "decide_thing", "asunto",
+        params={"verify": {"type": "regex", "pattern": "GOOD"}},
+    )
+    prov = ModelAwareProvider()
+    summary = await step.step("inst_personal", provider=prov, config=_cascade_config())
+    assert summary["judged"] == 1
+
+    # Cheap then smart — escalated exactly once.
+    assert prov.calls == ["cheap-m", "smart-m"]
+    ep = (await db.load_recent_episodes("inst_personal"))[0]
+    assert "verificado: passed" in ep["decision"]  # smart answer passes
+    assert ep["resultado"] == "GOOD answer"
+
+
+@pytest.mark.asyncio
+async def test_step_verify_fails_both_records_failed(tmp_path, monkeypatch):
+    db = await _init(tmp_path, monkeypatch)
+    from lhassa.core import step
+
+    # Neither answer matches → escalates and still records a failed verdict.
+    await db.add_task(
+        "inst_personal", "decide_thing", "asunto",
+        params={"verify": {"type": "regex", "pattern": "NEVER-THERE"}},
+    )
+    prov = ModelAwareProvider()
+    await step.step("inst_personal", provider=prov, config=_cascade_config())
+    assert prov.calls == ["cheap-m", "smart-m"]
+    ep = (await db.load_recent_episodes("inst_personal"))[0]
+    assert "verificado: failed" in ep["decision"]
+
+
 # ── watchlist.check ──────────────────────────────────────────────────────────────
 
 @pytest.mark.asyncio
