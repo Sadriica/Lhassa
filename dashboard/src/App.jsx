@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
 import StatusBar from './components/StatusBar'
 import BrainsPanel from './components/BrainsPanel'
+import SkillsPanel from './components/SkillsPanel'
 import AgentsPanel from './components/AgentsPanel'
 import MetricsPanel from './components/MetricsPanel'
 import AIUsagePanel from './components/AIUsagePanel'
@@ -21,6 +22,7 @@ const WS_URL = `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${wind
 // Sidebar sections (Warp/Oz "blocks" navigation). Brains is the primary section.
 const SECTIONS = [
   { id: 'brains', label: 'Brains' },
+  { id: 'skills', label: 'Skills' },
   { id: 'approvals', label: 'Approvals' },
   { id: 'tools', label: 'Tools' },
   { id: 'reports', label: 'Reports' },
@@ -166,6 +168,10 @@ export default function App() {
         <main className="flex-1 min-w-0 space-y-4">
           {section === 'brains' && (
             <ErrorBoundary><BrainsPanel /></ErrorBoundary>
+          )}
+
+          {section === 'skills' && (
+            <ErrorBoundary><SkillsPanel /></ErrorBoundary>
           )}
 
           {section === 'approvals' && (
