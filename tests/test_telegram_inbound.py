@@ -10,6 +10,7 @@ brain think runs (``provider.complete`` called) and that the 26-tool agent
 import asyncio
 from types import SimpleNamespace
 
+from lhassa.llm.provider import ProviderNotConfigured
 from lhassa.notify import telegram, telegram_inbound
 
 
@@ -309,12 +310,12 @@ def test_brain_falls_back_to_cloud_when_routine_provider_flakes(monkeypatch):
     cloud = _FakeProvider(reply="cloud says hi")
     cloud.name = "default"
     monkeypatch.setattr(
-        telegram_inbound, "_secondary_provider", lambda config, primary: cloud
+        telegram_inbound, "_fallback_chain", lambda config, primary: [(cloud, None)]
     )
 
     new_offset = asyncio.run(telegram_inbound.poll_once(_cfg(), offset=None))
     assert new_offset == 71
-    assert sent == ["cloud says hi"]  # the cloud fallback answered, not the fallback text
+    assert sent == ["cloud says hi"]  # the fallback chain answered, not the fallback text
     assert len(cloud.calls) == 1
 
 
@@ -433,3 +434,102 @@ def test_brain_provider_not_configured_falls_back(monkeypatch):
     new_offset = asyncio.run(telegram_inbound.poll_once(_cfg(), offset=None))
     assert new_offset == 61
     assert sent == [telegram_inbound._FALLBACK_REPLY]
+
+
+# ── fallback CHAIN: opencode → claude → codex → default ───────────────────────
+
+
+def _named(name, **over):
+    p = _FakeProvider(**over)
+    p.name = name
+    return p
+
+
+def test_fallback_chain_builds_in_order_and_skips_uninstalled(monkeypatch):
+    # Chain follows config order; a CLI provider whose binary is missing is skipped.
+    import lhassa.llm.provider as prov_mod
+
+    providers = {
+        "claude": _named("claude"),
+        "codex": _named("codex"),
+        "default": _named("default"),
+    }
+    resolved = []
+
+    def _fake_get(config, *, name=None):
+        resolved.append(name)
+        return providers[name]
+
+    monkeypatch.setattr(prov_mod, "get_model_provider", _fake_get)
+    # codex CLI not installed → skipped before it is even resolved.
+    monkeypatch.setattr(
+        telegram_inbound.shutil,
+        "which",
+        lambda b: None if b == "codex" else "/usr/bin/" + b,
+    )
+
+    cfg = _cfg(fallback_providers="claude,codex,default")
+    primary = SimpleNamespace(name="opencode")
+    chain = telegram_inbound._fallback_chain(cfg, primary)
+
+    assert [p.name for p, _ in chain] == ["claude", "default"]
+    assert "codex" not in resolved  # uninstalled CLI never resolved
+
+
+def test_fallback_chain_skips_same_kind_as_primary(monkeypatch):
+    import lhassa.llm.provider as prov_mod
+
+    monkeypatch.setattr(
+        telegram_inbound.shutil, "which", lambda b: "/usr/bin/" + b
+    )
+    monkeypatch.setattr(
+        prov_mod, "get_model_provider", lambda config, *, name=None: _named(name)
+    )
+
+    cfg = _cfg(fallback_providers="opencode,claude,default")
+    primary = SimpleNamespace(name="opencode")
+    chain = telegram_inbound._fallback_chain(cfg, primary)
+
+    # opencode is the same kind as the primary → not retried.
+    assert [p.name for p, _ in chain] == ["claude", "default"]
+
+
+def test_chain_walks_cli_subscriptions_before_cloud(monkeypatch):
+    # End to end: opencode (primary) flakes → claude raises → codex raises →
+    # default (cloud) answers. Asserts resolve order and that each was attempted.
+    import lhassa.llm.provider as prov_mod
+
+    payload = {
+        "ok": True,
+        "result": [
+            {"update_id": 80, "message": {"chat": {"id": 123}, "text": "hey"}}
+        ],
+    }
+    monkeypatch.setattr(
+        telegram_inbound.httpx, "AsyncClient", _client_returning(payload)
+    )
+    _patch_brain(monkeypatch, raise_exc=RuntimeError("opencode flaked"))
+    sent = _patch_send(monkeypatch)
+
+    claude = _named("claude", raise_exc=ProviderNotConfigured("no claude"))
+    codex = _named("codex", raise_exc=ProviderNotConfigured("no codex"))
+    cloud = _named("default", reply="cloud answer")
+    providers = {"claude": claude, "codex": codex, "default": cloud}
+    order = []
+
+    def _fake_get(config, *, name=None):
+        order.append(name)
+        return providers[name]
+
+    monkeypatch.setattr(prov_mod, "get_model_provider", _fake_get)
+    monkeypatch.setattr(
+        telegram_inbound.shutil, "which", lambda b: "/usr/bin/" + b
+    )
+
+    cfg = _cfg(fallback_providers="claude,codex,default")
+    new_offset = asyncio.run(telegram_inbound.poll_once(cfg, offset=None))
+
+    assert new_offset == 81
+    assert sent == ["cloud answer"]  # cloud answered only after both CLIs failed
+    assert order == ["claude", "codex", "default"]  # chain resolved in order
+    assert len(claude.calls) == 1 and len(codex.calls) == 1 and len(cloud.calls) == 1
