@@ -22,6 +22,14 @@ file still works off the derived default chart).
 Skills are validated against the specialist registry (:mod:`lhassa.agents.specialists`)
 where possible, but an unknown skill is ALLOWED with a warning — the org stays
 modular and a plugin's domain can be assigned before its code is loaded.
+
+**Permanent administrator invariant.** Lhassa (``config.root_admin_id``) is the
+total administrator and always sits at the root of any org ("orbits everything").
+Mutations enforce this: the administrator can never be removed (:func:`remove_brain`)
+or given a parent / demoted (:func:`set_parent`); a brain created with no parent
+attaches UNDER the administrator (:func:`add_brain`); and "promoting" a brain
+(:func:`set_root`) makes it a top-level coordinator DIRECTLY UNDER the administrator
+rather than unseating Lhassa.
 """
 
 from __future__ import annotations
@@ -34,6 +42,7 @@ from loguru import logger
 from lhassa.org.topology import (
     BrainNode,
     Topology,
+    admin_id,
     load_topology,
     save_topology,
 )
@@ -132,12 +141,19 @@ def add_brain(
     """Create a brain and persist it. Returns the updated topology.
 
     Rejects a duplicate id (before save), a missing parent, or a cycle (caught by
-    :class:`Topology` validation). ``parent=None`` is only valid when there is no
-    other root (i.e. the very first brain).
+    :class:`Topology` validation). You can NEVER create a second root: ``parent=None``
+    defaults the new brain UNDER the permanent administrator (Lhassa), and creating
+    another brain with the administrator's id is rejected.
     """
     node_id = (node_id or "").strip()
     if not node_id:
         raise ManagementError("a brain needs a non-empty id")
+    admin = admin_id(config)
+    if node_id == admin:
+        raise ManagementError(
+            f"{admin!r} is the permanent administrator (Lhassa) and already exists — "
+            "you cannot create a second one."
+        )
     topology = load_topology(config)
     if topology.has(node_id):
         raise ManagementError(f"brain {node_id!r} already exists")
@@ -146,7 +162,8 @@ def add_brain(
         id=node_id,
         role=(role or "department"),
         department=department or None,
-        parent=parent or None,
+        # No second root: an unspecified parent attaches under the administrator.
+        parent=parent or admin,
         skills=skills,
         limits=dict(limits or {}),
     )
@@ -199,7 +216,15 @@ def remove_brain(
     ``force`` the whole subtree under ``node_id`` is removed. Removing the last brain
     (an empty chart) is always rejected by :class:`Topology` validation, so the file
     is never left empty.
+
+    The permanent administrator (Lhassa) can NEVER be removed — it always orbits the
+    org.
     """
+    admin = admin_id(config)
+    if node_id == admin:
+        raise ManagementError(
+            f"{admin!r} is the permanent administrator (Lhassa) and cannot be removed."
+        )
     topology = load_topology(config)
     if not topology.has(node_id):
         raise ManagementError(f"no brain {node_id!r} in the topology")
@@ -227,10 +252,16 @@ def set_parent(
     """RE-PARENT a brain — change WHO COMMANDS WHOM. Returns the updated topology.
 
     Rejects self-parenting and a missing parent; a move that would create a cycle
-    (under one's own descendant) is caught by :class:`Topology` validation. Note the
-    root cannot be re-parented this way (it would leave the chart rootless) — use
-    :func:`set_root` to change who commands everyone.
+    (under one's own descendant) is caught by :class:`Topology` validation. The
+    permanent administrator (Lhassa) cannot be re-parented / demoted — it is always
+    the root; use :func:`set_root` to promote another brain beneath it.
     """
+    admin = admin_id(config)
+    if node_id == admin:
+        raise ManagementError(
+            f"{admin!r} is the permanent administrator (Lhassa) and cannot be given a "
+            "parent or demoted — it always orbits the org."
+        )
     topology = load_topology(config)
     node = topology.node(node_id)  # KeyError if absent
     if new_parent == node_id:
@@ -246,36 +277,31 @@ def set_root(
     *,
     config: "Optional[Config]" = None,
 ) -> Topology:
-    """Promote a brain to ROOT — make it the one that COMMANDS EVERYONE.
+    """PROMOTE a brain to a top-level coordinator under the permanent administrator.
 
-    Re-roots the tree by REVERSING the spine from ``node_id`` up to the old root:
-    ``node_id`` becomes the root (``parent=None``) and each ancestor on that path
-    becomes a child of the next node down the path — so the old root ends up as a
-    child of the node directly below it. Every brain NOT on that path keeps its
-    parent, so all other subtree relationships are preserved intact.
+    Lhassa (``config.root_admin_id``) is the ABSOLUTE, permanent root and is never
+    unseated. "Promoting" ``node_id`` therefore does NOT make it the new absolute
+    root — it makes it a **direct child of the administrator**: a top-level
+    coordinator that commands everything in its own subtree while still answering to
+    Lhassa orbiting above. This reinterprets the old re-root semantics so the
+    administrator can never be demoted.
 
-    If ``node_id`` is already the root this is a no-op (the chart is returned
-    unchanged, not rewritten). Returns the updated topology.
+    No-ops (the chart is returned unchanged, not rewritten):
+      - promoting the administrator itself (it already commands everyone), or
+      - promoting a brain that is ALREADY a direct child of the administrator.
+
+    Returns the updated topology.
     """
+    admin = admin_id(config)
     topology = load_topology(config)
     node = topology.node(node_id)  # KeyError if absent
-    if node.parent is None:
-        return topology  # already commands everyone
+    if node_id == admin:
+        return topology  # the administrator already commands everyone
+    if node.parent == admin:
+        return topology  # already a top-level coordinator under the administrator
 
-    # Walk the spine node → … → old root.
-    path: list[BrainNode] = []
-    cur: Optional[BrainNode] = node
-    while cur is not None:
-        path.append(cur)
-        cur = topology.node(cur.parent) if cur.parent else None
-
-    new_parent: dict[str, Optional[str]] = {n.id: n.parent for n in topology.nodes()}
-    new_parent[path[0].id] = None  # the promoted brain is the new root
-    for i in range(1, len(path)):
-        new_parent[path[i].id] = path[i - 1].id  # each ancestor flips downward
-
-    nodes = [replace(n, parent=new_parent[n.id]) for n in topology.nodes()]
-    return _persist(nodes, config)
+    new_node = replace(node, parent=admin)
+    return _persist(_replace_one(topology, node_id, new_node), config)
 
 
 # ── convenience wrappers ────────────────────────────────────────────────────────────
@@ -311,16 +337,20 @@ def describe(config: "Optional[Config]" = None) -> dict:
 
         {
           "root": "<root id>",
+          "admin": "<permanent administrator id>",
           "standalone": bool,
           "nodes": [
             {"id", "role", "department", "parent", "skills": [...], "limits": {...},
-             "children": [child ids], "is_leaf": bool},
+             "children": [child ids], "is_leaf": bool, "is_admin": bool},
             ...
           ]
         }
 
-    Node order is the topology's deterministic insertion order.
+    ``admin`` (== ``root``, since Lhassa is always pinned to the root) and the
+    per-node ``is_admin`` flag let the UI show which brain orbits everything. Node
+    order is the topology's deterministic insertion order.
     """
+    admin = admin_id(config)
     topology = load_topology(config)
     nodes = [
         {
@@ -332,11 +362,13 @@ def describe(config: "Optional[Config]" = None) -> dict:
             "limits": dict(n.limits),
             "children": [c.id for c in topology.children_of(n.id)],
             "is_leaf": topology.is_leaf(n.id),
+            "is_admin": n.id == admin,
         }
         for n in topology.nodes()
     ]
     return {
         "root": topology.root().id,
+        "admin": admin,
         "standalone": topology.is_standalone(),
         "nodes": nodes,
     }

@@ -110,8 +110,11 @@ def _parse_limits(raw: str | None) -> dict:
 # ── tree ──────────────────────────────────────────────────────────────────────────
 
 
-def _node_label(node) -> str:
-    bits = [node.id, f"[{node.role}]"]
+def _node_label(node, *, is_admin: bool = False) -> str:
+    bits = ["★" if is_admin else None, node.id, f"[{node.role}]"]
+    bits = [b for b in bits if b]
+    if is_admin:
+        bits.append("admin")
     if node.department:
         bits.append(f"dept={node.department}")
     if node.skills:
@@ -124,18 +127,23 @@ def _node_label(node) -> str:
 def tree_cmd(
     json_out: bool = typer.Option(False, "--json", help="Emit the chart as JSON."),
 ) -> None:
-    """Print the org hierarchy as a tree (root → … → leaves)."""
+    """Print the org hierarchy as a tree (root → … → leaves).
+
+    The permanent administrator (Lhassa) is the root and is marked ``★ … admin``.
+    """
     topology = _load()
     if json_out:
         _dump_json(topology.to_list())
         return
 
     root = topology.root()
-    rich_tree = Tree(_node_label(root))
+    rich_tree = Tree(_node_label(root, is_admin=topology.is_admin(root.id)))
 
     def _attach(parent_node, parent_widget):
         for child in topology.children_of(parent_node.id):
-            widget = parent_widget.add(_node_label(child))
+            widget = parent_widget.add(
+                _node_label(child, is_admin=topology.is_admin(child.id))
+            )
             _attach(child, widget)
 
     _attach(root, rich_tree)
@@ -156,12 +164,13 @@ def list_cmd(
         return
     from rich.table import Table
 
+    admin = topology.root().id  # the permanent administrator is pinned to the root
     table = Table(title="Org brains")
     for col in ("id", "role", "department", "parent", "skills", "limits"):
         table.add_column(col)
     for r in rows:
         table.add_row(
-            str(r["id"]),
+            ("★ " if r["id"] == admin else "") + str(r["id"]),
             str(r["role"]),
             str(r["department"] or "—"),
             str(r["parent"] or "—  (root)"),
@@ -365,7 +374,10 @@ def move_cmd(
     parent: str = typer.Option(..., "--parent", help="The new parent brain id."),
     json_out: bool = typer.Option(False, "--json", help="Emit the chart as JSON."),
 ) -> None:
-    """Re-parent a brain — change WHO COMMANDS WHOM."""
+    """Re-parent a brain — change WHO COMMANDS WHOM.
+
+    The permanent administrator (Lhassa) cannot be moved/demoted — that is rejected.
+    """
     from lhassa.org import management, topology as topo
 
     config = _config()
@@ -381,10 +393,15 @@ def move_cmd(
 
 
 def promote_cmd(
-    node_id: str = typer.Argument(..., help="Brain id to promote to root."),
+    node_id: str = typer.Argument(..., help="Brain id to promote."),
     json_out: bool = typer.Option(False, "--json", help="Emit the chart as JSON."),
 ) -> None:
-    """Promote a brain to ROOT — make it the one that COMMANDS EVERYONE."""
+    """Promote a brain to a TOP-LEVEL coordinator under the administrator.
+
+    Lhassa stays the permanent absolute root; the promoted brain becomes a direct
+    child of the administrator (it commands everything in its own subtree), never
+    unseating Lhassa.
+    """
     from lhassa.org import management, topology as topo
 
     config = _config()
@@ -396,7 +413,10 @@ def promote_cmd(
     if json_out:
         _dump_json(updated.to_list())
     else:
-        _out().print(f"Promoted {node_id!r} to root (it now commands everyone).")
+        _out().print(
+            f"Promoted {node_id!r} to a top-level coordinator under "
+            f"{updated.admin().id!r} (Lhassa stays the permanent root)."
+        )
 
 
 # ── show (one brain) ───────────────────────────────────────────────────────────────
@@ -415,6 +435,7 @@ def show_cmd(
     payload = node.to_dict()
     payload["children"] = [c.id for c in topology.children_of(node_id)]
     payload["is_leaf"] = topology.is_leaf(node_id)
+    payload["is_admin"] = topology.is_admin(node_id)
     if json_out:
         _dump_json(payload)
         return
@@ -426,6 +447,7 @@ def show_cmd(
     out.print(f"skills:     {', '.join(node.skills) or '—'}")
     out.print(f"limits:     {json.dumps(node.limits, ensure_ascii=False)}")
     out.print(f"children:   {', '.join(payload['children']) or '— (leaf)'}")
+    out.print(f"admin:      {'★ yes (permanent root)' if payload['is_admin'] else 'no'}")
 
 
 # ── skills (what CAN be assigned) ──────────────────────────────────────────────────

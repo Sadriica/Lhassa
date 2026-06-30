@@ -65,7 +65,10 @@ def test_tree_json(tmp_path, monkeypatch):
     res = runner.invoke(app, ["org", "tree", "--json"])
     assert res.exit_code == 0
     rows = json.loads(res.output)
-    assert {r["id"] for r in rows} == {"general", "dept:optimizacion", "dept:finanzas"}
+    # Lhassa (the permanent administrator) is injected at the root on load.
+    assert {r["id"] for r in rows} == {
+        "lhassa", "general", "dept:optimizacion", "dept:finanzas",
+    }
 
 
 def test_tree_pretty_runs(tmp_path, monkeypatch):
@@ -86,13 +89,14 @@ def test_list_json(tmp_path, monkeypatch):
 
 
 def test_default_derivation_when_no_file(tmp_path, monkeypatch):
-    # No topology file written → derived standalone single brain.
+    # No topology file written → derived standalone single brain = Lhassa (admin).
     _use_tmp(tmp_path, monkeypatch)
     res = runner.invoke(app, ["org", "list", "--json"])
     assert res.exit_code == 0
     rows = json.loads(res.output)
     assert len(rows) == 1
-    assert rows[0]["id"] == "general"
+    assert rows[0]["id"] == "lhassa"
+    assert rows[0]["role"] == "administrator"
 
 
 # ── add ─────────────────────────────────────────────────────────────────────────
@@ -120,15 +124,17 @@ def test_add_persists(tmp_path, monkeypatch):
 
 
 def test_add_into_empty_creates_hierarchy(tmp_path, monkeypatch):
-    # Fresh (no file) → standalone general; adding a child builds a 2-level chart.
+    # Fresh (no file) → standalone Lhassa; adding a brain with no parent attaches it
+    # UNDER the administrator (you can never create a second root).
     topo_file = _use_tmp(tmp_path, monkeypatch)
     res = runner.invoke(
         app,
-        ["org", "add", "--id", "dept:x", "--parent", "general", "--department", "x"],
+        ["org", "add", "--id", "dept:x", "--department", "x"],
     )
     assert res.exit_code == 0
-    ids = {n["id"] for n in json.loads(topo_file.read_text())}
-    assert ids == {"general", "dept:x"}
+    persisted = {n["id"]: n for n in json.loads(topo_file.read_text())}
+    assert set(persisted) == {"lhassa", "dept:x"}
+    assert persisted["dept:x"]["parent"] == "lhassa"
 
 
 def test_add_invalid_parent_fails(tmp_path, monkeypatch):
@@ -184,7 +190,7 @@ def test_remove_subtree_with_force(tmp_path, monkeypatch):
     removed = set(json.loads(res.output)["removed"])
     assert removed == {"ops", "dept:optimizacion"}
     ids = {n["id"] for n in json.loads(topo_file.read_text())}
-    assert ids == {"general"}
+    assert ids == {"lhassa", "general"}
 
 
 def test_remove_missing_fails(tmp_path, monkeypatch):
@@ -205,7 +211,8 @@ def test_route_preview(tmp_path, monkeypatch):
     )
     assert res.exit_code == 0
     payload = json.loads(res.output)
-    assert payload["path"] == ["general", "dept:optimizacion"]
+    # the path now starts at the permanent administrator (Lhassa) at the root.
+    assert payload["path"] == ["lhassa", "general", "dept:optimizacion"]
     assert payload["leaf"] == "dept:optimizacion"
 
 
@@ -290,7 +297,7 @@ def test_move_reparents(tmp_path, monkeypatch):
     assert persisted["dept:finanzas"]["parent"] == "dept:optimizacion"
 
 
-def test_promote_makes_root(tmp_path, monkeypatch):
+def test_promote_makes_top_level_under_admin(tmp_path, monkeypatch):
     topo_file = _use_tmp(tmp_path, monkeypatch)
     topo_file.write_text(
         json.dumps([
@@ -303,9 +310,26 @@ def test_promote_makes_root(tmp_path, monkeypatch):
     res = runner.invoke(app, ["org", "promote", "dept:opt", "--json"])
     assert res.exit_code == 0
     by_id = {n["id"]: n for n in json.loads(res.output)}
-    assert by_id["dept:opt"]["parent"] is None
-    assert by_id["ops"]["parent"] == "dept:opt"
-    assert by_id["general"]["parent"] == "ops"
+    # Lhassa stays the permanent root; dept:opt becomes a direct child of it.
+    assert by_id["lhassa"]["parent"] is None
+    assert by_id["dept:opt"]["parent"] == "lhassa"
+    assert by_id["general"]["parent"] == "lhassa"
+    assert by_id["ops"]["parent"] == "general"
+
+
+def test_remove_admin_rejected(tmp_path, monkeypatch):
+    topo_file = _use_tmp(tmp_path, monkeypatch)
+    _seed_flat(topo_file)
+    res = runner.invoke(app, ["org", "remove", "--id", "lhassa"])
+    assert res.exit_code == 1
+
+
+def test_tree_marks_admin(tmp_path, monkeypatch):
+    topo_file = _use_tmp(tmp_path, monkeypatch)
+    _seed_flat(topo_file)
+    res = runner.invoke(app, ["org", "tree"])
+    assert res.exit_code == 0
+    assert "★" in res.output and "admin" in res.output
 
 
 # ── show / skills ──────────────────────────────────────────────────────────────────
