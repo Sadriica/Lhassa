@@ -10,8 +10,10 @@ point:
     bottleneck and keeps most decisions inside the department (the brief's golden
     rule, §3-Fase 7).
   - :class:`DepartmentBrain` **executes** with ITS OWN identity. ``handle`` runs the
-    assigned work through an *injectable* ``executor`` (offline-testable; no real
-    model required) and returns a typed ``TASK_RESULT`` correlated by ``corr_id``.
+    assigned work through an *injectable* ``executor`` that defaults to the real
+    department brain (:func:`lhassa.org.executor.brain_executor`, offline by default
+    so it stays test-safe and spends nothing) and returns a typed ``TASK_RESULT``
+    correlated by ``corr_id``.
     Each handled task logs an ``Episode`` (``despertar_por="org"``) onto the audit
     plane — the episodes table already in place.
 
@@ -25,11 +27,13 @@ RBAC gates every privileged step via :mod:`lhassa.org.rbac`.
 """
 
 import inspect
+from functools import partial
 from typing import Any, Awaitable, Callable, Optional, Union
 
 from lhassa.config import Config
 from lhassa.core.episode import Episode
-from lhassa.org import messaging, rbac
+from lhassa.org import messaging, rbac, routing
+from lhassa.org.executor import brain_executor
 from lhassa.org.messaging import Message, MessageKind
 from lhassa.security import approval
 
@@ -52,23 +56,6 @@ class SelfApprovalError(PermissionError):
 def department_identity(department: str) -> str:
     """The logical brain identity for a department (``"dept:<name>"``)."""
     return f"dept:{department}"
-
-
-def _default_executor(goal: str, *, department: str) -> dict:
-    """Deterministic, offline default executor.
-
-    Records that the DEPARTMENT did the work (never the general) without calling a
-    model, so the core is offline-testable out of the box. A real deployment
-    injects an executor that drives the department brain's one-turn think path.
-
-    [SUPUESTO] Wiring the default to the live brain path (``core.step``) is
-    deferred to a later Fase-7 slice; the seam is the injectable ``executor``.
-    """
-    return {
-        "ok": True,
-        "department": department,
-        "summary": f"{department} handled: {goal}",
-    }
 
 
 async def _run_executor(executor: Executor, goal: str, *, department: str) -> Any:
@@ -154,6 +141,28 @@ class GeneralBrain:
         await messaging.enqueue(msg, instance_id=self.instance_id)
         return msg
 
+    async def assign_auto(
+        self,
+        goal: str,
+        *,
+        by_actor: str,
+        high_risk: bool = False,
+    ) -> Message:
+        """Route ``goal`` to the best department (deterministically) and assign it.
+
+        Uses :func:`lhassa.org.routing.route` — a table-driven keyword match, NO
+        LLM — to choose the target department, then delegates to :meth:`assign`. The
+        general still only COORDINATES: it picks where the work goes and enqueues
+        the typed ``TASK_ASSIGN``; it never executes the work itself.
+        """
+        to_department = routing.route(goal)
+        return await self.assign(
+            goal,
+            to_department=to_department,
+            by_actor=by_actor,
+            high_risk=high_risk,
+        )
+
     async def collect(self, corr_id: str) -> list[Message]:
         """Gather the ``TASK_RESULT``\\ (s) correlated to an assignment's ``corr_id``.
 
@@ -196,9 +205,10 @@ class DepartmentBrain:
     ) -> Message:
         """Execute an assigned ``TASK_ASSIGN`` and return a typed ``TASK_RESULT``.
 
-        The department runs the work through ``executor`` (default: an offline,
-        deterministic callable) under ITS OWN identity — the general never runs
-        here. The result is correlated to the assignment by ``corr_id`` and an
+        The department runs the work through ``executor`` (default: the real
+        department brain :func:`brain_executor`, offline unless turned live) under
+        ITS OWN identity — the general never runs here. The result is correlated to
+        the assignment by ``corr_id`` and an
         ``Episode`` (``despertar_por="org"``) is written to the audit plane.
 
         Multi-person approval: for a ``high_risk`` assignment, ``approver`` must be
@@ -235,7 +245,12 @@ class DepartmentBrain:
                 )
 
         # ── Execute on the DEPARTMENT side (never the general) ──────────────────
-        executor = executor or _default_executor
+        # Default: the real department brain (``brain_executor``), bound to THIS
+        # department's instance_id. It is offline by default (LHASSA_ORG_LIVE) so
+        # the seam stays test/offline-safe; production turns it live or injects a
+        # provider. Still fully injectable for tests/demos.
+        if executor is None:
+            executor = partial(brain_executor, instance_id=self.instance_id)
         result = await _run_executor(executor, goal, department=self.department)
 
         # ── Audit plane: one Episode per handled task ───────────────────────────
