@@ -30,7 +30,12 @@ from typing import TYPE_CHECKING, Callable, Optional
 
 from loguru import logger
 
-from lhassa.llm.provider import Completion, ModelProvider, get_model_provider
+from lhassa.llm.provider import (
+    Completion,
+    ModelProvider,
+    PseudonymizingProvider,
+    get_model_provider,
+)
 
 if TYPE_CHECKING:
     from lhassa.config import Config
@@ -60,23 +65,58 @@ class Decision:
 # ── Axis 1: provider (cost + data sensitivity) ────────────────────────────────
 
 
-def pick_provider(*, sensitive: bool, config: "Config") -> ModelProvider:
-    """Pick a provider. Sensitive data → a zero-retention provider if available.
+def _maybe_pseudonymize(provider: ModelProvider, config: "Config") -> ModelProvider:
+    """Wrap a non-local provider in the pseudonymization hook when enabled.
 
-    If the data is sensitive but no zero-retention provider is configured, fall
-    back to the default and log a warning (the call still happens, but the
-    operator is told their data may be retained).
+    The hook RELAXES for local providers: a local model runs on the machine, so
+    the data never leaves the box and there is nothing to scrub (§3-Fase 6).
     """
+    if getattr(provider, "is_local", False):
+        return provider
+    if getattr(config, "pseudonymize_remote", False):
+        return PseudonymizingProvider(provider)
+    return provider
+
+
+def pick_provider(*, sensitive: bool, config: "Config", hard: bool = False) -> ModelProvider:
+    """Pick a provider by data sensitivity and routine-vs-hard signal (§2.4, §3-Fase 6).
+
+    Routine/heartbeat thinking (``hard=False``) prefers the LOCAL model when it is
+    configured — its ``is_local`` keeps the data on the box, so pseudonymization is
+    not applied. ``config.heartbeat_provider`` steers this: ``cloud`` never uses
+    local; ``local`` forces local for the routine path (falling back to cloud with
+    a warning if unconfigured); ``auto`` uses local when ``local_model_url`` is set.
+
+    The HARD path always goes to the cloud smart model. Sensitive data still
+    routes to a zero-retention provider (and warns if none is configured). The
+    cloud path is wrapped in the pseudonymization hook when ``pseudonymize_remote``
+    is on; the local path is never wrapped.
+    """
+    heartbeat = (getattr(config, "heartbeat_provider", "auto") or "auto").lower()
+    local_url = (getattr(config, "local_model_url", "") or "").strip()
+    routine = not hard
+
+    # Routine/heartbeat path → prefer the local model when allowed.
+    if routine and heartbeat != "cloud":
+        wants_local = heartbeat == "local" or (heartbeat == "auto" and bool(local_url))
+        if wants_local:
+            if local_url:
+                # is_local=True → not wrapped; the privacy hook relaxes.
+                return get_model_provider(config, name="local")
+            if heartbeat == "local":
+                logger.warning(
+                    "router: heartbeat_provider='local' but local_model_url is "
+                    "unset — falling back to the cloud provider."
+                )
+
+    # Cloud path (hard, cloud-forced, or no local backend available).
     default = get_model_provider(config)
-    if not sensitive:
-        return default
-    if default.zero_retention:
-        return default
-    logger.warning(
-        "router: sensitive data but no zero-retention provider available; "
-        f"falling back to {default.name!r} (may retain data)."
-    )
-    return default
+    if sensitive and not default.zero_retention:
+        logger.warning(
+            "router: sensitive data but no zero-retention provider available; "
+            f"falling back to {default.name!r} (may retain data)."
+        )
+    return _maybe_pseudonymize(default, config)
 
 
 # ── Axis 2 (delegate): pick a harness by cost / capability / plan ─────────────
@@ -124,8 +164,11 @@ def pick_model(provider: ModelProvider, *, hard: bool, config: "Config") -> str:
     """Cheap model for routine judgment, smart model for hard judgment.
 
     With ``LHASSA_ROUTER=off`` routing is disabled and ``config.model`` is always
-    used. ``provider`` is accepted for a future per-provider model map.
+    used. A local provider serves a single model, so it always uses
+    ``config.local_model`` (its served name) regardless of the cheap/smart axis.
     """
+    if getattr(provider, "is_local", False):
+        return (getattr(config, "local_model", "") or "") or config.model
     if getattr(config, "router_mode", "rules") == "off":
         return config.model
     return config.model_smart if hard else config.model_cheap
@@ -189,7 +232,6 @@ def decide(
         logger.info("router: delegation requested but no harness available — thinking")
 
     sensitive = _is_sensitive(trigger, ctx)
-    provider = pick_provider(sensitive=sensitive, config=config)
 
     if force_think:
         hard = True
@@ -198,6 +240,9 @@ def decide(
     else:
         hard = _is_hard(trigger, ctx)
 
+    # Thread the routine/hard signal into provider selection so the heartbeat
+    # (routine) path can prefer the local model (§3-Fase 6).
+    provider = pick_provider(sensitive=sensitive, config=config, hard=hard)
     model = pick_model(provider, hard=hard, config=config)
 
     forced = "think" if force_think else "justdo" if force_justdo else ""

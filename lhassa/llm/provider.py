@@ -58,6 +58,10 @@ class ModelProvider(Protocol):
 
     name: str
     zero_retention: bool
+    # Marker so callers can introspect *where* a provider runs without importing
+    # a concrete class. A local backend sets this True; everything else defaults
+    # to False. Used by the router to relax the pseudonymization hook (§3-Fase 6).
+    is_local: bool = False
 
     async def complete(
         self, messages: list[dict], *, model: str | None = None, max_tokens: int = 1024, **opts
@@ -82,6 +86,7 @@ class GatewayProvider:
     """
 
     name = "default"
+    is_local = False
 
     def __init__(self, config: "Config", *, gateway: Any | None = None):
         self._config = config
@@ -121,6 +126,7 @@ class OpenCodeZenProvider:
 
     name = "zen"
     zero_retention = False
+    is_local = False
 
     def __init__(self, config: "Config | None" = None):
         self._config = config
@@ -131,13 +137,167 @@ class OpenCodeZenProvider:
         raise ProviderNotConfigured("opencode Zen not configured")
 
 
+# Short timeout: a local heartbeat must fail fast and degrade, not hang.
+_LOCAL_TIMEOUT = 30.0
+
+
+class LocalModelProvider:
+    """Heartbeat/routine provider backed by a LOCAL OpenAI-compatible server.
+
+    Talks to ``{local_model_url}/chat/completions`` (Ollama, llama.cpp, LM Studio,
+    …) over httpx, with no API key. Because inference runs on this machine the
+    data never leaves the box, so ``zero_retention`` is True and ``is_local`` is
+    True — the router uses the latter to relax the pseudonymization hook.
+
+    Inference is free, so every ``Completion`` reports ``cost_usd=0.0``. On a
+    connection failure, a non-200 response, or an unparseable body it raises
+    ``ProviderNotConfigured`` so the existing router/step degradation path kicks
+    in instead of crashing the heartbeat.
+    """
+
+    name = "local"
+    zero_retention = True
+    is_local = True
+
+    def __init__(self, config: "Config", *, client_factory: Any | None = None):
+        self._config = config
+        # Injectable for tests (an httpx.AsyncClient over a MockTransport); in
+        # production a fresh short-timeout client per call.
+        self._client_factory = client_factory
+
+    def _url(self) -> str:
+        url = (getattr(self._config, "local_model_url", "") or "").strip()
+        if not url:
+            raise ProviderNotConfigured(
+                "local model not configured (set LHASSA_LOCAL_MODEL_URL)"
+            )
+        return url
+
+    async def complete(
+        self, messages: list[dict], *, model: str | None = None, max_tokens: int = 1024, **opts
+    ) -> Completion:
+        url = self._url()
+        endpoint = url.rstrip("/") + "/chat/completions"
+        model = model or (getattr(self._config, "local_model", "") or "") or "local"
+
+        payload_messages = list(messages)
+        system = opts.get("system")
+        if isinstance(system, str) and system:
+            payload_messages = [{"role": "system", "content": system}, *payload_messages]
+
+        body: dict[str, Any] = {
+            "model": model,
+            "messages": payload_messages,
+            "max_tokens": max_tokens,
+        }
+        if "temperature" in opts and opts["temperature"] is not None:
+            body["temperature"] = opts["temperature"]
+
+        import httpx
+
+        if self._client_factory is not None:
+            client = self._client_factory()
+        else:
+            client = httpx.AsyncClient(timeout=_LOCAL_TIMEOUT)
+
+        try:
+            try:
+                resp = await client.post(endpoint, json=body)
+            except Exception as exc:  # connection refused / timeout / DNS …
+                raise ProviderNotConfigured(
+                    f"local model unreachable at {url}: {exc}"
+                ) from exc
+            if resp.status_code != 200:
+                raise ProviderNotConfigured(
+                    f"local model unreachable at {url}: HTTP {resp.status_code}"
+                )
+            try:
+                data = resp.json()
+                text = data["choices"][0]["message"]["content"]
+            except Exception as exc:
+                raise ProviderNotConfigured(
+                    f"local model unreachable at {url}: bad response ({exc})"
+                ) from exc
+        finally:
+            aclose = getattr(client, "aclose", None)
+            if aclose is not None:
+                try:
+                    await aclose()
+                except Exception:
+                    pass
+
+        usage = data.get("usage") or {}
+        return Completion(
+            text=text or "",
+            model=data.get("model") or model,
+            input_tokens=int(usage.get("prompt_tokens") or 0),
+            output_tokens=int(usage.get("completion_tokens") or 0),
+            cost_usd=0.0,
+        )
+
+
+class PseudonymizingProvider:
+    """Wraps a REMOTE ModelProvider to scrub PII before it leaves the machine.
+
+    Before ``complete()`` it pseudonymizes the ``messages`` (and any ``system``
+    opt) with a single shared mapping; after, it de-pseudonymizes the returned
+    text so the caller sees the real values back. ``name``/``zero_retention``
+    proxy the wrapped provider; ``is_local`` is False (a wrapped provider is, by
+    construction, the remote path). This enforces "pseudonymize before sending to
+    a non-local provider" at the provider boundary, with no change to core/step.
+    """
+
+    is_local = False
+
+    def __init__(self, wrapped: ModelProvider):
+        self._wrapped = wrapped
+
+    @property
+    def name(self) -> str:
+        return getattr(self._wrapped, "name", "wrapped")
+
+    @property
+    def zero_retention(self) -> bool:
+        return bool(getattr(self._wrapped, "zero_retention", False))
+
+    async def complete(
+        self, messages: list[dict], *, model: str | None = None, max_tokens: int = 1024, **opts
+    ) -> Completion:
+        from lhassa.privacy import depseudonymize, pseudonymize_messages
+
+        system = opts.get("system")
+        # Scrub system + messages together so one shared mapping covers both
+        # (avoids placeholder collisions between independent scrubs).
+        combo = list(messages)
+        has_system = isinstance(system, str) and bool(system)
+        if has_system:
+            combo = [*combo, {"role": "system", "content": system}]
+        scrubbed_combo, mapping = pseudonymize_messages(combo)
+
+        if has_system:
+            scrubbed_messages = scrubbed_combo[:-1]
+            opts = dict(opts)
+            opts["system"] = scrubbed_combo[-1].get("content", system)
+        else:
+            scrubbed_messages = scrubbed_combo
+
+        result = await self._wrapped.complete(
+            scrubbed_messages, model=model, max_tokens=max_tokens, **opts
+        )
+        result.text = depseudonymize(result.text, mapping)
+        return result
+
+
 def get_model_provider(config: "Config", *, name: str | None = None) -> ModelProvider:
     """Factory for the active ModelProvider. Defaults to the GatewayProvider.
 
     ``name="zen"`` returns the (not-yet-configured) opencode Zen stub.
+    ``name="local"`` returns the LOCAL OpenAI-compatible heartbeat provider.
     """
     if name == "zen":
         return OpenCodeZenProvider(config)
+    if name == "local":
+        return LocalModelProvider(config)
     return GatewayProvider(config)
 
 
