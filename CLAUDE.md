@@ -164,12 +164,38 @@ chart (who commands whom). `org/templates.py` — use-case presets built **under
 Lhassa** (`code-review`, `bug-investigation`, `refactor-migration`,
 `incident-response`, the multi-level `software-factory`); `lhassa org
 templates|apply`. `org/relationships.py` — a typed **overlay** graph (separate file,
-`LHASSA_ORG_RELATIONSHIPS_FILE`) layered on the command tree: closed edge kinds
-`reads` / `notifies` / `reviews` (directed) + `collaborates` (symmetric);
-`permits(a,b,kind)` is the pure read seam; `/api/org/relationships*`. Multi-person
-approval: proposer ≠ approver for high-risk. (`flows.json` /
-`LHASSA_FLOWS_FILE` is a reserved config path; work-flow graphs are not yet a
-surface.)
+`~/.lhassa/relationships.json`, `LHASSA_ORG_RELATIONSHIPS_FILE`) layered on the
+command tree: closed edge kinds `reads` / `notifies` / `reviews` (directed A→B) +
+`collaborates` (symmetric, stored canonically); `permits(from, to, kind)` is the pure
+runtime read seam ("may A read B?"); every mutating op validates (real nodes, known
+kind, no self-edge) before it writes. `/api/org/relationships` (+ `/kinds`,
+`POST`/`DELETE`); the dashboard Brains canvas draws the edges as a dashed per-kind
+overlay (legend + toggles) and the inspector adds/removes them. Multi-person approval:
+proposer ≠ approver for high-risk.
+
+## Work-flows (`flows/`)
+
+`flows/model.py` (`Flow`/`FlowNode`/`FlowEdge`, a validated DAG — closed `NodeKind`:
+`trigger`/`task`/`gate`/`output`/`branch`) + `flows/store.py` (`FlowStore` over
+`~/.lhassa/flows.json`, `LHASSA_FLOWS_FILE`) + `flows/engine.py` (`run_flow`). A flow
+wires `trigger → task → gate → output` (+ `branch`); the engine walks from the single
+trigger and threads each node's output along the edges. **Task** nodes route HYBRID (a
+pinned `config.brain` wins, else the node's `skill` auto-routes through the org
+topology) via the injectable `Executor` (default `org/executor.py:brain_executor`,
+offline + $0 unless `LHASSA_ORG_LIVE`); a **gate** is verify/approval and a non-pass
+halts the path. `api/flow_routes.py`: `GET/POST /api/flows`,
+`GET/PUT/PATCH/DELETE /api/flows/{id}`, `POST /api/flows/{id}/run`. The dashboard
+"Flows" section is the n8n-style canvas. No dedicated `lhassa` CLI subcommand yet.
+
+## Agentic run surface (`api/code_routes.py`)
+
+`POST /api/code {task, cli?}` launches an agentic coding task through a local AI CLI
+(`agents/local_cli.py`: claude/codex/opencode, on subscription, no key) and streams it
+over the WebSocket as `agent_started` / `agent_token` / `agent_done`;
+`GET /api/code/clis` lists installed CLIs + the auto-detected default,
+`GET /api/code/runs` lists recent runs. The dashboard "Run" section is the UI; the CLI
+equivalent is `lhassa code "<task>"`. The `lhassa-app` service includes `~/.local/bin`
+on PATH so it finds the `claude` CLI.
 
 ## Skills (first-class, 3-layer)
 
@@ -217,10 +243,12 @@ WebSocket `/ws` fan-out (`state.broadcast(dict)`). Routes include `/api/status`,
 `/api/llm/{ledger,limits,ccusage}`, `/api/approvals`, `/api/audit`,
 `/api/scheduled`, `/api/tools` (+ graduate), `/api/reports`, `/api/projections`,
 `/api/fleet`, `/api/config` (GET/PATCH — the settings service), `/api/skills/*`,
-`/api/org/*` (topology, brains, route, templates, relationships), `/api/code` (+
-`/clis`, `/runs` — the agentic local-CLI door), and `/checkin` + `/report`
-(check-in, not push). The dashboard panels live in `dashboard/src/components/`
-(Overview, Settings, Brains flow/tree, Templates, Skills, …). The always-on
+`/api/org/*` (topology, brains, route, templates, relationships),
+`/api/flows[/{id}[/run]]` (the work-flow editor), `/api/code` (+ `/clis`, `/runs` —
+the agentic local-CLI door), and `/checkin` + `/report` (check-in, not push). The
+dashboard sections are Overview, Brains (Flow/Tree/Templates + the relationship
+overlay), Skills, **Run** (agentic), **Flows** (work-flow editor), Settings, Reports,
+Fleet, Activity (`dashboard/src/components/`). The always-on
 services run **API-only** (no audio); `docker/run_api.py` is the audio-free
 entrypoint. The Lhasa visual identity (gold/red/white/green, a stupa mark) is
 shared by the dashboard and the CLI theme (`cli/theme.py`).

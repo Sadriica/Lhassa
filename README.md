@@ -116,11 +116,20 @@ answered by a tool-less brain think over the routine **fallback chain**
 ### Dashboard
 
 A React/Vite dashboard served by the FastAPI app on **:7766**, in the Lhasa
-identity (warm gold, a stupa mark): an **Overview**, **Settings** (the editable
-runtime knobs), a **Brains** flow/tree editor with org **Templates** and typed
-relationship overlays, **Skills**, plus metrics, the LLM ledger/limits, approvals,
-tools/quarantine, reports and fleet. WebSocket fan-out at `/ws` streams live
-events.
+identity (warm gold, a stupa mark). Sections: **Overview**; **Brains** (the
+Flow/Tree/Templates editor, with the typed **relationship overlay** drawn as dashed
+per-kind edges — legend + toggles — and add/remove from the inspector); **Skills**;
+**Run** (launch an agentic local-CLI task and watch it stream); **Flows** (an
+n8n-style work-flow editor wiring `trigger → task → gate → output`); **Settings**
+(the editable runtime knobs); **Reports**; **Fleet**; and **Activity**. The LLM
+ledger/limits, approvals and tools/quarantine surface here too. WebSocket fan-out at
+`/ws` streams live events (including the agentic run tokens).
+
+The same FastAPI app exposes the REST surface. Beyond the brain/LLM/approval routes
+it includes `/api/org/*` (topology · brains · route · templates · **relationships**:
+`GET /api/org/relationships`, `/kinds`, `POST`/`DELETE`), `/api/flows[/{id}[/run]]`
+(the work-flow editor), and `/api/code` (+ `/clis`, `/runs` — the agentic local-CLI
+door, the backend for the **Run** section and `lhassa code`).
 
 ### Voice (opt-in)
 
@@ -148,6 +157,7 @@ is loaded *after* `.env` (override on) and never holds secrets. The most relevan
 | **Memory (layer 4)** | `LHASSA_MEMORY_LAYER4`, `LHASSA_EMBEDDING_MODEL`, `LHASSA_MEMORY_SEMANTIC_TOPK` |
 | **Privacy** | `LHASSA_PSEUDONYMIZE_REMOTE` |
 | **Org / topology** | `LHASSA_ROOT_ADMIN`, `LHASSA_ORG_ROLE`, `LHASSA_ORG_DEPARTMENT`, `LHASSA_ORG_DEPARTMENTS`, `LHASSA_ORG_TOPOLOGY_FILE`, `LHASSA_ORG_RELATIONSHIPS_FILE`, `LHASSA_ORG_LIVE` |
+| **Work-flows** | `LHASSA_FLOWS_FILE` (the work-flow graph store; runs are offline/stubbed unless `LHASSA_ORG_LIVE`) |
 | **Plugins / channels** | `LHASSA_PLUGINS_DIR`, `LHASSA_NOTIFY_CHANNELS` |
 | **Harnesses / tools** | `LHASSA_HARNESS`, `LHASSA_AGENT_BACKEND`, `LHASSA_AGENT_DIR`, `LHASSA_TOOLS_REPO_DIR` |
 | **Voice** | `LHASSA_VOICE_ENABLED`, `LHASSA_STT_LANGUAGE`, `LHASSA_MIC_NAME`, `LHASSA_VOICE_ID` |
@@ -160,9 +170,9 @@ See [`.env.example`](.env.example) for the full list with defaults and comments.
 
 ## Architecture
 
-Brain state lives in `~/.lhassa/` (`brain.db`, `chica.db`, `backups/`, Ed25519
-keys, `org.json`, `relationships.json`, `skills/`, `settings.env`, `plugins/`,
-`tools/`, logs). The codebase is layered — infra → spine →
+Brain state lives in `~/.lhassa/` (`brain.db`, `chica.db`, `llm_gateway.db`,
+`backups/`, Ed25519 keys, `settings.env`, `org.json`, `relationships.json`,
+`flows.json`, `skills/`, `plugins/`, `tools/`, logs). The codebase is layered — infra → spine →
 interfaces → adapters → shells — and the layering is enforced by an
 architecture-guard test. For the layer map, the data dir, the phase history (0–7),
 and the do-and-sleep / provider-harness / org-tree diagrams, read
