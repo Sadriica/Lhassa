@@ -5,6 +5,45 @@ build. The source of truth for the architecture is `doc/lhassa-brief.md` (a
 living doc — correct it after each phase per §4). This file records the choices
 made along the way. Newest first.
 
+## 2026-06-30 — Phase 6 cont. (heartbeat via opencode, voice, Telegram) + Phase 7 START
+
+**Decision:** the owner has **no Ollama/Zen** but has the **opencode CLI** → the routine
+heartbeat thinks through **opencode** (their existing creds), default the free tier
+`opencode/deepseek-v4-flash-free`. Also: **start Phase 7 now** — the owner explicitly
+authorized it (overriding the brief's "not yet"); built as the minimal two-brain skeleton.
+4 slices, disjoint ownership, gates green (config surface added up front):
+- **opencode heartbeat** `OpenCodeProvider` (`opencode run --pure --format json -m …`;
+  router routine→opencode). **`--pure` matters:** a beat dropped from **>120s → ~8s**
+  (without it opencode hangs on plugin/MCP startup). **Live-verified schema** (replaced the
+  `[SUPUESTO]`): assistant text at `part.text` on a `text` event; totals nested under
+  `step_finish` `part.tokens`/`part.cost` (the first parser read top-level only → fixed,
+  + a regression test). Live smoke: free-tier round-trip → `pong`, tokens 11153/3, **$0**.
+- **voice** `voice/brain_bridge.py` — spoken turns answered by the brain (identity +
+  layered memory + episode `voz`), pipecat frames emitted via a lazy processor; swapped in
+  only when `voice_enabled`. Default path unchanged. (Live audio needs Deepgram/Cartesia.)
+- **Telegram** `notify/dispatch.py` (fan-out) + `notify/telegram_inbound.py` (getUpdates
+  poller; honors only the configured chat; answers via `cli.agent.run_once`; `python -m`
+  entrypoint). Credential-gated; no token → no network. (Live needs a bot token.)
+- **Phase 7 `org/`** (foundation, golden rules enforced + smoke-verified on real SQLite):
+  typed messages (`MessageKind` closed; free prose rejected) · read-only **commons** (only
+  `general` writes; one shared row) · **RBAC** (deny-by-default, cross-department isolation)
+  · **GeneralBrain coordinates, never executes** (no handle/executor) while DepartmentBrain
+  executes via an injectable executor and logs a `despertar_por='org'` episode (audit plane)
+  · **multi-person approval** (proposer≠approver for high-risk → `SelfApprovalError`) ·
+  **two brains, never six**. `org_messages`/`org_commons` tables added to `db.py`.
+
+**602 tests** (529→+73), ruff clean, imports/help ok, dashboard builds.
+
+**Turn-on-with-creds / continuous:** point the systemd heartbeat at opencode by setting
+`LHASSA_HEARTBEAT_PROVIDER=opencode` (or leave `auto` — opencode is auto-preferred when no
+`local_model_url`); voice needs Deepgram/Cartesia keys + `LHASSA_VOICE_ENABLED=1`; Telegram
+needs a bot token + chat id (+ `LHASSA_TELEGRAM_POLL=1` for inbound). **Backlog / `[SUPUESTO]`:**
+wire the org default executor to the live one-turn brain path (`core.step`) — the injectable
+`executor` is the seam; opencode `--pure` means org/MCP tools aren't available to a beat
+(fine for routine thinking; delegated code work still uses the harnesses); the live pipecat
+frame wiring of the voice bridge and the Telegram `getUpdates` shape are unverified without
+creds. **Casa/MCP** (home integrations) remains the open Phase-6 continuous item.
+
 ## 2026-06-29 — Phase 6 (Madurez) — first push: local heartbeat, memory layer 4, rich interfaces
 
 Phase 6 is **continuous** (no single DoD). This first push lands the autonomous,
