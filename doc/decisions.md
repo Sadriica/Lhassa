@@ -50,6 +50,39 @@ message via opencode at $0. **Backlog / `[SUPUESTO]`:** adopt the registry in th
 registries (providers/harnesses/verifiers/specialists) as they're touched (continuous); `/status`
 reads the gateway ledger path/schema directly; route ties break by child declaration order.
 
+## 2026-06-30 — Agentic run + typed relationships + work-flows + chat-via-CLI (+ docs)
+
+A large feature arc, all committed and live, full suite green (974 tests). Backends were built as
+self-contained NEW modules + APIRouters (no server.py contention) and mounted at integration.
+- **Chat via local CLIs + `lhassa code`**: the chat (CLI/voice/agent) can run through claude/codex/
+  opencode — the owner's subscription, NO API key (`llm_provider=claude` → `run_once` routes to the
+  CLI ModelProvider, tool-less; honors an explicit Chat model). The Settings panel gained **Chat
+  provider + Chat model** (a separate seat from the heartbeat) and now REJECTS an API provider with
+  no key (the bug that broke chat). NEW `lhassa code "<task>"` runs an AGENTIC task through the CLI
+  (edits files in the cwd) and **streams live** (a `LocalCliAgent.on_line` sink).
+- **Agentic run surface** (`9284651`/`8b82b90`): `POST /api/code` launches a CLI run streamed over
+  the existing WebSocket; the dashboard **Run** section watches it live; `lhassa-app.service` gained
+  `~/.local/bin` on PATH so it finds the claude CLI.
+- **Typed org RELATIONSHIPS** (`b52c1c2`/`dad07d0`): an overlay graph on the command tree —
+  `reads`/`notifies`/`reviews` (directed) + `collaborates` (symmetric); `permits()` runtime seam;
+  `/api/org/relationships`; the Brains canvas draws dashed per-kind edges (legend + toggles) and the
+  inspector adds/removes them.
+- **Work-FLOWS** (`998c834`/`d90f5e1`): `lhassa/flows/` model+store+engine (`trigger→task→gate→
+  output`+branch DAG; **hybrid** task routing — pin a brain else auto-route by skill; data threads
+  along edges; offline/$0 unless `LHASSA_ORG_LIVE`) + `/api/flows` + an n8n-style **Flows** editor.
+  Live smoke: create→run (`completed`, trigger✓→task✓→output✓)→delete.
+- **English seed rename** (`6edaf3b`): optimizacion/documentacion/finanzas → optimization/
+  documentation/finance across code + tests (+ migrated the live org.json).
+- **Test isolation fix** (`345b4be`): `config.py` no longer loads `~/.lhassa/settings.env` under
+  tests (conftest sets `LHASSA_NO_RUNTIME_OVERRIDES=1`) — the owner's live `LHASSA_LLM_PROVIDER=claude`
+  was leaking into the suite.
+- **Inspector/flow fixes**: render the Lhassa admin node; inspector edits persist (limits cleared by
+  omission, not null); per-brain skill RECOMMENDATIONS by name/department; skills show only the
+  brain's assigned set; parent dropdown pre-selected; department dropdown + create; department group
+  boxes on the canvas.
+- **Docs** (`55c8181`/`49e37af`): README/CLAUDE/architecture refreshed + NEW `doc/cli.md`;
+  relationships + flows corrected from "reserved" to shipped; the 9 dashboard sections + data dir.
+
 ## 2026-06-30 — Product/UX batch: skills, Lhassa-as-root, org flow, CLI palette, settings, templates, Lhasa reskin
 
 A big autonomous product/UX push. All committed, gates green (full suite 849 → 876), no AI
