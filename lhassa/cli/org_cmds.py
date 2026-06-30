@@ -195,7 +195,7 @@ def add_cmd(
         None, "--department", help="Department name/identity this brain owns."
     ),
     skills: str = typer.Option(
-        None, "--skills", help="Skills this brain handles, e.g. 'optimizacion,finanzas'."
+        None, "--skills", help="Skills this brain handles, e.g. 'optimization,finance'."
     ),
     limits: str = typer.Option(
         None,
@@ -323,7 +323,7 @@ def run_cmd(
 def set_skills_cmd(
     node_id: str = typer.Argument(..., help="Brain id to assign skills to."),
     skills: str = typer.Option(
-        ..., "--skills", help="Skills, e.g. 'optimizacion,finanzas' ('' clears them)."
+        ..., "--skills", help="Skills, e.g. 'optimization,finance' ('' clears them)."
     ),
     json_out: bool = typer.Option(False, "--json", help="Emit the node as JSON."),
 ) -> None:

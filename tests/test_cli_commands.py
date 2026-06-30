@@ -73,7 +73,7 @@ def test_tools_cmd(tmp_path, monkeypatch):
     async def seed():
         await db.init_db()
         await db.upsert_tool(
-            INST, "speedup", dominio="optimizacion", estado="cuarentena",
+            INST, "speedup", dominio="optimization", estado="cuarentena",
             metrica_actual=6.0,
         )
 
@@ -84,7 +84,7 @@ def test_tools_cmd(tmp_path, monkeypatch):
     rows = json.loads(res.output)
     row = next(r for r in rows if r["nombre"] == "speedup")
     assert row["estado"] == "cuarentena"
-    assert row["dominio"] == "optimizacion"
+    assert row["dominio"] == "optimization"
 
     # Pretty path runs without error.
     assert runner.invoke(app, ["tools"]).exit_code == 0

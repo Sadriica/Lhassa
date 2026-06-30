@@ -124,7 +124,7 @@ async def test_promote_graduates_and_records_tool(brain):
         "inst_test",
         "optimizar_calendario",
         HARMLESS,
-        domain="optimizacion",
+        domain="optimization",
         tests_spec={"type": "command", "cmd": "true"},
         metric_fn=lambda *_: 4.0,
         baseline=9.0,
@@ -134,7 +134,7 @@ async def test_promote_graduates_and_records_tool(brain):
 
     row = await brain.get_tool("inst_test", "optimizar_calendario")
     assert row["estado"] == "graduada"
-    assert row["dominio"] == "optimizacion"
+    assert row["dominio"] == "optimization"
     assert row["metrica_baseline"] == 9.0
     assert row["metrica_actual"] == 4.0
 

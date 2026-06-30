@@ -431,7 +431,7 @@ class Config:
     # Elastic org: the department set is CONFIG-DRIVEN (comma-separated), not code —
     # scale the org up/down without editing the registry.
     org_departments: str = os.getenv(
-        "LHASSA_ORG_DEPARTMENTS", "optimizacion,documentacion,finanzas"
+        "LHASSA_ORG_DEPARTMENTS", "optimization,documentation,finance"
     )
     # The org CHART/topology lives in this file (JSON): 1 standalone brain up to an
     # arbitrary-depth hierarchy the owner creates/manages (via `lhassa org`). Missing

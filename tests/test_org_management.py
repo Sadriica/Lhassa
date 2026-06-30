@@ -33,20 +33,20 @@ def _seed_flat(cfg):
     Topology(
         [
             BrainNode(id="general", role="general"),
-            BrainNode(id="dept:optimizacion", role="department",
-                      department="optimizacion", parent="general"),
-            BrainNode(id="dept:finanzas", role="department",
-                      department="finanzas", parent="general"),
+            BrainNode(id="dept:optimization", role="department",
+                      department="optimization", parent="general"),
+            BrainNode(id="dept:finance", role="department",
+                      department="finance", parent="general"),
         ]
     )
     topo.save_topology(
         Topology(
             [
                 BrainNode(id="general", role="general"),
-                BrainNode(id="dept:optimizacion", role="department",
-                          department="optimizacion", parent="general"),
-                BrainNode(id="dept:finanzas", role="department",
-                          department="finanzas", parent="general"),
+                BrainNode(id="dept:optimization", role="department",
+                          department="optimization", parent="general"),
+                BrainNode(id="dept:finance", role="department",
+                          department="finance", parent="general"),
             ]
         ),
         cfg,
@@ -59,14 +59,14 @@ def _seed_flat(cfg):
 def test_node_round_trips_skills_and_limits(tmp_path):
     cfg = _cfg(tmp_path)
     node = BrainNode(
-        id="dept:opt", role="department", department="optimizacion",
-        parent="general", skills=["optimizacion", "extra"],
+        id="dept:opt", role="department", department="optimization",
+        parent="general", skills=["optimization", "extra"],
         limits={"max_risk": "low", "budget_usd": 1.5, "allowed_actions": ["read"]},
     )
     topo.save_topology(Topology([BrainNode(id="general"), node]), cfg)
     reloaded = topo.load_topology(cfg)
     got = reloaded.node("dept:opt")
-    assert got.skills == ("optimizacion", "extra")
+    assert got.skills == ("optimization", "extra")
     assert got.limits == {"max_risk": "low", "budget_usd": 1.5,
                           "allowed_actions": ["read"]}
 
@@ -97,14 +97,14 @@ def test_add_brain_persists(tmp_path):
     _seed_flat(cfg)
     updated = management.add_brain(
         "dept:doc", role="department", parent="general",
-        department="documentacion", skills=["optimizacion"],
+        department="documentation", skills=["optimization"],
         limits={"budget_usd": 2.0}, config=cfg,
     )
     assert updated.has("dept:doc")
     reloaded = topo.load_topology(cfg)
     n = reloaded.node("dept:doc")
     assert n.parent == "general"
-    assert n.skills == ("optimizacion",)
+    assert n.skills == ("optimization",)
     assert n.limits == {"budget_usd": 2.0}
 
 
@@ -128,27 +128,27 @@ def test_add_missing_parent_rejected_does_not_corrupt(tmp_path):
 def test_update_brain_partial(tmp_path):
     cfg = _cfg(tmp_path)
     _seed_flat(cfg)
-    management.update_brain("dept:finanzas", role="lead", config=cfg)
-    n = topo.load_topology(cfg).node("dept:finanzas")
+    management.update_brain("dept:finance", role="lead", config=cfg)
+    n = topo.load_topology(cfg).node("dept:finance")
     assert n.role == "lead"
-    assert n.department == "finanzas"  # untouched
+    assert n.department == "finance"  # untouched
 
 
 def test_set_skills_and_set_limits(tmp_path):
     cfg = _cfg(tmp_path)
     _seed_flat(cfg)
-    management.set_skills("dept:optimizacion", ["optimizacion", "speed"], config=cfg)
-    management.set_limits("dept:optimizacion", {"max_risk": "medium"}, config=cfg)
-    n = topo.load_topology(cfg).node("dept:optimizacion")
-    assert n.skills == ("optimizacion", "speed")
+    management.set_skills("dept:optimization", ["optimization", "speed"], config=cfg)
+    management.set_limits("dept:optimization", {"max_risk": "medium"}, config=cfg)
+    n = topo.load_topology(cfg).node("dept:optimization")
+    assert n.skills == ("optimization", "speed")
     assert n.limits == {"max_risk": "medium"}
 
 
 def test_remove_leaf(tmp_path):
     cfg = _cfg(tmp_path)
     _seed_flat(cfg)
-    updated = management.remove_brain("dept:finanzas", config=cfg)
-    assert not updated.has("dept:finanzas")
+    updated = management.remove_brain("dept:finance", config=cfg)
+    assert not updated.has("dept:finance")
 
 
 def test_remove_with_children_refused(tmp_path):
@@ -167,7 +167,7 @@ def test_remove_subtree_with_force(tmp_path):
             BrainNode(id="general", role="general"),
             BrainNode(id="ops", role="sub_general", parent="general"),
             BrainNode(id="dept:opt", role="department",
-                      department="optimizacion", parent="ops"),
+                      department="optimization", parent="ops"),
         ]),
         cfg,
     )
@@ -182,15 +182,15 @@ def test_remove_subtree_with_force(tmp_path):
 def test_set_parent_reparents(tmp_path):
     cfg = _cfg(tmp_path)
     _seed_flat(cfg)
-    management.set_parent("dept:finanzas", "dept:optimizacion", config=cfg)
-    assert topo.load_topology(cfg).node("dept:finanzas").parent == "dept:optimizacion"
+    management.set_parent("dept:finance", "dept:optimization", config=cfg)
+    assert topo.load_topology(cfg).node("dept:finance").parent == "dept:optimization"
 
 
 def test_set_parent_self_rejected(tmp_path):
     cfg = _cfg(tmp_path)
     _seed_flat(cfg)
     with pytest.raises(ManagementError):
-        management.set_parent("dept:finanzas", "dept:finanzas", config=cfg)
+        management.set_parent("dept:finance", "dept:finance", config=cfg)
 
 
 def test_set_parent_cycle_rejected_does_not_corrupt(tmp_path):
@@ -200,7 +200,7 @@ def test_set_parent_cycle_rejected_does_not_corrupt(tmp_path):
             BrainNode(id="general", role="general"),
             BrainNode(id="ops", role="sub_general", parent="general"),
             BrainNode(id="dept:opt", role="department",
-                      department="optimizacion", parent="ops"),
+                      department="optimization", parent="ops"),
         ]),
         cfg,
     )
@@ -222,7 +222,7 @@ def test_promote_makes_top_level_child_of_admin(tmp_path):
             BrainNode(id="general", role="general"),
             BrainNode(id="ops", role="sub_general", parent="general"),
             BrainNode(id="dept:opt", role="department",
-                      department="optimizacion", parent="ops"),
+                      department="optimization", parent="ops"),
         ]),
         cfg,
     )
@@ -259,8 +259,8 @@ def test_promote_preserves_offspine_subtrees(tmp_path):
             BrainNode(id="general", role="general"),
             BrainNode(id="biz", role="sub_general", parent="general"),
             BrainNode(id="ops", role="sub_general", parent="general"),
-            BrainNode(id="fin", role="department", department="finanzas", parent="biz"),
-            BrainNode(id="opt", role="department", department="optimizacion", parent="ops"),
+            BrainNode(id="fin", role="department", department="finance", parent="biz"),
+            BrainNode(id="opt", role="department", department="optimization", parent="ops"),
         ]),
         cfg,
     )
@@ -310,22 +310,22 @@ def test_add_second_admin_rejected(tmp_path):
 def test_describe_shape(tmp_path):
     cfg = _cfg(tmp_path)
     _seed_flat(cfg)
-    management.set_skills("dept:optimizacion", ["optimizacion"], config=cfg)
+    management.set_skills("dept:optimization", ["optimization"], config=cfg)
     desc = management.describe(cfg)
     # the permanent administrator (Lhassa) is the root and is exposed as "admin".
     assert desc["root"] == "lhassa"
     assert desc["admin"] == "lhassa"
     assert desc["standalone"] is False
     ids = {n["id"] for n in desc["nodes"]}
-    assert ids == {"lhassa", "general", "dept:optimizacion", "dept:finanzas"}
+    assert ids == {"lhassa", "general", "dept:optimization", "dept:finance"}
     lhassa = next(n for n in desc["nodes"] if n["id"] == "lhassa")
     assert lhassa["is_admin"] is True
     general = next(n for n in desc["nodes"] if n["id"] == "general")
     assert general["is_admin"] is False
-    assert set(general["children"]) == {"dept:optimizacion", "dept:finanzas"}
+    assert set(general["children"]) == {"dept:optimization", "dept:finance"}
     assert general["is_leaf"] is False
-    opt = next(n for n in desc["nodes"] if n["id"] == "dept:optimizacion")
-    assert opt["skills"] == ["optimizacion"]
+    opt = next(n for n in desc["nodes"] if n["id"] == "dept:optimization")
+    assert opt["skills"] == ["optimization"]
     assert opt["is_leaf"] is True
 
 
@@ -343,10 +343,10 @@ def test_describe_standalone_default(tmp_path):
 def test_available_skills_lists_registry_domains():
     skills = management.available_skills()
     domains = {s["domain"] for s in skills}
-    assert "optimizacion" in domains
+    assert "optimization" in domains
 
 
 def test_validate_skills_warns_but_keeps_unknown():
-    cleaned, unknown = management.validate_skills(["optimizacion", "totally_new"])
-    assert cleaned == ("optimizacion", "totally_new")
+    cleaned, unknown = management.validate_skills(["optimization", "totally_new"])
+    assert cleaned == ("optimization", "totally_new")
     assert unknown == ["totally_new"]

@@ -59,15 +59,15 @@ __all__ = [
 # (b) materialise as a real SKILL.md via :func:`catalog_skill`.
 CATALOG: list[dict] = [
     {
-        "name": "optimizacion",
+        "name": "optimization",
         "description": "Make a routine cheaper on one clean lower-is-better metric "
         "(tokens, time, or steps) without changing what it produces.",
-        "domain": "optimizacion",
+        "domain": "optimization",
         "tags": ["performance", "cost"],
         "level": 2,
         "allowed-tools": ["read_file", "write_file", "shell"],
         "instructions": (
-            "# optimizacion\n\n"
+            "# optimization\n\n"
             "Operate as the OPTIMIZATION specialist: make an existing routine cheaper "
             "on ONE clean, lower-is-better metric — tokens, wall-clock time, or number "
             "of steps — without changing what it produces.\n\n"
@@ -341,9 +341,9 @@ CATALOG: list[dict] = [
     },
 ]
 
-# The starter skills seeded on demand: the optimizacion one mirrors the existing
+# The starter skills seeded on demand: the optimization one mirrors the existing
 # specialist, plus two broadly-useful generics.
-_SEED_NAMES = ("optimizacion", "documentation", "code-review")
+_SEED_NAMES = ("optimization", "documentation", "code-review")
 
 
 def _catalog_body(entry: dict) -> str:

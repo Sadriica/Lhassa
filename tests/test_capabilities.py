@@ -33,7 +33,7 @@ def _tmp_config(tmp_path, **overrides):
     base = dict(
         plugins_dir=str(tmp_path / "plugins"),
         org_role="",
-        org_departments="optimizacion,documentacion",
+        org_departments="optimization,documentation",
         org_topology_file=str(tmp_path / "topology.json"),
         notify_channels="telegram,desktop",
         heartbeat_provider="auto",
@@ -81,11 +81,11 @@ def test_collect_reports_known_registry_names(tmp_path):
     assert "default" in reg["providers"]["registered"]
     assert set(reg["harnesses"]["registered"]) >= {"opencode", "claude", "codex"}
     assert set(reg["verifiers"]["registered"]) >= {"command", "tests", "metric"}
-    assert "optimizacion" in reg["specialists"]["registered"]
+    assert "optimization" in reg["specialists"]["registered"]
     assert "telegram" in reg["channels"]["registered"]
     assert reg["commands"]["registered"]  # /start, /help, /status ...
     assert "sync_repo" in reg["actions"]["registered"]
-    assert "optimizacion" in reg["departments"]["registered"]
+    assert "optimization" in reg["departments"]["registered"]
     # harnesses available is a subset of registered.
     assert set(reg["harnesses"]["available"]) <= set(reg["harnesses"]["registered"])
 

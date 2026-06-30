@@ -21,10 +21,10 @@ def client(tmp_path, monkeypatch):
     topo_file = tmp_path / "org.json"
     topo_file.write_text(json.dumps([
         {"id": "general", "role": "general", "department": None, "parent": None},
-        {"id": "dept:optimizacion", "role": "department",
-         "department": "optimizacion", "parent": "general"},
-        {"id": "dept:finanzas", "role": "department",
-         "department": "finanzas", "parent": "general"},
+        {"id": "dept:optimization", "role": "department",
+         "department": "optimization", "parent": "general"},
+        {"id": "dept:finance", "role": "department",
+         "department": "finance", "parent": "general"},
     ]))
     monkeypatch.setattr(config_mod.Config, "org_topology_file", str(topo_file))
     monkeypatch.setattr(db, "DB_PATH", tmp_path / "brain.db")
@@ -45,7 +45,7 @@ def test_get_topology(client):
     # Lhassa (the permanent administrator) is injected at the root on load.
     assert body["root"] == "lhassa"
     assert body["admin"] == "lhassa"
-    assert _ids(body) == {"lhassa", "general", "dept:optimizacion", "dept:finanzas"}
+    assert _ids(body) == {"lhassa", "general", "dept:optimization", "dept:finance"}
     lhassa = next(n for n in body["nodes"] if n["id"] == "lhassa")
     assert lhassa["is_admin"] is True
 
@@ -53,15 +53,15 @@ def test_get_topology(client):
 def test_get_skills(client):
     r = client.get("/api/org/skills")
     assert r.status_code == 200
-    assert "optimizacion" in {s["domain"] for s in r.json()}
+    assert "optimization" in {s["domain"] for s in r.json()}
 
 
 def test_get_route_preview(client):
     r = client.get("/api/org/route", params={"goal": "optimize the slow latency"})
     assert r.status_code == 200
     body = r.json()
-    assert body["path"] == ["lhassa", "general", "dept:optimizacion"]
-    assert body["leaf"] == "dept:optimizacion"
+    assert body["path"] == ["lhassa", "general", "dept:optimization"]
+    assert body["leaf"] == "dept:optimization"
 
 
 # ── create / update / delete ────────────────────────────────────────────────────
@@ -70,13 +70,13 @@ def test_get_route_preview(client):
 def test_create_brain(client):
     r = client.post("/api/org/brains", json={
         "id": "dept:doc", "role": "department", "parent": "general",
-        "department": "documentacion", "skills": ["optimizacion"],
+        "department": "documentation", "skills": ["optimization"],
         "limits": {"budget_usd": 1.0},
     })
     assert r.status_code == 200
     assert "dept:doc" in _ids(r.json())
     doc = next(n for n in r.json()["nodes"] if n["id"] == "dept:doc")
-    assert doc["skills"] == ["optimizacion"]
+    assert doc["skills"] == ["optimization"]
     assert doc["limits"] == {"budget_usd": 1.0}
 
 
@@ -93,12 +93,12 @@ def test_create_brain_missing_id_is_400(client):
 
 
 def test_patch_brain(client):
-    r = client.patch("/api/org/brains/dept:finanzas", json={
-        "skills": ["finanzas", "budgets"], "limits": {"max_risk": "low"},
+    r = client.patch("/api/org/brains/dept:finance", json={
+        "skills": ["finance", "budgets"], "limits": {"max_risk": "low"},
     })
     assert r.status_code == 200
-    fin = next(n for n in r.json()["nodes"] if n["id"] == "dept:finanzas")
-    assert fin["skills"] == ["finanzas", "budgets"]
+    fin = next(n for n in r.json()["nodes"] if n["id"] == "dept:finance")
+    assert fin["skills"] == ["finance", "budgets"]
     assert fin["limits"] == {"max_risk": "low"}
 
 
@@ -108,25 +108,25 @@ def test_patch_missing_brain_is_404(client):
 
 
 def test_move_brain(client):
-    r = client.post("/api/org/brains/dept:finanzas/move",
-                    json={"parent": "dept:optimizacion"})
+    r = client.post("/api/org/brains/dept:finance/move",
+                    json={"parent": "dept:optimization"})
     assert r.status_code == 200
-    fin = next(n for n in r.json()["nodes"] if n["id"] == "dept:finanzas")
-    assert fin["parent"] == "dept:optimizacion"
+    fin = next(n for n in r.json()["nodes"] if n["id"] == "dept:finance")
+    assert fin["parent"] == "dept:optimization"
 
 
 def test_move_brain_missing_parent_is_400(client):
-    r = client.post("/api/org/brains/dept:finanzas/move", json={})
+    r = client.post("/api/org/brains/dept:finance/move", json={})
     assert r.status_code == 400
 
 
 def test_promote_brain(client):
-    r = client.post("/api/org/brains/dept:optimizacion/promote")
+    r = client.post("/api/org/brains/dept:optimization/promote")
     assert r.status_code == 200
     body = r.json()
     # Lhassa stays the permanent root; the promoted brain becomes a direct child.
     assert body["root"] == "lhassa"
-    opt = next(n for n in body["nodes"] if n["id"] == "dept:optimizacion")
+    opt = next(n for n in body["nodes"] if n["id"] == "dept:optimization")
     assert opt["parent"] == "lhassa"
 
 
@@ -143,9 +143,9 @@ def test_move_admin_is_400(client):
 
 
 def test_delete_leaf(client):
-    r = client.delete("/api/org/brains/dept:finanzas")
+    r = client.delete("/api/org/brains/dept:finance")
     assert r.status_code == 200
-    assert "dept:finanzas" not in _ids(r.json())
+    assert "dept:finance" not in _ids(r.json())
 
 
 def test_delete_with_children_is_400_without_force(client):
@@ -154,9 +154,9 @@ def test_delete_with_children_is_400_without_force(client):
 
 
 def test_delete_subtree_with_force(client):
-    # re-parent finanzas under optimizacion, then force-delete optimizacion's subtree
-    client.post("/api/org/brains/dept:finanzas/move", json={"parent": "dept:optimizacion"})
-    r = client.delete("/api/org/brains/dept:optimizacion", params={"force": "true"})
+    # re-parent finance under optimization, then force-delete optimization's subtree
+    client.post("/api/org/brains/dept:finance/move", json={"parent": "dept:optimization"})
+    r = client.delete("/api/org/brains/dept:optimization", params={"force": "true"})
     assert r.status_code == 200
     assert _ids(r.json()) == {"lhassa", "general"}
 

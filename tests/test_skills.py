@@ -50,14 +50,14 @@ def _seed_topology(cfg):
                 {
                     "id": "dept:opt",
                     "role": "department",
-                    "department": "optimizacion",
+                    "department": "optimization",
                     "parent": "general",
-                    "skills": ["optimizacion"],
+                    "skills": ["optimization"],
                 },
                 {
                     "id": "dept:fin",
                     "role": "department",
-                    "department": "finanzas",
+                    "department": "finance",
                     "parent": "general",
                 },
             ]
@@ -238,7 +238,7 @@ def test_import_missing_path_degrades(tmp_path):
 def test_brains_with_skill_reads_topology(tmp_path):
     cfg = _cfg(tmp_path)
     _seed_topology(cfg)
-    assert brains_with_skill("optimizacion", config=cfg) == ["dept:opt"]
+    assert brains_with_skill("optimization", config=cfg) == ["dept:opt"]
     assert brains_with_skill("nonexistent", config=cfg) == []
 
 
@@ -248,7 +248,7 @@ def test_assign_to_brain_merges(tmp_path):
     updated = assign_to_brain("research", "dept:opt", config=cfg)
     node = updated.node("dept:opt")
     # existing skill kept, new skill added (merge, not replace)
-    assert set(node.skills) == {"optimizacion", "research"}
+    assert set(node.skills) == {"optimization", "research"}
     assert brains_with_skill("research", config=cfg) == ["dept:opt"]
 
 
@@ -265,11 +265,11 @@ def test_assign_to_unknown_brain_raises(tmp_path):
 def test_recommend_offline_excludes_installed(tmp_path):
     cfg = _cfg(tmp_path)
     store = SkillStore(cfg)
-    store.save(ai_mod.catalog_skill(ai_mod.CATALOG[0]))  # install "optimizacion"
+    store.save(ai_mod.catalog_skill(ai_mod.CATALOG[0]))  # install "optimization"
 
     recs = ai_mod.recommend_skills(config=cfg)
     names = {r["name"] for r in recs}
-    assert "optimizacion" not in names  # installed → not recommended
+    assert "optimization" not in names  # installed → not recommended
     assert "code-review" in names
 
 
@@ -365,11 +365,11 @@ def test_is_installed_and_installed_names(tmp_path):
 def test_ensure_seed_is_idempotent(tmp_path):
     cfg = _cfg(tmp_path)
     seeded = ai_mod.ensure_seed(cfg)
-    assert set(seeded) == {"optimizacion", "documentation", "code-review"}
+    assert set(seeded) == {"optimization", "documentation", "code-review"}
     # second call seeds nothing (already present)
     assert ai_mod.ensure_seed(cfg) == []
     store = SkillStore(cfg)
-    assert store.get("optimizacion") is not None
+    assert store.get("optimization") is not None
 
 
 # ── AI ops (injected provider; degrade without one) ──────────────────────────
