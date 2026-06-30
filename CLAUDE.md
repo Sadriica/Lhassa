@@ -48,8 +48,8 @@ Inner layers never import outer shells; dependencies point **down** only.
 |---|---|---|
 | Leaf infra | `registry.py`, `plugins.py`, `config.py` | Generic machinery; imports no feature code |
 | Spine | `core/` | The do-and-sleep loop (`step`, `heartbeat`, `episode`, `db`, `watchlist`, `actions`) |
-| Interfaces | `memory/`, `security/`, `llm/` | Reusable contracts (facts, trust/approval, provider + router) |
-| Adapters (hands) | `harness/`, `tools/`, `agents/`, `remote/`, `health/` | The rentable body |
+| Interfaces | `memory/`, `security/`, `llm/`, `settings.py` | Reusable contracts (facts, trust/approval, provider + router, editable settings) |
+| Adapters (hands) | `harness/`, `tools/`, `agents/`, `skills/`, `remote/`, `health/` | The rentable body |
 | Shells (outer) | `cli/`, `api/`, `voice/`, `notify/`, `org/`, dashboard (JS) | World-facing surfaces; compose everything below |
 
 Encoded forbidden directions: spine/interfaces/adapters ↛ shells; `harness/` ⟂
@@ -149,26 +149,81 @@ brain think over the routine fallback chain (`opencode → claude → codex → 
 ## The org layer (Phase 7)
 
 `org/topology.py` — `BrainNode` / `Topology` (validated tree) + `load/save`,
-config-driven (`LHASSA_ORG_TOPOLOGY_FILE`). Runs **standalone (1 brain)** up to
-arbitrary depth. `org/coordinator.py` walks the tree: typed `TASK_ASSIGN` down,
-**only leaves execute**, results bubble up; `GeneralBrain` **coordinates, never
-executes**; `DepartmentBrain` executes via `org/executor.py:brain_executor` (the
-real one-turn brain path, gated behind `LHASSA_ORG_LIVE`). `org/routing.py` is a
-deterministic, table-driven router (**no LLM**). `org/rbac.py` is deny-by-default
-with cross-department isolation; `org/commons.py` is a read-only shared row (only
+config-driven (`LHASSA_ORG_TOPOLOGY_FILE`). **Lhassa is the permanent root
+administrator** (`config.root_admin_id`, `LHASSA_ROOT_ADMIN`, default `lhassa`):
+always roots the chart, never removed/demoted; `promote` makes a brain a top-level
+child of Lhassa without unseating it. Runs **standalone (1 brain)** up to arbitrary
+depth. `org/coordinator.py` walks the tree: typed `TASK_ASSIGN` down, **only leaves
+execute**, results bubble up; `GeneralBrain` **coordinates, never executes**;
+`DepartmentBrain` executes via `org/executor.py:brain_executor` (the real one-turn
+brain path, gated behind `LHASSA_ORG_LIVE`). `org/routing.py` is a deterministic,
+table-driven router (**no LLM**). `org/rbac.py` is deny-by-default with
+cross-department isolation; `org/commons.py` is a read-only shared row (only
 `general` writes). `org/management.py` + `cli/org_cmds.py` create and manage the
-chart (who commands whom). Multi-person approval: proposer ≠ approver for
-high-risk.
+chart (who commands whom). `org/templates.py` — use-case presets built **under
+Lhassa** (`code-review`, `bug-investigation`, `refactor-migration`,
+`incident-response`, the multi-level `software-factory`); `lhassa org
+templates|apply`. `org/relationships.py` — a typed **overlay** graph (separate file,
+`LHASSA_ORG_RELATIONSHIPS_FILE`) layered on the command tree: closed edge kinds
+`reads` / `notifies` / `reviews` (directed) + `collaborates` (symmetric);
+`permits(a,b,kind)` is the pure read seam; `/api/org/relationships*`. Multi-person
+approval: proposer ≠ approver for high-risk. (`flows.json` /
+`LHASSA_FLOWS_FILE` is a reserved config path; work-flow graphs are not yet a
+surface.)
+
+## Skills (first-class, 3-layer)
+
+`skills/` — skills are **3-layer**: a NAME on a brain (intent, in the topology
+skill set) → a `SKILL.md` in `~/.lhassa/skills/` (capability — YAML frontmatter +
+instructions, the skills.md / awesome-agent-skills convention; JSON form too) →
+loaded into the brain's prompt at think time (effect). `skills/store.py`
+(`SkillStore`), `skills/skillmd.py` (the format), `skills/ai.py` (AI create/improve,
+degrades without a model). Offline `recommend` works off a seed catalog (no model).
+`assign_to_brain` / `brains_with_skill`; assigning offers to install. `lhassa
+skills` (list/show/create[`--ai`]/improve/assign/who-has/recommend/import/export/
+seed) + `/api/skills/*`. The specialist registry domains (`org skills`) are the
+catalog of assignable skill names.
+
+## Settings service
+
+`settings.py` — a thin, safe layer over `config.py`: an **allowlist** (`EDITABLE`)
+of runtime knobs the dashboard Settings panel and `lhassa config` may change. `set`
+persists to `~/.lhassa/settings.env` (loaded by `config.py` **after** `.env` with
+`override=True`, so a new process picks it up; secrets stay in `.env`, never written
+here) **and** applies to the live `Config` class attribute. `effective()` is the
+read model (value + default + overridden + restart hint, secrets masked); `set_env`
+is the advanced `LHASSA_*` escape hatch. Setting `llm_provider` is guarded — it
+refuses a provider that can't actually run (an API provider with no key, or a CLI
+not on PATH). `GET/PATCH /api/config`.
+
+## Two model seats
+
+Keep the **chat** seat and the **heartbeat** seat distinct. *Chat* (CLI / voice /
+the built-in agent) uses `llm_provider` + `model`; it may be an API provider
+(groq/anthropic/openai/openrouter/cerebras — key in `.env`) **or** a local CLI on
+subscription with **no API key** (`claude` / `codex` / `opencode`) or `ollama`.
+*Heartbeat* (routine think) uses `heartbeat_provider` independently (auto/local/
+cloud/opencode/claude/codex). The Telegram/org routine path walks the fallback
+chain `opencode → claude → codex → cloud` (`LHASSA_FALLBACK_PROVIDERS`).
+`lhassa code "<task>"` is the **agentic** door: it hands a task to a real local CLI
+(claude/codex/opencode, `--cli` to pick) that edits files and runs tools in the
+current directory. See `doc/cli.md` for the full CLI reference.
 
 ## API + dashboard
 
 `api/server.py` (FastAPI) serves the dashboard and the REST surface plus a
 WebSocket `/ws` fan-out (`state.broadcast(dict)`). Routes include `/api/status`,
-`/api/memory/*`, `/api/agents`, `/api/metrics`, `/api/llm/{ledger,limits,ccusage}`,
-`/api/approvals`, `/api/tools` (+ graduate), `/api/reports`, `/api/projections`,
-`/api/fleet`, `/api/org/*`, and `/checkin` + `/report` (check-in, not push). The
-always-on services run **API-only** (no audio); `docker/run_api.py` is the
-audio-free entrypoint.
+`/api/overview`, `/api/memory/*`, `/api/agents`, `/api/metrics`,
+`/api/llm/{ledger,limits,ccusage}`, `/api/approvals`, `/api/audit`,
+`/api/scheduled`, `/api/tools` (+ graduate), `/api/reports`, `/api/projections`,
+`/api/fleet`, `/api/config` (GET/PATCH — the settings service), `/api/skills/*`,
+`/api/org/*` (topology, brains, route, templates, relationships), `/api/code` (+
+`/clis`, `/runs` — the agentic local-CLI door), and `/checkin` + `/report`
+(check-in, not push). The dashboard panels live in `dashboard/src/components/`
+(Overview, Settings, Brains flow/tree, Templates, Skills, …). The always-on
+services run **API-only** (no audio); `docker/run_api.py` is the audio-free
+entrypoint. The Lhasa visual identity (gold/red/white/green, a stupa mark) is
+shared by the dashboard and the CLI theme (`cli/theme.py`).
 
 ## Conventions (still true)
 
