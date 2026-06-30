@@ -26,32 +26,38 @@ class _Cfg:
 # ── default derivation ──────────────────────────────────────────────────────────
 
 
-def test_default_standalone_single_brain():
+def test_default_standalone_single_admin_brain():
+    # The default/main brain IS Lhassa — the permanent administrator at the root.
     t = topo.default_topology(_Cfg(org_role=""))
     assert t.is_standalone()
     assert len(t.nodes()) == 1
-    assert t.root().id == "general"
-    assert t.children_of("general") == []
+    assert t.root().id == "lhassa"
+    assert t.root().role == "administrator"
+    assert t.is_admin("lhassa")
+    assert t.children_of("lhassa") == []
 
 
-def test_default_flat_general_plus_departments():
+def test_default_flat_admin_plus_departments():
+    # org_role/org_departments imply departments hanging UNDER the administrator.
     t = topo.default_topology(
         _Cfg(org_role="general", org_departments="optimizacion,documentacion,finanzas")
     )
     assert not t.is_standalone()
-    assert t.root().id == "general"
-    kids = [c.id for c in t.children_of("general")]
+    assert t.root().id == "lhassa"
+    assert t.root().role == "administrator"
+    kids = [c.id for c in t.children_of("lhassa")]
     assert kids == ["dept:optimizacion", "dept:documentacion", "dept:finanzas"]
     opt = t.node("dept:optimizacion")
     assert opt.role == "department"
     assert opt.department == "optimizacion"
-    assert opt.parent == "general"
+    assert opt.parent == "lhassa"
 
 
 def test_load_falls_back_to_default_when_no_file(tmp_path):
     cfg = _Cfg(org_role="", org_topology_file=str(tmp_path / "missing.json"))
     t = topo.load_topology(cfg)
     assert t.is_standalone()
+    assert t.root().id == "lhassa"
 
 
 # ── save / load round-trip ──────────────────────────────────────────────────────
@@ -81,8 +87,14 @@ def test_save_load_round_trip(tmp_path):
     assert isinstance(raw, list)
     assert {n["id"] for n in raw} == {"general", "ops", "dept:optimizacion"}
 
+    # On load, the permanent administrator (Lhassa) is injected at the root and the
+    # loaded chart's old root ("general") becomes its child — the rest is intact.
     reloaded = topo.load_topology(cfg)
-    assert [n.id for n in reloaded.nodes()] == ["general", "ops", "dept:optimizacion"]
+    assert reloaded.root().id == "lhassa"
+    assert [n.id for n in reloaded.nodes()] == [
+        "lhassa", "general", "ops", "dept:optimizacion",
+    ]
+    assert reloaded.node("general").parent == "lhassa"
     assert reloaded.node("dept:optimizacion").department == "optimizacion"
     assert reloaded.node("ops").parent == "general"
 
@@ -92,8 +104,27 @@ def test_load_accepts_object_with_nodes_key(tmp_path):
     path.write_text(json.dumps({"nodes": [{"id": "solo", "role": "general"}]}))
     cfg = _Cfg(org_topology_file=str(path))
     t = topo.load_topology(cfg)
-    assert t.is_standalone()
-    assert t.root().id == "solo"
+    # the administrator is synthesized above the loaded root
+    assert t.root().id == "lhassa"
+    assert t.has("solo")
+    assert t.node("solo").parent == "lhassa"
+
+
+# ── permanent administrator (Lhassa orbits everything) ──────────────────────────
+
+
+def test_load_respects_a_chart_already_rooted_at_admin(tmp_path):
+    path = tmp_path / "org.json"
+    path.write_text(json.dumps([
+        {"id": "lhassa", "role": "administrator", "parent": None},
+        {"id": "dept:x", "role": "department", "department": "x", "parent": "lhassa"},
+    ]))
+    cfg = _Cfg(org_topology_file=str(path))
+    t = topo.load_topology(cfg)
+    assert t.root().id == "lhassa"
+    assert [n.id for n in t.nodes()] == ["lhassa", "dept:x"]
+    assert t.node("dept:x").parent == "lhassa"
+    assert t.is_admin("lhassa") and not t.is_admin("dept:x")
 
 
 # ── validation ──────────────────────────────────────────────────────────────────

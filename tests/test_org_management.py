@@ -172,7 +172,8 @@ def test_remove_subtree_with_force(tmp_path):
         cfg,
     )
     updated = management.remove_brain("ops", force=True, config=cfg)
-    assert {n.id for n in updated.nodes()} == {"general"}
+    # the permanent administrator (Lhassa) is injected above the loaded 'general'.
+    assert {n.id for n in updated.nodes()} == {"lhassa", "general"}
 
 
 # ── set_parent (re-parent) — who commands whom ──────────────────────────────────────
@@ -210,10 +211,11 @@ def test_set_parent_cycle_rejected_does_not_corrupt(tmp_path):
     assert (tmp_path / "org.json").read_text() == before
 
 
-# ── set_root (re-root) — who commands everyone ──────────────────────────────────────
+# ── set_root (PROMOTE) — a top-level coordinator UNDER the permanent admin ───────────
+# Lhassa is never unseated: promoting B makes B a direct child of the administrator.
 
 
-def test_set_root_reroots_along_spine(tmp_path):
+def test_promote_makes_top_level_child_of_admin(tmp_path):
     cfg = _cfg(tmp_path)
     topo.save_topology(
         Topology([
@@ -225,25 +227,33 @@ def test_set_root_reroots_along_spine(tmp_path):
         cfg,
     )
     updated = management.set_root("dept:opt", config=cfg)
-    # the promoted brain is the new root …
-    assert updated.root().id == "dept:opt"
-    # … and the spine flipped: ops→child of dept:opt, general→child of ops.
-    assert updated.node("dept:opt").parent is None
-    assert updated.node("ops").parent == "dept:opt"
-    assert updated.node("general").parent == "ops"
+    # Lhassa stays the absolute root; dept:opt becomes a direct child of the admin.
+    assert updated.root().id == "lhassa"
+    assert updated.node("dept:opt").parent == "lhassa"
+    # the rest of the chart is preserved (general still under lhassa, ops under general)
+    assert updated.node("general").parent == "lhassa"
+    assert updated.node("ops").parent == "general"
 
 
-def test_set_root_already_root_is_noop(tmp_path):
+def test_promote_admin_itself_is_noop(tmp_path):
     cfg = _cfg(tmp_path)
     _seed_flat(cfg)
-    updated = management.set_root("general", config=cfg)
-    assert updated.root().id == "general"
+    updated = management.set_root("lhassa", config=cfg)
+    assert updated.root().id == "lhassa"
 
 
-def test_set_root_preserves_offspine_subtrees(tmp_path):
+def test_promote_already_top_level_is_noop(tmp_path):
     cfg = _cfg(tmp_path)
-    # general → [biz → fin], [ops → opt]. Promote 'opt'. 'fin' (off the spine)
-    # must keep its parent 'biz'.
+    _seed_flat(cfg)  # general becomes a direct child of lhassa on load
+    updated = management.set_root("general", config=cfg)
+    assert updated.root().id == "lhassa"
+    assert updated.node("general").parent == "lhassa"
+
+
+def test_promote_preserves_offspine_subtrees(tmp_path):
+    cfg = _cfg(tmp_path)
+    # general → [biz → fin], [ops → opt]. Promote 'opt' to top-level under the admin.
+    # 'fin' (off the promoted brain) must keep its parent 'biz'.
     topo.save_topology(
         Topology([
             BrainNode(id="general", role="general"),
@@ -255,9 +265,43 @@ def test_set_root_preserves_offspine_subtrees(tmp_path):
         cfg,
     )
     updated = management.set_root("opt", config=cfg)
-    assert updated.root().id == "opt"
-    assert updated.node("fin").parent == "biz"  # off-spine subtree intact
+    assert updated.root().id == "lhassa"
+    assert updated.node("opt").parent == "lhassa"   # now a top-level coordinator
+    assert updated.node("fin").parent == "biz"      # untouched subtree intact
     assert updated.node("biz").parent == "general"
+
+
+# ── permanent administrator invariant (Lhassa is never removed/demoted) ──────────────
+
+
+def test_remove_admin_rejected(tmp_path):
+    cfg = _cfg(tmp_path)
+    _seed_flat(cfg)
+    before = (tmp_path / "org.json").read_text()
+    with pytest.raises(ManagementError):
+        management.remove_brain("lhassa", config=cfg)
+    assert (tmp_path / "org.json").read_text() == before
+
+
+def test_move_admin_rejected(tmp_path):
+    cfg = _cfg(tmp_path)
+    _seed_flat(cfg)
+    with pytest.raises(ManagementError):
+        management.set_parent("lhassa", "general", config=cfg)
+
+
+def test_add_with_no_parent_attaches_under_admin(tmp_path):
+    cfg = _cfg(tmp_path)
+    _seed_flat(cfg)
+    updated = management.add_brain("dept:doc", role="department", config=cfg)
+    assert updated.node("dept:doc").parent == "lhassa"
+
+
+def test_add_second_admin_rejected(tmp_path):
+    cfg = _cfg(tmp_path)
+    _seed_flat(cfg)
+    with pytest.raises(ManagementError):
+        management.add_brain("lhassa", role="administrator", config=cfg)
 
 
 # ── describe ────────────────────────────────────────────────────────────────────────
@@ -268,11 +312,16 @@ def test_describe_shape(tmp_path):
     _seed_flat(cfg)
     management.set_skills("dept:optimizacion", ["optimizacion"], config=cfg)
     desc = management.describe(cfg)
-    assert desc["root"] == "general"
+    # the permanent administrator (Lhassa) is the root and is exposed as "admin".
+    assert desc["root"] == "lhassa"
+    assert desc["admin"] == "lhassa"
     assert desc["standalone"] is False
     ids = {n["id"] for n in desc["nodes"]}
-    assert ids == {"general", "dept:optimizacion", "dept:finanzas"}
+    assert ids == {"lhassa", "general", "dept:optimizacion", "dept:finanzas"}
+    lhassa = next(n for n in desc["nodes"] if n["id"] == "lhassa")
+    assert lhassa["is_admin"] is True
     general = next(n for n in desc["nodes"] if n["id"] == "general")
+    assert general["is_admin"] is False
     assert set(general["children"]) == {"dept:optimizacion", "dept:finanzas"}
     assert general["is_leaf"] is False
     opt = next(n for n in desc["nodes"] if n["id"] == "dept:optimizacion")
@@ -284,7 +333,8 @@ def test_describe_standalone_default(tmp_path):
     cfg = _Cfg(org_role="", org_topology_file=str(tmp_path / "missing.json"))
     desc = management.describe(cfg)
     assert desc["standalone"] is True
-    assert desc["root"] == "general"
+    assert desc["root"] == "lhassa"
+    assert desc["admin"] == "lhassa"
 
 
 # ── available skills (what CAN be assigned) ─────────────────────────────────────────

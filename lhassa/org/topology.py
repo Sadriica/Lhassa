@@ -29,7 +29,7 @@ this module is the pure, side-effect-free shape + its load/save.
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Iterable, Mapping, Optional
 
@@ -42,6 +42,12 @@ if TYPE_CHECKING:
 # label, so new role names never need an RBAC edit.
 ROLE_GENERAL = "general"
 ROLE_DEPARTMENT = "department"
+# The role of the PERMANENT root administrator brain (Lhassa). It is never a leaf
+# "executor" label — it sits above any org and coordinates everything beneath it.
+ROLE_ADMIN = "administrator"
+
+# Fallback admin id when a Config (or a stand-in) does not carry ``root_admin_id``.
+DEFAULT_ADMIN_ID = "lhassa"
 
 
 class TopologyError(ValueError):
@@ -180,6 +186,19 @@ class Topology:
                 return node
         raise TopologyError("no root brain")  # pragma: no cover - guarded by validate
 
+    def admin(self) -> BrainNode:
+        """The PERMANENT administrator brain — always the root of the chart.
+
+        :func:`load_topology` / :func:`default_topology` guarantee the
+        ``config.root_admin_id`` brain (Lhassa) sits at the root, so the
+        administrator and the root are the same node ("Lhassa orbits everything").
+        """
+        return self.root()
+
+    def is_admin(self, node_id: str) -> bool:
+        """Whether ``node_id`` is the permanent administrator (i.e. the root)."""
+        return node_id == self.root().id
+
     def node(self, node_id: str) -> BrainNode:
         """The brain with ``node_id``. Raises :class:`KeyError` if absent."""
         try:
@@ -235,26 +254,72 @@ def _parse_departments(raw: str) -> list[str]:
     return seen
 
 
+def admin_id(config: "Optional[Config]" = None) -> str:
+    """The id of the PERMANENT root administrator (``config.root_admin_id``).
+
+    Lhassa is the default/main brain — the total administrator that always sits at
+    the top of any org and is never removed or demoted. Resolved from config so a
+    stand-in without the field still gets the ``"lhassa"`` default.
+    """
+    config = _resolve_config(config)
+    return (getattr(config, "root_admin_id", "") or DEFAULT_ADMIN_ID).strip() or DEFAULT_ADMIN_ID
+
+
+def _ensure_admin(nodes: Iterable[BrainNode], admin: str) -> list[BrainNode]:
+    """Force the permanent administrator to the ROOT of a node set.
+
+    The migration / invariant rule (kept deliberately simple):
+
+      - If the ``admin`` node is missing, one is SYNTHESIZED and prepended.
+      - The admin node is pinned to the root (``parent=None``).
+      - Any OTHER root (a loaded chart's original root) is re-parented UNDER the
+        admin, so the old top-level brain becomes a child of Lhassa.
+
+    The admin is returned first for deterministic iteration; every other node keeps
+    its declared order. This makes Lhassa orbit any chart loaded from disk, even an
+    old pre-admin one that rooted at ``general``.
+    """
+    nodes = list(nodes)
+    existing = next((n for n in nodes if n.id == admin), None)
+    admin_node = (
+        replace(existing, parent=None)
+        if existing is not None
+        else BrainNode(id=admin, role=ROLE_ADMIN)
+    )
+    others: list[BrainNode] = []
+    for n in nodes:
+        if n.id == admin:
+            continue
+        others.append(replace(n, parent=admin) if n.parent is None else n)
+    return [admin_node, *others]
+
+
 def default_topology(config: "Config") -> Topology:
     """Derive a chart from config when no topology file exists.
 
-    - ``org_role`` empty → a **single standalone brain** (one root, no children).
-    - else → a flat ``general`` → ``[org_departments…]`` chart (slice-1 shape).
+    The root is ALWAYS the permanent administrator brain ``config.root_admin_id``
+    (Lhassa), with ``role="administrator"``:
+
+    - ``org_role`` empty → just the **single admin brain** (Lhassa standalone — it
+      both coordinates and executes, there is no one else, but it is still the
+      administrator).
+    - else → the admin brain with ``[org_departments…]`` hanging directly UNDER it
+      (admin → departments).
     """
+    admin = admin_id(config)
     role = (getattr(config, "org_role", "") or "").strip().lower()
     if not role:
-        # One brain that both coordinates and executes — there is no one else.
-        return Topology([BrainNode(id="general", role=ROLE_GENERAL)])
+        return Topology([BrainNode(id=admin, role=ROLE_ADMIN)])
 
     departments = _parse_departments(getattr(config, "org_departments", "") or "")
-    nodes = [BrainNode(id="general", role=ROLE_GENERAL)]
+    nodes = [BrainNode(id=admin, role=ROLE_ADMIN)]
     for name in departments:
         nodes.append(
             BrainNode(
                 id=f"dept:{name}",
                 role=ROLE_DEPARTMENT,
                 department=name,
-                parent="general",
+                parent=admin,
             )
         )
     return Topology(nodes)
@@ -282,15 +347,20 @@ def load_topology(config: "Optional[Config]" = None) -> Topology:
 
     The file is JSON — a list of node objects ``{"id","role","department","parent"}``
     (a bare list, or an object with a ``"nodes"`` key). A missing/empty file falls
-    back to :func:`default_topology` (single standalone brain, or a flat
-    general+departments chart), so a fresh install needs no file at all.
+    back to :func:`default_topology` (the single admin brain, or the admin with its
+    departments), so a fresh install needs no file at all.
+
+    Whatever is loaded, the permanent administrator (``config.root_admin_id``) is
+    guaranteed to sit at the ROOT via :func:`_ensure_admin` — a pre-admin chart that
+    rooted at ``general`` is migrated so Lhassa orbits above it.
     """
     config = _resolve_config(config)
     path = topology_path(config)
     if path and path.exists():
         raw = json.loads(path.read_text(encoding="utf-8") or "[]")
         items = raw.get("nodes", []) if isinstance(raw, dict) else raw
-        return Topology([BrainNode.from_dict(d) for d in items])
+        nodes = [BrainNode.from_dict(d) for d in items]
+        return Topology(_ensure_admin(nodes, admin_id(config)))
     return default_topology(config)
 
 

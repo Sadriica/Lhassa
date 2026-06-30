@@ -42,8 +42,12 @@ def test_get_topology(client):
     r = client.get("/api/org/topology")
     assert r.status_code == 200
     body = r.json()
-    assert body["root"] == "general"
-    assert _ids(body) == {"general", "dept:optimizacion", "dept:finanzas"}
+    # Lhassa (the permanent administrator) is injected at the root on load.
+    assert body["root"] == "lhassa"
+    assert body["admin"] == "lhassa"
+    assert _ids(body) == {"lhassa", "general", "dept:optimizacion", "dept:finanzas"}
+    lhassa = next(n for n in body["nodes"] if n["id"] == "lhassa")
+    assert lhassa["is_admin"] is True
 
 
 def test_get_skills(client):
@@ -56,7 +60,7 @@ def test_get_route_preview(client):
     r = client.get("/api/org/route", params={"goal": "optimize the slow latency"})
     assert r.status_code == 200
     body = r.json()
-    assert body["path"] == ["general", "dept:optimizacion"]
+    assert body["path"] == ["lhassa", "general", "dept:optimizacion"]
     assert body["leaf"] == "dept:optimizacion"
 
 
@@ -120,9 +124,22 @@ def test_promote_brain(client):
     r = client.post("/api/org/brains/dept:optimizacion/promote")
     assert r.status_code == 200
     body = r.json()
-    assert body["root"] == "dept:optimizacion"
-    general = next(n for n in body["nodes"] if n["id"] == "general")
-    assert general["parent"] == "dept:optimizacion"
+    # Lhassa stays the permanent root; the promoted brain becomes a direct child.
+    assert body["root"] == "lhassa"
+    opt = next(n for n in body["nodes"] if n["id"] == "dept:optimizacion")
+    assert opt["parent"] == "lhassa"
+
+
+def test_delete_admin_is_400(client):
+    r = client.delete("/api/org/brains/lhassa")
+    assert r.status_code == 400
+    # the administrator is still there.
+    assert "lhassa" in _ids(client.get("/api/org/topology").json())
+
+
+def test_move_admin_is_400(client):
+    r = client.post("/api/org/brains/lhassa/move", json={"parent": "general"})
+    assert r.status_code == 400
 
 
 def test_delete_leaf(client):
@@ -141,7 +158,7 @@ def test_delete_subtree_with_force(client):
     client.post("/api/org/brains/dept:finanzas/move", json={"parent": "dept:optimizacion"})
     r = client.delete("/api/org/brains/dept:optimizacion", params={"force": "true"})
     assert r.status_code == 200
-    assert _ids(r.json()) == {"general"}
+    assert _ids(r.json()) == {"lhassa", "general"}
 
 
 # ── existing routes unaffected ────────────────────────────────────────────────────
