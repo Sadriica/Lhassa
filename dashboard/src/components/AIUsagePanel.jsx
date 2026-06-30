@@ -110,9 +110,9 @@ export default function AIUsagePanel({ metrics = {} }) {
   const recent = ledger?.recent || []
 
   return (
-    <div className="bg-slate-900 border border-slate-700 rounded-lg p-4">
+    <div className="lh-card">
       <div className="flex items-center justify-between mb-3">
-        <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">AI Usage</h2>
+        <h2 className="lh-card-title">AI Usage</h2>
         {ledger && (
           <span className={ledger.cache_enabled ? 'text-xs text-green-400' : 'text-xs text-slate-500'}>
             cache {ledger.cache_enabled ? 'on' : 'off'}

@@ -64,9 +64,9 @@ export default function QuarantinePanel() {
   }
 
   return (
-    <div className="bg-slate-900 border border-slate-700 rounded-lg p-4">
+    <div className="lh-card">
       <div className="flex items-center justify-between mb-3">
-        <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+        <h2 className="lh-card-title">
           Quarantine room
         </h2>
         <span className="text-xs text-slate-500">{tools.length} tools</span>
@@ -82,7 +82,7 @@ export default function QuarantinePanel() {
             const estado = t.estado || 'cuarentena'
             const badge = ESTADO_STYLES[estado] || 'bg-slate-800 text-slate-300 border-slate-700'
             return (
-              <li key={t.id || t.nombre} className="border border-slate-800 rounded p-2">
+              <li key={t.id || t.nombre} className="lh-row">
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-xs font-medium text-slate-200">{t.nombre}</span>
                   <span className={`text-[10px] px-1.5 py-0.5 rounded border ${badge}`}>
@@ -103,7 +103,7 @@ export default function QuarantinePanel() {
                       type="button"
                       disabled={busy === t.nombre}
                       onClick={() => graduate(t.nombre)}
-                      className="text-xs px-2 py-1 rounded bg-green-700 hover:bg-green-600 disabled:bg-slate-700 text-white"
+                      className="lh-btn lh-btn-primary"
                     >
                       {busy === t.nombre ? '…' : 'Approve graduation'}
                     </button>

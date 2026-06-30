@@ -103,9 +103,9 @@ export default function HealthPanel() {
   }
 
   return (
-    <div className="bg-slate-900 border border-slate-700 rounded-lg p-4">
+    <div className="lh-card">
       <div className="flex items-center justify-between mb-3">
-        <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Runtime</h2>
+        <h2 className="lh-card-title">Runtime</h2>
         {!loading && health && (
           <span className={health.voice_active ? 'text-xs text-green-400' : 'text-xs text-slate-500'}>
             {health.voice_active ? 'awake' : 'sleeping'}

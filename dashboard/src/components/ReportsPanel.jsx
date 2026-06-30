@@ -43,9 +43,9 @@ export default function ReportsPanel() {
   const projection = proj?.projection
 
   return (
-    <div className="bg-slate-900 border border-slate-700 rounded-lg p-4">
+    <div className="lh-card">
       <div className="flex items-center justify-between mb-3">
-        <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+        <h2 className="lh-card-title">
           Reports & projections
         </h2>
         <span className="text-xs text-slate-500">{reports?.count ?? 0} episodes</span>
@@ -71,7 +71,7 @@ export default function ReportsPanel() {
           {reports?.by_despertar && Object.keys(reports.by_despertar).length > 0 && (
             <div className="flex flex-wrap gap-1 mb-2">
               {Object.entries(reports.by_despertar).map(([k, v]) => (
-                <span key={k} className="text-[10px] px-1.5 py-0.5 rounded border border-slate-700 bg-slate-800 text-slate-300">
+                <span key={k} className="lh-badge">
                   {k}: {v}
                 </span>
               ))}
@@ -83,7 +83,7 @@ export default function ReportsPanel() {
           ) : (
             <ul className="space-y-1 max-h-64 overflow-y-auto">
               {recent.slice(0, 20).map(e => (
-                <li key={e.id} className="border border-slate-800 rounded p-1.5">
+                <li key={e.id} className="lh-row">
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-[11px] text-slate-300">{e.decision || e.despertar_por || '—'}</span>
                     <span className="text-[10px] text-slate-600">{e.creado_en}</span>
