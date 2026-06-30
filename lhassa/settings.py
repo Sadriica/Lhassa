@@ -53,6 +53,40 @@ RESTART_APP = "app"  # restart the main app/API service
 RESTART_VOICE = "voice"  # restart the voice surface
 RESTART_TELEGRAM = "telegram"  # restart the telegram poller
 
+# ── static model hints for the dropdowns (no network) ────────────────────────────
+# These are SUGGESTIONS the panel renders as a select/datalist; the fields stay free
+# text (``allow_custom``) so any model id can still be typed. [SUPUESTO] — static,
+# not verified against a live catalogue; refresh when the providers rotate ids.
+
+# Cheap/free opencode models (reused by the opencode_model dropdown + available()).
+OPENCODE_MODEL_HINTS = [
+    "opencode/deepseek-v4-flash-free",
+    "opencode/grok-code-fast",
+    "opencode/qwen3-coder-free",
+]
+
+# Cloud model ids per provider, used to populate the cheap/smart model dropdowns.
+# [SUPUESTO] current-ish ids — kept small and defensive.
+MODEL_HINTS: dict[str, list[str]] = {
+    "groq": ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"],
+    "openai": ["gpt-4o", "gpt-4o-mini"],
+    "anthropic": ["claude-opus-4-8", "claude-haiku-4-5-20251001"],
+}
+
+
+def _model_options() -> list[str]:
+    """Union of the cloud + opencode model hints for the cheap/smart dropdowns."""
+    seen: list[str] = []
+    for ids in list(MODEL_HINTS.values()) + [OPENCODE_MODEL_HINTS]:
+        for mid in ids:
+            if mid not in seen:
+                seen.append(mid)
+    return seen
+
+
+# Provider names valid in the fallback chain / heartbeat CLI selection.
+FALLBACK_PROVIDER_OPTIONS = ["opencode", "claude", "codex", "local", "default"]
+
 EDITABLE: list[dict] = [
     # ── Heartbeat / routine thinking ─────────────────────────────────────────────
     {
@@ -60,8 +94,14 @@ EDITABLE: list[dict] = [
         "attr": "heartbeat_provider",
         "env_var": "LHASSA_HEARTBEAT_PROVIDER",
         "type": "enum",
-        "options": ["auto", "local", "cloud", "opencode"],
+        "options": ["auto", "local", "cloud", "opencode", "claude", "codex"],
         "label": "Heartbeat provider",
+        "help": (
+            "Which provider runs the routine/heartbeat think. 'auto' prefers a local "
+            "model, then opencode, then cloud; 'opencode'/'claude'/'codex' force the "
+            "matching CLI subscription (claude → the Claude Code CLI, codex → the Codex "
+            "CLI); 'local' forces the local endpoint; 'cloud' forces the cost gateway."
+        ),
         "group": "Heartbeat",
         "default": "auto",
         "restart": RESTART_NONE,
@@ -71,7 +111,10 @@ EDITABLE: list[dict] = [
         "attr": "opencode_model",
         "env_var": "LHASSA_OPENCODE_MODEL",
         "type": "str",
+        "options": list(OPENCODE_MODEL_HINTS),
+        "allow_custom": True,
         "label": "OpenCode model (routine beat)",
+        "help": "Suggested opencode models; any model id may still be typed.",
         "group": "Heartbeat",
         "default": "opencode/deepseek-v4-flash-free",
         "restart": RESTART_NONE,
@@ -80,8 +123,13 @@ EDITABLE: list[dict] = [
         "key": "fallback_providers",
         "attr": "fallback_providers",
         "env_var": "LHASSA_FALLBACK_PROVIDERS",
-        "type": "str",
-        "label": "Fallback provider chain (CSV)",
+        "type": "multi",
+        "options": list(FALLBACK_PROVIDER_OPTIONS),
+        "label": "Fallback provider chain",
+        "help": (
+            "Ordered providers tried when the primary heartbeat provider fails "
+            "(stored as a CSV string). Accepts a list or a CSV string on set."
+        ),
         "group": "Heartbeat",
         "default": "claude,codex,default",
         "restart": RESTART_NONE,
@@ -92,7 +140,10 @@ EDITABLE: list[dict] = [
         "attr": "model_cheap",
         "env_var": "LHASSA_MODEL_CHEAP",
         "type": "str",
+        "options": _model_options(),
+        "allow_custom": True,
         "label": "Cheap model (routine judgment)",
+        "help": "Suggested model ids; any model id may still be typed.",
         "group": "Models",
         "default": "(falls back to LHASSA_MODEL)",
         "restart": RESTART_NONE,
@@ -102,7 +153,10 @@ EDITABLE: list[dict] = [
         "attr": "model_smart",
         "env_var": "LHASSA_MODEL_SMART",
         "type": "str",
+        "options": _model_options(),
+        "allow_custom": True,
         "label": "Smart model (hard judgment)",
+        "help": "Suggested model ids; any model id may still be typed.",
         "group": "Models",
         "default": "(falls back to LHASSA_MODEL)",
         "restart": RESTART_NONE,
@@ -314,6 +368,15 @@ def _coerce(entry: dict, value: Any) -> Any:
                 f"{entry['key']!r} must be one of {options}, got {token!r}"
             )
         return token
+    if t == "multi":
+        # Accept a list/tuple OR a CSV string; normalize to a clean CSV string so the
+        # stored/serialized value stays backward-compatible (config reads a CSV).
+        if isinstance(value, (list, tuple)):
+            parts = [str(v).strip() for v in value]
+        else:
+            parts = [p.strip() for p in str(value).split(",")]
+        parts = [p for p in parts if p]  # drop empties (also makes "" → "")
+        return ",".join(parts)
     return str(value)
 
 
@@ -343,17 +406,12 @@ def _config():
 
 # ── available lists for the panel ────────────────────────────────────────────────
 
-# A static hint of cheap/free opencode models — avoids a network call at read time.
-OPENCODE_MODEL_HINTS = [
-    "opencode/deepseek-v4-flash-free",
-    "opencode/grok-code-fast",
-    "opencode/qwen3-coder-free",
-]
-
 
 def available() -> dict:
     """Read-only lists the panel needs: provider names, harness adapters, opencode
-    model hints, and the enum option sets. No network calls."""
+    model hints, a per-provider model map (so the cheap/smart dropdowns can union
+    them), and the enum option sets. No network calls — every list is a static
+    ``[SUPUESTO]`` hint."""
     providers: list[str] = []
     harnesses: list[str] = []
     try:
@@ -371,7 +429,12 @@ def available() -> dict:
     return {
         "providers": providers,
         "harnesses": harnesses,
+        # {provider: [model ids]} static hints for the model dropdowns.
+        "models": {k: list(v) for k, v in MODEL_HINTS.items()},
         "opencode_models": list(OPENCODE_MODEL_HINTS),
+        # Flat union the cheap/smart dropdowns can render directly.
+        "model_options": _model_options(),
+        "fallback_providers": list(FALLBACK_PROVIDER_OPTIONS),
         "heartbeat_providers": list(_BY_KEY["heartbeat_provider"]["options"]),
         "router_modes": list(_BY_KEY["router_mode"]["options"]),
     }
@@ -397,6 +460,11 @@ def _effective_entry(entry: dict, config) -> dict:
     }
     if entry.get("options"):
         row["options"] = list(entry["options"])
+    if entry.get("allow_custom"):
+        # Frontend hint: render a select/datalist but still allow a typed value.
+        row["allow_custom"] = True
+    if entry.get("help"):
+        row["help"] = entry["help"]
     row["value"] = _mask(raw) if secret else raw
     return row
 

@@ -102,11 +102,12 @@ def pick_provider(*, sensitive: bool, config: "Config", hard: bool = False) -> M
 
     # Routine/heartbeat path → prefer local, then opencode, before falling to cloud.
     if routine and heartbeat != "cloud":
-        # Explicit opencode: use the CLI provider (it degrades at call time if the
-        # binary/credentials are missing). opencode is cloud → privacy hook applies.
-        if heartbeat == "opencode":
+        # Explicit CLI-subscription providers: opencode / claude (Claude Code CLI) /
+        # codex (Codex CLI). They degrade at call time if the binary/credentials are
+        # missing. All three are cloud-ish (not local) → the privacy hook applies.
+        if heartbeat in ("opencode", "claude", "codex"):
             return _maybe_pseudonymize(
-                get_model_provider(config, name="opencode"), config
+                get_model_provider(config, name=heartbeat), config
             )
 
         wants_local = heartbeat == "local" or (heartbeat == "auto" and bool(local_url))

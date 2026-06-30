@@ -77,6 +77,46 @@ def test_set_enum_validates(env):
     assert ok["applied"] is True and config_mod.Config.heartbeat_provider == "opencode"
 
 
+def test_heartbeat_provider_accepts_claude_and_codex(env):
+    # The CLI-subscription providers are now selectable heartbeat options.
+    for p in ("claude", "codex"):
+        res = settings.set("heartbeat_provider", p)
+        assert res["applied"] is True and res["value"] == p
+        assert config_mod.Config.heartbeat_provider == p
+        assert settings.get("heartbeat_provider")["value"] == p
+    model = settings.effective()
+    hb = next(s for s in model["settings"] if s["key"] == "heartbeat_provider")
+    assert {"claude", "codex"} <= set(hb["options"])
+    assert {"claude", "codex"} <= set(model["available"]["heartbeat_providers"])
+
+
+def test_model_fields_carry_options_and_allow_custom(env):
+    model = settings.effective()
+    by = {s["key"]: s for s in model["settings"]}
+    for key in ("opencode_model", "model_cheap", "model_smart"):
+        assert by[key]["options"], f"{key} should carry dropdown options"
+        assert by[key]["allow_custom"] is True  # select but still free-text
+    # available() exposes a per-provider model map + a flat union for the dropdowns.
+    avail = model["available"]
+    assert {"groq", "openai", "anthropic"} <= set(avail["models"])
+    assert "llama-3.3-70b-versatile" in avail["models"]["groq"]
+    assert avail["model_options"]
+    assert avail["opencode_models"]
+
+
+def test_fallback_providers_is_multi_accepts_list_and_csv(env):
+    row = settings.get("fallback_providers")
+    assert row["type"] == "multi" and row["options"]
+    # A list is joined to a CSV string (backward-compat stored value).
+    res = settings.set("fallback_providers", ["opencode", "claude", "default"])
+    assert res["applied"] is True and res["value"] == "opencode,claude,default"
+    assert config_mod.Config.fallback_providers == "opencode,claude,default"
+    assert "LHASSA_FALLBACK_PROVIDERS=opencode,claude,default" in _settings_env_text(env)
+    # A CSV string is also accepted and normalized (spaces/empties trimmed).
+    res2 = settings.set("fallback_providers", "claude, codex , default,")
+    assert res2["applied"] is True and res2["value"] == "claude,codex,default"
+
+
 def test_set_unknown_key_is_error_not_raise(env):
     res = settings.set("does_not_exist", "x")
     assert res["applied"] is False and "unknown setting" in res["error"]

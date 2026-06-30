@@ -360,6 +360,58 @@ def test_pick_provider_not_sensitive_returns_default():
     assert prov.name == "default"
 
 
+# ── Router: heartbeat_provider → claude / codex CLI subscriptions ─────────────
+
+
+def _route_with_heartbeat(monkeypatch, heartbeat, *, hard=False):
+    """Drive pick_provider with a chosen heartbeat_provider, mocking get_model_provider."""
+    captured = {}
+
+    def fake_gmp(config, name=None):
+        captured["name"] = name
+        return FakeProvider(name=name or "default")
+
+    monkeypatch.setattr(router, "get_model_provider", fake_gmp)
+    cfg = FakeConfig()
+    cfg.heartbeat_provider = heartbeat
+    prov = router.pick_provider(sensitive=False, config=cfg, hard=hard)
+    return prov, captured
+
+
+def test_pick_provider_heartbeat_claude_routes_to_claude(monkeypatch):
+    prov, captured = _route_with_heartbeat(monkeypatch, "claude")
+    assert captured["name"] == "claude"
+    assert prov.name == "claude"
+
+
+def test_pick_provider_heartbeat_codex_routes_to_codex(monkeypatch):
+    prov, captured = _route_with_heartbeat(monkeypatch, "codex")
+    assert captured["name"] == "codex"
+    assert prov.name == "codex"
+
+
+def test_pick_provider_heartbeat_claude_hard_path_ignores_cli(monkeypatch):
+    # The HARD path is unchanged: it goes to the cloud default, not the claude CLI.
+    prov, captured = _route_with_heartbeat(monkeypatch, "claude", hard=True)
+    assert captured["name"] is None  # default gateway, no CLI name forced
+    assert prov.name == "default"
+
+
+def test_decide_routine_routes_to_codex_when_configured(monkeypatch):
+    captured = {}
+
+    def fake_gmp(config, name=None):
+        captured["name"] = name
+        return FakeProvider(name=name or "default")
+
+    monkeypatch.setattr(router, "get_model_provider", fake_gmp)
+    cfg = FakeConfig()
+    cfg.heartbeat_provider = "codex"
+    d = router.decide(FakeTrigger(), None, config=cfg)
+    assert d.kind == "think" and d.provider.name == "codex"
+    assert captured["name"] == "codex"
+
+
 # ── Router: pick_model (cheap vs smart) ───────────────────────────────────────
 
 
