@@ -420,6 +420,12 @@ class Config:
     org_departments: str = os.getenv(
         "LHASSA_ORG_DEPARTMENTS", "optimizacion,documentacion,finanzas"
     )
+    # The org CHART/topology lives in this file (JSON): 1 standalone brain up to an
+    # arbitrary-depth hierarchy the owner creates/manages (via `lhassa org`). Missing
+    # file → derived from org_role/org_departments (a flat general+departments chart).
+    org_topology_file: str = os.getenv(
+        "LHASSA_ORG_TOPOLOGY_FILE", str(Path.home() / ".lhassa" / "org.json")
+    )
 
     # ── Modularity — registries, channels, plugins (elastic & modular) ────────
     # Which notify CHANNELS are active (comma-separated); each is a registered,
