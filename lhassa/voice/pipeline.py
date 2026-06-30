@@ -172,6 +172,16 @@ async def run():
 
     register_tools(llm)
 
+    # Phase 6 voice bridge: when enabled, the assistant turn is answered by the
+    # brain (memory + identity + provider + episode) via a drop-in FrameProcessor
+    # that replaces the LLM service. Default path (voice_enabled false) unchanged.
+    turn_processor = llm
+    if getattr(config, "voice_enabled", False):
+        from lhassa.voice.brain_bridge import make_brain_processor
+
+        turn_processor = make_brain_processor(config)
+        logger.info("Voice turns routed through the brain (memory + identity + episode).")
+
     context = LLMContext(
         messages=[{"role": "system", "content": system_prompt}],
         tools=TOOLS,
@@ -215,7 +225,7 @@ async def run():
             stt,
             *([WakeDebug()] if config.debug else []),
             aggregators.user(),
-            llm,
+            turn_processor,
             ChatPrinter(),
             tts,
             transport.output(),
