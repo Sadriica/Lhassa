@@ -14,7 +14,7 @@ a candidate is rejected unless every gate explicitly passes.
 
 The pipeline stops at the first failed gate (later gates do not run): there is no
 point measuring "better" on something that is not even "correct". Gates are
-**modular per domain** — the first domain is ``optimizacion`` (clean metrics).
+**modular per domain** — the first domain is ``optimization`` (clean metrics).
 
 Reuse, not reinvention: gate 1 is :func:`lhassa.security.quarantine.run_in_quarantine`;
 gates 2 and 3 are the existing :mod:`lhassa.agents.verify` ``Verifier`` built-ins
@@ -46,7 +46,7 @@ GATE_MEJOR = "3_mejor"
 RETIRE_FAILURE_RATE = 0.5
 RETIRE_MIN_USES = 3
 
-# Default direction for the "mejor" metric. The first domain is optimización, whose
+# Default direction for the "mejor" metric. The first domain is optimization, whose
 # metrics (tokens/tiempo/pasos) are all *lower is better* → not higher_is_better.
 _LOWER_IS_BETTER = False
 
@@ -70,7 +70,7 @@ async def run_gates(
     tests_spec: Optional[dict] = None,
     metric_fn: Optional[Callable] = None,
     baseline: Optional[float] = None,
-    domain: str = "optimizacion",
+    domain: str = "optimization",
     quarantine_timeout: int = 30,
 ) -> list[GateResult]:
     """Run the three inline gates IN ORDER, stopping at the first failure.
@@ -151,7 +151,7 @@ async def promote(
     tool_name: str,
     candidate: Candidate,
     *,
-    domain: str = "optimizacion",
+    domain: str = "optimization",
     tests_spec: Optional[dict] = None,
     metric_fn: Optional[Callable] = None,
     baseline: Optional[float] = None,

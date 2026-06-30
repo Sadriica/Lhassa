@@ -8,8 +8,8 @@ to a documented default department when nothing matches. The whole policy is a
 lookup, so it is transparent, free, and testable — the same spirit as
 :mod:`lhassa.org.rbac` (a closed table, auditable at a glance).
 
-The registry starts with at least two departments (``optimizacion`` and
-``documentacion``, plus ``finanzas``) and is open for ``register``. ``route`` never
+The registry starts with at least two departments (``optimization`` and
+``documentation``, plus ``finance``) and is open for ``register``. ``route`` never
 calls a model; the general's :meth:`GeneralBrain.assign_auto` uses it to choose the
 target and then assigns as usual — the general routes, it never executes.
 """
@@ -33,10 +33,10 @@ class Department:
     description: str = ""
 
 
-# The fallback department used when a goal matches no keyword table. ``optimizacion``
+# The fallback department used when a goal matches no keyword table. ``optimization``
 # is Lhassa's first specialist domain (Phase 5), so it is the natural default home
 # for unclassified work.
-FALLBACK_DEPARTMENT = "optimizacion"
+FALLBACK_DEPARTMENT = "optimization"
 
 
 # ── the registry (insertion-ordered; first-registered wins ties) ──────────────────
@@ -64,7 +64,7 @@ def get_department(name: str) -> Department | None:
 
 register(
     Department(
-        name="optimizacion",
+        name="optimization",
         description="performance, latency, and efficiency work",
         keywords=frozenset(
             {
@@ -80,7 +80,7 @@ register(
 
 register(
     Department(
-        name="documentacion",
+        name="documentation",
         description="documentation, write-ups, and explanations",
         keywords=frozenset(
             {
@@ -88,7 +88,7 @@ register(
                 "documentar", "readme", "manual", "guide", "tutorial", "write-up",
                 "writeup", "explain", "explanation", "describe", "comment",
                 "comments", "changelog", "notes", "spec", "redactar", "redaccion",
-                "documentacion", "escribir",
+                "escribir",
             }
         ),
     )
@@ -96,11 +96,11 @@ register(
 
 register(
     Department(
-        name="finanzas",
+        name="finance",
         description="budgets, payments, and accounting",
         keywords=frozenset(
             {
-                "finance", "financial", "finanzas", "budget", "budgeting",
+                "finance", "financial", "budget", "budgeting",
                 "presupuesto", "invoice", "factura", "payment", "pay", "pago",
                 "funds", "fund", "money", "dinero", "cost", "costs", "expense",
                 "expenses", "gasto", "gastos", "accounting", "ledger", "reconcile",

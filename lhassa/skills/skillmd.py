@@ -6,12 +6,12 @@ frontmatter carries ``name`` / ``description`` (+ optional ``license`` and a
 nested ``metadata`` block) and whose markdown body is the instructions::
 
     ---
-    name: optimizacion
+    name: optimization
     description: Make a routine cheaper on one clean lower-is-better metric.
     license: MIT
     metadata:
       allowed-tools: [read_file, write_file, shell]
-      domain: optimizacion
+      domain: optimization
       tags: [performance, cost]
       level: 2
       source: lhassa/catalog

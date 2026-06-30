@@ -68,11 +68,11 @@ async def test_brain_executor_thinks_with_department_identity(tmp_path, monkeypa
     _patch_router(monkeypatch, provider)
 
     result = await brain_executor(
-        "make the heartbeat faster", department="optimizacion", instance_id="inst_personal"
+        "make the heartbeat faster", department="optimization", instance_id="inst_personal"
     )
 
     # structured result
-    assert result["department"] == "optimizacion"
+    assert result["department"] == "optimization"
     assert result["summary"] == "optimized: cache the hot path"
     assert result["model"] == "fake-model"
     assert result["cost_usd"] == pytest.approx(0.0021)
@@ -80,7 +80,7 @@ async def test_brain_executor_thinks_with_department_identity(tmp_path, monkeypa
 
     # the DEPARTMENT'S identity is reflected in the system prompt
     assert provider.seen_system is not None
-    assert "optimizacion department brain" in provider.seen_system
+    assert "optimization department brain" in provider.seen_system
 
     # an episode (despertar_por="org") was logged carrying the answer
     eps = await db.load_recent_episodes("inst_personal")
@@ -101,9 +101,9 @@ async def test_brain_executor_degrades_on_provider_not_configured(tmp_path, monk
     _patch_router(monkeypatch, provider)
 
     # must NOT raise — a failure becomes a structured result
-    result = await brain_executor("anything", department="finanzas")
+    result = await brain_executor("anything", department="finance")
     assert result["ok"] is True
-    assert result["department"] == "finanzas"
+    assert result["department"] == "finance"
     assert result["cost_usd"] == 0.0
     assert "ProviderNotConfigured" in result["summary"]
 
@@ -115,7 +115,7 @@ async def test_brain_executor_degrades_on_no_provider(tmp_path, monkeypatch):
     from lhassa.org.executor import brain_executor
 
     _patch_router(monkeypatch, None)  # router resolves no provider
-    result = await brain_executor("x", department="documentacion")
+    result = await brain_executor("x", department="documentation")
     assert result["ok"] is True
     assert result["cost_usd"] == 0.0
 
@@ -131,7 +131,7 @@ async def test_brain_executor_offline_by_default_makes_no_call(tmp_path, monkeyp
     provider = _FakeProvider()
     _patch_router(monkeypatch, provider)
 
-    result = await brain_executor("optimize stuff", department="optimizacion")
+    result = await brain_executor("optimize stuff", department="optimization")
     assert provider.calls == 0  # no model was called
     assert result["ok"] is True
     assert result["model"] == "offline"
@@ -166,7 +166,7 @@ async def test_brain_executor_loads_installed_skill_into_prompt(tmp_path, monkey
     cfg = _skills_cfg(tmp_path)
     SkillStore(cfg).save(
         Skill(
-            name="optimizacion",
+            name="optimization",
             description="make it cheaper",
             instructions="OPTIMIZE: beat one lower-is-better metric, MAGIC_MARKER_42.",
         )
@@ -178,18 +178,18 @@ async def test_brain_executor_loads_installed_skill_into_prompt(tmp_path, monkey
     # one installed skill + one referenced-but-not-installed name
     result = await brain_executor(
         "speed it up",
-        department="optimizacion",
+        department="optimization",
         instance_id="inst_personal",
         config=cfg,
-        skills=["optimizacion", "ghost-skill"],
+        skills=["optimization", "ghost-skill"],
     )
 
     # the installed skill's instructions were injected into the system prompt
-    assert "## Skill: optimizacion" in provider.seen_system
+    assert "## Skill: optimization" in provider.seen_system
     assert "MAGIC_MARKER_42" in provider.seen_system
     # the uninstalled name is recorded, not loaded — and nothing raised
     assert result["ok"] is True
-    assert result["skills_loaded"] == ["optimizacion"]
+    assert result["skills_loaded"] == ["optimization"]
     assert result["skills_not_installed"] == ["ghost-skill"]
     # an uninstalled skill never reaches the prompt
     assert "ghost-skill" not in (provider.seen_system or "")
@@ -204,24 +204,24 @@ async def test_brain_executor_resolves_skills_from_topology(tmp_path, monkeypatc
     from lhassa.skills.store import SkillStore
 
     cfg = _skills_cfg(tmp_path)
-    # a topology where dept:optimizacion is assigned the "optimizacion" skill
+    # a topology where dept:optimization is assigned the "optimization" skill
     (tmp_path / "org.json").write_text(
         json.dumps(
             [
                 {"id": "general", "role": "general", "parent": None},
                 {
-                    "id": "dept:optimizacion",
+                    "id": "dept:optimization",
                     "role": "department",
-                    "department": "optimizacion",
+                    "department": "optimization",
                     "parent": "general",
-                    "skills": ["optimizacion"],
+                    "skills": ["optimization"],
                 },
             ]
         )
     )
     SkillStore(cfg).save(
         Skill(
-            name="optimizacion",
+            name="optimization",
             description="make it cheaper",
             instructions="TOPO_LOADED_BODY_77",
         )
@@ -232,10 +232,10 @@ async def test_brain_executor_resolves_skills_from_topology(tmp_path, monkeypatc
 
     # no skills= → names come from the topology node
     result = await brain_executor(
-        "tighten it", department="optimizacion", instance_id="inst_personal", config=cfg
+        "tighten it", department="optimization", instance_id="inst_personal", config=cfg
     )
     assert "TOPO_LOADED_BODY_77" in provider.seen_system
-    assert result["skills_loaded"] == ["optimizacion"]
+    assert result["skills_loaded"] == ["optimization"]
     assert "skills_not_installed" not in result
 
 
@@ -252,14 +252,14 @@ async def test_handle_default_executor_is_brain_executor(tmp_path, monkeypatch):
     _patch_router(monkeypatch, provider)
 
     general = GeneralBrain(instance_id="inst_personal")
-    dept = DepartmentBrain(department="optimizacion", instance_id="inst_personal")
+    dept = DepartmentBrain(department="optimization", instance_id="inst_personal")
 
-    await general.assign("speed it up", to_department="optimizacion", by_actor="owner")
-    inbox = await messaging.inbox("dept:optimizacion", instance_id="inst_personal")
+    await general.assign("speed it up", to_department="optimization", by_actor="owner")
+    inbox = await messaging.inbox("dept:optimization", instance_id="inst_personal")
 
     # no executor injected → defaults to brain_executor → the mocked provider runs
     result = await dept.handle(inbox[0])
     assert provider.calls == 1
     assert result.payload["result"]["summary"] == "department thought about it"
     # the department's identity reached the prompt
-    assert "optimizacion department brain" in provider.seen_system
+    assert "optimization department brain" in provider.seen_system

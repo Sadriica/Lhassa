@@ -111,7 +111,7 @@ async def test_streak_isolated_per_action_and_actor(tmp_path, monkeypatch, knob_
     assert await autonomy.should_auto_approve(inst, "sync_repo", "alice") is True
     assert await autonomy.should_auto_approve(inst, "sync_repo", "bob") is False
     # Different action, same actor → its own (empty) streak.
-    assert await autonomy.should_auto_approve(inst, "generar_documentacion", "alice") is False
+    assert await autonomy.should_auto_approve(inst, "generate_documentation", "alice") is False
 
 
 @pytest.mark.asyncio

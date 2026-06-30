@@ -40,15 +40,15 @@ def _seed_flat(topo_file):
             [
                 {"id": "general", "role": "general", "department": None, "parent": None},
                 {
-                    "id": "dept:optimizacion",
+                    "id": "dept:optimization",
                     "role": "department",
-                    "department": "optimizacion",
+                    "department": "optimization",
                     "parent": "general",
                 },
                 {
-                    "id": "dept:finanzas",
+                    "id": "dept:finance",
                     "role": "department",
-                    "department": "finanzas",
+                    "department": "finance",
                     "parent": "general",
                 },
             ]
@@ -67,7 +67,7 @@ def test_tree_json(tmp_path, monkeypatch):
     rows = json.loads(res.output)
     # Lhassa (the permanent administrator) is injected at the root on load.
     assert {r["id"] for r in rows} == {
-        "lhassa", "general", "dept:optimizacion", "dept:finanzas",
+        "lhassa", "general", "dept:optimization", "dept:finance",
     }
 
 
@@ -85,7 +85,7 @@ def test_list_json(tmp_path, monkeypatch):
     res = runner.invoke(app, ["org", "list", "--json"])
     assert res.exit_code == 0
     rows = json.loads(res.output)
-    assert any(r["id"] == "dept:finanzas" and r["department"] == "finanzas" for r in rows)
+    assert any(r["id"] == "dept:finance" and r["department"] == "finance" for r in rows)
 
 
 def test_default_derivation_when_no_file(tmp_path, monkeypatch):
@@ -109,18 +109,18 @@ def test_add_persists(tmp_path, monkeypatch):
         app,
         [
             "org", "add",
-            "--id", "dept:documentacion",
+            "--id", "dept:documentation",
             "--role", "department",
             "--parent", "general",
-            "--department", "documentacion",
+            "--department", "documentation",
             "--json",
         ],
     )
     assert res.exit_code == 0
-    assert json.loads(res.output)["id"] == "dept:documentacion"
+    assert json.loads(res.output)["id"] == "dept:documentation"
     # persisted to disk
     ids = {n["id"] for n in json.loads(topo_file.read_text())}
-    assert "dept:documentacion" in ids
+    assert "dept:documentation" in ids
 
 
 def test_add_into_empty_creates_hierarchy(tmp_path, monkeypatch):
@@ -152,11 +152,11 @@ def test_add_invalid_parent_fails(tmp_path, monkeypatch):
 def test_remove_leaf(tmp_path, monkeypatch):
     topo_file = _use_tmp(tmp_path, monkeypatch)
     _seed_flat(topo_file)
-    res = runner.invoke(app, ["org", "remove", "--id", "dept:finanzas", "--json"])
+    res = runner.invoke(app, ["org", "remove", "--id", "dept:finance", "--json"])
     assert res.exit_code == 0
-    assert json.loads(res.output)["removed"] == ["dept:finanzas"]
+    assert json.loads(res.output)["removed"] == ["dept:finance"]
     ids = {n["id"] for n in json.loads(topo_file.read_text())}
-    assert "dept:finanzas" not in ids
+    assert "dept:finance" not in ids
 
 
 def test_remove_root_with_children_refused(tmp_path, monkeypatch):
@@ -177,9 +177,9 @@ def test_remove_subtree_with_force(tmp_path, monkeypatch):
                 {"id": "general", "role": "general", "department": None, "parent": None},
                 {"id": "ops", "role": "sub_general", "department": None, "parent": "general"},
                 {
-                    "id": "dept:optimizacion",
+                    "id": "dept:optimization",
                     "role": "department",
-                    "department": "optimizacion",
+                    "department": "optimization",
                     "parent": "ops",
                 },
             ]
@@ -188,7 +188,7 @@ def test_remove_subtree_with_force(tmp_path, monkeypatch):
     res = runner.invoke(app, ["org", "remove", "--id", "ops", "--force", "--json"])
     assert res.exit_code == 0
     removed = set(json.loads(res.output)["removed"])
-    assert removed == {"ops", "dept:optimizacion"}
+    assert removed == {"ops", "dept:optimization"}
     ids = {n["id"] for n in json.loads(topo_file.read_text())}
     assert ids == {"lhassa", "general"}
 
@@ -212,8 +212,8 @@ def test_route_preview(tmp_path, monkeypatch):
     assert res.exit_code == 0
     payload = json.loads(res.output)
     # the path now starts at the permanent administrator (Lhassa) at the root.
-    assert payload["path"] == ["lhassa", "general", "dept:optimizacion"]
-    assert payload["leaf"] == "dept:optimizacion"
+    assert payload["path"] == ["lhassa", "general", "dept:optimization"]
+    assert payload["leaf"] == "dept:optimization"
 
 
 # ── run (offline) ───────────────────────────────────────────────────────────────
@@ -228,8 +228,8 @@ def test_run_offline(tmp_path, monkeypatch):
     )
     assert res.exit_code == 0
     out = json.loads(res.output)
-    assert out["leaf"] == "dept:finanzas"
-    assert out["department"] == "finanzas"
+    assert out["leaf"] == "dept:finance"
+    assert out["department"] == "finance"
     # offline executor → deterministic, $0 result (no live model)
     assert out["result"]["model"] == "offline"
     assert out["result"]["cost_usd"] == 0.0
@@ -245,18 +245,18 @@ def test_add_with_skills_and_limits(tmp_path, monkeypatch):
         app,
         [
             "org", "add", "--id", "dept:doc", "--parent", "general",
-            "--department", "documentacion",
-            "--skills", "optimizacion,writing",
+            "--department", "documentation",
+            "--skills", "optimization,writing",
             "--limits", '{"budget_usd": 1.5}',
             "--json",
         ],
     )
     assert res.exit_code == 0
     node = json.loads(res.output)
-    assert node["skills"] == ["optimizacion", "writing"]
+    assert node["skills"] == ["optimization", "writing"]
     assert node["limits"] == {"budget_usd": 1.5}
     persisted = {n["id"]: n for n in json.loads(topo_file.read_text())}
-    assert persisted["dept:doc"]["skills"] == ["optimizacion", "writing"]
+    assert persisted["dept:doc"]["skills"] == ["optimization", "writing"]
 
 
 def test_set_skills_cmd(tmp_path, monkeypatch):
@@ -264,10 +264,10 @@ def test_set_skills_cmd(tmp_path, monkeypatch):
     _seed_flat(topo_file)
     res = runner.invoke(
         app,
-        ["org", "set-skills", "dept:finanzas", "--skills", "finanzas,budgets", "--json"],
+        ["org", "set-skills", "dept:finance", "--skills", "finance,budgets", "--json"],
     )
     assert res.exit_code == 0
-    assert json.loads(res.output)["skills"] == ["finanzas", "budgets"]
+    assert json.loads(res.output)["skills"] == ["finance", "budgets"]
 
 
 def test_set_limits_cmd_kv_pairs(tmp_path, monkeypatch):
@@ -275,7 +275,7 @@ def test_set_limits_cmd_kv_pairs(tmp_path, monkeypatch):
     _seed_flat(topo_file)
     res = runner.invoke(
         app,
-        ["org", "set-limits", "dept:finanzas", "--limits", "max_risk=low,budget_usd=2.5",
+        ["org", "set-limits", "dept:finance", "--limits", "max_risk=low,budget_usd=2.5",
          "--json"],
     )
     assert res.exit_code == 0
@@ -290,11 +290,11 @@ def test_move_reparents(tmp_path, monkeypatch):
     topo_file = _use_tmp(tmp_path, monkeypatch)
     _seed_flat(topo_file)
     res = runner.invoke(
-        app, ["org", "move", "dept:finanzas", "--parent", "dept:optimizacion"]
+        app, ["org", "move", "dept:finance", "--parent", "dept:optimization"]
     )
     assert res.exit_code == 0
     persisted = {n["id"]: n for n in json.loads(topo_file.read_text())}
-    assert persisted["dept:finanzas"]["parent"] == "dept:optimizacion"
+    assert persisted["dept:finance"]["parent"] == "dept:optimization"
 
 
 def test_promote_makes_top_level_under_admin(tmp_path, monkeypatch):
@@ -303,7 +303,7 @@ def test_promote_makes_top_level_under_admin(tmp_path, monkeypatch):
         json.dumps([
             {"id": "general", "role": "general", "parent": None},
             {"id": "ops", "role": "sub_general", "parent": "general"},
-            {"id": "dept:opt", "role": "department", "department": "optimizacion",
+            {"id": "dept:opt", "role": "department", "department": "optimization",
              "parent": "ops"},
         ])
     )
@@ -338,10 +338,10 @@ def test_tree_marks_admin(tmp_path, monkeypatch):
 def test_show_one_brain(tmp_path, monkeypatch):
     topo_file = _use_tmp(tmp_path, monkeypatch)
     _seed_flat(topo_file)
-    res = runner.invoke(app, ["org", "show", "dept:optimizacion", "--json"])
+    res = runner.invoke(app, ["org", "show", "dept:optimization", "--json"])
     assert res.exit_code == 0
     payload = json.loads(res.output)
-    assert payload["id"] == "dept:optimizacion"
+    assert payload["id"] == "dept:optimization"
     assert payload["is_leaf"] is True
     assert payload["children"] == []
 
@@ -351,16 +351,16 @@ def test_skills_lists_registry_domains(tmp_path, monkeypatch):
     res = runner.invoke(app, ["org", "skills", "--json"])
     assert res.exit_code == 0
     domains = {s["domain"] for s in json.loads(res.output)}
-    assert "optimizacion" in domains
+    assert "optimization" in domains
 
 
 def test_tree_shows_skills(tmp_path, monkeypatch):
     topo_file = _use_tmp(tmp_path, monkeypatch)
     _seed_flat(topo_file)
-    runner.invoke(app, ["org", "set-skills", "dept:optimizacion", "--skills", "optimizacion"])
+    runner.invoke(app, ["org", "set-skills", "dept:optimization", "--skills", "optimization"])
     res = runner.invoke(app, ["org", "tree"])
     assert res.exit_code == 0
-    assert "skills=optimizacion" in res.output
+    assert "skills=optimization" in res.output
 
 
 # ── the default chat/REPL path is preserved ──────────────────────────────────────

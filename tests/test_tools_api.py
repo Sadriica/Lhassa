@@ -32,7 +32,7 @@ async def test_get_tools_returns_rows(api):
     await db.upsert_tool(
         inst,
         "speedup",
-        dominio="optimizacion",
+        dominio="optimization",
         estado="cuarentena",
         metrica_baseline=10.0,
         metrica_actual=6.0,
@@ -42,7 +42,7 @@ async def test_get_tools_returns_rows(api):
     rows = r.json()
     assert isinstance(rows, list)
     row = next(t for t in rows if t["nombre"] == "speedup")
-    assert row["dominio"] == "optimizacion"
+    assert row["dominio"] == "optimization"
     assert row["estado"] == "cuarentena"
     assert row["metrica_baseline"] == 10.0
     assert row["metrica_actual"] == 6.0
@@ -61,7 +61,7 @@ async def test_get_tools_empty(api):
 @pytest.mark.asyncio
 async def test_graduate_endpoint_marks_graduada_and_resolves_approval(api):
     client, db, inst = api
-    await db.upsert_tool(inst, "speedup", dominio="optimizacion", estado="cuarentena")
+    await db.upsert_tool(inst, "speedup", dominio="optimization", estado="cuarentena")
 
     r = await client.post("/api/tools/speedup/graduate", json={})
     assert r.status_code == 200

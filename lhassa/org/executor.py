@@ -111,7 +111,7 @@ def _resolve_brain_skills(department: str, config: Config) -> tuple[str, ...]:
     """The skill NAMES assigned to the brain that owns ``department`` (topology).
 
     Finds the :class:`BrainNode` whose ``department`` matches (or whose ``id`` ends
-    with the department, e.g. ``"dept:optimizacion"``) and returns its ``.skills``.
+    with the department, e.g. ``"dept:optimization"``) and returns its ``.skills``.
     No match (or the single standalone admin) → no skills, unchanged behaviour.
     Never raises — a missing/unreadable topology yields ``()``.
     """

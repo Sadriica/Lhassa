@@ -35,9 +35,9 @@ def _seed_topology(tmp_path):
                 {
                     "id": "dept:opt",
                     "role": "department",
-                    "department": "optimizacion",
+                    "department": "optimization",
                     "parent": "general",
-                    "skills": ["optimizacion"],
+                    "skills": ["optimization"],
                 },
             ]
         )
@@ -104,7 +104,7 @@ def test_seed_and_recommend(tmp_path, monkeypatch):
     res = runner.invoke(skills_app, ["seed", "--json"])
     assert res.exit_code == 0
     assert set(json.loads(res.output)["seeded"]) == {
-        "optimizacion",
+        "optimization",
         "documentation",
         "code-review",
     }
@@ -113,7 +113,7 @@ def test_seed_and_recommend(tmp_path, monkeypatch):
     assert res.exit_code == 0
     names = {r["name"] for r in json.loads(res.output)}
     # seeded ones are excluded; uninstalled catalog entries remain
-    assert "optimizacion" not in names
+    assert "optimization" not in names
     assert "research" in names
 
 
@@ -136,7 +136,7 @@ def test_assign_and_who_has(tmp_path, monkeypatch):
     res = runner.invoke(skills_app, ["assign", "research", "dept:opt", "--json"])
     assert res.exit_code == 0
     node = json.loads(res.output)
-    assert set(node["skills"]) == {"optimizacion", "research"}
+    assert set(node["skills"]) == {"optimization", "research"}
 
     res = runner.invoke(skills_app, ["who-has", "research", "--json"])
     assert res.exit_code == 0

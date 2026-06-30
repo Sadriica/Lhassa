@@ -20,7 +20,7 @@ Public surface:
 """
 
 from lhassa.agents.specialists.registry import (
-    OPTIMIZACION,
+    OPTIMIZATION,
     Specialist,
     build_specialist_prompt,
     get_specialist,
@@ -28,7 +28,7 @@ from lhassa.agents.specialists.registry import (
 )
 
 __all__ = [
-    "OPTIMIZACION",
+    "OPTIMIZATION",
     "Specialist",
     "build_specialist_prompt",
     "get_specialist",

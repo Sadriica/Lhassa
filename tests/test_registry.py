@@ -149,8 +149,8 @@ def test_attr_registry_keys_by_attribute():
         name: str
         label: str = ""
 
-    a = Dept("opt", "optimizacion")
-    b = Dept("doc", "documentacion")
+    a = Dept("opt", "optimization")
+    b = Dept("doc", "documentation")
     reg = attr_registry([a, b], kind="department", key="name")
     assert reg.get("opt") is a
     assert reg.get("doc") is b

@@ -48,7 +48,7 @@ def _seed(db, inst):
     async def _go():
         await db.init_db()
         await db.upsert_tool(
-            inst, "speedup", dominio="optimizacion", estado="cuarentena"
+            inst, "speedup", dominio="optimization", estado="cuarentena"
         )
         await db.add_approval(
             inst,

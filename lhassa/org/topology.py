@@ -59,14 +59,14 @@ class BrainNode:
     """One brain in the org chart (immutable).
 
     Fields:
-      - ``id``: the logical brain id (e.g. ``"general"``, ``"dept:optimizacion"``).
+      - ``id``: the logical brain id (e.g. ``"general"``, ``"dept:optimization"``).
         Unique within a topology; doubles as the messaging identity.
       - ``role``: an open label (``"general"``/``"department"``/``"sub_general"``…).
       - ``department``: the department name/identity this brain owns (optional —
         coordinators may have none; leaves usually do).
       - ``parent``: the id of the parent brain, or ``None`` for the single root.
       - ``skills``: the skill/specialist domains this brain HANDLES (e.g.
-        ``("optimizacion", "finanzas")``). Free-form strings so the org stays
+        ``("optimization", "finance")``). Free-form strings so the org stays
         modular; management validates them against the specialist registry where
         it can and merely warns on an unknown skill. Stored as a tuple (hashable).
       - ``limits``: the brain's LIMITATIONS — an opaque, forward-compatible mapping

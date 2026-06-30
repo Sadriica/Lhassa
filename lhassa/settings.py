@@ -253,7 +253,7 @@ EDITABLE: list[dict] = [
         "type": "str",
         "label": "Default departments (CSV, derived chart)",
         "group": "Org",
-        "default": "optimizacion,documentacion,finanzas",
+        "default": "optimization,documentation,finance",
         "restart": RESTART_NONE,
     },
 ]

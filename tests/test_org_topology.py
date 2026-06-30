@@ -40,16 +40,16 @@ def test_default_standalone_single_admin_brain():
 def test_default_flat_admin_plus_departments():
     # org_role/org_departments imply departments hanging UNDER the administrator.
     t = topo.default_topology(
-        _Cfg(org_role="general", org_departments="optimizacion,documentacion,finanzas")
+        _Cfg(org_role="general", org_departments="optimization,documentation,finance")
     )
     assert not t.is_standalone()
     assert t.root().id == "lhassa"
     assert t.root().role == "administrator"
     kids = [c.id for c in t.children_of("lhassa")]
-    assert kids == ["dept:optimizacion", "dept:documentacion", "dept:finanzas"]
-    opt = t.node("dept:optimizacion")
+    assert kids == ["dept:optimization", "dept:documentation", "dept:finance"]
+    opt = t.node("dept:optimization")
     assert opt.role == "department"
-    assert opt.department == "optimizacion"
+    assert opt.department == "optimization"
     assert opt.parent == "lhassa"
 
 
@@ -71,9 +71,9 @@ def test_save_load_round_trip(tmp_path):
             BrainNode(id="general", role="general"),
             BrainNode(id="ops", role="sub_general", parent="general"),
             BrainNode(
-                id="dept:optimizacion",
+                id="dept:optimization",
                 role="department",
-                department="optimizacion",
+                department="optimization",
                 parent="ops",
             ),
         ]
@@ -85,17 +85,17 @@ def test_save_load_round_trip(tmp_path):
     # The on-disk file is a JSON list of node objects.
     raw = json.loads(path.read_text())
     assert isinstance(raw, list)
-    assert {n["id"] for n in raw} == {"general", "ops", "dept:optimizacion"}
+    assert {n["id"] for n in raw} == {"general", "ops", "dept:optimization"}
 
     # On load, the permanent administrator (Lhassa) is injected at the root and the
     # loaded chart's old root ("general") becomes its child — the rest is intact.
     reloaded = topo.load_topology(cfg)
     assert reloaded.root().id == "lhassa"
     assert [n.id for n in reloaded.nodes()] == [
-        "lhassa", "general", "ops", "dept:optimizacion",
+        "lhassa", "general", "ops", "dept:optimization",
     ]
     assert reloaded.node("general").parent == "lhassa"
-    assert reloaded.node("dept:optimizacion").department == "optimizacion"
+    assert reloaded.node("dept:optimization").department == "optimization"
     assert reloaded.node("ops").parent == "general"
 
 
@@ -173,13 +173,13 @@ def _three_level() -> Topology:
             BrainNode(id="ops", role="sub_general", parent="general"),
             BrainNode(id="biz", role="sub_general", parent="general"),
             BrainNode(
-                id="dept:optimizacion",
+                id="dept:optimization",
                 role="department",
-                department="optimizacion",
+                department="optimization",
                 parent="ops",
             ),
             BrainNode(
-                id="dept:finanzas", role="department", department="finanzas", parent="biz"
+                id="dept:finance", role="department", department="finance", parent="biz"
             ),
         ]
     )
@@ -188,17 +188,17 @@ def _three_level() -> Topology:
 def test_children_of_and_descendants():
     t = _three_level()
     assert [c.id for c in t.children_of("general")] == ["ops", "biz"]
-    assert [c.id for c in t.children_of("ops")] == ["dept:optimizacion"]
+    assert [c.id for c in t.children_of("ops")] == ["dept:optimization"]
     desc = {n.id for n in t.descendants("general")}
-    assert desc == {"ops", "biz", "dept:optimizacion", "dept:finanzas"}
-    assert t.is_leaf("dept:optimizacion")
+    assert desc == {"ops", "biz", "dept:optimization", "dept:finance"}
+    assert t.is_leaf("dept:optimization")
     assert not t.is_leaf("ops")
 
 
 def test_arbitrary_depth_node_lookup():
     t = _three_level()
     assert t.root().id == "general"
-    assert t.node("dept:finanzas").department == "finanzas"
+    assert t.node("dept:finance").department == "finance"
     with pytest.raises(KeyError):
         t.node("nope")
 
@@ -224,9 +224,9 @@ async def _init(tmp_path, monkeypatch):
 
 def test_route_in_topology_picks_the_matching_subtree():
     t = _three_level()
-    # the goal is an optimization one → routes into ops (which owns optimizacion)
+    # the goal is an optimization one → routes into ops (which owns optimization)
     assert route_in_topology(t, "general", "optimize the slow latency") == "ops"
-    # a finance goal → routes into biz (which owns finanzas)
+    # a finance goal → routes into biz (which owns finance)
     assert route_in_topology(t, "general", "reconcile the budget invoice") == "biz"
 
 
@@ -250,14 +250,14 @@ async def test_three_level_routes_to_leaf_and_bubbles_up(tmp_path, monkeypatch):
         executor=executor,
     )
 
-    # routed general → ops → dept:optimizacion (the correct leaf)
-    assert out["path"] == ["general", "ops", "dept:optimizacion"]
-    assert out["leaf"] == "dept:optimizacion"
-    assert out["department"] == "optimizacion"
-    assert out["result"] == {"summary": "done:optimizacion", "ok": True}
+    # routed general → ops → dept:optimization (the correct leaf)
+    assert out["path"] == ["general", "ops", "dept:optimization"]
+    assert out["leaf"] == "dept:optimization"
+    assert out["department"] == "optimization"
+    assert out["result"] == {"summary": "done:optimization", "ok": True}
 
     # the LEAF executed (a coordinator never runs the executor)
-    assert ran == {"department": "optimizacion", "goal": out["goal"]}
+    assert ran == {"department": "optimization", "goal": out["goal"]}
 
     # the result bubbled back to the root as a TASK_RESULT to "general"
     bubbled = await messaging.by_corr(
@@ -283,7 +283,7 @@ async def test_coordinators_never_execute(tmp_path, monkeypatch):
         instance_id=INST, executor=executor,
     )
     # ONLY the leaf department executed — never "general"/"ops"/"biz".
-    assert seen_departments == ["finanzas"]
+    assert seen_departments == ["finance"]
 
 
 @pytest.mark.asyncio
@@ -343,4 +343,4 @@ async def test_high_risk_self_approval_rejected_in_tree(tmp_path, monkeypatch):
         executor=executor, high_risk=True, approver="manager",
     )
     assert ran["n"] == 1
-    assert out["leaf"] == "dept:finanzas"
+    assert out["leaf"] == "dept:finance"

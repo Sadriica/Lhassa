@@ -14,7 +14,7 @@ brain already runs, parametrised by data:
 Because every part is data, swapping the base model changes nothing here — that is
 the whole point of "skills, NO fine-tuning … así no dependes de ningún modelo".
 
-The **first domain is ``optimizacion``** — a clean, lower-is-better metric
+The **first domain is ``optimization``** — a clean, lower-is-better metric
 (tokens/tiempo/pasos) so "mejor" is provable. Fuzzier domains come later; each new
 domain is just another ``register_specialist(...)`` call, no new code path.
 """
@@ -45,7 +45,7 @@ class Specialist:
     ``gate_spec``    — criteria for :func:`lhassa.agents.gates.run_gates`. Keys:
                        ``tests_spec`` (gate 2 — correcta) and
                        ``higher_is_better`` (metric direction for gate 3 — mejor;
-                       optimización is lower-is-better → ``False``).
+                       optimization is lower-is-better → ``False``).
     ``metric_name``  — the concrete metric the "mejor" gate measures
                        (e.g. ``"tokens"`` / ``"tiempo"`` / ``"pasos"``).
     """
@@ -58,14 +58,14 @@ class Specialist:
     metric_name: str = ""
 
 
-# ── First specialist: optimización (the clean-metric domain) ──────────────────
+# ── First specialist: optimization (the clean-metric domain) ──────────────────
 # Lower-is-better on a concrete metric (tokens/tiempo/pasos), so the "mejor" gate
 # is decidable against a baseline. Its gate_spec wires straight into gates.run_gates
 # / gates.promote: tests_spec proves "correcta", higher_is_better=False is the
 # lower-is-better direction MetricVerifier uses for "mejor".
-OPTIMIZACION = Specialist(
+OPTIMIZATION = Specialist(
     name="optimizador",
-    domain="optimizacion",
+    domain="optimization",
     instructions=(
         "You are operating as the OPTIMIZATION specialist. Your job is to make an "
         "existing routine cheaper on one clean, lower-is-better metric — tokens, "
@@ -81,7 +81,7 @@ OPTIMIZACION = Specialist(
         # Gate 2 (correcta): a command/test verifier must exit 0. The concrete
         # spec for a given candidate is supplied at promote time; this is the shape.
         "tests_spec": {"type": "command"},
-        # Gate 3 (mejor): optimización metrics are lower-is-better.
+        # Gate 3 (mejor): optimization metrics are lower-is-better.
         "higher_is_better": False,
     },
     metric_name="tokens",
@@ -108,7 +108,7 @@ def register_specialist(specialist: Specialist, *, override: bool = False) -> Sp
 
 
 # Register the first built-in domain through the seam.
-register_specialist(OPTIMIZACION)
+register_specialist(OPTIMIZATION)
 
 # Backward-compatible alias: a LIVE, read-only ``{domain: specialist}`` view of the
 # registry's backing store, so any historical consumer doing ``_REGISTRY.get(domain)``
@@ -122,7 +122,7 @@ def get_specialist(domain: str) -> Optional[Specialist]:
 
 
 def list_specialists() -> list[Specialist]:
-    """Every registered specialist (insertion order — optimización first)."""
+    """Every registered specialist (insertion order — optimization first)."""
     return list(SPECIALISTS.all())
 
 

@@ -22,7 +22,7 @@ async def _init(tmp_path, monkeypatch):
 
 def test_registry_has_at_least_two_departments():
     names = {d.name for d in routing.list_departments()}
-    assert {"optimizacion", "documentacion"} <= names
+    assert {"optimization", "documentation"} <= names
     assert len(names) >= 2
 
 
@@ -39,18 +39,18 @@ def test_register_adds_a_department():
 
 # ── deterministic routing ──────────────────────────────────────────────────────────
 
-def test_optimization_goal_routes_to_optimizacion():
-    assert routing.route("optimize the latency, it is too slow") == "optimizacion"
-    assert routing.route("profile the bottleneck and improve throughput") == "optimizacion"
+def test_optimization_goal_routes_to_optimization():
+    assert routing.route("optimize the latency, it is too slow") == "optimization"
+    assert routing.route("profile the bottleneck and improve throughput") == "optimization"
 
 
-def test_documentation_goal_routes_to_documentacion():
-    assert routing.route("write the documentation and a readme") == "documentacion"
-    assert routing.route("explain this and add a changelog entry") == "documentacion"
+def test_documentation_goal_routes_to_documentation():
+    assert routing.route("write the documentation and a readme") == "documentation"
+    assert routing.route("explain this and add a changelog entry") == "documentation"
 
 
-def test_finance_goal_routes_to_finanzas():
-    assert routing.route("reconcile the budget and pay the invoice") == "finanzas"
+def test_finance_goal_routes_to_finance():
+    assert routing.route("reconcile the budget and pay the invoice") == "finance"
 
 
 def test_unmatched_goal_falls_back():
@@ -60,11 +60,11 @@ def test_unmatched_goal_falls_back():
 
 def test_routing_is_deterministic():
     goal = "optimize the slow heartbeat loop"
-    assert routing.route(goal) == routing.route(goal) == "optimizacion"
+    assert routing.route(goal) == routing.route(goal) == "optimization"
 
 
 def test_keyword_match_is_whole_word():
-    # "doc" is a documentacion keyword but must not match inside "docker"
+    # "doc" is a documentation keyword but must not match inside "docker"
     assert routing.route("deploy the docker container") == routing.FALLBACK_DEPARTMENT
 
 
@@ -80,11 +80,11 @@ async def test_assign_auto_routes_to_the_right_department(tmp_path, monkeypatch)
 
     opt = await general.assign_auto("optimize the slow loop", by_actor="owner")
     assert opt.kind is MessageKind.TASK_ASSIGN
-    assert opt.to_instance == "dept:optimizacion"
-    assert opt.payload["department"] == "optimizacion"
+    assert opt.to_instance == "dept:optimization"
+    assert opt.payload["department"] == "optimization"
 
     doc = await general.assign_auto("write the readme docs", by_actor="owner")
-    assert doc.to_instance == "dept:documentacion"
+    assert doc.to_instance == "dept:documentation"
 
 
 @pytest.mark.asyncio
