@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import OrgTree from './OrgTree'
 import OrgFlow from './OrgFlow'
+import TemplatesPicker from './TemplatesPicker'
 
 // The Brains management panel — the centerpiece. Drives the slice-J org API:
 //   GET    /api/org/topology              read the chart
@@ -299,7 +300,7 @@ export default function BrainsPanel() {
   const [goal, setGoal] = useState('')
   const [route, setRoute] = useState(null)
   const [routeErr, setRouteErr] = useState('')
-  const [view, setView] = useState('flow') // 'flow' (n8n-style canvas) | 'tree'
+  const [view, setView] = useState('flow') // 'flow' (n8n-style canvas) | 'tree' | 'templates'
 
   const loadTopology = useCallback(async () => {
     try {
@@ -420,6 +421,13 @@ export default function BrainsPanel() {
             >
               Tree
             </button>
+            <button
+              type="button"
+              className={`lh-btn ${view === 'templates' ? 'lh-btn-primary' : ''}`}
+              onClick={() => setView('templates')}
+            >
+              Templates
+            </button>
           </div>
           <button type="button" className="lh-btn" onClick={loadTopology} disabled={busy}>Refresh</button>
           <button type="button" className="lh-btn lh-btn-primary" onClick={() => setShowCreate((v) => !v)}>
@@ -470,6 +478,13 @@ export default function BrainsPanel() {
 
       {loading ? (
         <p className="text-xs" style={{ color: 'var(--lh-text-faint)' }}>Loading the org chart…</p>
+      ) : view === 'templates' ? (
+        <TemplatesPicker
+          onApplied={(chart) => {
+            if (chart && chart.nodes) setTopology(chart)
+            setView('flow')
+          }}
+        />
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
           {/* Canvas */}
