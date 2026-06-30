@@ -5,6 +5,42 @@ build. The source of truth for the architecture is `doc/lhassa-brief.md` (a
 living doc — correct it after each phase per §4). This file records the choices
 made along the way. Newest first.
 
+## 2026-06-30 — Phase 7 slice 2 (departments think) + heartbeat wired to opencode
+
+**Ops:** the heartbeat now thinks via **opencode** — set in `~/Code/lhassa/.env`
+(`LHASSA_HEARTBEAT_PROVIDER=opencode`, `LHASSA_OPENCODE_BIN=/usr/bin/opencode` — absolute
+because the systemd user PATH is minimal, `LHASSA_OPENCODE_MODEL=opencode/deepseek-v4-flash-free`).
+No systemd edit needed: each beat is a fresh process that re-reads `.env`. `.env` is
+gitignored (secrets stay local). The routine path resolves to `PseudonymizingProvider(
+OpenCodeProvider)` — opencode with PII scrubbing (opencode is cloud), **$0** on the free tier.
+A `scripts/systemd/lhassa-telegram.service` user unit was added for the inbound poller
+(credential-gated; install/enable when the owner sets a bot token).
+
+**Phase 7 slice 2** (departments actually think; the general routes among many):
+- `org/executor.py` `brain_executor()` runs a department task through the REAL one-turn
+  brain path (identity + layered memory + router routine provider + `provider.complete`),
+  the department's identity in the system prompt, logs a `despertar_por='org'` episode,
+  degrades to a structured **$0** result on `ProviderNotConfigured`/budget (never raises —
+  a failure becomes a `TASK_RESULT`, not a crash). The live model call is **gated behind
+  `LHASSA_ORG_LIVE`** (default off → offline-deterministic) so slice-1 tests stay offline —
+  the established turn-on-with-creds convention (subagent's call; honors the don't-break-
+  tests/offline constraints).
+- `org/coordinator.py`: `DepartmentBrain` defaults to `brain_executor` (still injectable);
+  `GeneralBrain.assign_auto()` routes then assigns (the general routes, never executes).
+- `org/routing.py`: deterministic table-driven registry (optimizacion/documentacion/
+  finanzas) + `route()` with a documented fallback — **no LLM**. `org/__main__.py` offline
+  two-brain demo.
+
+**Verified:** 617 tests, ruff clean, `python -m lhassa.org` runs offline ($0). **Live smoke
+(`LHASSA_ORG_LIVE=1`):** the general routed a goal → the `optimizacion` department **thought
+for real via opencode** (free tier, **$0**), returned a genuine answer + a typed `TASK_RESULT`
+correlated by `corr_id`. Two brains thinking end to end.
+
+**Next Phase-7 candidates:** a second live department in the demo; cross-department commons
+policy enforcement during a think; `STATUS_REQUEST`/`STATUS_REPORT` flow; an API/dashboard
+view of the org message queue. **Backlog:** point a real department at `LHASSA_ORG_LIVE=1`
+in production once desired.
+
 ## 2026-06-30 — Phase 6 cont. (heartbeat via opencode, voice, Telegram) + Phase 7 START
 
 **Decision:** the owner has **no Ollama/Zen** but has the **opencode CLI** → the routine
