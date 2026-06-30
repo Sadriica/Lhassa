@@ -282,6 +282,25 @@ TOOLS = ToolsSchema(
             },
             required=["command"],
         ),
+        FunctionSchema(
+            name="track_postulaciones",
+            description=(
+                "Track job/internship applications (CVs sent). op='add' records a new "
+                "application (needs empresa), op='update' advances one by id+estado, "
+                "op='list' (default) lists tracked applications, optionally filtered by estado."
+            ),
+            properties={
+                "op": {"type": "string", "enum": ["add", "update", "list"], "description": "add | update | list (default list)"},
+                "empresa": {"type": "string", "description": "Company name (required for add)"},
+                "rol": {"type": "string", "description": "Role / position"},
+                "estado": {"type": "string", "description": "Application status, e.g. pendiente, enviada, entrevista, oferta, rechazada"},
+                "fuente": {"type": "string", "description": "Where it came from, e.g. LinkedIn, email"},
+                "link": {"type": "string", "description": "Link to the posting"},
+                "notas": {"type": "string", "description": "Free-form notes"},
+                "id": {"type": "string", "description": "Application id (required for update)"},
+            },
+            required=[],
+        ),
     ]
 )
 
@@ -906,6 +925,21 @@ async def handle_watch_command(params: FunctionCallParams):
         await params.result_callback(f"Monitor error: {e}")
 
 
+async def handle_track_postulaciones(params: FunctionCallParams):
+    op = params.arguments.get("op", "list")
+    logger.info(f"[tool] track_postulaciones op={op!r}")
+    print(f"\033[2m[📋 postulaciones: {op}]\033[0m")
+    _bump_tool()
+
+    try:
+        from lhassa.core.actions import tracking_postulaciones
+        summary = await tracking_postulaciones(dict(params.arguments or {}))
+        await params.result_callback(summary)
+    except Exception as e:
+        logger.error(f"track_postulaciones error: {e}")
+        await params.result_callback(f"track_postulaciones error: {e}")
+
+
 # ── Registration ───────────────────────────────────────────────────────────────
 
 def register_tools(llm):
@@ -935,11 +969,13 @@ def register_tools(llm):
     llm.register_function("watch_process", handle_watch_process)
     llm.register_function("watch_file", handle_watch_file)
     llm.register_function("watch_command", handle_watch_command)
+    llm.register_function("track_postulaciones", handle_track_postulaciones)
     logger.info(
         "Tools registered: web_search, shell, run_privileged, read_file, write_file, "
         "delegate_to_agent, run_ai_cli, schedule_reminder, list_reminders, "
         "read_emails, send_email, read_calendar, create_event, "
         "github_list_repos, github_list_issues, github_get_issue, "
         "github_list_prs, github_get_pr, github_comment, github_notifications, "
-        "analyze_screen, analyze_image, watch_process, watch_file, watch_command"
+        "analyze_screen, analyze_image, watch_process, watch_file, watch_command, "
+        "track_postulaciones"
     )

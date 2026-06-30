@@ -227,6 +227,17 @@ class Config:
         os.getenv("LHASSA_ALWAYS_APPROVE_ACTIONS", "move_money,delete_data")
     )
 
+    # ── Integrations: MCP (§2.11) — "plug in, don't program" ──────────────────
+    # Server definitions for the MCP client. JSON shape:
+    #   {"servers": {"<name>": {"type":"stdio","command":[...]}
+    #                        | {"type":"url","url":"https://…"}}}
+    # Missing file → zero MCP tools (the brain runs fine with none). Adding an
+    # integration is editing this file, not writing code.
+    mcp_config_path: str = os.getenv(
+        "LHASSA_MCP_CONFIG_PATH",
+        str(Path.home() / ".config" / "lhassa" / "mcp.json"),
+    )
+
     # ── General ───────────────────────────────────────────────────────────────
     log_level: str = os.getenv("LHASSA_LOG_LEVEL", "INFO")
     debug: bool = os.getenv("LHASSA_DEBUG", "").lower() in ("1", "true", "yes")
