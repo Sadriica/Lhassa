@@ -210,6 +210,55 @@ def test_top_level_verify_degrades_on_bad_spec():
     assert V.verify("x", spec={}).passed is False
 
 
+# ── keystone registry: introspection + drop-in seam ──────────────────────────
+
+
+def test_verifiers_registry_exposes_builtin_names():
+    # The capabilities slice introspects ``VERIFIERS`` (a keystone Registry).
+    from lhassa.registry import Registry
+
+    assert isinstance(V.VERIFIERS, Registry)
+    assert set(V.VERIFIERS.names()) == {
+        "command", "tests", "lint", "health", "regex", "metric"
+    }
+    # The legacy ``_REGISTRY`` alias is a live read-only view of the same store.
+    assert V._REGISTRY.get("regex") is V.RegexVerifier
+
+
+def test_register_verifier_dropin_and_make(monkeypatch):
+    """A plugin can register a new verifier type, then make_verifier builds it."""
+
+    class AlwaysVerifier:
+        name = "always"
+
+        def __init__(self, *, value=True):
+            self.value = value
+
+        def verify(self, artifact=None, context=None):
+            return V.VerifyResult(self.value, "always")
+
+    try:
+        V.register_verifier("always", AlwaysVerifier)
+        built = V.make_verifier({"type": "always", "value": True})
+        assert isinstance(built, AlwaysVerifier)
+        assert built.verify().passed is True
+        # The top-level helper resolves the new type too.
+        assert V.verify("x", spec={"type": "always", "value": False}).passed is False
+    finally:
+        V.VERIFIERS.unregister("always")
+
+
+def test_register_verifier_override_protection():
+    with pytest.raises(ValueError, match="already registered"):
+        V.register_verifier("regex", V.RegexVerifier)
+    # override=True replaces without raising; restore afterwards.
+    try:
+        V.register_verifier("regex", V.CommandVerifier, override=True)
+        assert V.VERIFIERS.get("regex") is V.CommandVerifier
+    finally:
+        V.register_verifier("regex", V.RegexVerifier, override=True)
+
+
 # ── the model-free invariant ─────────────────────────────────────────────────
 
 

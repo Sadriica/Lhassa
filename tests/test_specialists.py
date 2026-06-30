@@ -4,6 +4,8 @@ Offline and model-agnostic: a specialist is base-model + instructions + tools +
 gate criteria, so these assertions never touch a model or the network.
 """
 
+import pytest
+
 from lhassa import persona
 from lhassa.agents import specialists
 from lhassa.agents.specialists import (
@@ -74,3 +76,49 @@ def test_specialist_is_frozen():
 
 def test_module_reexports():
     assert specialists.get_specialist("optimizacion") is OPTIMIZACION
+
+
+# ── keystone registry: introspection + drop-in seam ──────────────────────────
+
+
+def test_specialists_registry_exposes_optimizacion():
+    from lhassa.agents.specialists import registry as reg
+    from lhassa.registry import Registry
+
+    assert isinstance(reg.SPECIALISTS, Registry)
+    assert "optimizacion" in reg.SPECIALISTS.names()
+    # The legacy ``_REGISTRY`` alias is a live read-only view of the same store.
+    assert reg._REGISTRY.get("optimizacion") is OPTIMIZACION
+
+
+def test_register_specialist_dropin_and_resolves():
+    """A plugin can register a new domain without editing core, then resolve it."""
+    from lhassa.agents.specialists import registry as reg
+
+    dummy = Specialist(
+        name="dummy-skill",
+        domain="dummy-domain",
+        instructions="Do the dummy thing.",
+    )
+    try:
+        returned = reg.register_specialist(dummy)
+        assert returned is dummy
+        assert get_specialist("dummy-domain") is dummy
+        assert dummy in list_specialists()
+    finally:
+        reg.SPECIALISTS.unregister("dummy-domain")
+
+
+def test_register_specialist_override_protection():
+    from lhassa.agents.specialists import registry as reg
+
+    clash = Specialist(name="x", domain="optimizacion", instructions="y")
+    with pytest.raises(ValueError, match="already registered"):
+        reg.register_specialist(clash)
+    # override=True replaces without raising; restore the original afterwards.
+    try:
+        reg.register_specialist(clash, override=True)
+        assert get_specialist("optimizacion") is clash
+    finally:
+        reg.register_specialist(OPTIMIZACION, override=True)
+        assert get_specialist("optimizacion") is OPTIMIZACION

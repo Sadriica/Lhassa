@@ -164,6 +164,56 @@ def test_get_adapter_and_unknown():
         get_adapter("bogus")
 
 
+# ── keystone registry: introspection + drop-in seam ──────────────────────────────
+
+def test_adapters_registry_exposes_names_in_preference_order():
+    # The capabilities slice introspects ``ADAPTERS`` (a keystone Registry).
+    from lhassa.registry import Registry
+
+    assert isinstance(ad.ADAPTERS, Registry)
+    assert ad.ADAPTERS.names() == ["opencode", "claude", "codex"]
+    # The legacy ``_ADAPTERS`` mapping is a live read-only view of the same store.
+    assert set(ad._ADAPTERS) == {"opencode", "claude", "codex"}
+    assert ad._ADAPTERS["opencode"].name == "opencode"
+
+
+def test_register_adapter_dropin_and_resolves(monkeypatch):
+    """A plugin can register a new adapter without editing core, then resolve it."""
+
+    class DummyAdapter(ad._BaseAdapter):
+        name = "dummy"
+        model_locked = False
+        billing = "free"
+        binary = "dummy-cli"
+
+        def build_command(self, prompt, **opts):
+            return ["dummy-cli", prompt]
+
+    try:
+        ad.register_adapter("dummy", DummyAdapter())
+        got = get_adapter("DUMMY")  # case-insensitive
+        assert got.name == "dummy"
+        assert "dummy" in ad.ADAPTERS.names()
+        # available() reflects shutil.which on the registered instance.
+        monkeypatch.setattr(ad.shutil, "which", lambda n: "/x" if n == "dummy-cli" else None)
+        assert got in available_adapters()
+    finally:
+        ad.ADAPTERS.unregister("dummy")
+
+
+def test_register_adapter_override_protection():
+    with pytest.raises(ValueError, match="already registered"):
+        ad.register_adapter("opencode", OpenCodeAdapter())
+    # override=True replaces without raising, then restore the original.
+    original = get_adapter("opencode")
+    try:
+        ad.register_adapter("opencode", CodexAdapter(), override=True)
+        assert get_adapter("opencode").name == "codex"
+    finally:
+        ad.register_adapter("opencode", original, override=True)
+        assert get_adapter("opencode").name == "opencode"
+
+
 # ── runner.launch — records a running job + streams, without blocking ────────────
 
 @pytest.mark.asyncio

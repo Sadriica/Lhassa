@@ -37,6 +37,8 @@ from typing import Callable, Optional, Protocol, runtime_checkable
 
 from loguru import logger
 
+from lhassa.registry import Registry
+
 # Cap on captured command output stored in a result detail.
 _OUTPUT_CAP = 2000
 
@@ -233,15 +235,37 @@ class MetricVerifier:
 
 # ── dispatcher ───────────────────────────────────────────────────────────────
 
-# The single source of truth mapping a spec ``type`` to its Verifier class.
-_REGISTRY: dict[str, Callable[..., Verifier]] = {
-    "command": CommandVerifier,
-    "tests": TestsVerifier,
-    "lint": LintVerifier,
-    "health": HealthVerifier,
-    "regex": RegexVerifier,
-    "metric": MetricVerifier,
-}
+# The single source of truth mapping a spec ``type`` to its Verifier class lives
+# in the shared keystone ``Registry`` (the same primitive that backs actions/
+# channels/commands). A plugin can drop in a new objective gate with
+# ``@register_verifier("x")`` WITHOUT editing this file — the elastic/modular
+# principle — and a duplicate type is rejected instead of silently clobbering.
+VERIFIERS: Registry[Callable[..., Verifier]] = Registry("verifier")
+
+
+def register_verifier(name: str, cls: Optional[Callable[..., Verifier]] = None, *, override: bool = False):
+    """Register a Verifier class under the spec ``type`` ``name``.
+
+    Usable as a **decorator** (``@register_verifier("x")`` on a Verifier class) or a
+    **direct call** (``register_verifier("x", cls)``) — a thin wrapper over
+    :data:`VERIFIERS`. A duplicate ``name`` raises unless ``override=True``. This is
+    the drop-in seam for adding an objective gate without touching core.
+    """
+    return VERIFIERS.register(name, cls, override=override)
+
+
+# Register the built-in gates through the seam (insertion order preserved).
+register_verifier("command", CommandVerifier)
+register_verifier("tests", TestsVerifier)
+register_verifier("lint", LintVerifier)
+register_verifier("health", HealthVerifier)
+register_verifier("regex", RegexVerifier)
+register_verifier("metric", MetricVerifier)
+
+# Backward-compatible alias: a LIVE, read-only ``{type: class}`` view of the
+# registry's backing store, so any historical consumer doing ``_REGISTRY.get(typ)``
+# keeps working while later ``register_verifier`` calls are reflected.
+_REGISTRY = VERIFIERS.as_mapping()
 
 
 def make_verifier(spec: dict) -> Verifier:
@@ -252,7 +276,7 @@ def make_verifier(spec: dict) -> Verifier:
     """
     params = dict(spec or {})
     typ = params.pop("type", None)
-    cls = _REGISTRY.get(typ)
+    cls = VERIFIERS.get_or_none(typ)
     if cls is None:
         raise ValueError(f"unknown verifier type: {typ!r}")
     try:

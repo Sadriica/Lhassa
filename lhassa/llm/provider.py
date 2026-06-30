@@ -18,7 +18,9 @@ import json
 import re
 from dataclasses import dataclass
 from loguru import logger
-from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Callable, Optional, Protocol, runtime_checkable
+
+from lhassa.registry import Registry
 
 if TYPE_CHECKING:
     from lhassa.config import Config
@@ -593,20 +595,57 @@ class PseudonymizingProvider:
         return result
 
 
+# ── provider factory registry (the §2.2 axis-1 swap point) ────────────────────
+#
+# The set of named provider FACTORIES lives in the shared keystone ``Registry``
+# (the same primitive that backs actions/channels/commands/harnesses), so a plugin
+# can drop in a new ModelProvider with ``@register_provider("x")`` WITHOUT editing
+# this file — the elastic/modular principle. A factory is a ``(config) -> provider``
+# callable; ``get_model_provider`` routes through it, preserving the exact historical
+# behaviour (default → GatewayProvider; the named stubs/providers as before).
+ProviderFactory = Callable[["Config"], ModelProvider]
+PROVIDERS: Registry[ProviderFactory] = Registry("provider")
+
+# The fallback key used when ``name`` is None or unknown (the historical default).
+_DEFAULT_PROVIDER = "default"
+
+
+def register_provider(
+    name: str, factory: Optional[ProviderFactory] = None, *, override: bool = False
+):
+    """Register a ModelProvider factory under ``name`` — a wrapper over :data:`PROVIDERS`.
+
+    Usable as a **decorator** (``@register_provider("x")`` on a ``(config) -> provider``
+    factory) or a **direct call** (``register_provider("x", factory)``). A duplicate
+    ``name`` raises unless ``override=True`` — so two plugins can never silently
+    clobber each other. This is the drop-in seam for adding a provider without
+    touching core.
+    """
+    return PROVIDERS.register(name, factory, override=override)
+
+
+# Register the built-in factories. ``default`` (GatewayProvider) is the fallback.
+register_provider(_DEFAULT_PROVIDER, lambda config: GatewayProvider(config))
+register_provider("local", lambda config: LocalModelProvider(config))
+register_provider("opencode", lambda config: OpenCodeProvider(config))
+register_provider("zen", lambda config: OpenCodeZenProvider(config))
+
+
 def get_model_provider(config: "Config", *, name: str | None = None) -> ModelProvider:
     """Factory for the active ModelProvider. Defaults to the GatewayProvider.
 
     ``name="zen"`` returns the (not-yet-configured) opencode Zen stub.
     ``name="local"`` returns the LOCAL OpenAI-compatible heartbeat provider.
     ``name="opencode"`` returns the opencode-CLI heartbeat provider.
+
+    Routing goes through the :data:`PROVIDERS` registry; an absent or unknown
+    ``name`` falls back to the ``default`` factory (GatewayProvider), preserving
+    the historical behaviour exactly.
     """
-    if name == "zen":
-        return OpenCodeZenProvider(config)
-    if name == "local":
-        return LocalModelProvider(config)
-    if name == "opencode":
-        return OpenCodeProvider(config)
-    return GatewayProvider(config)
+    factory = PROVIDERS.get_or_none(name) if name else None
+    if factory is None:
+        factory = PROVIDERS.get(_DEFAULT_PROVIDER)
+    return factory(config)
 
 
 # ── Voice pipeline service (Pipecat) ──────────────────────────────────────────

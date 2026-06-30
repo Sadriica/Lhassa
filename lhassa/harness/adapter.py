@@ -21,6 +21,8 @@ import shutil
 from dataclasses import dataclass
 from typing import Optional, Protocol, runtime_checkable
 
+from lhassa.registry import Registry
+
 # Strip ANSI escape codes the CLIs may emit before parsing a line.
 _ANSI = re.compile(r"\x1b\[[0-9;]*[mGKHF]")
 
@@ -191,27 +193,63 @@ class CodexAdapter(_BaseAdapter):
 
 # ── registry / detection ─────────────────────────────────────────────────────────
 
-# Insertion order is the preference order when billing rank ties (opencode first).
-_ADAPTERS: dict[str, HarnessAdapter] = {
-    a.name: a for a in (OpenCodeAdapter(), ClaudeCodeAdapter(), CodexAdapter())
-}
+# The harness swap point lives in the shared keystone ``Registry`` (the same
+# primitive that backs actions/channels/commands), so a plugin can drop in a new
+# coding muscle with ``@register_adapter("x")`` WITHOUT editing this file — the
+# elastic/modular principle. Insertion order is the preference order when billing
+# rank ties (opencode first), preserved by the keystone's dict semantics.
+ADAPTERS: Registry[HarnessAdapter] = Registry("harness")
+
+
+def register_adapter(name: str, item: Optional[HarnessAdapter] = None, *, override: bool = False):
+    """Register a harness adapter under ``name`` — a wrapper over :data:`ADAPTERS`.
+
+    Usable as a **decorator** on an adapter class (``@register_adapter("x")`` — the
+    class is instantiated with no arguments and the **instance** is registered, the
+    class itself returned unchanged) or on a ready instance, and as a **direct call**
+    (``register_adapter("x", instance)``). ``name`` is lower-cased so lookups stay
+    case-insensitive. A duplicate ``name`` raises unless ``override=True`` — so two
+    plugins can never silently clobber each other. This is the drop-in seam.
+    """
+
+    def _store(obj):
+        instance = obj() if isinstance(obj, type) else obj
+        ADAPTERS.register((name or "").lower(), instance, override=override)
+        return obj
+
+    if item is None:
+        return _store
+    return _store(item)
 
 
 def get_adapter(name: str) -> HarnessAdapter:
     """Return the adapter registered under ``name`` (case-insensitive)."""
-    try:
-        return _ADAPTERS[(name or "").lower()]
-    except KeyError:
+    adapter = ADAPTERS.get_or_none((name or "").lower())
+    if adapter is None:
         raise ValueError(
-            f"Unknown harness {name!r}. Valid options: {', '.join(_ADAPTERS)}."
+            f"Unknown harness {name!r}. Valid options: {', '.join(ADAPTERS.names())}."
         )
+    return adapter
 
 
 def available_adapters() -> list[HarnessAdapter]:
     """Return the installed adapters, in registry (preference) order."""
-    return [a for a in _ADAPTERS.values() if a.available()]
+    return [a for a in ADAPTERS.all() if a.available()]
 
 
 def all_adapters() -> list[HarnessAdapter]:
     """Return every known adapter regardless of availability."""
-    return list(_ADAPTERS.values())
+    return list(ADAPTERS.all())
+
+
+# Register the three built-ins through the seam, preserving the historical order
+# (opencode → claude → codex) that drives the router's tie-break preference.
+register_adapter("opencode", OpenCodeAdapter())
+register_adapter("claude", ClaudeCodeAdapter())
+register_adapter("codex", CodexAdapter())
+
+# Backward-compatible module-level mapping: a LIVE, read-only ``{name: adapter}``
+# view of the registry's backing store, so any historical consumer doing
+# ``_ADAPTERS[name]`` / ``_ADAPTERS.values()`` / ``', '.join(_ADAPTERS)`` keeps
+# working byte-for-byte while later ``register_adapter`` calls are reflected.
+_ADAPTERS = ADAPTERS.as_mapping()
