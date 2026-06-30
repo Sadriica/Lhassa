@@ -95,6 +95,18 @@ def _safe_int(val: str, default: int) -> int:
         return default
 
 
+def _parse_repos(raw: str) -> "set[str] | str":
+    """Parse LHASSA_ALLOWLIST_REPOS (CSV) into a set, or "*" for "allow any".
+
+    Empty or "*" → wildcard (the dev default); otherwise the set of repo names
+    that the task-level allowlist accepts as ``sync_repo`` objetivos.
+    """
+    raw = (raw or "").strip()
+    if not raw or raw == "*":
+        return "*"
+    return {item.strip() for item in raw.split(",") if item.strip()}
+
+
 class Config:
     # ── LLM provider (voice pipeline) ─────────────────────────────────────────
     # Which provider powers the voice pipeline and the built-in agent tool loop.
@@ -155,6 +167,20 @@ class Config:
     # conversational memory DB at ~/.lhassa/memory.db.
     brain_db_path: str = os.getenv(
         "LHASSA_BRAIN_DB_PATH", str(Path.home() / ".lhassa" / "brain.db")
+    )
+
+    # ── Security: signing + task-level allowlist (§2.6) ───────────────────────
+    # Ed25519 private key location (public key written alongside as <path>.pub).
+    # The brain holds the private key and signs Tasks; a machine holds the public
+    # key and verifies them. Local-first: both live here for now.
+    signing_key_path: str = os.getenv(
+        "LHASSA_SIGNING_KEY_PATH", str(Path.home() / ".lhassa" / "keys" / "ed25519")
+    )
+    # Repo names the task-level allowlist accepts as `sync_repo` objetivos.
+    # CSV → set; "*" (default) means allow any (dev). This is the TASK-level
+    # allowlist, separate from the command-level sudo allowlist in tools/privileged.
+    allowlist_repos: "set[str] | str" = _parse_repos(
+        os.getenv("LHASSA_ALLOWLIST_REPOS", "*")
     )
 
     # ── General ───────────────────────────────────────────────────────────────
