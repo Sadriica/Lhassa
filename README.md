@@ -65,31 +65,45 @@ state lives under `/data` (`HOME=/data`). Details and portability caveats:
 
 ### CLI (`lhassa`)
 
-The default invocation is a **chat** turn through Lhassa's tool-calling loop:
+The default invocation is a **chat** turn through Lhassa's tool-calling loop,
+themed in the Lhasa palette (gold / red / white / green, prompt `lhassa ›`):
 
 ```bash
 lhassa "summarize this repo"        # one-shot from an argument
 echo "data" | lhassa                # one-shot from piped stdin
 lhassa                              # interactive REPL (TTY)
 lhassa "..." --json                 # machine-readable {response, model, tokens, cost}
+lhassa code "add a --json flag"     # an AGENTIC task via a local CLI (reads/edits files)
 ```
 
-Power subcommands (all offline against the local brain DB, each supports `--json`):
+`lhassa code` hands the task to a real agentic CLI (`claude` / `codex` /
+`opencode`, on your subscription, no API key; `--cli` to choose) that can edit
+files and run tools in the current directory, streaming live.
+
+Subcommands (most are offline against the local brain DB, each supports `--json`):
 
 | Command | What it does |
 |---|---|
-| `tools` | List self-written tools and their gate/usage state |
-| `approvals` / `approve <id>` / `deny <id>` | The HITL approval queue (feeds the autonomy knob) |
+| `code <task>` | Run an agentic coding task through a local AI CLI (subscription, no key) |
+| `status` / `overview` | The whole brain at a glance (brains, skills, approvals, cost, health) |
+| `watch` | Tail recent activity (`--once` for one frame) |
 | `report [--days N]` | Cost/usage summary (gateway ledger + optional ccusage) |
 | `memory <query>` | Search durable facts (substring or tag) |
+| `tools` | List self-written tools and their gate/usage state |
+| `approvals` / `approve <id>` / `deny <id>` | The HITL approval queue (feeds the autonomy knob) |
 | `fleet` | Known machines, last check-in, desired state |
 | `capabilities` (alias `doctor`) | What is wired + what is on/off (LLM-free) |
-| `org …` | Manage the org topology — see below |
+| `version` | Version, runtime, key toggles |
+| `serve` | Run the dashboard + REST API |
+| `beat` | Run one heartbeat tick (deterministic, $0) |
+| `config get/set/list` | Runtime settings → `~/.lhassa/settings.env` (see below) |
+| `org …` | Manage the brain hierarchy (1..N brains) |
+| `skills …` | Manage first-class skills (create/assign/recommend/…) |
 
-`lhassa org` manages the brain hierarchy (1..N brains): `tree`, `list`, `show`,
-`add`, `remove`, `move`, `promote`, `set-skills`, `set-limits`, `skills`,
-`route <goal>` (preview), `run <goal>` (end-to-end; thinks for real only when
-`LHASSA_ORG_LIVE=1`).
+`lhassa config set llm_provider claude` switches the **chat provider** live;
+`lhassa org apply software-factory` adopts a use-case org chart;
+`lhassa skills assign code-review backend` gives a brain a skill. The full
+reference with every flag and example is in **[`doc/cli.md`](doc/cli.md)**.
 
 ### Telegram bot
 
@@ -101,9 +115,12 @@ answered by a tool-less brain think over the routine **fallback chain**
 
 ### Dashboard
 
-A React/Vite dashboard served by the FastAPI app on **:7766** — status, metrics,
-LLM ledger/limits, approvals, tools/quarantine, reports, fleet, and the org tree.
-WebSocket fan-out at `/ws` streams live events.
+A React/Vite dashboard served by the FastAPI app on **:7766**, in the Lhasa
+identity (warm gold, a stupa mark): an **Overview**, **Settings** (the editable
+runtime knobs), a **Brains** flow/tree editor with org **Templates** and typed
+relationship overlays, **Skills**, plus metrics, the LLM ledger/limits, approvals,
+tools/quarantine, reports and fleet. WebSocket fan-out at `/ws` streams live
+events.
 
 ### Voice (opt-in)
 
@@ -116,22 +133,26 @@ always-on services run **API-only** (no audio).
 ## Configuration
 
 Everything is env-driven; a gitignored **`.env`** (copy from `.env.example`)
-holds secrets — never commit it. The most relevant `LHASSA_*` knobs:
+holds secrets — never commit it. A second file, **`~/.lhassa/settings.env`**, holds
+runtime overrides written by `lhassa config set` / the dashboard Settings panel; it
+is loaded *after* `.env` (override on) and never holds secrets. The most relevant
+`LHASSA_*` knobs:
 
 | Group | Vars |
 |---|---|
-| **Heartbeat / opencode** | `LHASSA_HEARTBEAT_PROVIDER` (auto/local/opencode/cloud), `LHASSA_OPENCODE_BIN`, `LHASSA_OPENCODE_MODEL` |
-| **Local / fallback chain** | `LHASSA_LOCAL_MODEL_URL`, `LHASSA_LOCAL_MODEL`, `LHASSA_FALLBACK_PROVIDERS` |
+| **Chat (CLI/voice/agent)** | `LHASSA_LLM_PROVIDER` (groq/anthropic/openai/openrouter/cerebras/ollama **or** the local CLIs claude/codex/opencode), `LHASSA_MODEL` |
+| **Heartbeat / opencode** | `LHASSA_HEARTBEAT_PROVIDER` (auto/local/cloud/opencode/claude/codex), `LHASSA_OPENCODE_BIN`, `LHASSA_OPENCODE_MODEL` |
+| **Local / fallback chain** | `LHASSA_LOCAL_MODEL_URL`, `LHASSA_LOCAL_MODEL`, `LHASSA_FALLBACK_PROVIDERS` (default `claude,codex,default`) |
 | **Cost / router** | `LHASSA_ROUTER`, `LHASSA_MODEL_CHEAP`, `LHASSA_MODEL_SMART`, `LHASSA_LLM_DAILY_TOKEN_BUDGET`, `LHASSA_KILL_SWITCH` |
 | **Telegram** | `LHASSA_TELEGRAM_BOT_TOKEN`, `LHASSA_TELEGRAM_CHAT_ID`, `LHASSA_TELEGRAM_POLL` |
 | **Memory (layer 4)** | `LHASSA_MEMORY_LAYER4`, `LHASSA_EMBEDDING_MODEL`, `LHASSA_MEMORY_SEMANTIC_TOPK` |
 | **Privacy** | `LHASSA_PSEUDONYMIZE_REMOTE` |
-| **Org / topology** | `LHASSA_ORG_ROLE`, `LHASSA_ORG_DEPARTMENT`, `LHASSA_ORG_DEPARTMENTS`, `LHASSA_ORG_TOPOLOGY_FILE`, `LHASSA_ORG_LIVE` |
+| **Org / topology** | `LHASSA_ROOT_ADMIN`, `LHASSA_ORG_ROLE`, `LHASSA_ORG_DEPARTMENT`, `LHASSA_ORG_DEPARTMENTS`, `LHASSA_ORG_TOPOLOGY_FILE`, `LHASSA_ORG_RELATIONSHIPS_FILE`, `LHASSA_ORG_LIVE` |
 | **Plugins / channels** | `LHASSA_PLUGINS_DIR`, `LHASSA_NOTIFY_CHANNELS` |
-| **Harnesses** | `LHASSA_HARNESS`, `LHASSA_AGENT_BACKEND`, `LHASSA_AGENT_DIR` |
+| **Harnesses / tools** | `LHASSA_HARNESS`, `LHASSA_AGENT_BACKEND`, `LHASSA_AGENT_DIR`, `LHASSA_TOOLS_REPO_DIR` |
 | **Voice** | `LHASSA_VOICE_ENABLED`, `LHASSA_STT_LANGUAGE`, `LHASSA_MIC_NAME`, `LHASSA_VOICE_ID` |
-| **Identity / API** | `LHASSA_INSTANCE_ID`, `LHASSA_API_HOST`, `LHASSA_API_PORT` (7766) |
-| **Provider keys** | one is enough, auto-detected: `GROQ_API_KEY` / `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `OPENROUTER_API_KEY` / `CEREBRAS_API_KEY`; voice adds `DEEPGRAM_API_KEY` + `CARTESIA_API_KEY` |
+| **Identity / API / CLI** | `LHASSA_INSTANCE_ID`, `LHASSA_API_HOST`, `LHASSA_API_PORT` (7766), `LHASSA_CLI_LOG_LEVEL` |
+| **Provider keys** | one is enough, auto-detected: `GROQ_API_KEY` / `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `OPENROUTER_API_KEY` / `CEREBRAS_API_KEY`; voice adds `DEEPGRAM_API_KEY` + `CARTESIA_API_KEY`. The CLI providers `claude` / `codex` / `opencode` need **no key** — they run on your subscription. |
 
 See [`.env.example`](.env.example) for the full list with defaults and comments.
 
@@ -140,7 +161,8 @@ See [`.env.example`](.env.example) for the full list with defaults and comments.
 ## Architecture
 
 Brain state lives in `~/.lhassa/` (`brain.db`, `chica.db`, `backups/`, Ed25519
-keys, `org.json`, `plugins/`, logs). The codebase is layered — infra → spine →
+keys, `org.json`, `relationships.json`, `skills/`, `settings.env`, `plugins/`,
+`tools/`, logs). The codebase is layered — infra → spine →
 interfaces → adapters → shells — and the layering is enforced by an
 architecture-guard test. For the layer map, the data dir, the phase history (0–7),
 and the do-and-sleep / provider-harness / org-tree diagrams, read
@@ -151,6 +173,7 @@ and the do-and-sleep / provider-harness / org-tree diagrams, read
 | Document | Contents |
 |---|---|
 | [doc/architecture.md](doc/architecture.md) | Current high-level overview (layers, data dir, phases, diagrams) |
+| [doc/cli.md](doc/cli.md) | CLI reference — every `lhassa` subcommand, flags and examples |
 | [doc/architecture-layers.md](doc/architecture-layers.md) | The modularity guard — layers + forbidden import directions |
 | [doc/lhassa-brief.md](doc/lhassa-brief.md) | The implementation spec (Spanish) |
 | [doc/decisions.md](doc/decisions.md) | Running decisions log (phase by phase) |
