@@ -249,13 +249,50 @@ async def run_once(prompt: str, *, config=None) -> CliResult:
 
         config = Config()
 
+    system = build_system_prompt()
+
+    # Chat via a LOCAL CLI provider (claude/codex/opencode): authenticated by the owner's
+    # subscription, no API key. A tool-less one-shot — "just run claude and pass the message
+    # through". Picked when the chat provider is set to one of these CLIs.
+    if config.llm_provider in _CLI_CHAT_PROVIDERS:
+        return await _run_cli_provider(config, system, prompt)
+
     # Provider shape selects the loop branch / tool format; the model round-trip
     # goes through the gateway (cache + budget + ledger).
     provider = "anthropic" if config.llm_provider == "anthropic" else "openai"
     handlers = _tool_handlers()
-    system = build_system_prompt()
 
     with contextlib.redirect_stdout(sys.stderr):
         if provider == "anthropic":
             return await _run_anthropic(config, config.model, system, prompt, handlers)
         return await _run_openai(config, config.model, system, prompt, handlers)
+
+
+# Chat providers backed by a local CLI (subscription auth, no API key).
+_CLI_CHAT_PROVIDERS = ("claude", "codex", "opencode")
+
+
+async def _run_cli_provider(config, system: str, prompt: str) -> "CliResult":
+    """Chat through a local CLI provider (claude/codex/opencode) — tool-less, no API key."""
+    from lhassa.llm.provider import ProviderNotConfigured, get_model_provider
+
+    prov = get_model_provider(config, name=config.llm_provider)
+    try:
+        comp = await prov.complete(
+            [{"role": "user", "content": prompt}],
+            model=None,  # let the CLI use its own (subscription) model
+            max_tokens=1024,
+            system=system,
+        )
+    except ProviderNotConfigured as exc:
+        return CliResult(
+            f"({config.llm_provider} CLI is not available: {exc})",
+            config.llm_provider, 0, 0, 0.0,
+        )
+    return CliResult(
+        (comp.text or "").strip(),
+        comp.model or config.llm_provider,
+        comp.input_tokens,
+        comp.output_tokens,
+        comp.cost_usd,
+    )
