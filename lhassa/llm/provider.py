@@ -543,6 +543,296 @@ class OpenCodeProvider:
         )
 
 
+# ── CLI-subscription providers (Claude Code / Codex) ──────────────────────────
+#
+# Two more CLI-backed ModelProviders mirroring OpenCodeProvider, so a chat/think
+# fallback can chain across the owner's CLI subscriptions BEFORE paying for cloud:
+# ``opencode → claude → codex → default``. Each shells the relevant CLI for a
+# one-shot, non-interactive completion using the owner's existing subscription
+# (the CLI picks its own model unless one is given), so ``zero_retention`` is False
+# and ``is_local`` is False. A non-zero exit, a missing binary, a timeout, or empty
+# output raises ``ProviderNotConfigured`` so the existing degradation/chain path
+# handles it instead of crashing the turn.
+
+# Single CLI beat timeout: long enough for a subscription model, short enough that
+# a stuck CLI degrades the turn instead of hanging it.
+_CLI_TIMEOUT = 120.0
+
+
+def _flatten_messages(messages: list[dict], system: Any) -> str:
+    """Flatten chat messages into a single prompt string for a one-shot CLI run.
+
+    A ``system`` opt (and any system-role message) is prepended as plain guidance;
+    user/assistant turns are lightly labelled for multi-turn context. Mirrors
+    :meth:`OpenCodeProvider._build_prompt` for the prompt-arg CLIs.
+    """
+    parts: list[str] = []
+    if isinstance(system, str) and system:
+        parts.append(system)
+    for m in messages:
+        role = m.get("role", "user")
+        content = m.get("content", "")
+        if not isinstance(content, str):
+            content = str(content)
+        if not content:
+            continue
+        if role == "system":
+            parts.append(content)
+        elif role == "assistant":
+            parts.append(f"Assistant: {content}")
+        else:
+            parts.append(f"User: {content}")
+    return "\n\n".join(parts)
+
+
+async def _spawn_cli(argv: list[str], timeout: float) -> tuple[int | None, bytes, bytes]:
+    """Spawn ``argv`` non-interactively and return ``(returncode, stdout, stderr)``.
+
+    ``stdin`` is closed (``DEVNULL``) so a CLI that would otherwise wait on stdin
+    (codex reads extra input from stdin) never blocks the long-running poller. On
+    timeout the process is killed and ``asyncio.TimeoutError`` propagates.
+    """
+    proc = await asyncio.create_subprocess_exec(
+        *argv,
+        stdin=asyncio.subprocess.DEVNULL,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    try:
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+    except asyncio.TimeoutError:
+        try:
+            proc.kill()
+            await proc.wait()
+        except Exception:
+            pass
+        raise
+    return proc.returncode, stdout, stderr
+
+
+def _parse_claude_json(stdout: str) -> tuple[str, float, int, int]:
+    """Parse ``claude --print --output-format json`` stdout.
+
+    Verified live: a single JSON object ``{"type":"result","result":"<text>",
+    "is_error":false,"total_cost_usd":N,"usage":{"input_tokens":N,
+    "output_tokens":M}}``. Defensive: if the body is not that object (e.g. plain
+    ``text`` output), the cleaned raw stdout is used as the text and cost/usage are
+    zero. Returns ``(text, cost_usd, input_tokens, output_tokens)``.
+    """
+    obj: Any = None
+    try:
+        obj = json.loads(stdout.strip())
+    except Exception:
+        obj = None
+    if isinstance(obj, dict):
+        text = obj.get("result")
+        if not isinstance(text, str):
+            text = ""
+        cost = 0.0
+        for key in ("total_cost_usd", "cost_usd"):
+            v = obj.get(key)
+            if isinstance(v, (int, float)) and not isinstance(v, bool):
+                cost = float(v)
+        usage = obj.get("usage") if isinstance(obj.get("usage"), dict) else {}
+        in_tok = _int(usage.get("input_tokens") or usage.get("prompt_tokens") or 0)
+        out_tok = _int(usage.get("output_tokens") or usage.get("completion_tokens") or 0)
+        return text, cost, in_tok, out_tok
+    # Non-JSON (text mode / banner) — fall back to the cleaned raw stdout.
+    return _clean_stdout(stdout), 0.0, 0, 0
+
+
+def _parse_codex_jsonl(stdout: str) -> tuple[str, float, int, int]:
+    """Parse ``codex exec --json`` stdout (JSONL events).
+
+    Verified live: the assistant text arrives in
+    ``{"type":"item.completed","item":{"type":"agent_message","text":"<text>"}}``
+    events and usage in ``{"type":"turn.completed","usage":{"input_tokens":N,
+    "output_tokens":M}}`` (codex reports no cost → 0.0). Non-JSON lines (e.g. a
+    "Reading additional input…" banner) are skipped. If nothing parses as JSON the
+    cleaned raw stdout is used. Returns ``(text, cost_usd, input_tokens, output_tokens)``.
+    """
+    texts: list[str] = []
+    cost = 0.0
+    in_tok = out_tok = 0
+    parsed_any = False
+
+    for obj in _iter_json_events(stdout):
+        if not isinstance(obj, dict):
+            continue
+        parsed_any = True
+        item = obj.get("item")
+        if isinstance(item, dict) and item.get("type") == "agent_message":
+            t = item.get("text")
+            if isinstance(t, str) and t:
+                texts.append(t)
+        usage = obj.get("usage")
+        if isinstance(usage, dict):
+            i = _int(usage.get("input_tokens") or usage.get("prompt_tokens") or 0)
+            o = _int(usage.get("output_tokens") or usage.get("completion_tokens") or 0)
+            if i:
+                in_tok = i
+            if o:
+                out_tok = o
+            c = usage.get("cost")
+            if c is None:
+                c = usage.get("cost_usd")
+            if isinstance(c, (int, float)) and not isinstance(c, bool):
+                cost = float(c)
+
+    if texts:
+        text = "\n".join(texts)
+    elif not parsed_any:
+        text = _clean_stdout(stdout)
+    else:
+        text = ""
+    return text, cost, in_tok, out_tok
+
+
+class ClaudeCodeProvider:
+    """Routine/chat provider backed by the local **Claude Code CLI** (``claude``).
+
+    Uses the owner's Claude Code subscription: ``complete()`` shells
+    ``claude --print --output-format json [--model <model>] <prompt>`` via a
+    subprocess and parses the single JSON result for the text and (if reported)
+    cost/usage. When ``model`` is ``None`` the CLI picks its own model from the
+    subscription. ``zero_retention``/``is_local`` are False. A non-zero exit, a
+    missing binary, a timeout, or empty output raises ``ProviderNotConfigured`` so
+    the fallback chain degrades cleanly instead of crashing the turn.
+    """
+
+    name = "claude"
+    zero_retention = False
+    is_local = False
+
+    def __init__(self, config: "Config", *, runner: Any | None = None):
+        self._config = config
+        # Subprocess seam: an async callable ``(argv) -> (returncode, stdout_bytes,
+        # stderr_bytes)``. Injected by tests so they never spawn a real CLI.
+        self._runner = runner
+
+    async def _run(self, argv: list[str]) -> tuple[int | None, bytes, bytes]:
+        if self._runner is not None:
+            return await self._runner(argv)
+        return await _spawn_cli(argv, _CLI_TIMEOUT)
+
+    async def complete(
+        self, messages: list[dict], *, model: str | None = None, max_tokens: int = 1024, **opts
+    ) -> Completion:
+        binary = (getattr(self._config, "claude_bin", "") or "") or "claude"
+        # None ⇒ let the CLI pick the subscription's model; a config attr can override.
+        model = model or (getattr(self._config, "claude_model", "") or "") or None
+        prompt = _flatten_messages(messages, opts.get("system"))
+        argv = [binary, "--print", "--output-format", "json"]
+        if model:
+            argv += ["--model", model]
+        argv.append(prompt)
+
+        try:
+            returncode, stdout_b, stderr_b = await asyncio.wait_for(
+                self._run(argv), timeout=_CLI_TIMEOUT
+            )
+        except FileNotFoundError as exc:
+            raise ProviderNotConfigured(
+                f"claude unavailable: binary {binary!r} not found ({exc})"
+            ) from exc
+        except (asyncio.TimeoutError, TimeoutError) as exc:
+            raise ProviderNotConfigured(
+                f"claude unavailable: timed out after {_CLI_TIMEOUT:.0f}s"
+            ) from exc
+
+        stdout = (stdout_b or b"").decode("utf-8", "replace")
+        stderr = (stderr_b or b"").decode("utf-8", "replace")
+        if returncode not in (0, None):
+            detail = (stderr or stdout).strip()[:300]
+            raise ProviderNotConfigured(f"claude unavailable: exit {returncode}: {detail}")
+
+        text, cost, in_tok, out_tok = _parse_claude_json(stdout)
+        if not text.strip():
+            raise ProviderNotConfigured("claude unavailable: empty output")
+
+        return Completion(
+            text=text,
+            model=model or "claude",
+            input_tokens=in_tok,
+            output_tokens=out_tok,
+            cost_usd=cost,
+        )
+
+
+class CodexProvider:
+    """Routine/chat provider backed by the local **Codex CLI** (``codex``).
+
+    Uses the owner's Codex subscription: ``complete()`` shells
+    ``codex exec --json -s read-only --color never --skip-git-repo-check
+    [-m <model>] <prompt>`` via a subprocess and parses the JSONL event stream for
+    the assistant text and (if reported) usage (codex reports no cost → 0.0). When
+    ``model`` is ``None`` the CLI picks its own model. ``zero_retention``/
+    ``is_local`` are False. A non-zero exit, a missing binary, a timeout, or empty
+    output raises ``ProviderNotConfigured`` so the fallback chain degrades cleanly.
+    """
+
+    name = "codex"
+    zero_retention = False
+    is_local = False
+
+    def __init__(self, config: "Config", *, runner: Any | None = None):
+        self._config = config
+        self._runner = runner
+
+    async def _run(self, argv: list[str]) -> tuple[int | None, bytes, bytes]:
+        if self._runner is not None:
+            return await self._runner(argv)
+        return await _spawn_cli(argv, _CLI_TIMEOUT)
+
+    async def complete(
+        self, messages: list[dict], *, model: str | None = None, max_tokens: int = 1024, **opts
+    ) -> Completion:
+        binary = (getattr(self._config, "codex_bin", "") or "") or "codex"
+        model = model or (getattr(self._config, "codex_model", "") or "") or None
+        prompt = _flatten_messages(messages, opts.get("system"))
+        # ``-s read-only`` keeps a chat turn from touching the filesystem;
+        # ``--skip-git-repo-check`` lets it run outside a repo; ``--color never``
+        # keeps stdout clean. Verified live (non-interactive JSONL).
+        argv = [
+            binary, "exec", "--json", "-s", "read-only",
+            "--color", "never", "--skip-git-repo-check",
+        ]
+        if model:
+            argv += ["-m", model]
+        argv.append(prompt)
+
+        try:
+            returncode, stdout_b, stderr_b = await asyncio.wait_for(
+                self._run(argv), timeout=_CLI_TIMEOUT
+            )
+        except FileNotFoundError as exc:
+            raise ProviderNotConfigured(
+                f"codex unavailable: binary {binary!r} not found ({exc})"
+            ) from exc
+        except (asyncio.TimeoutError, TimeoutError) as exc:
+            raise ProviderNotConfigured(
+                f"codex unavailable: timed out after {_CLI_TIMEOUT:.0f}s"
+            ) from exc
+
+        stdout = (stdout_b or b"").decode("utf-8", "replace")
+        stderr = (stderr_b or b"").decode("utf-8", "replace")
+        if returncode not in (0, None):
+            detail = (stderr or stdout).strip()[:300]
+            raise ProviderNotConfigured(f"codex unavailable: exit {returncode}: {detail}")
+
+        text, cost, in_tok, out_tok = _parse_codex_jsonl(stdout)
+        if not text.strip():
+            raise ProviderNotConfigured("codex unavailable: empty output")
+
+        return Completion(
+            text=text,
+            model=model or "codex",
+            input_tokens=in_tok,
+            output_tokens=out_tok,
+            cost_usd=cost,
+        )
+
+
 class PseudonymizingProvider:
     """Wraps a REMOTE ModelProvider to scrub PII before it leaves the machine.
 
@@ -628,6 +918,8 @@ def register_provider(
 register_provider(_DEFAULT_PROVIDER, lambda config: GatewayProvider(config))
 register_provider("local", lambda config: LocalModelProvider(config))
 register_provider("opencode", lambda config: OpenCodeProvider(config))
+register_provider("claude", lambda config: ClaudeCodeProvider(config))
+register_provider("codex", lambda config: CodexProvider(config))
 register_provider("zen", lambda config: OpenCodeZenProvider(config))
 
 
@@ -637,6 +929,8 @@ def get_model_provider(config: "Config", *, name: str | None = None) -> ModelPro
     ``name="zen"`` returns the (not-yet-configured) opencode Zen stub.
     ``name="local"`` returns the LOCAL OpenAI-compatible heartbeat provider.
     ``name="opencode"`` returns the opencode-CLI heartbeat provider.
+    ``name="claude"``/``name="codex"`` return the Claude Code / Codex CLI providers
+    (the owner's subscriptions — the chat/think fallback chain before paying cloud).
 
     Routing goes through the :data:`PROVIDERS` registry; an absent or unknown
     ``name`` falls back to the ``default`` factory (GatewayProvider), preserving

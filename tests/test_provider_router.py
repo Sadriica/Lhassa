@@ -5,12 +5,17 @@ injected completion callable; the router is exercised with fake providers and a
 minimal config double. No network, no live LLM.
 """
 
+import asyncio
+import json
+
 import pytest
 import pytest_asyncio  # noqa: F401  (registers asyncio mode)
 
 from lhassa.llm import router
 from lhassa.llm.gateway import LedgerGateway
 from lhassa.llm.provider import (
+    ClaudeCodeProvider,
+    CodexProvider,
     Completion,
     GatewayProvider,
     ModelProvider,
@@ -136,6 +141,163 @@ def test_get_model_provider_unknown_name_falls_back_to_default():
     assert isinstance(get_model_provider(FakeConfig(), name="bogus"), GatewayProvider)
 
 
+def test_get_model_provider_resolves_cli_subscriptions():
+    assert isinstance(get_model_provider(FakeConfig(), name="claude"), ClaudeCodeProvider)
+    assert isinstance(get_model_provider(FakeConfig(), name="codex"), CodexProvider)
+
+
+# ── CLI-subscription providers (Claude Code / Codex) — runner seam mocked ─────
+#
+# These mock the injected subprocess ``runner`` so no real CLI is ever spawned.
+
+
+def _runner(returncode=0, stdout=b"", stderr=b""):
+    """An injectable ``runner`` returning a fixed (returncode, stdout, stderr)."""
+
+    async def run(argv):
+        return returncode, stdout, stderr
+
+    return run
+
+
+def _capturing_runner(captured, *, returncode=0, stdout=b"", stderr=b""):
+    """A runner that records argv into ``captured`` before returning."""
+
+    async def run(argv):
+        captured["argv"] = argv
+        return returncode, stdout, stderr
+
+    return run
+
+
+async def test_claude_code_provider_parses_json():
+    out = json.dumps(
+        {
+            "type": "result",
+            "subtype": "success",
+            "is_error": False,
+            "result": "hello there",
+            "total_cost_usd": 0.0123,
+            "usage": {"input_tokens": 12, "output_tokens": 5},
+        }
+    ).encode()
+    prov = ClaudeCodeProvider(FakeConfig(), runner=_runner(0, out))
+    assert prov.name == "claude"
+    assert isinstance(prov, ModelProvider)
+    c = await prov.complete([{"role": "user", "content": "hi"}])
+    assert c.text == "hello there"
+    assert c.cost_usd == pytest.approx(0.0123)
+    assert c.input_tokens == 12 and c.output_tokens == 5
+
+
+async def test_claude_code_provider_model_and_system_in_argv():
+    captured = {}
+    out = json.dumps({"type": "result", "result": "ok"}).encode()
+    prov = ClaudeCodeProvider(FakeConfig(), runner=_capturing_runner(captured, stdout=out))
+    await prov.complete(
+        [{"role": "user", "content": "hi"}], model="opus", system="be brief"
+    )
+    argv = captured["argv"]
+    assert argv[0] == "claude"
+    assert "--print" in argv and "--output-format" in argv and "json" in argv
+    assert "--model" in argv and "opus" in argv
+    assert "be brief" in argv[-1]  # system prepended into the flattened prompt
+
+
+async def test_claude_code_provider_nonzero_exit_raises():
+    prov = ClaudeCodeProvider(FakeConfig(), runner=_runner(1, b"", b"boom"))
+    with pytest.raises(ProviderNotConfigured):
+        await prov.complete([{"role": "user", "content": "hi"}])
+
+
+async def test_claude_code_provider_missing_binary_raises():
+    async def run(argv):
+        raise FileNotFoundError("no claude")
+
+    prov = ClaudeCodeProvider(FakeConfig(), runner=run)
+    with pytest.raises(ProviderNotConfigured):
+        await prov.complete([{"role": "user", "content": "hi"}])
+
+
+async def test_claude_code_provider_timeout_raises():
+    async def run(argv):
+        raise asyncio.TimeoutError()
+
+    prov = ClaudeCodeProvider(FakeConfig(), runner=run)
+    with pytest.raises(ProviderNotConfigured):
+        await prov.complete([{"role": "user", "content": "hi"}])
+
+
+async def test_claude_code_provider_empty_output_raises():
+    out = json.dumps({"type": "result", "result": ""}).encode()
+    prov = ClaudeCodeProvider(FakeConfig(), runner=_runner(0, out))
+    with pytest.raises(ProviderNotConfigured):
+        await prov.complete([{"role": "user", "content": "hi"}])
+
+
+async def test_codex_provider_parses_jsonl():
+    lines = [
+        {"type": "thread.started", "thread_id": "t"},
+        {"type": "turn.started"},
+        {"type": "item.completed",
+         "item": {"id": "item_0", "type": "agent_message", "text": "pong"}},
+        {"type": "turn.completed", "usage": {"input_tokens": 40, "output_tokens": 17}},
+    ]
+    out = ("\n".join(json.dumps(line) for line in lines)).encode()
+    prov = CodexProvider(FakeConfig(), runner=_runner(0, out))
+    assert prov.name == "codex"
+    assert isinstance(prov, ModelProvider)
+    c = await prov.complete([{"role": "user", "content": "hi"}])
+    assert c.text == "pong"
+    assert c.cost_usd == 0.0  # codex reports no cost
+    assert c.input_tokens == 40 and c.output_tokens == 17
+
+
+async def test_codex_provider_argv_has_exec_and_model():
+    captured = {}
+    out = json.dumps(
+        {"type": "item.completed", "item": {"type": "agent_message", "text": "ok"}}
+    ).encode()
+    prov = CodexProvider(FakeConfig(), runner=_capturing_runner(captured, stdout=out))
+    await prov.complete([{"role": "user", "content": "hi"}], model="gpt-x")
+    argv = captured["argv"]
+    assert argv[:2] == ["codex", "exec"]
+    assert "--json" in argv and "-m" in argv and "gpt-x" in argv
+    assert argv[-1].endswith("hi")  # prompt is the trailing positional arg
+
+
+async def test_codex_provider_nonzero_exit_raises():
+    prov = CodexProvider(FakeConfig(), runner=_runner(1, b"", b"boom"))
+    with pytest.raises(ProviderNotConfigured):
+        await prov.complete([{"role": "user", "content": "hi"}])
+
+
+async def test_codex_provider_missing_binary_raises():
+    async def run(argv):
+        raise FileNotFoundError("no codex")
+
+    prov = CodexProvider(FakeConfig(), runner=run)
+    with pytest.raises(ProviderNotConfigured):
+        await prov.complete([{"role": "user", "content": "hi"}])
+
+
+async def test_codex_provider_timeout_raises():
+    async def run(argv):
+        raise asyncio.TimeoutError()
+
+    prov = CodexProvider(FakeConfig(), runner=run)
+    with pytest.raises(ProviderNotConfigured):
+        await prov.complete([{"role": "user", "content": "hi"}])
+
+
+async def test_codex_provider_empty_output_raises():
+    # JSON parsed but no agent_message event → treated as empty → not configured.
+    out = json.dumps({"type": "turn.completed", "usage": {}}).encode()
+    prov = CodexProvider(FakeConfig(), runner=_runner(0, out))
+    with pytest.raises(ProviderNotConfigured):
+        await prov.complete([{"role": "user", "content": "hi"}])
+
+
 # ── keystone registry: introspection + drop-in seam ──────────────────────────
 
 
@@ -144,7 +306,9 @@ def test_providers_registry_exposes_builtin_names():
     from lhassa.registry import Registry
 
     assert isinstance(P.PROVIDERS, Registry)
-    assert set(P.PROVIDERS.names()) == {"default", "local", "opencode", "zen"}
+    assert set(P.PROVIDERS.names()) == {
+        "default", "local", "opencode", "claude", "codex", "zen"
+    }
 
 
 def test_register_provider_dropin_and_resolves():

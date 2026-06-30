@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import shutil
 
 import httpx
 from loguru import logger
@@ -66,27 +67,74 @@ def _enabled(config) -> bool:
     return bool(getattr(config, "telegram_poll_enabled", False)) and telegram.is_configured(config)
 
 
-def _secondary_provider(config, primary):
-    """A reliable CLOUD fallback for the bot when the routine provider flakes.
+# Provider names that are backed by a local CLI binary — skipped from the chain
+# when that binary is not installed (``shutil.which``), so the chain degrades
+# cleanly on a machine that lacks a given subscription CLI. The binary name can be
+# overridden per-provider via a ``<name>_bin`` config attr (e.g. ``opencode_bin``).
+_CLI_PROVIDERS = {"opencode", "claude", "codex"}
 
-    The routine provider for a chat turn is usually opencode, which boots a fresh
-    runtime per call and fails intermittently under the long-running poller. This
-    returns a plain :class:`GatewayProvider` (the configured cloud LLM, e.g. Groq)
-    so the owner always gets an answer. Returns ``None`` — disabling the fallback —
-    when the primary already IS the cloud gateway (``name == "default"``) or no
-    cloud provider is configured. This is the seam tests patch to ``None`` (to
-    assert the single-provider path) or to a mock (to assert the fallback fires).
+
+def _model_for(name: str, config) -> str | None:
+    """The model arg for a chain provider.
+
+    The cloud gateway (``default``) uses the cheap routine model, as before; the
+    CLI subscriptions (claude/codex/opencode) and other providers pass ``None`` so
+    each CLI/provider picks its own model from the owner's subscription/config.
     """
-    try:
-        from lhassa.llm.provider import GatewayProvider
+    if name == "default":
+        return _secondary_model(config)
+    return None
 
-        if getattr(primary, "name", "") == "default":
-            return None  # primary is already the cloud gateway — nothing to add
-        if not getattr(config, "llm_provider", ""):
-            return None  # no cloud LLM configured → no fallback to offer
-        return GatewayProvider(config)
+
+def _fallback_chain(config, primary):
+    """Build the configured chat/think fallback chain as ``[(provider, model), …]``.
+
+    Walks ``config.fallback_providers`` (comma-separated names, default
+    ``"claude,codex,default"``) IN ORDER, resolving each via
+    :func:`lhassa.llm.provider.get_model_provider`. This keeps the owner on their
+    CLI subscriptions (``opencode → claude → codex``) before paying for the cloud
+    gateway (``default``). Each entry is:
+
+    - **skipped if it is the same kind as the primary** (``name == primary.name``) —
+      don't retry e.g. opencode→opencode;
+    - **skipped if it is a CLI provider whose binary is not installed**
+      (``shutil.which``), so the chain degrades cleanly on a machine missing that CLI;
+    - **skipped if it cannot be resolved** (unknown/raising factory).
+
+    Never raises — a bad config or a failed resolve yields a shorter chain. This is
+    the seam tests patch to assert the chain order / skipping behaviour.
+    """
+    chain: list[tuple] = []
+    try:
+        names = [
+            n.strip()
+            for n in (getattr(config, "fallback_providers", "") or "").split(",")
+            if n.strip()
+        ]
     except Exception:
-        return None
+        return chain
+
+    from lhassa.llm.provider import get_model_provider
+
+    primary_name = getattr(primary, "name", "")
+    seen: set[str] = set()
+    for name in names:
+        if name in seen:
+            continue
+        seen.add(name)
+        if name == primary_name:
+            continue  # don't retry the same kind as the primary
+        if name in _CLI_PROVIDERS:
+            binary = (getattr(config, f"{name}_bin", "") or "") or name
+            if shutil.which(binary) is None:
+                continue  # CLI not installed → skip, degrade cleanly
+        try:
+            provider = get_model_provider(config, name=name)
+        except Exception:
+            continue
+        if provider is not None:
+            chain.append((provider, _model_for(name, config)))
+    return chain
 
 
 def _secondary_model(config):
@@ -141,16 +189,15 @@ async def _brain_reply(text: str, *, config) -> str:
         parts.append(_CHAT_INSTRUCTION)
         system = "\n\n".join(parts)
 
-        # Try the routine provider (opencode/local — $0), then a reliable CLOUD
-        # fallback. opencode boots a fresh runtime per call and flakes under the
-        # long-running poller, so a cloud provider backs it up — the owner always
-        # gets an answer. The fallback is the mockable ``_secondary_provider`` seam.
+        # Try the routine provider (opencode/local — $0), then walk the configured
+        # fallback CHAIN: the owner's CLI subscriptions (claude → codex) before the
+        # cloud gateway (default). opencode boots a fresh runtime per call and flakes
+        # under the long-running poller, so the chain backs it up — the owner always
+        # gets an answer. The chain is the mockable ``_fallback_chain`` seam.
         attempts: list[tuple] = []
         if decision.provider is not None:
             attempts.append((decision.provider, decision.model))
-        secondary = _secondary_provider(config, decision.provider)
-        if secondary is not None:
-            attempts.append((secondary, _secondary_model(config)))
+        attempts.extend(_fallback_chain(config, decision.provider))
         if not attempts:
             raise ProviderNotConfigured("router resolved no provider for telegram turn")
 
@@ -181,7 +228,7 @@ async def _brain_reply(text: str, *, config) -> str:
             )
             return reply
 
-        # Every provider (routine + cloud fallback) failed — defer, keep the episode.
+        # Every provider (routine + fallback chain) failed — defer, keep the episode.
         ep.finish(
             decision=_DEFERRED_DECISION,
             accion="responder",
