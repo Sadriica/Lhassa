@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import OrgTree from './OrgTree'
+import OrgFlow from './OrgFlow'
 
 // The Brains management panel — the centerpiece. Drives the slice-J org API:
 //   GET    /api/org/topology              read the chart
@@ -112,6 +113,7 @@ function Inspector({ node, allIds, skills, onPatch, onMove, onPromote, onDelete,
     setPickedSkills((prev) => (prev.includes(d) ? prev.filter((x) => x !== d) : [...prev, d]))
 
   const moveTargets = allIds.filter((id) => id !== node.id)
+  const isAdmin = Boolean(node.is_admin)
 
   return (
     <div className="space-y-3">
@@ -155,48 +157,59 @@ function Inspector({ node, allIds, skills, onPatch, onMove, onPromote, onDelete,
         Save changes
       </button>
 
-      <div className="pt-2" style={{ borderTop: '1px solid var(--lh-border)' }}>
-        <span className="lh-label">move — change who it reports to</span>
-        <div className="flex gap-1.5 mt-1">
-          <select className="lh-select" value={moveTo} onChange={(e) => setMoveTo(e.target.value)}>
-            <option value="">choose new parent…</option>
-            {moveTargets.map((id) => <option key={id} value={id}>{id}</option>)}
-          </select>
-          <button
-            type="button" className="lh-btn" disabled={busy || !moveTo}
-            onClick={() => onMove(node.id, moveTo)}
-          >
-            Move
-          </button>
+      {isAdmin ? (
+        <div className="pt-2" style={{ borderTop: '1px solid var(--lh-border)' }}>
+          <p className="text-[11px]" style={{ color: 'var(--lh-text-faint)' }}>
+            Lhassa is the permanent administrator — it orbits everything and is anchored at the root.
+            It can't be moved, promoted, or deleted.
+          </p>
         </div>
-      </div>
-
-      <div className="flex gap-2 pt-2" style={{ borderTop: '1px solid var(--lh-border)' }}>
-        <button
-          type="button" className="lh-btn" disabled={busy || !node.parent}
-          onClick={() => onPromote(node.id)} title="Make it command everyone"
-        >
-          ↑ Promote to root
-        </button>
-        {confirmDelete ? (
-          <div className="flex gap-1.5 flex-1">
-            <button
-              type="button" className="lh-btn lh-btn-danger" disabled={busy}
-              onClick={() => onDelete(node.id, (node.children?.length || 0) > 0)}
-            >
-              {(node.children?.length || 0) > 0 ? 'Delete subtree' : 'Confirm delete'}
-            </button>
-            <button type="button" className="lh-btn" onClick={() => setConfirmDelete(false)}>Cancel</button>
+      ) : (
+        <>
+          <div className="pt-2" style={{ borderTop: '1px solid var(--lh-border)' }}>
+            <span className="lh-label">move — change who it reports to</span>
+            <div className="flex gap-1.5 mt-1">
+              <select className="lh-select" value={moveTo} onChange={(e) => setMoveTo(e.target.value)}>
+                <option value="">choose new parent…</option>
+                {moveTargets.map((id) => <option key={id} value={id}>{id}</option>)}
+              </select>
+              <button
+                type="button" className="lh-btn" disabled={busy || !moveTo}
+                onClick={() => onMove(node.id, moveTo)}
+              >
+                Move
+              </button>
+            </div>
           </div>
-        ) : (
-          <button
-            type="button" className="lh-btn lh-btn-danger" disabled={busy}
-            onClick={() => setConfirmDelete(true)}
-          >
-            Delete
-          </button>
-        )}
-      </div>
+
+          <div className="flex gap-2 pt-2" style={{ borderTop: '1px solid var(--lh-border)' }}>
+            <button
+              type="button" className="lh-btn" disabled={busy || !node.parent}
+              onClick={() => onPromote(node.id)} title="Make it a top-level child of Lhassa"
+            >
+              ↑ Promote to root
+            </button>
+            {confirmDelete ? (
+              <div className="flex gap-1.5 flex-1">
+                <button
+                  type="button" className="lh-btn lh-btn-danger" disabled={busy}
+                  onClick={() => onDelete(node.id, (node.children?.length || 0) > 0)}
+                >
+                  {(node.children?.length || 0) > 0 ? 'Delete subtree' : 'Confirm delete'}
+                </button>
+                <button type="button" className="lh-btn" onClick={() => setConfirmDelete(false)}>Cancel</button>
+              </div>
+            ) : (
+              <button
+                type="button" className="lh-btn lh-btn-danger" disabled={busy}
+                onClick={() => setConfirmDelete(true)}
+              >
+                Delete
+              </button>
+            )}
+          </div>
+        </>
+      )}
       {confirmDelete && (node.children?.length || 0) > 0 && (
         <p className="text-[11px]" style={{ color: 'var(--lh-warn)' }}>
           Warning: this brain has {node.children.length} child{node.children.length === 1 ? '' : 'ren'}.
@@ -286,6 +299,7 @@ export default function BrainsPanel() {
   const [goal, setGoal] = useState('')
   const [route, setRoute] = useState(null)
   const [routeErr, setRouteErr] = useState('')
+  const [view, setView] = useState('flow') // 'flow' (n8n-style canvas) | 'tree'
 
   const loadTopology = useCallback(async () => {
     try {
@@ -390,7 +404,23 @@ export default function BrainsPanel() {
             {isStandalone ? ' · standalone' : ''}
           </span>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 items-center">
+          <div className="flex gap-1" role="group" aria-label="view">
+            <button
+              type="button"
+              className={`lh-btn ${view === 'flow' ? 'lh-btn-primary' : ''}`}
+              onClick={() => setView('flow')}
+            >
+              Flow
+            </button>
+            <button
+              type="button"
+              className={`lh-btn ${view === 'tree' ? 'lh-btn-primary' : ''}`}
+              onClick={() => setView('tree')}
+            >
+              Tree
+            </button>
+          </div>
           <button type="button" className="lh-btn" onClick={loadTopology} disabled={busy}>Refresh</button>
           <button type="button" className="lh-btn lh-btn-primary" onClick={() => setShowCreate((v) => !v)}>
             + Create brain
@@ -426,7 +456,7 @@ export default function BrainsPanel() {
       {showCreate && (
         <div className="mb-3">
           <CreateForm
-            allIds={allIds} defaultParent={topology?.root} skills={skills}
+            allIds={allIds} defaultParent={selectedId || topology?.admin || topology?.root} skills={skills}
             onCreate={createBrain} onClose={() => setShowCreate(false)} busy={busy}
           />
         </div>
@@ -442,13 +472,24 @@ export default function BrainsPanel() {
         <p className="text-xs" style={{ color: 'var(--lh-text-faint)' }}>Loading the org chart…</p>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
-          {/* Tree */}
+          {/* Canvas */}
           <div className="lg:col-span-3">
-            <div className="lh-label mb-2">hierarchy — who commands whom</div>
-            <OrgTree
-              topology={topology} selectedId={selectedId} routePath={routePath}
-              onSelect={(id) => setSelectedId(id)}
-            />
+            <div className="lh-label mb-2">
+              {view === 'flow'
+                ? 'flow — drag a node onto another to re-parent it'
+                : 'hierarchy — who commands whom'}
+            </div>
+            {view === 'flow' ? (
+              <OrgFlow
+                topology={topology} selectedId={selectedId} routePath={routePath}
+                onSelect={(id) => setSelectedId(id)} onMove={moveBrain}
+              />
+            ) : (
+              <OrgTree
+                topology={topology} selectedId={selectedId} routePath={routePath}
+                onSelect={(id) => setSelectedId(id)}
+              />
+            )}
           </div>
           {/* Inspector */}
           <div className="lg:col-span-2">
