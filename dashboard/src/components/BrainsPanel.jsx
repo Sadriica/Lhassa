@@ -213,7 +213,7 @@ function LimitsEditor({ rows, setRows }) {
 }
 
 // ── inspector for the selected brain ────────────────────────────────────────
-function Inspector({ node, nodes, departments, skills, installedSet, onInstall, onAddSkill, onPatch, onMove, onPromote, onDelete, busy }) {
+function Inspector({ node, nodes, departments, installedSet, onInstall, onAddSkill, onPatch, onMove, onPromote, onDelete, busy }) {
   const [role, setRole] = useState(node.role || '')
   const [department, setDepartment] = useState(node.department || '')
   const [pickedSkills, setPickedSkills] = useState(node.skills || [])
@@ -287,7 +287,29 @@ function Inspector({ node, nodes, departments, skills, installedSet, onInstall, 
 
       <div className="space-y-1">
         <span className="lh-label">skills</span>
-        <SkillPicker available={skills} selected={pickedSkills} onToggle={toggleSkill} />
+        {pickedSkills.length === 0 ? (
+          <p className="text-[11px]" style={{ color: 'var(--lh-text-faint)' }}>
+            No skills assigned yet — add one from “recommended” below.
+          </p>
+        ) : (
+          <div className="flex flex-wrap gap-1.5">
+            {pickedSkills.map((s) => (
+              <button
+                key={s}
+                type="button"
+                className="lh-tag lh-tag-accent"
+                style={{ cursor: 'pointer' }}
+                title="Remove this skill"
+                onClick={() => toggleSkill(s)}
+              >
+                {s} ✕
+              </button>
+            ))}
+          </div>
+        )}
+        <p className="text-[10px]" style={{ color: 'var(--lh-text-faint)' }}>
+          The skills this brain carries (✕ to remove). Click Save changes to persist.
+        </p>
       </div>
 
       <div className="space-y-1">
@@ -780,7 +802,7 @@ export default function BrainsPanel() {
             {selected ? (
               <>
                 <Inspector
-                  key={selected.id} node={selected} nodes={nodes} departments={departments} skills={skills}
+                  key={selected.id} node={selected} nodes={nodes} departments={departments}
                   installedSet={installedSet} onInstall={installSkill} onAddSkill={addSkillToBrain}
                   onPatch={patchBrain} onMove={moveBrain} onPromote={promoteBrain}
                   onDelete={deleteBrain} busy={busy}
