@@ -26,6 +26,10 @@ Wants=network-online.target
 [Service]
 Type=simple
 WorkingDirectory=%h/Code/lhassa
+# Include the user's local bin so the agentic panel/heartbeat can find the
+# subscription CLIs (claude lives in ~/.local/bin) — the default user-service PATH
+# is minimal and would otherwise miss them.
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin:/usr/local/sbin:/usr/sbin
 ExecStart=%h/Code/lhassa/.venv/bin/python %h/Code/lhassa/docker/run_api.py
 Restart=on-failure
 RestartSec=5
