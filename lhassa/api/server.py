@@ -1022,6 +1022,26 @@ async def assign_skill_endpoint(name: str, payload: dict):
     return {"ok": True, "skill": name, "brain": brain_id}
 
 
+@app.post("/api/skills/{name}/install")
+async def install_skill_endpoint(name: str):
+    """Install a skill from the built-in catalog (materializes its SKILL.md).
+
+    Used by the "skill referenced but not installed" affordance: a brain can carry a
+    skill NAME, but the skill only does something once installed. Returns the
+    installed skill; 404 if the name is not in the catalog (create it with AI instead).
+    """
+    from lhassa.skills.ai import install_from_catalog
+    from lhassa.skills.skillmd import skill_to_dict
+
+    skill = install_from_catalog(name, config=Config)
+    if skill is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"{name!r} is not in the catalog — create it with AI or by hand.",
+        )
+    return {"ok": True, "skill": skill_to_dict(skill)}
+
+
 # ── Overview — one defensive aggregate for the dashboard home ──────────────────
 #
 # A single read-only digest for the dashboard's "home" surface and ``lhassa
