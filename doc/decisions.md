@@ -50,6 +50,43 @@ message via opencode at $0. **Backlog / `[SUPUESTO]`:** adopt the registry in th
 registries (providers/harnesses/verifiers/specialists) as they're touched (continuous); `/status`
 reads the gateway ledger path/schema directly; route ties break by child declaration order.
 
+## 2026-06-30 — Capability batch: fallback chain, capabilities, Docker, org management, Warp dashboard, installer
+
+A large autonomous batch turning Lhassa into a more capable, portable, always-on tool. All
+committed, gates green (full suite grew 745 → 805), no AI attribution.
+- **Provider fallback CHAIN** (`f04ab2a`): `ClaudeCodeProvider` (`claude --print --output-format
+  json`) + `CodexProvider` (`codex exec --json …`), registered via `register_provider`; verified
+  with live calls. `notify/telegram_inbound._fallback_chain` walks `config.fallback_providers`
+  (`claude,codex,default`), skipping the primary's kind and uninstalled CLIs — so chat is
+  `opencode → claude → codex → cloud`, keeping the owner on subscriptions before paying cloud.
+  This fixed the Telegram bot answering "I can't reach my model" (opencode boots a runtime per
+  call and flakes under the long-running poller — earlier fix `b36de30` added the cloud fallback).
+- **`lhassa capabilities` / `doctor`** (`6917f25`): introspects every keystone registry +
+  gated config + loaded plugins (LLM-free, never-raises) — surfaces what's wired and on/off.
+- **Docker** (`fb80a22`): multi-stage image (node builds dashboard → python:3.13 runtime,
+  non-root, `HOME=/data` volume, port 7766, healthcheck), `docker-compose.yml` (api/heartbeat/
+  telegram roles via `LHASSA_RUN`), `doc/deployment.md`. Build + run verified (API 200, beat $0).
+- **Brain/org MANAGEMENT** (`5d3a6ba`): `BrainNode` gains `skills` + `limits`; `org/management.py`
+  add/update/remove/`set_parent` (who commands whom) / `set_root` (who commands everyone) /
+  set_skills/set_limits/`describe`; `lhassa org` add/move/promote/set-skills/set-limits/show/skills;
+  `/api/org/topology|skills|route|brains[/{id}/move|promote]`. Live API smoke passed (create →
+  re-parent → promote → route preview). The owner now creates/manages brains + hierarchy by CLI + API.
+- **Dashboard redesign** (`b6b9be6`): Warp/Oz-inspired dark theme (design tokens, teal accent,
+  mono for IDs/metrics, sidebar of "blocks") + `BrainsPanel`/`OrgTree` — visualize the hierarchy
+  and drive the org API (create/edit/move/promote/delete + route preview). Existing panels restyled.
+- **One-command installer** (`5ed00bc`): `scripts/install.sh` (preflight → uv sync + dashboard
+  build → docker build+smoke → install systemd USER services → `loginctl enable-linger` for boot),
+  `uninstall.sh`, `scripts/systemd/lhassa-app.service` (no-voice API+dashboard+scheduler via
+  `docker/run_api.py`), `doc/install.md`.
+
+**Now running (background + on boot):** ran `install.sh --no-docker` — `lhassa-app.service`
+(dashboard+API+scheduler on 127.0.0.1:7766), `lhassa-heartbeat.timer`, and
+`lhassa-telegram.service` are **enabled + active**, lingering on, so they start at boot before
+login. Verified live: `GET /` → 200 (title "Lhassa"), `/api/org/topology` → 200.
+
+**Telegram (live):** the bot answers reliably via the fallback chain; name/description/commands
+set in English; the inbound poller runs as the systemd service.
+
 ## 2026-06-30 — Phase 7 slice 2 (departments think) + heartbeat wired to opencode
 
 **Ops:** the heartbeat now thinks via **opencode** — set in `~/Code/lhassa/.env`
