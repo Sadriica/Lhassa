@@ -5,6 +5,50 @@ build. The source of truth for the architecture is `doc/lhassa-brief.md` (a
 living doc — correct it after each phase per §4). This file records the choices
 made along the way. Newest first.
 
+## 2026-06-29 — Phase 6 (Madurez) — first push: local heartbeat, memory layer 4, rich interfaces
+
+Phase 6 is **continuous** (no single DoD). This first push lands the autonomous,
+offline-verifiable pieces; voice + home/casa MCP are noted as the remaining
+continuous items (they need audio creds / per-home servers to smoke honestly).
+Built (3 slices, gates green, file ownership disjoint — config surface added up front):
+- **6.A** `llm/provider.py` `LocalModelProvider` (OpenAI-compatible local endpoint,
+  no API key, **cost $0**, `zero_retention`+`is_local`; unreachable→`ProviderNotConfigured`
+  → existing degradation path) + `privacy.py` (deterministic stdlib PII scrubber,
+  reversible placeholders, never raises) + `PseudonymizingProvider` (wraps a remote
+  provider: scrub before send, de-scrub after) + `router` routine→local preference
+  (`heartbeat_provider` auto/local/cloud), hard→cloud, cloud path pseudonymized unless
+  the provider is local (**the hook relaxes for local** — §3-Fase 6).
+- **6.B** `memory/embeddings.py` (pluggable `Embedder`: `HashingEmbedder` deterministic
+  offline default + optional `OpenAICompatEmbedder` degrading to hashing; no numpy) +
+  `db.py` `fact_embeddings` table/helpers + `memory/load.py` **layer 4** (semantic
+  `Context.semantic_facts`, lowest `PRIORITY` so it truncates first and never touches the
+  identity core; `load(query=,config=)` + explicit `index_facts()`). **Off by default** —
+  existing `load()` is byte-for-byte unchanged.
+- **6.C** `cli/` power subcommands (`tools/approvals/approve/deny/report/memory/fleet`,
+  each `--json`) preserving the default `lhassa "prompt"`/piped/REPL via a fallback
+  `TyperGroup` + `notify/telegram.py` (credential-gated, no token→no network, never
+  raises) + `/api/reports`·`/api/projections`·`/api/fleet` + dashboard Reports/Fleet panels.
+
+**DoD-style live smoke** (offline tests + a smoke against a **real in-process
+OpenAI-compatible socket server**): the routine path thinks on the **local** model at
+**$0** with PII **un-scrubbed** (data never leaves the box — hook relaxed); the hard/cloud
+path is wrapped in `PseudonymizingProvider` and PII is scrubbed→de-scrubbed round-trip;
+memory **layer 4 ON** recovers an overheating fact that shares **no tag** with the query
+("why is my computer warm and slow") and ranks it first, while **layer 4 OFF** yields no
+semantic layer. **529 tests** (460→+69), ruff clean, `lhassa --help` lists 7 subcommands,
+dashboard builds.
+
+**Deferred / continuous (Phase 6 is ongoing):** **voice** (skeleton `voice/pipeline.py`
+exists; end-to-end wiring needs Deepgram/Cartesia creds + audio to smoke) and **home/casa
+MCP** integrations (per-home servers) are the remaining items. **Turn-on-with-creds:**
+the local heartbeat needs a running local endpoint (`LHASSA_LOCAL_MODEL_URL`, e.g. Ollama);
+layer 4 needs `LHASSA_MEMORY_LAYER4=1` (+ optional `LHASSA_EMBEDDING_MODEL`); Telegram needs
+a bot token+chat id. **Backlog / `[SUPUESTO]`:** the cloud embedder + real-endpoint JSON
+shapes (Ollama `usage`/`choices`, OpenAI `/embeddings`) are assumed, not yet live-verified;
+the heartbeat is not yet pointed at a local model in the systemd unit (config default `auto`
+with an empty URL = unchanged behavior); a free-text CLI prompt whose first word is exactly
+a subcommand name routes to that subcommand unless quoted.
+
 ## 2026-06-29 — Phase 5 complete (self-improvement 2b in quarantine)
 
 The brain can write its own tools and graduate them only through objective gates,
