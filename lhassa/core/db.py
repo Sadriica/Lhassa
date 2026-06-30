@@ -244,6 +244,51 @@ async def init_db() -> None:
             )
         """)
 
+        # org_messages — the typed task queue between brains (§2.coordinación,
+        # Fase 7). Inter-brain communication is TYPED messages, never free prose:
+        # a closed set of kinds (TASK_ASSIGN / TASK_RESULT / STATUS_REQUEST /
+        # STATUS_REPORT) correlated by ``corr_id`` so a result maps back to its
+        # assignment. Scoped to ``instance_id`` (the org/tenant): the two brains
+        # (general + department) share the tenant and are addressed by their
+        # logical ``from_instance`` / ``to_instance`` identity strings.
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS org_messages (
+                id            TEXT PRIMARY KEY,
+                instance_id   TEXT NOT NULL,
+                kind          TEXT NOT NULL,
+                from_instance TEXT,
+                to_instance   TEXT,
+                payload       TEXT,
+                status        TEXT NOT NULL DEFAULT 'pending',
+                corr_id       TEXT,
+                creado_en     TEXT NOT NULL
+            )
+        """)
+        await db.execute("""
+            CREATE INDEX IF NOT EXISTS org_messages_inbox
+            ON org_messages(instance_id, to_instance, status)
+        """)
+        await db.execute("""
+            CREATE INDEX IF NOT EXISTS org_messages_by_corr
+            ON org_messages(instance_id, corr_id)
+        """)
+
+        # org_commons — the ONE cross-cutting read-only source of truth (Fase 7):
+        # policies, org chart, shared data. Readable by ALL brains; written ONLY
+        # by the curator (the general — enforced in lhassa.org.commons / rbac).
+        # A single shared row per (instance_id, clave) — no per-department copies
+        # that could diverge. ``curator`` records who last wrote it (audit).
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS org_commons (
+                instance_id    TEXT NOT NULL,
+                clave          TEXT NOT NULL,
+                valor          TEXT,
+                curator        TEXT,
+                actualizado_en TEXT NOT NULL,
+                PRIMARY KEY (instance_id, clave)
+            )
+        """)
+
         await db.commit()
 
 
@@ -909,3 +954,181 @@ async def bump_tool_usage(instance_id: str, nombre: str, *, ok: bool) -> None:
             (0 if ok else 1, instance_id, nombre),
         )
         await db.commit()
+
+
+# ── org_messages (the typed task queue between brains — Fase 7) ──────────────────
+#
+# Inter-brain messages are TYPED, never free prose: the ``kind`` is one of a closed
+# set (validated by lhassa.org.messaging before it reaches here). A ``corr_id``
+# threads a TASK_RESULT back to its TASK_ASSIGN. Every helper is scoped to
+# ``instance_id`` (the org/tenant); the brains are addressed by their logical
+# ``from_instance`` / ``to_instance`` identity strings.
+
+
+async def enqueue_org_message(
+    instance_id: str,
+    *,
+    kind: str,
+    from_instance: str,
+    to_instance: str,
+    payload: Optional[dict] = None,
+    corr_id: str = "",
+    status: str = "pending",
+    msg_id: Optional[str] = None,
+    creado_en: Optional[str] = None,
+) -> str:
+    """Persist one typed inter-brain message. Returns its id (generated if absent).
+
+    ``payload`` is JSON-encoded. Scoped to ``instance_id`` (the org/tenant).
+    """
+    msg_id = msg_id or _new_id("msg")
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            """INSERT INTO org_messages(
+                   id, instance_id, kind, from_instance, to_instance,
+                   payload, status, corr_id, creado_en)
+               VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                msg_id, instance_id, kind, from_instance, to_instance,
+                _dumps(payload or {}), status, corr_id, creado_en or _now(),
+            ),
+        )
+        await db.commit()
+    return msg_id
+
+
+def _decode_org_message(row: dict) -> dict:
+    """Decode the JSON ``payload`` column of an org_messages row in place."""
+    row["payload"] = _loads(row.get("payload"), {})
+    return row
+
+
+async def get_org_inbox(
+    instance_id: str,
+    to_instance: str,
+    *,
+    status: Optional[str] = None,
+) -> list[dict]:
+    """Return messages addressed to ``to_instance`` (oldest first), payload decoded.
+
+    Optionally filtered by ``status``. Always scoped to ``instance_id``.
+    """
+    sql = "SELECT * FROM org_messages WHERE instance_id = ? AND to_instance = ?"
+    args: list[Any] = [instance_id, to_instance]
+    if status is not None:
+        sql += " AND status = ?"
+        args.append(status)
+    sql += " ORDER BY creado_en, rowid"
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(sql, args) as cur:
+            rows = [dict(row) for row in await cur.fetchall()]
+    return [_decode_org_message(r) for r in rows]
+
+
+async def get_org_messages_by_corr(
+    instance_id: str,
+    corr_id: str,
+    *,
+    kind: Optional[str] = None,
+) -> list[dict]:
+    """Return messages sharing a ``corr_id`` (oldest first), payload decoded.
+
+    Optionally filtered by ``kind`` (e.g. only TASK_RESULT). Scoped to instance.
+    """
+    sql = "SELECT * FROM org_messages WHERE instance_id = ? AND corr_id = ?"
+    args: list[Any] = [instance_id, corr_id]
+    if kind is not None:
+        sql += " AND kind = ?"
+        args.append(kind)
+    sql += " ORDER BY creado_en, rowid"
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(sql, args) as cur:
+            rows = [dict(row) for row in await cur.fetchall()]
+    return [_decode_org_message(r) for r in rows]
+
+
+async def get_org_message(instance_id: str, msg_id: str) -> Optional[dict]:
+    """Return a single message row (payload decoded), or ``None`` if absent."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            "SELECT * FROM org_messages WHERE instance_id = ? AND id = ?",
+            (instance_id, msg_id),
+        ) as cur:
+            row = await cur.fetchone()
+    return _decode_org_message(dict(row)) if row is not None else None
+
+
+async def set_org_message_status(instance_id: str, msg_id: str, status: str) -> None:
+    """Advance a message's ``status`` (pending → delivered → done). Instance-scoped."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "UPDATE org_messages SET status = ? WHERE instance_id = ? AND id = ?",
+            (status, instance_id, msg_id),
+        )
+        await db.commit()
+
+
+# ── org_commons (the read-only cross-cutting source of truth — Fase 7) ───────────
+#
+# ONE shared row per (instance_id, clave). Reads are open to all brains; the WRITE
+# gate (curator-only) lives in lhassa.org.commons + lhassa.org.rbac, not here — db
+# stays a dumb store. Values are JSON-encoded to preserve dict/list/str/number.
+
+
+async def set_commons(
+    instance_id: str,
+    clave: str,
+    valor: Any,
+    *,
+    curator: str,
+) -> None:
+    """Upsert one commons entry (single shared row per key). Records ``curator``.
+
+    JSON-encodes ``valor`` to preserve its type. Scoped to ``instance_id``.
+    """
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            """INSERT INTO org_commons(instance_id, clave, valor, curator, actualizado_en)
+               VALUES(?, ?, ?, ?, ?)
+               ON CONFLICT(instance_id, clave)
+               DO UPDATE SET valor = excluded.valor,
+                             curator = excluded.curator,
+                             actualizado_en = excluded.actualizado_en""",
+            (instance_id, clave, json.dumps(valor, ensure_ascii=False), curator, _now()),
+        )
+        await db.commit()
+
+
+async def get_commons(instance_id: str, clave: str) -> Optional[dict]:
+    """Return one commons row (value JSON-decoded) or ``None`` if absent.
+
+    The returned dict carries ``clave``, ``valor`` (decoded), ``curator`` and
+    ``actualizado_en``. Scoped to ``instance_id``.
+    """
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            "SELECT * FROM org_commons WHERE instance_id = ? AND clave = ?",
+            (instance_id, clave),
+        ) as cur:
+            row = await cur.fetchone()
+    if row is None:
+        return None
+    out = dict(row)
+    out["valor"] = _loads(out.get("valor"), None)
+    return out
+
+
+async def get_all_commons(instance_id: str) -> dict[str, Any]:
+    """Return the whole commons as ``{clave: valor}`` (values decoded), instance-scoped."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            "SELECT clave, valor FROM org_commons WHERE instance_id = ? ORDER BY clave",
+            (instance_id,),
+        ) as cur:
+            rows = await cur.fetchall()
+    return {row["clave"]: _loads(row["valor"], None) for row in rows}
