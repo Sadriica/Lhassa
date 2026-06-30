@@ -33,10 +33,18 @@ function limitsToRows(limits) {
   }))
 }
 function rowsToLimits(rows) {
+  // The backend REPLACES limits with whatever object we send (a None/absent field
+  // means "leave unchanged", so we always send a full object — never null). A key
+  // is CLEARED by simply omitting it: removing a row drops it here, and an empty
+  // value drops it too, so clearing the field is also a removal. Sending `{}`
+  // clears every limit.
   const out = {}
   rows.forEach(({ key, value }) => {
     const k = key.trim()
-    if (k) out[k] = parseLimitValue(value)
+    if (!k) return
+    const v = parseLimitValue(value)
+    if (v === '' || v === null || v === undefined) return // empty → remove the key
+    out[k] = v
   })
   return out
 }
@@ -63,6 +71,53 @@ function SkillPicker({ available, selected, onToggle }) {
           </button>
         )
       })}
+    </div>
+  )
+}
+
+// ── carried-skills install status ───────────────────────────────────────────
+// A brain can carry a skill NAME that has no installed SKILL.md yet — in which
+// case the name does nothing. We compare each carried skill against the installed
+// set: an installed one is a normal gold tag; a not-installed one is a dashed,
+// muted tag with an Install action (→ POST /api/skills/{name}/install).
+function CarriedSkills({ skills, installedSet, onInstall }) {
+  const [installing, setInstalling] = useState('')
+  if (!skills.length) {
+    return <p className="text-[11px]" style={{ color: 'var(--lh-text-faint)' }}>No skills carried yet.</p>
+  }
+  return (
+    <div className="space-y-1.5">
+      <div className="flex flex-wrap gap-1.5 items-center">
+        {skills.map((s) => {
+          const ok = installedSet.has(String(s).toLowerCase())
+          if (ok) {
+            return <span key={s} className="lh-tag lh-tag-accent" title="installed SKILL.md">{s}</span>
+          }
+          return (
+            <span key={s} className="inline-flex items-center gap-1">
+              <span
+                className="lh-tag"
+                style={{ borderStyle: 'dashed', color: 'var(--lh-text-faint)', background: 'transparent' }}
+                title="referenced but not installed"
+              >
+                {s}
+              </span>
+              <button
+                type="button"
+                className="lh-btn"
+                style={{ padding: '0.18rem 0.5rem', fontSize: '0.6875rem' }}
+                disabled={installing === s}
+                onClick={async () => { setInstalling(s); await onInstall(s); setInstalling('') }}
+              >
+                {installing === s ? '…' : 'Install'}
+              </button>
+            </span>
+          )
+        })}
+      </div>
+      <p className="text-[10px]" style={{ color: 'var(--lh-text-faint)' }}>
+        A gold tag is an installed SKILL.md. A dashed tag is only a name — it does nothing until its skill is installed.
+      </p>
     </div>
   )
 }
@@ -95,12 +150,15 @@ function LimitsEditor({ rows, setRows }) {
           <button key={p} type="button" className="lh-btn" onClick={() => add(p)}>+ {p}</button>
         ))}
       </div>
+      <p className="text-[10px]" style={{ color: 'var(--lh-text-faint)' }}>
+        ✕ or an empty value removes a limit. Click Save changes to persist.
+      </p>
     </div>
   )
 }
 
 // ── inspector for the selected brain ────────────────────────────────────────
-function Inspector({ node, allIds, skills, onPatch, onMove, onPromote, onDelete, busy }) {
+function Inspector({ node, allIds, skills, installedSet, onInstall, onPatch, onMove, onPromote, onDelete, busy }) {
   const [role, setRole] = useState(node.role || '')
   const [department, setDepartment] = useState(node.department || '')
   const [pickedSkills, setPickedSkills] = useState(node.skills || [])
@@ -139,6 +197,11 @@ function Inspector({ node, allIds, skills, onPatch, onMove, onPromote, onDelete,
       <div className="space-y-1">
         <span className="lh-label">skills</span>
         <SkillPicker available={skills} selected={pickedSkills} onToggle={toggleSkill} />
+      </div>
+
+      <div className="space-y-1">
+        <span className="lh-label">carried — install status</span>
+        <CarriedSkills skills={pickedSkills} installedSet={installedSet} onInstall={onInstall} />
       </div>
 
       <div className="space-y-1">
@@ -292,6 +355,8 @@ function CreateForm({ allIds, defaultParent, skills, onCreate, onClose, busy }) 
 export default function BrainsPanel() {
   const [topology, setTopology] = useState(null)
   const [skills, setSkills] = useState([])
+  const [installed, setInstalled] = useState([]) // installed SKILL.md skills
+  const [skillNotice, setSkillNotice] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
@@ -316,13 +381,52 @@ export default function BrainsPanel() {
     }
   }, [])
 
+  const loadInstalled = useCallback(async () => {
+    try {
+      const r = await fetch('/api/skills')
+      const d = r.ok ? await r.json() : []
+      setInstalled(Array.isArray(d) ? d : [])
+    } catch {
+      setInstalled([])
+    }
+  }, [])
+
   useEffect(() => {
     loadTopology()
+    loadInstalled()
     fetch('/api/org/skills')
       .then((r) => (r.ok ? r.json() : []))
       .then((d) => setSkills(Array.isArray(d) ? d : []))
       .catch(() => setSkills([]))
-  }, [loadTopology])
+  }, [loadTopology, loadInstalled])
+
+  // The set a carried skill is matched against — installed skill names AND their
+  // domains (the org picker keys by domain, SKILL.md by name; accept either).
+  const installedSet = useMemo(() => {
+    const s = new Set()
+    for (const sk of installed) {
+      if (sk?.name) s.add(String(sk.name).toLowerCase())
+      const dom = sk?.metadata?.domain
+      if (dom) s.add(String(dom).toLowerCase())
+    }
+    return s
+  }, [installed])
+
+  const installSkill = useCallback(async (name) => {
+    setSkillNotice('')
+    try {
+      const r = await fetch(`/api/skills/${encodeURIComponent(name)}/install`, { method: 'POST' })
+      if (r.status === 404) {
+        setSkillNotice(`"${name}" isn't in the catalog — open Skills to create it with AI.`)
+        return
+      }
+      if (!r.ok) throw new Error('install failed')
+      await loadInstalled()
+      setSkillNotice(`Installed "${name}".`)
+    } catch {
+      setSkillNotice(`Could not install "${name}".`)
+    }
+  }, [loadInstalled])
 
   // A mutating call returns the updated chart — adopt it (optimistic refresh).
   const mutate = useCallback(async (label, doFetch) => {
@@ -510,11 +614,19 @@ export default function BrainsPanel() {
           <div className="lg:col-span-2">
             <div className="lh-label mb-2">inspector</div>
             {selected ? (
-              <Inspector
-                key={selected.id} node={selected} allIds={allIds} skills={skills}
-                onPatch={patchBrain} onMove={moveBrain} onPromote={promoteBrain}
-                onDelete={deleteBrain} busy={busy}
-              />
+              <>
+                <Inspector
+                  key={selected.id} node={selected} allIds={allIds} skills={skills}
+                  installedSet={installedSet} onInstall={installSkill}
+                  onPatch={patchBrain} onMove={moveBrain} onPromote={promoteBrain}
+                  onDelete={deleteBrain} busy={busy}
+                />
+                {skillNotice && (
+                  <div className="text-[11px] mt-2 lh-row" style={{ color: 'var(--lh-accent-text)' }}>
+                    {skillNotice}
+                  </div>
+                )}
+              </>
             ) : (
               <p className="text-xs lh-row" style={{ color: 'var(--lh-text-faint)' }}>
                 Select a brain in the tree to edit its role, skills, limits, move it, promote it, or delete it.

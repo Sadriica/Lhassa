@@ -100,9 +100,108 @@ function SecretControl({ setting, busy, onSave }) {
   )
 }
 
+const CUSTOM = '__custom__'
+
+// ── model field: a select of known ids + a "Custom…" path that reveals an input ──
+// The owner asked for drop-lists, not free typing — but a custom model id must
+// still be possible. So: a <select> populated from the setting's options (falling
+// back to the available pools) plus a "Custom…" entry that swaps in a text field.
+function ModelCombo({ setting, options, busy, onSave }) {
+  const value = setting.value ?? ''
+  const known = options.includes(value)
+  // Custom mode when the current value isn't a known option (and isn't empty),
+  // or when the user explicitly picks "Custom…".
+  const [custom, setCustom] = useState(Boolean(value) && !known)
+  const [draft, setDraft] = useState(value)
+
+  if (custom) {
+    const dirty = String(draft) !== String(value)
+    const commit = () => { if (dirty && draft.trim()) onSave(setting.key, draft.trim()) }
+    return (
+      <div className="flex items-center gap-1.5">
+        <input
+          className="lh-input"
+          placeholder="custom model id…"
+          value={draft}
+          disabled={busy}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); commit() } }}
+          style={{ maxWidth: 240 }}
+        />
+        <button
+          type="button"
+          className="lh-btn"
+          title="Back to the list"
+          disabled={busy}
+          onClick={() => { setCustom(false); setDraft(value) }}
+        >
+          ▾
+        </button>
+      </div>
+    )
+  }
+  return (
+    <select
+      className="lh-select"
+      value={known ? value : ''}
+      disabled={busy}
+      onChange={(e) => {
+        if (e.target.value === CUSTOM) { setDraft(value || ''); setCustom(true) }
+        else onSave(setting.key, e.target.value)
+      }}
+      style={{ maxWidth: 260 }}
+    >
+      {!value && <option value="">— default</option>}
+      {options.map((o) => <option key={o} value={o}>{o}</option>)}
+      <option value={CUSTOM}>Custom…</option>
+    </select>
+  )
+}
+
+// ── multi-select: checkbox chips for an ordered provider chain (CSV-backed) ──────
+function MultiSelect({ setting, options, busy, onSave }) {
+  const current = useMemo(
+    () => String(setting.value ?? '').split(',').map((s) => s.trim()).filter(Boolean),
+    [setting.value],
+  )
+  const toggle = (opt) => {
+    const next = current.includes(opt)
+      ? current.filter((x) => x !== opt)   // remove
+      : [...current, opt]                  // append (keeps chain priority order)
+    onSave(setting.key, next)              // backend accepts a list
+  }
+  return (
+    <div className="flex flex-col items-end gap-1.5" style={{ maxWidth: 320 }}>
+      <div className="flex flex-wrap gap-1.5 justify-end">
+        {options.map((opt) => {
+          const on = current.includes(opt)
+          const idx = current.indexOf(opt)
+          return (
+            <button
+              key={opt}
+              type="button"
+              disabled={busy}
+              onClick={() => toggle(opt)}
+              className={`lh-tag ${on ? 'lh-tag-accent' : ''}`}
+              style={{ cursor: busy ? 'not-allowed' : 'pointer' }}
+              title={on ? `#${idx + 1} in the chain — click to remove` : 'Click to add to the chain'}
+            >
+              {on ? `${idx + 1}· ` : ''}{opt}
+            </button>
+          )
+        })}
+      </div>
+      <span className="lh-mono text-[10px]" style={{ color: 'var(--lh-text-faint)' }}>
+        {current.length ? `order: ${current.join(' → ')}` : 'none selected'}
+      </span>
+    </div>
+  )
+}
+
 // ── one editable setting row ──────────────────────────────────────────────────
 function SettingRow({ setting, available, status, busy, onSave }) {
-  const { key, type, value, label, options, overridden, secret, restart } = setting
+  const { key, type, value, label, options, overridden, secret, restart, allow_custom } = setting
   // Local draft for free-text / numeric controls; committed on blur or Enter.
   const [draft, setDraft] = useState(value ?? '')
 
@@ -114,12 +213,24 @@ function SettingRow({ setting, available, status, busy, onSave }) {
     return []
   }, [options, key, available])
 
-  // Model fields get a datalist of known opencode models (a gentle assist).
-  const datalistId = key === 'opencode_model' ? `dl-${key}` : null
-  const datalistVals = datalistId ? (available.opencode_models || []) : []
+  // Model-combo option pool: the setting's own options, else the matching pool.
+  const modelOptions = useMemo(() => {
+    if (Array.isArray(options) && options.length) return options
+    if (key === 'opencode_model') return available.opencode_models || []
+    return available.model_options || []
+  }, [options, key, available])
+
+  // Multi-select option pool (fallback_providers).
+  const multiOptions = useMemo(() => {
+    if (Array.isArray(options) && options.length) return options
+    return available.fallback_providers || []
+  }, [options, available])
 
   const dirty = String(draft) !== String(value ?? '')
   const commit = () => { if (dirty) onSave(key, draft) }
+
+  // A str field with a known option pool (and a custom escape hatch) → model combo.
+  const isModelCombo = type === 'str' && (allow_custom || (Array.isArray(options) && options.length))
 
   let control
   if (secret) {
@@ -133,6 +244,8 @@ function SettingRow({ setting, available, status, busy, onSave }) {
         onChange={(next) => onSave(key, next)}
       />
     )
+  } else if (type === 'multi') {
+    control = <MultiSelect setting={setting} options={multiOptions} busy={busy} onSave={onSave} />
   } else if (type === 'enum') {
     control = (
       <select
@@ -146,27 +259,29 @@ function SettingRow({ setting, available, status, busy, onSave }) {
         {!enumOptions.includes(value) && value != null && <option value={value}>{String(value)}</option>}
       </select>
     )
+  } else if (isModelCombo) {
+    control = (
+      <ModelCombo
+        key={String(value)}
+        setting={setting}
+        options={modelOptions}
+        busy={busy}
+        onSave={onSave}
+      />
+    )
   } else {
     const numeric = type === 'int' || type === 'float'
     control = (
-      <>
-        <input
-          className="lh-input"
-          inputMode={numeric ? 'numeric' : undefined}
-          list={datalistId || undefined}
-          value={draft}
-          disabled={busy}
-          onChange={(e) => setDraft(e.target.value)}
-          onBlur={commit}
-          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); commit() } }}
-          style={{ maxWidth: 260 }}
-        />
-        {datalistId && (
-          <datalist id={datalistId}>
-            {datalistVals.map((v) => <option key={v} value={v} />)}
-          </datalist>
-        )}
-      </>
+      <input
+        className="lh-input"
+        inputMode={numeric ? 'numeric' : undefined}
+        value={draft}
+        disabled={busy}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); commit() } }}
+        style={{ maxWidth: 260 }}
+      />
     )
   }
 
