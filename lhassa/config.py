@@ -443,6 +443,15 @@ class Config:
     # sits at the top of any org and is never removed or demoted ("orbits everything").
     # Reorganizing or adding brains happens beneath it.
     root_admin_id: str = os.getenv("LHASSA_ROOT_ADMIN", "lhassa")
+    # Typed org RELATIONSHIPS overlay (reads/notifies/reviews/collaborates) live here —
+    # a graph separate from the command tree (who-commands-whom stays in org.json).
+    org_relationships_file: str = os.getenv(
+        "LHASSA_ORG_RELATIONSHIPS_FILE", str(Path.home() / ".lhassa" / "relationships.json")
+    )
+    # Work-flows (trigger → task → gate → output graphs) are stored here.
+    flows_file: str = os.getenv(
+        "LHASSA_FLOWS_FILE", str(Path.home() / ".lhassa" / "flows.json")
+    )
 
     # ── Skills (first-class, SKILL.md format) ─────────────────────────────────
     # Skills live as folders here, each with a SKILL.md (YAML frontmatter
