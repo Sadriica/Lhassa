@@ -1,6 +1,8 @@
 import os
 import platform
 import shutil
+from pathlib import Path
+
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -141,6 +143,18 @@ class Config:
     mic_name: str = os.getenv(
         "LHASSA_MIC_NAME",
         "pipewire" if platform.system() == "Linux" else "",
+    )
+
+    # ── Instance identity + brain DB (data spine) ─────────────────────────────
+    # One instance, one owner — never an assumed single owner. Every row in the
+    # "grande" brain DB carries this id and every query filters by it, so the
+    # multi-tenant shape is seeded from day one (personal use keeps one value).
+    instance_id: str = os.getenv("LHASSA_INSTANCE_ID", "inst_personal")
+
+    # The "grande": append-only SQLite (WAL) source of truth, separate from the
+    # conversational memory DB at ~/.lhassa/memory.db.
+    brain_db_path: str = os.getenv(
+        "LHASSA_BRAIN_DB_PATH", str(Path.home() / ".lhassa" / "brain.db")
     )
 
     # ── General ───────────────────────────────────────────────────────────────
