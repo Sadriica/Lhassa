@@ -6,6 +6,11 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 load_dotenv()
+# Runtime overrides written by the settings panel / `lhassa config` live in a
+# dedicated file so secrets in ``.env`` are never rewritten. They load AFTER ``.env``
+# with ``override=True`` so an edited setting wins; new processes (heartbeat, telegram,
+# app) pick them up on next start.
+load_dotenv(Path.home() / ".lhassa" / "settings.env", override=True)
 
 _PROVIDERS = {"groq", "anthropic", "openai", "openrouter", "ollama", "cerebras"}
 
