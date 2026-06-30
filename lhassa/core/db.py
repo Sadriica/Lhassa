@@ -722,3 +722,120 @@ async def list_postulaciones(
         db.row_factory = aiosqlite.Row
         async with db.execute(sql, args) as cur:
             return [dict(row) for row in await cur.fetchall()]
+
+
+# ── tools (self-written tools + their gate metrics — §2.8) ──────────────────────
+#
+# A ``tools`` row is APPEND-as-source-of-truth: one row per (instance_id, nombre);
+# the only in-place mutations allowed are the gate ``estado`` and the metric/usage
+# counters (metrica_baseline/actual, usos, fallos). The lifecycle of ``estado`` is
+# the four-gate pipeline of self-improvement 2b:
+#   cuarentena → (gates) → graduada | rechazada → (gate 4 Retiro) → cuarentena
+# Every helper is scoped to ``instance_id`` (isolation from day one).
+
+
+async def get_tool(instance_id: str, nombre: str) -> Optional[dict]:
+    """Return the tool row for one (instance_id, nombre), or ``None`` if absent."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            """SELECT * FROM tools
+               WHERE instance_id = ? AND nombre = ?
+               ORDER BY creado_en DESC, rowid DESC
+               LIMIT 1""",
+            (instance_id, nombre),
+        ) as cur:
+            row = await cur.fetchone()
+    return dict(row) if row is not None else None
+
+
+async def upsert_tool(
+    instance_id: str,
+    nombre: str,
+    *,
+    dominio: Optional[str] = None,
+    repo_url: Optional[str] = None,
+    estado: Optional[str] = None,
+    metrica_baseline: Optional[float] = None,
+    metrica_actual: Optional[float] = None,
+) -> str:
+    """Create or update the tool row for one (instance_id, nombre). Returns its id.
+
+    Only the fields explicitly passed (non-``None``) are written on an update, so a
+    caller can advance ``estado`` without clobbering the recorded metrics. The
+    usage counters (usos/fallos) are owned by :func:`bump_tool_usage` and are never
+    touched here.
+    """
+    existing = await get_tool(instance_id, nombre)
+    async with aiosqlite.connect(DB_PATH) as db:
+        if existing is None:
+            tool_id = _new_id("tool")
+            await db.execute(
+                """INSERT INTO tools(
+                       id, instance_id, nombre, dominio, repo_url, estado,
+                       metrica_baseline, metrica_actual, usos, fallos, creado_en)
+                   VALUES(?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?)""",
+                (
+                    tool_id, instance_id, nombre, dominio, repo_url, estado,
+                    metrica_baseline, metrica_actual, _now(),
+                ),
+            )
+            await db.commit()
+            return tool_id
+        sets: list[str] = []
+        args: list[Any] = []
+        for col, val in (
+            ("dominio", dominio),
+            ("repo_url", repo_url),
+            ("estado", estado),
+            ("metrica_baseline", metrica_baseline),
+            ("metrica_actual", metrica_actual),
+        ):
+            if val is not None:
+                sets.append(f"{col} = ?")
+                args.append(val)
+        if sets:
+            args.extend([instance_id, nombre])
+            await db.execute(
+                f"UPDATE tools SET {', '.join(sets)} "
+                "WHERE instance_id = ? AND nombre = ?",
+                args,
+            )
+            await db.commit()
+        return existing["id"]
+
+
+async def list_tools(
+    instance_id: str,
+    *,
+    estado: Optional[str] = None,
+) -> list[dict]:
+    """Return tool rows for ``instance_id`` (newest first), optionally by ``estado``."""
+    sql = "SELECT * FROM tools WHERE instance_id = ?"
+    args: list[Any] = [instance_id]
+    if estado is not None:
+        sql += " AND estado = ?"
+        args.append(estado)
+    sql += " ORDER BY creado_en DESC, rowid DESC"
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(sql, args) as cur:
+            return [dict(row) for row in await cur.fetchall()]
+
+
+async def bump_tool_usage(instance_id: str, nombre: str, *, ok: bool) -> None:
+    """Record one production use of a tool: +1 ``usos`` and +1 ``fallos`` if not ``ok``.
+
+    This is the signal gate 4 (Retiro) reads: a graduated tool whose production
+    failure-rate crosses a threshold (or that goes unused) is demoted back to
+    cuarentena. Scoped to ``instance_id``; a no-op if the tool does not exist.
+    """
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            """UPDATE tools
+               SET usos = usos + 1,
+                   fallos = fallos + ?
+               WHERE instance_id = ? AND nombre = ?""",
+            (0 if ok else 1, instance_id, nombre),
+        )
+        await db.commit()
