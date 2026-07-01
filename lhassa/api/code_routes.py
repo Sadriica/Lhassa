@@ -15,6 +15,8 @@ Endpoints (mounted by the integrator with ``app.include_router(code_routes.route
   POST /api/code       → body {task: str, cli?: str}; launches the run in the
                          background and returns {"ok": true, "run_id", "cli"} at once.
   GET  /api/code/runs  → recent agent runs (same shape as /api/agents) to list/resume.
+  POST /api/code/{run_id}/stop → terminate a running task's process group, mark it
+                         ``stopped``, and emit ``agent_stopped``/``agent_done``. Idempotent.
 
 run_id handling: ``LocalCliAgent.run`` mints its own id internally and only returns
 the final output string, so it cannot hand us an id up front. To return an id that
@@ -63,6 +65,7 @@ async def list_runs() -> list[dict]:
         {
             "id": r.id,
             "name": r.name,
+            "cli": r.cli,
             "status": r.status,
             "task": r.task,
             "output": r.output,
@@ -71,6 +74,31 @@ async def list_runs() -> list[dict]:
         }
         for r in state.agent_runs.values()
     ]
+
+
+@router.post("/api/code/{run_id}/stop")
+async def stop_code(run_id: str) -> dict:
+    """Stop a running agentic task.
+
+    Terminates the run's subprocess process group (graceful → kill, so child CLIs
+    die too), marks the run ``stopped``, and emits ``agent_stopped`` + ``agent_done``
+    so the panel updates. Idempotent: stopping an unknown or already-finished run is a
+    safe no-op. Never raises — a stop must never take down the server.
+    """
+    try:
+        run = state.agent_runs.get(run_id)
+        if run is None or run.status != "running":
+            return {"ok": True, "run_id": run_id, "stopped": False}
+        # Flip status first so a late finish from the torn-down subprocess can't clobber it,
+        # then kill the process group and free the tracking entry.
+        state.stop_agent(run_id)
+        await local_cli.stop_run(run_id)
+        await state.broadcast({"type": "agent_stopped", "run_id": run_id})
+        await state.broadcast({"type": "agent_done", "run_id": run_id, "output": run.output})
+        return {"ok": True, "run_id": run_id, "stopped": True}
+    except Exception as e:  # a stop must never surface as a 500
+        logger.error(f"[code] stop failed for run_id={run_id!r}: {e}")
+        return {"ok": True, "run_id": run_id, "stopped": False}
 
 
 @router.post("/api/code")
@@ -94,7 +122,7 @@ async def launch_code(req: CodeRequest):
     try:
         agent = local_cli.make_agent(cli)
         run_id = uuid.uuid4().hex[:8]
-        run = AgentRun(id=run_id, name=f"ai-cli ({cli})", status="running", task=task)
+        run = AgentRun(id=run_id, name=f"ai-cli ({cli})", status="running", task=task, cli=cli)
         state.register_agent(run)
         asyncio.ensure_future(_stream_run(agent, run_id, run, task))
     except Exception as e:  # never 500 — surface a clear, actionable error

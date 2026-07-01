@@ -110,4 +110,58 @@ def test_runs_endpoint_shape(client, monkeypatch):
     runs = resp.json()
     assert isinstance(runs, list)
     match = [r for r in runs if r["id"] == run_id]
-    assert match and set(match[0]) >= {"id", "name", "status", "task", "output"}
+    assert match and set(match[0]) >= {
+        "id", "name", "cli", "status", "task", "output", "started_at", "finished_at",
+    }
+    assert match[0]["cli"] == "claude"
+
+
+# ── stop endpoint ───────────────────────────────────────────────────────────────
+
+def test_stop_unknown_run_is_idempotent_noop(client):
+    """Stopping a run that was never registered is a safe 200 no-op — never a 500."""
+    resp = client.post("/api/code/does-not-exist/stop")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["ok"] is True
+    assert body["stopped"] is False
+
+
+def test_stop_running_run_marks_stopped(client, monkeypatch):
+    """A tracked running run transitions to 'stopped' and its process group is signalled."""
+    from lhassa.state import AgentRun
+
+    stopped_ids = []
+
+    async def fake_stop_run(run_id):
+        stopped_ids.append(run_id)
+        return True
+
+    monkeypatch.setattr(local_cli, "stop_run", fake_stop_run)
+
+    run = AgentRun(id="run123", name="ai-cli (claude)", status="running",
+                   task="do work", cli="claude")
+    state.register_agent(run)
+
+    resp = client.post("/api/code/run123/stop")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["ok"] is True and body["stopped"] is True
+    assert stopped_ids == ["run123"]
+    assert state.agent_runs["run123"].status == "stopped"
+    assert state.agent_runs["run123"].finished_at > 0
+
+
+def test_stop_finished_run_is_noop(client):
+    """Stopping an already-finished run does not touch it and reports stopped=False."""
+    from lhassa.state import AgentRun
+
+    run = AgentRun(id="done456", name="ai-cli (claude)", status="done",
+                   task="done work", cli="claude")
+    state.register_agent(run)
+
+    resp = client.post("/api/code/done456/stop")
+    assert resp.status_code == 200
+    assert resp.json()["stopped"] is False
+    # Status is untouched.
+    assert state.agent_runs["done456"].status == "done"
