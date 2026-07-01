@@ -14,12 +14,13 @@ standard library and never imports an outer shell (see ``tests/test_architecture
 """
 
 from lhassa.cv.paths import base_path, cv_dir, out_dir
-from lhassa.cv.store import export, load_base, short_id, slug_company
+from lhassa.cv.store import clean_latex, export, load_base, short_id, slug_company
 
 __all__ = [
     "base_path",
     "cv_dir",
     "out_dir",
+    "clean_latex",
     "export",
     "load_base",
     "short_id",

@@ -146,7 +146,9 @@ def resolve_brain(node: FlowNode, data: Any, config: Config) -> tuple[str, bool]
         return (skill or "general"), False
 
 
-async def _default_executor(goal: str, *, department: str, config: Config, **_: Any) -> dict:
+async def _default_executor(
+    goal: str, *, department: str, config: Config, max_tokens: Optional[int] = None, **_: Any
+) -> dict:
     """The default task executor — the org department brain (offline + $0 by default)."""
     if not _live_enabled():
         return {
@@ -161,7 +163,9 @@ async def _default_executor(goal: str, *, department: str, config: Config, **_: 
         }
     from lhassa.org.executor import brain_executor
 
-    return await brain_executor(goal, department=department, config=config)
+    return await brain_executor(
+        goal, department=department, config=config, max_tokens=max_tokens
+    )
 
 
 # ── per-node execution ───────────────────────────────────────────────────────
@@ -184,7 +188,14 @@ async def _run_task(
     department, pinned = resolve_brain(node, data, config)
     prompt = cfg.get("prompt") or cfg.get("goal") or ""
     goal = _format_goal(prompt, data, base_cv=base_cv, company=company) or department
-    result = await executor(goal, department=department, config=config)
+    max_tokens = cfg.get("max_tokens")
+    try:
+        max_tokens = int(max_tokens) if max_tokens is not None else None
+    except (TypeError, ValueError):
+        max_tokens = None
+    result = await executor(
+        goal, department=department, config=config, max_tokens=max_tokens
+    )
     extra = {
         "brain": department,
         "pinned": pinned,
@@ -305,6 +316,7 @@ def _run_output(
             from lhassa import cv
 
             artifact = payload if isinstance(payload, str) else str(payload)
+            artifact = cv.clean_latex(artifact)  # strip prose/fences → compile-ready .tex
             path = cv.export(artifact, company=company, run_id=run_id)
             record["output"] = "tex"
             record["path"] = str(path)
