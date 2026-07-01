@@ -65,11 +65,19 @@ _CHAT_INSTRUCTION = (
 )
 
 # ── Telegram → CV work-flow bridge replies ────────────────────────────────────
-# Sent when a CV document arrives with no caption: we hold the CV and ask for the
-# role in a FOLLOW-UP message (many clients send a file without letting you caption it).
+# The base CV lives on disk (``cv_largo.tex``) and rarely changes, so a document
+# upload is unambiguous: replacing the base is an EXPLICIT act (arm with /cvnewbase),
+# and any other upload is a one-off tailor. No inline buttons — an armed flag decides.
+#
+# Sent when a (non-armed, caption-less) CV document arrives: we hold the CV and ask
+# for the job posting in a follow-up message (many clients send a file uncaptioned).
 _CV_NO_CAPTION = (
-    "Got your CV ({chars} chars). Now send the job posting or target role as a normal "
-    "message and I'll tailor it. Optionally name the company with '@ Company' or 'company: X'."
+    "Got your CV ({chars} chars) — now send the job posting as a normal message and "
+    "I'll tailor it. Optionally name the company with '@ Company' or 'company: X'."
+)
+# Confirmation after an armed /cvnewbase upload replaced the base CV.
+_CV_BASE_SAVED = (
+    "Base CV updated ({chars} chars; previous backed up). /cv will use it now."
 )
 # The document could not be downloaded / had no readable text.
 _CV_NO_DOWNLOAD = "I couldn't download that document — try sending it again."
@@ -81,6 +89,11 @@ _CV_ERROR = "Something went wrong tailoring your CV. Nothing was sent."
 # message. Keyed by chat id; in-memory (the poller is one long-running process).
 _PENDING_CV: dict = {}
 _PENDING_TTL = 1800.0  # 30 min — an older held CV is treated as stale and dropped.
+
+# Chats ARMED via /cvnewbase for a base-CV replacement (chat id → arm timestamp).
+# The next uploaded document in an armed chat replaces the on-disk base CV.
+_AWAIT_BASE: dict = {}
+_AWAIT_BASE_TTL = 1800.0  # 30 min — an old arm request is treated as stale and ignored.
 
 
 def _pending_set(chat_id: str, base_cv: str, filename: str) -> None:
@@ -95,6 +108,23 @@ def _pending_pop(chat_id: str) -> "dict | None":
     if time.time() - held.get("ts", 0) > _PENDING_TTL:
         return None
     return held
+
+
+def _arm_base(chat_id: str) -> None:
+    """Arm ``chat_id`` for a base-CV replacement (its next document upload)."""
+    _AWAIT_BASE[chat_id] = time.time()
+
+
+def _consume_armed(chat_id: str) -> bool:
+    """Return whether ``chat_id`` is armed for a base replacement, and DISARM it.
+
+    Pops the arm flag (so an upload consumes it exactly once) and returns True only
+    when it was set within the TTL — a stale arm request is dropped and ignored.
+    """
+    ts = _AWAIT_BASE.pop(chat_id, None)
+    if ts is None:
+        return False
+    return (time.time() - ts) <= _AWAIT_BASE_TTL
 # ``@ Company`` / ``company: X`` extractors for the optional company name in a caption.
 _COMPANY_RES = (
     re.compile(r"company\s*[:=]\s*(?P<name>[^\n]+)", re.IGNORECASE),
@@ -318,6 +348,13 @@ async def _answer(text: str, *, config, chat_id: str = "") -> None:
             await _reply_with_cv(record, flow_id, company, config=config)
             return
 
+    # ``/cvnewbase`` ARMS this chat so the next uploaded document replaces the base CV
+    # (the arm side-effect needs the chat id, which the string-only registry lacks; the
+    # instruction reply itself is the registry command below).
+    command_name, _ = commands.parse(stripped)
+    if command_name == "cvnewbase":
+        _arm_base(chat_id)
+
     reply = None
     try:
         reply = await commands.dispatch(text, config=config)
@@ -435,7 +472,16 @@ async def _reply_with_cv(record, flow_id: str, company: str | None, *, config) -
     path = _tex_output_path(record)
     if path:
         cap = f"Tailored CV for {company}." if company else "Your tailored CV."
-        ok = await telegram_api.send_document(path, caption=cap, config=config)
+        # Prefer a compiled PDF (tectonic); fall back to the raw .tex when the engine
+        # is missing or the compile fails, so the owner always gets a file.
+        from lhassa import cv
+
+        send_path = path
+        with contextlib.suppress(Exception):
+            pdf = cv.compile_pdf(path)
+            if pdf is not None:
+                send_path = str(pdf)
+        ok = await telegram_api.send_document(send_path, caption=cap, config=config)
         if not ok:
             await telegram.send(
                 "I tailored your CV but couldn't send the file — try again.",
@@ -471,8 +517,17 @@ async def _answer_document(document: dict, caption, *, config, chat_id: str = ""
             await telegram.send(_CV_NO_TEXT, config=config)
             return
 
+        # ARMED via /cvnewbase → this upload REPLACES the on-disk base CV (any caption is
+        # ignored in this mode). save_base backs up the previous base first.
+        if _consume_armed(chat_id):
+            _PENDING_CV.pop(chat_id, None)  # a base replacement supersedes any held CV
+            cv.save_base(base_cv)
+            await telegram.send(_CV_BASE_SAVED.format(chars=len(base_cv)), config=config)
+            return
+
         if not cap:
-            # Hold the CV; the next plain-text message is the job posting.
+            # Not armed, no caption → HOLD the CV; the next plain-text message is the
+            # job posting and we tailor a one-off from it.
             _pending_set(chat_id, base_cv, document.get("file_name") or "cv")
             await telegram.send(_CV_NO_CAPTION.format(chars=len(base_cv)), config=config)
             return
@@ -504,6 +559,13 @@ async def _answer_cv_command(text: str, *, config) -> None:
             )
             return
         company = _parse_company(posting)
+        # A tailored run takes a while (a real model turn) — ack immediately so the
+        # owner knows it's working before the file lands.
+        with contextlib.suppress(Exception):
+            await telegram.send(
+                f"Tailoring your CV to {company or 'the role'}… this takes ~2 min.",
+                config=config,
+            )
         record, flow_id = await _run_cv_flow(
             caption=posting, company=company, base_cv=None, config=config
         )
@@ -620,6 +682,23 @@ async def run_forever(config=None) -> None:
         return
 
     logger.info("Telegram inbound poller started.")
+
+    # Best-effort: publish the bot's command menu once on start. Guarded so a slow or
+    # failing setMyCommands can never block or crash the poller's startup path.
+    with contextlib.suppress(Exception):
+        from lhassa.notify import telegram_api
+
+        await telegram_api.set_my_commands(
+            [
+                ("cv", "Tailor your CV to a job posting"),
+                ("cvnewbase", "Replace the base CV with your next upload"),
+                ("cvbase", "Show the base CV on file"),
+                ("status", "Brain status"),
+                ("help", "Help"),
+            ],
+            config=config,
+        )
+
     offset = None
     backoff = _BACKOFF_START
     while True:
