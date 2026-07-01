@@ -203,7 +203,9 @@ def test_document_update_runs_flow_and_sends_tex(monkeypatch, tmp_path):
     assert sent_text == []
 
 
-def test_no_caption_document_asks_for_role(monkeypatch):
+def test_no_caption_document_holds_cv_and_asks_for_role(monkeypatch):
+    telegram_inbound._PENDING_CV.clear()
+    tex_body = "\\documentclass{article}\\begin{document}Body\\end{document}"
     payload = {
         "ok": True,
         "result": [
@@ -211,7 +213,7 @@ def test_no_caption_document_asks_for_role(monkeypatch):
                 "update_id": 310,
                 "message": {
                     "chat": {"id": 123},
-                    "document": {"file_id": "FID", "file_name": "cv.pdf"},
+                    "document": {"file_id": "FID", "file_name": "cv.tex"},
                 },
             }
         ],
@@ -220,20 +222,94 @@ def test_no_caption_document_asks_for_role(monkeypatch):
         telegram_inbound.httpx, "AsyncClient", _client_returning(payload)
     )
 
-    async def _boom_get_file(file_id, *, config=None):
-        raise AssertionError("must not download a captionless document")
+    async def _fake_get_file(file_id, *, config=None):
+        return tex_body.encode()
 
     async def _boom_send_doc(path, *, caption="", config=None):
         raise AssertionError("must not send a file without a target role")
 
-    monkeypatch.setattr(telegram_api, "get_file", _boom_get_file)
+    monkeypatch.setattr(telegram_api, "get_file", _fake_get_file)
     monkeypatch.setattr(telegram_api, "send_document", _boom_send_doc)
     sent = _patch_send(monkeypatch)
 
     new_offset = asyncio.run(telegram_inbound.poll_once(_cfg(), offset=None))
 
     assert new_offset == 311
-    assert sent == [telegram_inbound._CV_NO_CAPTION]
+    # The CV is HELD for the chat and we ask for the role (no file sent, no flow run).
+    assert telegram_inbound._PENDING_CV["123"]["base_cv"] == tex_body
+    assert len(sent) == 1 and sent[0].startswith("Got your CV")
+    telegram_inbound._PENDING_CV.clear()
+
+
+def test_held_cv_then_followup_text_runs_flow(monkeypatch, tmp_path):
+    telegram_inbound._PENDING_CV.clear()
+    tex_body = (
+        "\\documentclass{article}\\begin{document}"
+        "owner@example.edu +57 300 111 2222\\end{document}"
+    )
+    # Two updates in order: the caption-less document, then the follow-up job posting.
+    payload = {
+        "ok": True,
+        "result": [
+            {
+                "update_id": 400,
+                "message": {
+                    "chat": {"id": 123},
+                    "document": {"file_id": "FID", "file_name": "cv.tex"},
+                },
+            },
+            {
+                "update_id": 401,
+                "message": {"chat": {"id": 123}, "text": "AI Engineer @ Sezzle"},
+            },
+        ],
+    }
+    monkeypatch.setattr(
+        telegram_inbound.httpx, "AsyncClient", _client_returning(payload)
+    )
+
+    async def _fake_get_file(file_id, *, config=None):
+        return tex_body.encode()
+
+    monkeypatch.setattr(telegram_api, "get_file", _fake_get_file)
+
+    sent_docs = []
+
+    async def _fake_send_document(path, *, caption="", config=None):
+        sent_docs.append(str(path))
+        return True
+
+    monkeypatch.setattr(telegram_api, "send_document", _fake_send_document)
+    _patch_send(monkeypatch)
+
+    import lhassa.flows.store as store_mod
+
+    monkeypatch.setattr(store_mod.FlowStore, "get", lambda self, fid: object())
+
+    out_file = tmp_path / "zz99_sezzle.tex"
+    out_file.write_text("% tailored", encoding="utf-8")
+    seen = {}
+
+    async def _fake_run_flow(flow, *, inputs, config, company, base_cv):
+        seen.update(inputs=inputs, company=company, base_cv=base_cv)
+        return {
+            "status": "completed",
+            "steps": [{"kind": "output", "output": "tex", "path": str(out_file)}],
+        }
+
+    import lhassa.flows.engine as engine_mod
+
+    monkeypatch.setattr(engine_mod, "run_flow", _fake_run_flow)
+
+    asyncio.run(telegram_inbound.poll_once(_cfg(), offset=None))
+
+    # The follow-up text ran the flow with the HELD CV as base + the text as the posting.
+    assert seen["base_cv"] == tex_body
+    assert seen["inputs"] == {"summary": "AI Engineer @ Sezzle"}
+    assert seen["company"] == "Sezzle"
+    assert sent_docs == [str(out_file)]
+    assert telegram_inbound._PENDING_CV == {}  # consumed
+    telegram_inbound._PENDING_CV.clear()
 
 
 def test_gate_failure_replies_and_sends_no_file(monkeypatch):

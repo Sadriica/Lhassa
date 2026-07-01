@@ -30,6 +30,7 @@ import asyncio
 import contextlib
 import re
 import shutil
+import time
 from pathlib import Path
 
 import httpx
@@ -64,16 +65,36 @@ _CHAT_INSTRUCTION = (
 )
 
 # ── Telegram → CV work-flow bridge replies ────────────────────────────────────
-# Sent when a CV document arrives with no caption (we won't tailor blindly).
+# Sent when a CV document arrives with no caption: we hold the CV and ask for the
+# role in a FOLLOW-UP message (many clients send a file without letting you caption it).
 _CV_NO_CAPTION = (
-    "Send the job posting or target role as the document's caption and I'll tailor "
-    "your CV to it. Optionally name the company with '@ Company' or 'company: X'."
+    "Got your CV ({chars} chars). Now send the job posting or target role as a normal "
+    "message and I'll tailor it. Optionally name the company with '@ Company' or 'company: X'."
 )
 # The document could not be downloaded / had no readable text.
 _CV_NO_DOWNLOAD = "I couldn't download that document — try sending it again."
 _CV_NO_TEXT = "I couldn't read any text from that document. Send a .tex or a text PDF."
 # Something unexpected happened while tailoring.
 _CV_ERROR = "Something went wrong tailoring your CV. Nothing was sent."
+
+# A CV held from a caption-less upload, awaiting the job posting in a follow-up
+# message. Keyed by chat id; in-memory (the poller is one long-running process).
+_PENDING_CV: dict = {}
+_PENDING_TTL = 1800.0  # 30 min — an older held CV is treated as stale and dropped.
+
+
+def _pending_set(chat_id: str, base_cv: str, filename: str) -> None:
+    _PENDING_CV[chat_id] = {"base_cv": base_cv, "filename": filename, "ts": time.time()}
+
+
+def _pending_pop(chat_id: str) -> "dict | None":
+    """Return (and clear) a non-stale held CV for ``chat_id``, else None."""
+    held = _PENDING_CV.pop(chat_id, None)
+    if not held:
+        return None
+    if time.time() - held.get("ts", 0) > _PENDING_TTL:
+        return None
+    return held
 # ``@ Company`` / ``company: X`` extractors for the optional company name in a caption.
 _COMPANY_RES = (
     re.compile(r"company\s*[:=]\s*(?P<name>[^\n]+)", re.IGNORECASE),
@@ -269,7 +290,7 @@ async def _brain_reply(text: str, *, config) -> str:
             await ep.append()
 
 
-async def _answer(text: str, *, config) -> None:
+async def _answer(text: str, *, config, chat_id: str = "") -> None:
     """Answer one message and reply with it. Never raises.
 
     A slash command is handled by the modular command registry
@@ -285,6 +306,17 @@ async def _answer(text: str, *, config) -> None:
     if stripped == "/cv" or stripped.startswith("/cv ") or stripped.startswith("/cv\n"):
         await _answer_cv_command(text, config=config)
         return
+
+    # A CV held from a caption-less upload → this plain text IS the job posting.
+    if not stripped.startswith("/"):
+        held = _pending_pop(chat_id)
+        if held:
+            company = _parse_company(stripped)
+            record, flow_id = await _run_cv_flow(
+                caption=stripped, company=company, base_cv=held["base_cv"], config=config
+            )
+            await _reply_with_cv(record, flow_id, company, config=config)
+            return
 
     reply = None
     try:
@@ -414,17 +446,16 @@ async def _reply_with_cv(record, flow_id: str, company: str | None, *, config) -
     await telegram.send(_gate_failure_reply(record), config=config)
 
 
-async def _answer_document(document: dict, caption, *, config) -> None:
+async def _answer_document(document: dict, caption, *, config, chat_id: str = "") -> None:
     """Handle an uploaded CV document: extract → run the flow → reply. Never raises.
 
     The ``caption`` (falling back to any message text) is the JOB POSTING / target
-    role. With no caption we ask for it instead of tailoring blindly.
+    role. With no caption we HOLD the extracted CV for this chat and ask for the role
+    in a follow-up message (:func:`_answer` picks it up) — many clients send a file
+    without letting you add a caption.
     """
     try:
         cap = (str(caption).strip() if caption else "")
-        if not cap:
-            await telegram.send(_CV_NO_CAPTION, config=config)
-            return
 
         from lhassa.notify import telegram_api
 
@@ -440,6 +471,13 @@ async def _answer_document(document: dict, caption, *, config) -> None:
             await telegram.send(_CV_NO_TEXT, config=config)
             return
 
+        if not cap:
+            # Hold the CV; the next plain-text message is the job posting.
+            _pending_set(chat_id, base_cv, document.get("file_name") or "cv")
+            await telegram.send(_CV_NO_CAPTION.format(chars=len(base_cv)), config=config)
+            return
+
+        _PENDING_CV.pop(chat_id, None)  # a captioned upload supersedes any held CV
         company = _parse_company(cap)
         record, flow_id = await _run_cv_flow(
             caption=cap, company=company, base_cv=base_cv, config=config
@@ -548,14 +586,14 @@ async def poll_once(config=None, *, offset=None):
             document = message.get("document")
             if isinstance(document, dict) and document.get("file_id"):
                 caption = message.get("caption") or message.get("text")
-                await _answer_document(document, caption, config=config)
+                await _answer_document(document, caption, config=config, chat_id=chat_id)
                 continue
 
             text = message.get("text")
             if not isinstance(text, str) or not text.strip():
                 continue
 
-            await _answer(text.strip(), config=config)
+            await _answer(text.strip(), config=config, chat_id=chat_id)
         except Exception as exc:  # one bad update must not kill the loop
             logger.warning(f"Telegram inbound: skipping bad update: {exc}")
             continue
