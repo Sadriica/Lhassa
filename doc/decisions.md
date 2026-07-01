@@ -5,6 +5,60 @@ build. The source of truth for the architecture is `doc/lhassa-brief.md` (a
 living doc — correct it after each phase per §4). This file records the choices
 made along the way. Newest first.
 
+## 2026-07-01 — Dashboard as a product: Matte Obsidian redesign, usability pass, CV work-flow & run control
+
+A long UX/product arc turning the dashboard into a real command surface, plus two backend
+capabilities. All shipped green (final: **991 tests**, ruff clean, dashboard build + lint clean)
+and committed in focused commits on top of the aiosqlite-vendor / API-auth hardening.
+
+- **Vendoring + API hardening (`a27e94f`):** the local `aiosqlite` shim (a sqlite3 wrapper that
+  avoids the upstream worker-thread stalls here) moved from a root `aiosqlite/` package that
+  **shadowed the real dependency** to `lhassa/_vendor/aiosqlite.py` with explicit imports; plus a
+  require-local-or-token API middleware (non-local `/api` needs `LHASSA_API_TOKEN`; loopback allowed)
+  + CORS restriction, and a `conftest` `ASGISyncTestClient` (Starlette's sync TestClient hangs here).
+- **Visual — "Matte Obsidian" (`7f667a5`):** matured the dark theme to flat matte surfaces (no
+  gradients/glow/blur), hairline borders, an editorial **Fraunces** serif for display, **gold-led
+  with the monk-red as a real co-accent** (finial, active-nav tick, admin ring); stripped the
+  decorative sidebar chrome. Inspiration: quiet-luxury (AP/Cartier) restraint, not more chrome.
+- **Layout & responsive:** bigger fluid org-flow canvas; the brain inspector is now a dismissible
+  **popup** (right dock desktop / bottom sheet mobile); a whole-page **responsive** pass (hamburger
+  drawer, stacking grids, touch sizing) toward mobile use. React-Flow canvases are **lazy-loaded**,
+  cutting the initial bundle ~513 → ~312 kB.
+- **Usability pass (12 findings from a live click-through):** section **deep-linking** via the URL
+  hash incl. `#flows/<id>` (Back/Forward) + section persistence; a **global toast** system; a **⌘K
+  command palette**; two-step delete confirms; discoverable reparenting (right-click "Move under…");
+  empty-state CTAs; client-side filters on dense lists; palette-token contrast fixes; flow-editor
+  **auto-wire + disconnected-node warnings** and a vertical "Tidy" layout; "Create & add another"
+  for brains; focus-refetch of the org canvas; auto-fit that doesn't hide fresh nodes; fixed the
+  long-standing WebSocket reconnect lint bug (handleEvent `useCallback` + `connectRef`). Renamed the
+  Spanish specialist display name `optimizador` → **`optimizer`** (`30535bf`).
+- **Draggable department blocks (`7f667a5`):** dept boxes are now draggable and carry their brains
+  as a unit (per-department offset persisted to `localStorage`, with a Reset control), **without
+  breaking reparent-by-drag** (offset keeps member nodes on absolute coords).
+- **`#10` optimistic + Undo (`8c3a0c7`):** brain move / leaf-delete / flow-delete / skill-remove
+  apply instantly with an **Undo toast** that reconstructs the prior state (rollback on failure);
+  a subtree/force delete stays two-step-confirmed and non-undoable.
+- **`#11` run control (`26835d1`):** the agentic Run surface can now **Stop** a running task (track
+  by id + process group, SIGTERM→grace→SIGKILL via `local_cli.stop_run`, idempotent), shows a
+  **status history** (`running/done/failed/stopped`) and **Copy output**. New `POST
+  /api/code/{run_id}/stop`; `AgentRun` gained `cli` + a `stopped` status.
+- **CV work-flow: base-CV input + `.tex` export (`e84ed02`):** new modular file-I/O seam
+  **`lhassa/cv/`** (config `LHASSA_CV_DIR`, default `~/.lhassa/cv`; `load_base`, `slug_company`,
+  `short_id`, atomic `export` → `out/{id}_{company}.tex`). The flow engine injects `{base_cv}` +
+  `{company}` into task prompts and gained an **`output` type `"tex"`** that writes the artifact;
+  `resolve_company` = run-override → context → `untitled`; `POST /api/flows/{id}/run` accepts an
+  optional `company`. The "Impossible-to-reject CV" flow (`flow-zvzpry`, in `~/.lhassa/flows.json`)
+  now builds on `cv_largo.tex`, tailors to **≤2 pages/role preserving structure**, and exports a
+  `.tex`. Offline dry-run ($0) verified end-to-end (writes real files with stub content); a REAL
+  optimized `.tex` needs a live run (`LHASSA_ORG_LIVE=1` + a model) over the user's real base CV.
+
+**Dogfooding:** built the whole thing as a new user via the live UI + API — created an **Interns**
+department + a 6-brain CV pipeline (jd-analyst → researcher → cv-writer → ats-evaluator → gate →
+critic → finalizer → gate → output) and validated the flow offline, which is what surfaced the 12
+usability findings above. **`[SUPUESTO]`:** org/flow live-update is focus-refetch, not a WS push;
+run tracking is in-memory (not restart-persistent); the flow-editor deep-link and drag/touch feel
+were verified by construction, not on a real mobile device.
+
 ## 2026-06-30 — Elastic & modular hardening pass (A–E) + Telegram live + org topology
 
 **Owner principle (now a standing constraint):** Lhassa must be **fully elastic and highly
