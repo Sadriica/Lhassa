@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { toast } from '../lib/toast'
 
 // AGENTIC panel — the dashboard face of `lhassa code`. Hand a task to a local AI
 // CLI (claude/codex/opencode) and watch it run live.
@@ -16,7 +17,20 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 const STATUS = {
   running: { label: 'running', dot: 'lh-dot-accent', live: true },
   done:    { label: 'done',    dot: 'lh-dot-ok' },
-  error:   { label: 'error',   dot: 'lh-dot-alert' },
+  // The backend's failed status is "error"; "failed" is accepted as an alias.
+  error:   { label: 'failed',  dot: 'lh-dot-alert' },
+  failed:  { label: 'failed',  dot: 'lh-dot-alert' },
+  stopped: { label: 'stopped', dot: 'lh-dot-warn' },
+}
+
+// Copy arbitrary text to the clipboard, with a toast either way.
+async function copyText(text, okMsg = 'Output copied') {
+  try {
+    await navigator.clipboard.writeText(text || '')
+    toast.success(okMsg)
+  } catch {
+    toast.error('Could not copy to clipboard')
+  }
 }
 
 // Pull a readable message from an error body — the route returns {error};
@@ -30,6 +44,15 @@ async function errText(r, fallback) {
 function cliOf(name) {
   const m = /\(([^)]+)\)/.exec(name || '')
   return m ? m[1] : name || '?'
+}
+
+function fmtTime(sec) {
+  if (!sec) return ''
+  try {
+    return new Date(sec * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  } catch {
+    return ''
+  }
 }
 
 function fmtDuration(start, end) {
@@ -52,7 +75,7 @@ function StatusPill({ status }) {
 }
 
 // ── live output console ───────────────────────────────────────────────────────
-function OutputConsole({ run, elapsed }) {
+function OutputConsole({ run, elapsed, onStop, onRerun, stopping }) {
   const ref = useRef(null)
   const output = run?.output || ''
   const status = run?.status
@@ -89,11 +112,44 @@ function OutputConsole({ run, elapsed }) {
             {cliOf(run.name)}
           </span>
         </div>
-        <span className="lh-mono text-[11px]" style={{ color: 'var(--lh-text-faint)' }}>
-          {isRunning
-            ? (elapsed != null ? `${elapsed.toFixed(0)}s` : 'streaming…')
-            : (duration ? `done in ${duration}` : null)}
-        </span>
+        <div className="flex items-center gap-2 shrink-0">
+          <span className="lh-mono text-[11px]" style={{ color: 'var(--lh-text-faint)' }}>
+            {isRunning
+              ? (elapsed != null ? `${elapsed.toFixed(0)}s` : 'streaming…')
+              : (duration ? `done in ${duration}` : null)}
+          </span>
+          {isRunning ? (
+            <button
+              type="button"
+              className="lh-btn lh-btn-danger"
+              onClick={onStop}
+              disabled={stopping}
+              title="Terminate this running task"
+            >
+              {stopping ? 'Stopping…' : '■ Stop'}
+            </button>
+          ) : (
+            run.task && (
+              <button
+                type="button"
+                className="lh-btn"
+                onClick={() => onRerun(run.task)}
+                title="Refill the task box with this run's task"
+              >
+                Re-run
+              </button>
+            )
+          )}
+          <button
+            type="button"
+            className="lh-btn"
+            onClick={() => copyText(output)}
+            disabled={!output}
+            title="Copy this run's output to the clipboard"
+          >
+            Copy
+          </button>
+        </div>
       </div>
 
       {run.task && (
@@ -158,7 +214,17 @@ function RecentRuns({ runs, loading, selectedId, onSelect }) {
                 <span className="lh-mono text-[12px] font-semibold" style={{ color: 'var(--lh-text)' }}>#{r.id}</span>
                 <span className="lh-tag lh-tag-accent">{cliOf(r.name)}</span>
               </div>
-              <StatusPill status={r.status} />
+              <div className="flex items-center gap-2 shrink-0">
+                {r.started_at && (
+                  <span className="lh-mono text-[10px]" style={{ color: 'var(--lh-text-faint)' }}>
+                    {fmtTime(r.started_at)}
+                    {fmtDuration(r.started_at, r.finished_at)
+                      ? ` · ${fmtDuration(r.started_at, r.finished_at)}`
+                      : ''}
+                  </span>
+                )}
+                <StatusPill status={r.status} />
+              </div>
             </div>
             {r.task && (
               <p className="text-[11px] mt-1 truncate" style={{ color: 'var(--lh-text-muted)' }} title={r.task}>
@@ -180,6 +246,7 @@ export default function AgenticPanel({ agents }) {
   const [task, setTask] = useState('')
   const [launching, setLaunching] = useState(false)
   const [launchError, setLaunchError] = useState('')
+  const [stopping, setStopping] = useState(false)
   const [selectedId, setSelectedId] = useState(null)
   const [launchedRunId, setLaunchedRunId] = useState(null)
   const [runs, setRuns] = useState([])
@@ -219,11 +286,23 @@ export default function AgenticPanel({ agents }) {
   useEffect(() => { loadRuns() }, [loadRuns])
 
   // Selected run: prefer App's WS-fed live record (it accumulates each agent_token
-  // into .output and flips status on done/error), else the recent-runs snapshot.
+  // into .output and flips status on done/error), but let the /runs snapshot own the
+  // terminal status. App's WS folding doesn't model "stopped" (it maps agent_done →
+  // "done"), so once the backend records a terminal status we trust that instead.
   const selectedRun = useMemo(() => {
     if (!selectedId) return null
-    if (agents[selectedId]) return agents[selectedId]
-    return runs.find((r) => r.id === selectedId) || null
+    const live = agents[selectedId]
+    const snap = runs.find((r) => r.id === selectedId) || null
+    if (live && snap) {
+      const terminal = snap.status && snap.status !== 'running'
+      return {
+        ...snap,
+        ...live,
+        status: terminal ? snap.status : live.status,
+        output: live.output || snap.output,
+      }
+    }
+    return live || snap
   }, [selectedId, agents, runs])
 
   // While the selected run streams, tick a live elapsed timer and keep runs fresh
@@ -272,6 +351,28 @@ export default function AgenticPanel({ agents }) {
     } finally {
       setLaunching(false)
     }
+  }
+
+  // Stop the currently selected run. Idempotent server-side, so a stale click is safe.
+  const stop = async () => {
+    if (!selectedId || stopping) return
+    setStopping(true)
+    try {
+      const r = await fetch(`/api/code/${selectedId}/stop`, { method: 'POST' })
+      if (!r.ok) throw new Error(await errText(r, 'Stop failed'))
+      toast.success('Stopping run…')
+      loadRuns()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Stop failed')
+    } finally {
+      setStopping(false)
+    }
+  }
+
+  // Re-run: refill the task box so the user can tweak and launch again.
+  const rerun = (t) => {
+    setTask(t || '')
+    toast.info('Task loaded — edit and Run')
   }
 
   const onSelectRun = (id) => {
@@ -358,7 +459,13 @@ export default function AgenticPanel({ agents }) {
       {/* live output */}
       <div className="mt-4">
         <div className="lh-label mb-2">output</div>
-        <OutputConsole run={selectedRun} elapsed={elapsed} />
+        <OutputConsole
+          run={selectedRun}
+          elapsed={elapsed}
+          onStop={stop}
+          onRerun={rerun}
+          stopping={stopping}
+        />
       </div>
 
       {/* recent runs */}

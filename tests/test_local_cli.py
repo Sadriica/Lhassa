@@ -178,6 +178,59 @@ async def test_run_reports_nonzero_exit(monkeypatch):
     assert "boom" in result
 
 
+# ── stop / process-group tracking ───────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_stop_run_unknown_id_is_noop():
+    """Stopping an untracked run returns False and never raises (idempotent no-op)."""
+    assert await local_cli.stop_run("no-such-run") is False
+
+
+@pytest.mark.asyncio
+async def test_stop_run_signals_tracked_process(monkeypatch):
+    """A tracked run is SIGTERM'd (then SIGKILL'd if still alive) and reported stopped."""
+    signals = []
+
+    class _Killable:
+        pid = 4321
+        returncode = None  # stays alive so the grace period escalates to SIGKILL
+
+        def send_signal(self, sig):
+            signals.append(sig)
+
+    # Route killpg through send_signal so we don't touch a real process group.
+    monkeypatch.setattr(local_cli.os, "killpg", lambda pgid, sig: signals.append(sig))
+    monkeypatch.setattr(local_cli.os, "getpgid", lambda pid: pid)
+    monkeypatch.setattr(local_cli, "_STOP_GRACE", 0.0)
+
+    local_cli._register_proc("rid-stop", _Killable())
+    try:
+        assert local_cli.is_running("rid-stop") is True
+        assert await local_cli.stop_run("rid-stop") is True
+        # SIGTERM first, then SIGKILL after the (zeroed) grace period.
+        assert signals[0] == local_cli.signal.SIGTERM
+        assert local_cli.signal.SIGKILL in signals
+        assert local_cli.was_stopped("rid-stop") is True
+    finally:
+        local_cli._unregister_proc("rid-stop")
+    assert local_cli.is_running("rid-stop") is False
+
+
+def test_state_stopped_status_not_clobbered():
+    """A stopped run keeps its status/output even if a late finish_agent arrives."""
+    from lhassa.state import AgentRun, state
+
+    run = AgentRun(id="stp1", name="ai-cli (claude)", status="running",
+                   task="t", cli="claude", output="partial output")
+    state.register_agent(run)
+    assert state.stop_agent("stp1") is True
+    assert state.agent_runs["stp1"].status == "stopped"
+    # A late finish (from the torn-down subprocess) must not overwrite it.
+    state.finish_agent("stp1", "late error", success=False)
+    assert state.agent_runs["stp1"].status == "stopped"
+    assert state.agent_runs["stp1"].output == "partial output"
+
+
 @pytest.mark.asyncio
 async def test_invoke_passes_agent_dir_as_cwd(monkeypatch, tmp_path):
     monkeypatch.setattr(local_cli.shutil, "which", lambda name: "/usr/bin/" + name)

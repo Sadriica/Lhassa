@@ -15,9 +15,10 @@ from loguru import logger
 class AgentRun:
     id: str
     name: str
-    status: str           # "running" | "done" | "error"
+    status: str           # "running" | "done" | "error" | "stopped"
     output: str = ""
     task: str = ""
+    cli: str = ""         # the local AI CLI that ran it (claude/codex/opencode), if any
     started_at: float = field(default_factory=time.time)
     finished_at: float = 0.0
 
@@ -165,7 +166,7 @@ class AppState:
         if len(self.agent_runs) > self._MAX_AGENT_RUNS:
             finished = [
                 (rid, r) for rid, r in self.agent_runs.items()
-                if r.status in ("done", "error")
+                if r.status in ("done", "error", "stopped")
             ]
             finished.sort(key=lambda x: x[1].finished_at)
             for rid, _ in finished[: len(self.agent_runs) - self._MAX_AGENT_RUNS]:
@@ -173,10 +174,22 @@ class AppState:
 
     def finish_agent(self, run_id: str, output: str, success: bool = True):
         run = self.agent_runs.get(run_id)
-        if run:
+        # A run that was explicitly stopped keeps its "stopped" status and streamed
+        # output — a late-arriving finish from the torn-down subprocess must not clobber it.
+        if run and run.status != "stopped":
             run.status = "done" if success else "error"
             run.output = output
             run.finished_at = time.time()
+
+    def stop_agent(self, run_id: str) -> bool:
+        """Mark a running agent as stopped (user-initiated). Idempotent no-op on an
+        unknown or already-finished run. Returns True only if a running run was stopped."""
+        run = self.agent_runs.get(run_id)
+        if run is None or run.status != "running":
+            return False
+        run.status = "stopped"
+        run.finished_at = time.time()
+        return True
 
 
 # Module-level singleton — import from anywhere via `from lhassa.state import state`

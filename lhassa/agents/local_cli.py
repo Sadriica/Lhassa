@@ -25,6 +25,7 @@ import os
 import platform
 import re
 import shutil
+import signal
 import uuid
 from pathlib import Path
 
@@ -70,6 +71,74 @@ else:
     except Exception:
         _distro = "Linux"
     _OS_HINT = f"Context: {_distro}, {_pkg}, systemd.\n\n"
+
+
+# ── In-flight run tracking (for STOP) ───────────────────────────────────────────
+# Maps an active run_id → its running subprocess so POST /api/code/{id}/stop can
+# terminate the whole process group (the CLI plus any children it spawns). Purely
+# in-memory; entries are freed when the run ends (normally or via a stop). Stopping
+# an unknown / already-finished run is a safe no-op.
+_RUNNING: dict[str, object] = {}
+# run_ids we deliberately stopped — a resulting nonzero exit is expected, not an error.
+_STOPPED: set[str] = set()
+
+# Grace period between SIGTERM and SIGKILL when stopping a run.
+_STOP_GRACE = 1.5
+
+
+def _register_proc(run_id: str, proc: object) -> None:
+    _RUNNING[run_id] = proc
+
+
+def _unregister_proc(run_id: str) -> None:
+    _RUNNING.pop(run_id, None)
+    _STOPPED.discard(run_id)
+
+
+def is_running(run_id: str) -> bool:
+    """True if a subprocess for this run is currently tracked as in-flight."""
+    return run_id in _RUNNING
+
+
+def was_stopped(run_id: str) -> bool:
+    """True if this run was explicitly stopped (so a nonzero exit is expected)."""
+    return run_id in _STOPPED
+
+
+def _kill_group(proc: object, sig: int) -> None:
+    """Send `sig` to the child's whole process group; degrade to the lone pid.
+
+    Reuses the project's killpg pattern (see security/quarantine.py) so child CLIs
+    spawned by the agent die too. Never raises — the process may already be gone.
+    """
+    try:
+        os.killpg(os.getpgid(proc.pid), sig)  # type: ignore[attr-defined]
+    except (ProcessLookupError, PermissionError, AttributeError):
+        try:
+            proc.send_signal(sig)  # type: ignore[attr-defined]
+        except Exception:  # already dead / no such signal — nothing to do
+            pass
+
+
+async def stop_run(run_id: str) -> bool:
+    """Terminate a tracked run's process group (graceful SIGTERM → SIGKILL).
+
+    Returns True if a live subprocess was found and signalled, False if the run is
+    unknown or already finished (idempotent no-op). Never raises — a stop must never
+    take down the caller.
+    """
+    proc = _RUNNING.get(run_id)
+    if proc is None:
+        return False
+    _STOPPED.add(run_id)
+    try:
+        _kill_group(proc, signal.SIGTERM)
+        await asyncio.sleep(_STOP_GRACE)
+        if getattr(proc, "returncode", None) is None:  # still alive after grace
+            _kill_group(proc, signal.SIGKILL)
+    except Exception as e:  # never propagate — the run is already being torn down
+        logger.error(f"[ai-cli] stop_run({run_id}) failed: {e}")
+    return True
 
 
 def cli_binary(cli: str) -> str:
@@ -144,6 +213,7 @@ class LocalCliAgent:
             name=f"ai-cli ({self.cli})",
             status="running",
             task=task,
+            cli=self.cli,
         )
         state.register_agent(run)
 
@@ -179,6 +249,8 @@ class LocalCliAgent:
                 cwd=str(cwd),
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
+                # Own process group so STOP can killpg the CLI and any children it spawns.
+                start_new_session=True,
             )
         except FileNotFoundError:
             raise RuntimeError(
@@ -189,6 +261,8 @@ class LocalCliAgent:
         if proc.stdout is None or proc.stderr is None:
             raise RuntimeError(f"{self.cli} process pipes unavailable")
 
+        # Track the live subprocess so POST /api/code/{id}/stop can find and kill it.
+        _register_proc(run_id, proc)
         stderr_lines: list[str] = []
 
         async def _drain_stdout():
@@ -213,23 +287,28 @@ class LocalCliAgent:
                 stderr_lines.append(_ANSI.sub("", line_bytes.decode(errors="replace")))
 
         try:
-            await asyncio.wait_for(
-                asyncio.gather(_drain_stdout(), _drain_stderr()),
-                timeout=self._timeout,
-            )
-            await proc.wait()
-        except asyncio.TimeoutError:
-            proc.kill()
-            await proc.wait()
-            raise RuntimeError(
-                f"{self.cli} timed out after {self._timeout}s and was cancelled."
-            )
+            try:
+                await asyncio.wait_for(
+                    asyncio.gather(_drain_stdout(), _drain_stderr()),
+                    timeout=self._timeout,
+                )
+                await proc.wait()
+            except asyncio.TimeoutError:
+                _kill_group(proc, signal.SIGKILL)
+                await proc.wait()
+                raise RuntimeError(
+                    f"{self.cli} timed out after {self._timeout}s and was cancelled."
+                )
 
-        if proc.returncode != 0:
-            err = "".join(stderr_lines)
-            raise RuntimeError(f"{self.cli} exited {proc.returncode}: {err[:500]}")
+            # A stopped run exits nonzero by design (we killed it) — that's a clean
+            # stop, not a failure. Return whatever it streamed so far.
+            if proc.returncode != 0 and not was_stopped(run_id):
+                err = "".join(stderr_lines)
+                raise RuntimeError(f"{self.cli} exited {proc.returncode}: {err[:500]}")
 
-        return run.output.strip()
+            return run.output.strip()
+        finally:
+            _unregister_proc(run_id)
 
 
 def make_agent(cli: str | None = None, on_line=None) -> LocalCliAgent:
