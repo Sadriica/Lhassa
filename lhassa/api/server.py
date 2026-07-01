@@ -1218,6 +1218,94 @@ async def _overview_tools() -> dict:
     return {"count": len(rows), "by_estado": by_estado}
 
 
+# ── Command-center sections (what's running now / pulse / flows / today) ───────
+#
+# These four power the Overview's "command center" surface. Each is cheap
+# (in-memory reads of ``state.agent_runs`` or a single small DB/file read) and, like
+# every other section, defensive: a failure lands in ``errors`` and the section
+# falls back to its default. LLM-free.
+
+async def _overview_now_running() -> list[dict]:
+    """Agentic runs in flight RIGHT NOW (status ``running``) — an in-memory O(n) read.
+
+    Returns the newest-first list the panel's "Now running" strip renders (each row
+    gets an inline Stop → ``POST /api/code/{id}/stop``). Flows are intentionally NOT
+    here: flow runs are currently SYNCHRONOUS with no long-lived "running" state, so
+    there is no running-flow signal to surface — see ``_overview_flows``.
+    """
+    runs = [
+        {
+            "id": r.id,
+            "name": r.name,
+            "cli": r.cli,
+            "task": r.task,
+            "status": r.status,
+            "started_at": r.started_at,
+        }
+        for r in state.agent_runs.values()
+        if r.status == "running"
+    ]
+    runs.sort(key=lambda x: x["started_at"] or 0, reverse=True)
+    return runs
+
+
+async def _overview_pulse() -> dict:
+    """Do-and-sleep pulse: last beat (latest episode ts), online/offline mode, alive.
+
+    ``next_tick`` is deliberately OMITTED: the heartbeat cadence lives in the systemd
+    timer's ``OnCalendar`` (not in ``Config``), so there is nothing to derive it from
+    here and we never fabricate a time — the panel simply hides that field.
+    """
+    import os
+
+    await db.init_db()
+    rows = await db.load_recent_episodes(Config.instance_id, 1)
+    last_beat = rows[0].get("creado_en") if rows else None
+    live = (os.getenv("LHASSA_ORG_LIVE", "") or "").strip().lower() in {
+        "1", "true", "yes", "on",
+    }
+    return {
+        "last_beat": last_beat,
+        "mode": "online" if live else "offline",
+        "alive": last_beat is not None,
+    }
+
+
+async def _overview_flows() -> dict:
+    """Flow count (from the ``FlowStore``) + the last flow-run status.
+
+    ``last_status`` is ``None`` today: flow runs are SYNCHRONOUS and not persisted, so
+    there is no stored "last run" to read. Live running-flow state / a last-run record
+    would need flow-run tracking (out of scope). If that lands, source it here.
+    """
+    from lhassa.flows.store import FlowStore
+
+    flows = FlowStore(Config()).list_flows()
+    return {"count": len(flows), "last_status": None}
+
+
+async def _overview_runs_today() -> dict:
+    """Today's agentic runs bucketed by terminal status (done / stopped / failed).
+
+    "Today" is the local calendar day; ``failed`` folds the backend's ``error`` status
+    and its ``failed`` alias. Cheap in-memory read of ``state.agent_runs``.
+    """
+    day_start = datetime.now().replace(
+        hour=0, minute=0, second=0, microsecond=0
+    ).timestamp()
+    done = stopped = failed = 0
+    for r in state.agent_runs.values():
+        if (r.started_at or 0) < day_start:
+            continue
+        if r.status == "done":
+            done += 1
+        elif r.status == "stopped":
+            stopped += 1
+        elif r.status in ("error", "failed"):
+            failed += 1
+    return {"done": done, "stopped": stopped, "failed": failed}
+
+
 _OVERVIEW_SECTIONS = {
     "brains": _overview_brains,
     "skills": _overview_skills,
@@ -1226,9 +1314,13 @@ _OVERVIEW_SECTIONS = {
     "health": _overview_health,
     "activity": _overview_activity,
     "tools": _overview_tools,
+    "now_running": _overview_now_running,
+    "pulse": _overview_pulse,
+    "flows": _overview_flows,
+    "runs_today": _overview_runs_today,
 }
 
-_OVERVIEW_DEFAULTS: dict[str, dict] = {
+_OVERVIEW_DEFAULTS: dict[str, object] = {
     "brains": {"count": 0, "admin": None, "root": None, "standalone": None},
     "skills": {"installed": 0, "recommended": 0},
     "approvals": {"pending": 0, "items": []},
@@ -1241,6 +1333,10 @@ _OVERVIEW_DEFAULTS: dict[str, dict] = {
     "health": {"worst_level": "info", "ok": True},
     "activity": {"recent": []},
     "tools": {"count": 0, "by_estado": {}},
+    "now_running": [],
+    "pulse": {"last_beat": None, "mode": "offline", "alive": False},
+    "flows": {"count": 0, "last_status": None},
+    "runs_today": {"done": 0, "stopped": 0, "failed": 0},
 }
 
 
@@ -1259,7 +1355,10 @@ async def build_overview() -> dict:
             sections[name] = await fn()
         except Exception as exc:  # one degraded subsystem is reported, not fatal
             errors[name] = f"{type(exc).__name__}: {exc}"
-            sections[name] = dict(_OVERVIEW_DEFAULTS[name])
+            default = _OVERVIEW_DEFAULTS[name]
+            # Copy so a caller can't mutate the shared default; handle list sections
+            # (e.g. ``now_running``) as well as the dict ones.
+            sections[name] = list(default) if isinstance(default, list) else dict(default)
     sections["errors"] = errors
     sections["instance_id"] = Config.instance_id
     sections["generated_at"] = int(time.time())
