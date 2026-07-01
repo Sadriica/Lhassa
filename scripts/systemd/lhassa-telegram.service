@@ -22,6 +22,11 @@ WorkingDirectory=%h/Code/lhassa
 ExecStart=%h/Code/lhassa/.venv/bin/python -m lhassa.notify.telegram_inbound
 Restart=on-failure
 RestartSec=10
+# Live CV tailoring: run flows against a real model (claude subscription).
+Environment=LHASSA_ORG_LIVE=1
+Environment=LHASSA_HEARTBEAT_PROVIDER=claude
+Environment=LHASSA_CLAUDE_MODEL=claude-sonnet-4-6
+Environment=LHASSA_CLI_TIMEOUT=400
 
 [Install]
 WantedBy=default.target
