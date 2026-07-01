@@ -530,6 +530,64 @@ def apply_cmd(
     )
 
 
+# ── monitor (the environment supervisor: everyone reports to it) ───────────────────
+
+
+def monitor_cmd(
+    department: str = typer.Option(
+        "interns", "--department", help="The supervising brain/department to monitor as."
+    ),
+    json_out: bool = typer.Option(False, "--json", help="Emit the report as JSON."),
+) -> None:
+    """Run a monitoring pass: review recent activity, health and outcomes.
+
+    Surfaces anomalies + RISKS and proposes concrete, routed improvements. Offline
+    and $0 by default; set ``LHASSA_ORG_LIVE=1`` for a live reasoning pass.
+    """
+    from lhassa.org import monitor as mon
+
+    config = _config()
+    report = asyncio.run(mon.monitor_pass(department=department, config=config))
+    if json_out:
+        _dump_json(report)
+        return
+
+    out = _out()
+    live = report.get("live")
+    out.print(
+        f"Monitor — {report.get('department', department)} "
+        f"({'live' if live else 'offline'})",
+        style="bold",
+    )
+
+    def _section(title: str, items, *, style: str) -> None:
+        out.print(title, style=style)
+        if not items:
+            out.print("  —", style="dim")
+            return
+        for it in items:
+            if isinstance(it, dict):
+                out.print(
+                    f"  • {it.get('department', '?')} → {it.get('fix', '')}",
+                    markup=False,
+                )
+            else:
+                out.print(f"  • {it}", markup=False)
+
+    _section("Observations", report.get("observations"), style="bold")
+    _section("Risks", report.get("risks"), style="red")
+    _section("Improvements", report.get("improvements"), style="green")
+    _section("Delegations", report.get("delegations"), style="bold")
+
+    if report.get("error"):
+        out.print(f"(degraded: {report['error']})", style="red")
+    if not live:
+        out.print(
+            "Offline pass ($0). Set LHASSA_ORG_LIVE=1 for a live reasoning pass.",
+            style="dim",
+        )
+
+
 # ── registration ──────────────────────────────────────────────────────────────────
 
 org_app.command("tree")(tree_cmd)
@@ -546,3 +604,4 @@ org_app.command("show")(show_cmd)
 org_app.command("skills")(skills_cmd)
 org_app.command("templates")(templates_cmd)
 org_app.command("apply")(apply_cmd)
+org_app.command("monitor")(monitor_cmd)
