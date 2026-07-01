@@ -219,7 +219,7 @@ def test_verifiers_registry_exposes_builtin_names():
 
     assert isinstance(V.VERIFIERS, Registry)
     assert set(V.VERIFIERS.names()) == {
-        "command", "tests", "lint", "health", "regex", "metric"
+        "command", "tests", "lint", "health", "regex", "metric", "contact_preserved"
     }
     # The legacy ``_REGISTRY`` alias is a live read-only view of the same store.
     assert V._REGISTRY.get("regex") is V.RegexVerifier

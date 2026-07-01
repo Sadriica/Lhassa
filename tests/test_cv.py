@@ -189,3 +189,30 @@ async def test_task_max_tokens_threaded_to_executor(cv_dir):
     )
     await run_flow(flow, executor=_exec)
     assert seen["max_tokens"] == 1234
+
+
+# ── the contact-preservation gate (the CV árbitro: never invent contact details) ──
+def test_contact_gate_passes_when_details_preserved(cv_dir):
+    from lhassa.agents.verify import verify
+
+    base = r"\href{mailto:owner@example.edu}{owner@example.edu} +57 300 111 2222"
+    out = "Email owner@example.edu, phone +57 300 111 2222 — tailored CV body."
+    v = verify(out, spec={"type": "contact_preserved"}, context={"base_cv": base})
+    assert v.passed
+
+
+def test_contact_gate_fails_when_email_or_phone_invented(cv_dir):
+    from lhassa.agents.verify import verify
+
+    base = "owner@example.edu +57 300 111 2222"
+    altered = "impostor@example.edu +57 316 000 0000"  # both invented
+    v = verify(altered, spec={"type": "contact_preserved"}, context={"base_cv": base})
+    assert not v.passed
+    assert "owner@example.edu" in v.detail and "573001112222" in v.detail
+
+
+def test_contact_gate_passes_with_no_base(cv_dir):
+    from lhassa.agents.verify import verify
+
+    v = verify("anything", spec={"type": "contact_preserved"}, context={})
+    assert v.passed  # nothing to enforce

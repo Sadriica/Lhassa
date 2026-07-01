@@ -262,6 +262,48 @@ register_verifier("health", HealthVerifier)
 register_verifier("regex", RegexVerifier)
 register_verifier("metric", MetricVerifier)
 
+
+# ── contact preservation (the CV árbitro: never alter/invent contact details) ──
+_EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
+
+
+def _phone_runs(text: str, *, min_len: int = 7) -> set:
+    """Digit-only runs of length >= ``min_len`` (phone numbers, formatting-agnostic)."""
+    runs = set()
+    for chunk in re.findall(r"\d[\d\s().+-]{5,}\d", text or ""):
+        digits = re.sub(r"\D", "", chunk)
+        if len(digits) >= min_len:
+            runs.add(digits)
+    return runs
+
+
+class ContactPreservedVerifier:
+    """The artifact must preserve the base CV's contact details VERBATIM.
+
+    An objective, LLM-free gate for the CV work-flow: every email and phone number in
+    the base CV must appear (verbatim; formatting-agnostic for phones) in the tailored
+    output. A model that altered or invented a contact detail FAILS the gate. The base
+    CV comes from ``context['base_cv']`` (threaded by the flow engine); with no base to
+    compare, it passes (nothing to enforce).
+    """
+
+    name = "contact_preserved"
+
+    def verify(self, artifact, context=None) -> VerifyResult:
+        base = (context or {}).get("base_cv") or ""
+        if not base.strip():
+            return VerifyResult(True, "contact: no base CV to compare")
+        out = artifact if isinstance(artifact, str) else str(artifact)
+        out_digits = re.sub(r"\D", "", out)
+        missing = [f"email:{e}" for e in set(_EMAIL_RE.findall(base)) if e not in out]
+        missing += [f"phone:{p}" for p in _phone_runs(base) if p not in out_digits]
+        if missing:
+            return VerifyResult(False, "contact altered/dropped: " + ", ".join(sorted(missing)))
+        return VerifyResult(True, "contact preserved (emails + phones verbatim)")
+
+
+register_verifier("contact_preserved", ContactPreservedVerifier)
+
 # Backward-compatible alias: a LIVE, read-only ``{type: class}`` view of the
 # registry's backing store, so any historical consumer doing ``_REGISTRY.get(typ)``
 # keeps working while later ``register_verifier`` calls are reflected.
