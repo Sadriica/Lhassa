@@ -17,6 +17,7 @@ dependencies = [
     # Web tools
     "duckduckgo-search>=8.0.0", # fallback search when Brave key is not set
     "httpx>=0.27.0",            # Brave Search, GitHub API, Microsoft Graph
+    "pypdf>=4.0.0",             # pure-Python PDF text extraction (CV work-flow bridge)
     # Dashboard API
     "fastapi>=0.110.0",
     "starlette<1.0.0",

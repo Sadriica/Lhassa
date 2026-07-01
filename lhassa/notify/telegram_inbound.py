@@ -28,7 +28,9 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import re
 import shutil
+from pathlib import Path
 
 import httpx
 from loguru import logger
@@ -59,6 +61,23 @@ _DEFERRED_DECISION = "deferred: telegram needs judgment"
 _CHAT_INSTRUCTION = (
     "You are answering in a Telegram chat with your owner. Reply in short, natural "
     "messages. Lead with the answer and keep it brief."
+)
+
+# ── Telegram → CV work-flow bridge replies ────────────────────────────────────
+# Sent when a CV document arrives with no caption (we won't tailor blindly).
+_CV_NO_CAPTION = (
+    "Send the job posting or target role as the document's caption and I'll tailor "
+    "your CV to it. Optionally name the company with '@ Company' or 'company: X'."
+)
+# The document could not be downloaded / had no readable text.
+_CV_NO_DOWNLOAD = "I couldn't download that document — try sending it again."
+_CV_NO_TEXT = "I couldn't read any text from that document. Send a .tex or a text PDF."
+# Something unexpected happened while tailoring.
+_CV_ERROR = "Something went wrong tailoring your CV. Nothing was sent."
+# ``@ Company`` / ``company: X`` extractors for the optional company name in a caption.
+_COMPANY_RES = (
+    re.compile(r"company\s*[:=]\s*(?P<name>[^\n]+)", re.IGNORECASE),
+    re.compile(r"(?:^|\s)@\s*(?P<name>[^\n]+)"),
 )
 
 
@@ -259,6 +278,14 @@ async def _answer(text: str, *, config) -> None:
     registry already turned into a help hint) falls through to the tool-less brain
     think only when the registry returns ``None`` (i.e. it was not a command).
     """
+    # The ``/cv <job posting>`` command runs the CV work-flow against the on-disk base
+    # CV and replies with the tailored file itself (not a plain string), so it is
+    # handled here rather than through the string-returning command registry.
+    stripped = text.strip()
+    if stripped == "/cv" or stripped.startswith("/cv ") or stripped.startswith("/cv\n"):
+        await _answer_cv_command(text, config=config)
+        return
+
     reply = None
     try:
         reply = await commands.dispatch(text, config=config)
@@ -274,6 +301,179 @@ async def _answer(text: str, *, config) -> None:
         await telegram.send(reply, config=config)
     except Exception as exc:
         logger.warning(f"Telegram inbound: reply send failed: {exc}")
+
+
+# ── Telegram → CV work-flow bridge ────────────────────────────────────────────
+def _parse_company(caption: str) -> str | None:
+    """Pull an optional company name out of a caption.
+
+    Recognises ``company: X`` / ``company=X`` and ``@ Company`` (the ``company:`` form
+    wins). Returns the trimmed name, or ``None`` when neither pattern is present — the
+    flow then resolves the company to ``"untitled"``.
+    """
+    text = caption or ""
+    for pattern in _COMPANY_RES:
+        m = pattern.search(text)
+        if m:
+            name = m.group("name").strip().strip(".,;")
+            if name:
+                return name
+    return None
+
+
+async def _run_cv_flow(*, caption: str, company: str | None, base_cv, config):
+    """Run the configured CV work-flow. Returns ``(record, flow_id)``.
+
+    ``base_cv`` is passed straight through to :func:`run_flow` — a string (the
+    uploaded CV's text) overrides the on-disk base CV, ``None`` keeps the disk base.
+    ``record`` is ``None`` when the configured flow id is not stored (so the caller can
+    say "not set up yet"). Never raises.
+    """
+    from lhassa.flows.engine import run_flow
+    from lhassa.flows.store import FlowStore
+
+    flow_id = (getattr(config, "cv_flow_id", "") or "flow-zvzpry").strip()
+    flow = FlowStore(config).get(flow_id)
+    if flow is None:
+        return None, flow_id
+    record = await run_flow(
+        flow,
+        inputs={"summary": caption},
+        config=config,
+        company=company,
+        base_cv=base_cv,
+    )
+    return record, flow_id
+
+
+def _tex_output_path(record: dict) -> str | None:
+    """The exported ``.tex`` path if the run reached its tex output, else ``None``."""
+    for step in record.get("steps", []) or []:
+        if (
+            step.get("kind") == "output"
+            and step.get("output") == "tex"
+            and step.get("path")
+            and not step.get("error")
+        ):
+            path = step["path"]
+            if Path(path).is_file():
+                return path
+    return None
+
+
+def _gate_failure_reply(record: dict) -> str:
+    """A short, honest explanation for why no tailored file was produced.
+
+    Prefers the specific failed gate (the contact-preservation árbitro is the common
+    one). We never send a broken file — we say what stopped us.
+    """
+    for step in record.get("steps", []) or []:
+        if step.get("kind") == "gate" and not step.get("passed"):
+            if step.get("needs_approval"):
+                return "That CV needs your approval before I can send it."
+            detail = str(step.get("detail") or "")
+            if "contact" in detail.lower():
+                return (
+                    "I couldn't tailor it safely: contact details would have changed. "
+                    "I didn't send a file."
+                )
+            return (
+                "I couldn't tailor it safely: a verification check didn't pass. "
+                "I didn't send a file."
+            )
+    return "I couldn't produce a tailored CV this time. Nothing was sent."
+
+
+async def _reply_with_cv(record, flow_id: str, company: str | None, *, config) -> None:
+    """Turn a CV run record into the owner's reply. Never raises.
+
+    On success (the run reached its tex output) send the ``.tex`` via ``sendDocument``;
+    on a gate failure send a short text explaining what stopped it; a missing flow id
+    or a broken record degrades to a clear message. Nothing broken is ever sent.
+    """
+    from lhassa.notify import telegram_api
+
+    if record is None:
+        await telegram.send(
+            f"My CV work-flow ({flow_id}) isn't set up yet — create it first.",
+            config=config,
+        )
+        return
+
+    path = _tex_output_path(record)
+    if path:
+        cap = f"Tailored CV for {company}." if company else "Your tailored CV."
+        ok = await telegram_api.send_document(path, caption=cap, config=config)
+        if not ok:
+            await telegram.send(
+                "I tailored your CV but couldn't send the file — try again.",
+                config=config,
+            )
+        return
+
+    await telegram.send(_gate_failure_reply(record), config=config)
+
+
+async def _answer_document(document: dict, caption, *, config) -> None:
+    """Handle an uploaded CV document: extract → run the flow → reply. Never raises.
+
+    The ``caption`` (falling back to any message text) is the JOB POSTING / target
+    role. With no caption we ask for it instead of tailoring blindly.
+    """
+    try:
+        cap = (str(caption).strip() if caption else "")
+        if not cap:
+            await telegram.send(_CV_NO_CAPTION, config=config)
+            return
+
+        from lhassa.notify import telegram_api
+
+        data = await telegram_api.get_file(document.get("file_id"), config=config)
+        if not data:
+            await telegram.send(_CV_NO_DOWNLOAD, config=config)
+            return
+
+        from lhassa import cv
+
+        base_cv = cv.extract_text(data, filename=document.get("file_name") or "")
+        if not base_cv.strip():
+            await telegram.send(_CV_NO_TEXT, config=config)
+            return
+
+        company = _parse_company(cap)
+        record, flow_id = await _run_cv_flow(
+            caption=cap, company=company, base_cv=base_cv, config=config
+        )
+        await _reply_with_cv(record, flow_id, company, config=config)
+    except Exception as exc:  # never raise into the poll loop
+        logger.warning(f"Telegram inbound: CV document handling failed: {exc}")
+        with contextlib.suppress(Exception):
+            await telegram.send(_CV_ERROR, config=config)
+
+
+async def _answer_cv_command(text: str, *, config) -> None:
+    """The optional ``/cv <job posting>`` text command — tailor the on-disk base CV.
+
+    No attachment: ``base_cv`` stays ``None`` so :func:`run_flow` loads the base CV
+    from disk. Never raises.
+    """
+    try:
+        posting = text.strip()[len("/cv"):].strip()
+        if not posting:
+            await telegram.send(
+                "Usage: /cv <job posting or target role> — I'll tailor your base CV.",
+                config=config,
+            )
+            return
+        company = _parse_company(posting)
+        record, flow_id = await _run_cv_flow(
+            caption=posting, company=company, base_cv=None, config=config
+        )
+        await _reply_with_cv(record, flow_id, company, config=config)
+    except Exception as exc:  # never raise into the poll loop
+        logger.warning(f"Telegram inbound: /cv command failed: {exc}")
+        with contextlib.suppress(Exception):
+            await telegram.send(_CV_ERROR, config=config)
 
 
 async def poll_once(config=None, *, offset=None):
@@ -341,6 +541,14 @@ async def poll_once(config=None, *, offset=None):
             if chat_id != allowed_chat:
                 # Security: answer nobody but the owner.
                 logger.info(f"Telegram inbound: ignoring message from chat {chat_id!r}")
+                continue
+
+            # A CV document (with the caption as the job posting) routes to the CV
+            # work-flow bridge; a plain text message keeps the existing brain path.
+            document = message.get("document")
+            if isinstance(document, dict) and document.get("file_id"):
+                caption = message.get("caption") or message.get("text")
+                await _answer_document(document, caption, config=config)
                 continue
 
             text = message.get("text")
