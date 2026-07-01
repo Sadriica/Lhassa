@@ -5,6 +5,82 @@ build. The source of truth for the architecture is `doc/lhassa-brief.md` (a
 living doc — correct it after each phase per §4). This file records the choices
 made along the way. Newest first.
 
+## 2026-07-01 — Live CV pipeline over Telegram, a governed-flow hierarchy & the constant monitor role
+
+The CV work-flow went from an offline skeleton to a real, live, gate-guarded product a person
+drives from Telegram — and, from that concrete case, two STANDING architectural principles were
+established: **every flow runs through the org hierarchy**, and **"monitor" is a first-class,
+constant role**. All shipped green (final: **1061 tests**, ruff clean) in focused commits.
+
+**Live CV pipeline (real output).** Running `flow-zvzpry` live surfaced real defects, each fixed:
+- **Per-task token budget** — the org think was capped at 512 output tokens, truncating the CV.
+  A task node's optional `max_tokens` (free-form config) now threads engine → executor →
+  `provider.complete`; the CV tasks get room (finalizer 8000, cv-writer 6000). (`19e84dc`)
+- **`cv.clean_latex()`** strips a model's prose/```latex fences → a compile-ready `.tex`. (`19e84dc`)
+- **Claude CLI provider** was handed the router's default (a groq model name) as `--model` and
+  404'd, so `heartbeat_provider=claude` silently fell back to groq. Now it only forwards a Claude
+  model/alias (claude*/opus/sonnet/haiku), else `claude_model` / the CLI default; new
+  `LHASSA_CLAUDE_MODEL` / `LHASSA_CLAUDE_BIN`; `_CLI_TIMEOUT` is configurable
+  (`LHASSA_CLI_TIMEOUT`, default 300s) because a full-page generation runs past two minutes. (`df9d8f3`)
+- Result: a complete, valid 2-page LaTeX CV tailored to a role via **claude · sonnet-4.6** (run
+  offline-forced through the CLI, no groq TPM cap). Length rule tightened (aim ~1.5 pages, hard max 2).
+- **Contact-preservation gate (an objective, LLM-free árbitro)** — a live run had the model INVENT
+  the candidate's email + phone despite a "do not invent" prompt. `agents/verify.py` gains a
+  `contact_preserved` verifier: every email + phone (formatting-agnostic) in the base CV must appear
+  verbatim in the output, else the gate FAILS and the path stops before export. The engine threads
+  `base_cv` into a gate's verify `context`; the CV flow's final gate runs it. So a tailored CV can
+  never ship altered contact details. (`86e3d1d`)
+
+**Telegram as the CV surface.** `notify/telegram_inbound.py` bridges a chat to the flow:
+- `cv/extract.py` `extract_text` (reads `.tex`/`.txt`, extracts `.pdf` via **pypdf**); `run_flow`
+  gained a `base_cv` override; `notify/telegram_api.py` getFile/download + `sendDocument`. (`25e97a0`)
+- The base CV lives on disk (`~/.lhassa/cv/cv_largo.tex`) and rarely changes, so the frequent action
+  is a **command that needs only the job posting**, and changing the base is explicit — **no
+  per-upload button prompts** (a design the owner iterated to): `/cv <posting>` (acks, tailors the
+  on-disk base, replies with the **compiled PDF** via `cv.compile_pdf`/tectonic, `.tex` fallback);
+  `/cvnewbase` (arms the chat — the next uploaded file replaces the base, backing up the old);
+  `/cvbase` (shows the base on file). A caption-less document with no arm → a one-off tailor
+  (hold, then the follow-up text is the posting). Commands publish to the bot `/` menu. New config
+  `LHASSA_TECTONIC_BIN`. Owner-gated, never raises into the poll loop. (`5c69b91`, `17f8e75`)
+- The poller runs in LIVE CV mode via service env (`LHASSA_ORG_LIVE=1` + claude sonnet-4.6). (`6ad0ac8`)
+
+**PRINCIPLE 1 — every flow runs through the hierarchy (`org/delegate.py`, `62a31e0`).** A flow is
+no longer run bare. `delegate_flow(flow, …)` resolves the flow's **owning department** (pinned-brain
+→ department table lookup — interns for the CV flow), walks the command path `lhassa → general →
+interns`, logs one **deterministic, $0, never-LLM** `org-delegate` Episode, then runs the flow (lazy
+import — no org↔flows cycle). It **never blocks the work**: a topology failure degrades to a direct
+run. The Telegram bridge and `POST /api/flows/{id}/run` both call it (run_flow stays the internal
+engine); this is the standing pattern for ALL flows, current and future. The hierarchy hops are
+deterministic on purpose — governance + a full audit trail at **no extra token cost**; the only spend
+stays the flow's pinned worker brains.
+
+**PRINCIPLE 2 — "monitor" is a first-class, constant role.**
+- `org/monitor.py` (`37e6ae4`): a reusable capability — `gather_signals()` (read-only, $0: recent
+  episodes, health digest, flows, approvals, failures) + `monitor_pass()` → `{observations, risks,
+  improvements, delegations}` (offline stub $0; live reasons via `brain_executor`). `make_brain_monitor()`
+  makes ANY brain a monitor; applied to the interns brain (role → `monitor`; "everyone reports to it").
+  `lhassa org monitor` CLI.
+- `org/watcher.py` (`40eb60b`): the always-on **$0 "ear"**. `detect_events()` diffs two `gather_signals`
+  snapshots (new failures / health-worsened / new approvals / run start+finish — transitions only);
+  `watch_loop()` has an **elastic cadence** — idle `LHASSA_MONITOR_IDLE_INTERVAL` (default **300s**),
+  active (something running, via `state.agent_runs`) `LHASSA_MONITOR_ACTIVE_INTERVAL` (default **15s**);
+  `react()` ALWAYS logs a monitor Episode and pushes a Telegram alert only on IMPORTANT events
+  (failures / health-alert / approvals), **de-duped** so a standing condition alerts on the transition,
+  not every tick. Idle is $0; a token is only ever spent under `monitor_think` + `LHASSA_ORG_LIVE`.
+  Config `LHASSA_MONITOR_*` (enabled/idle/active/department/notify/think, enabled default OFF) +
+  `scripts/systemd/lhassa-monitor.service` (opt-in). Because the delegation + flow + org paths all
+  write to the same episode/signal plane the watcher reads, the monitor sees the WHOLE hierarchy.
+
+**Together**: a flow fired from anywhere → Lhassa delegates down the hierarchy (episode) → the owning
+department runs it (episodes per brain) → the constant, cheap monitor watches that trail and reacts
+only when something happens. Sovereignty + observability + cost-awareness in one loop.
+
+**`[SUPUESTO]` / to enable:** the monitor service is shipped but NOT enabled (owner runs
+`systemctl --user enable --now lhassa-monitor.service`). A live monitor *think* needs
+`LHASSA_MONITOR_THINK=1` + `LHASSA_ORG_LIVE=1`; default is $0. Company auto-naming from prose isn't
+wired (tag `@ Company` / `company: X`); Telegram's ~4096-char single-message limit bounds a pasted
+posting. Saving a PDF as the base stores its extracted text (a `.tex` keeps real LaTeX).
+
 ## 2026-07-01 — Dashboard as a product: Matte Obsidian redesign, usability pass, CV work-flow & run control
 
 A long UX/product arc turning the dashboard into a real command surface, plus two backend
