@@ -397,15 +397,20 @@ async def _run_cv_flow(*, caption: str, company: str | None, base_cv, config):
     uploaded CV's text) overrides the on-disk base CV, ``None`` keeps the disk base.
     ``record`` is ``None`` when the configured flow id is not stored (so the caller can
     say "not set up yet"). Never raises.
+
+    The run goes through the deterministic org DELEGATION seam
+    (:func:`lhassa.org.delegate.delegate_flow`) rather than calling ``run_flow``
+    directly, so a flow flows down the command chain (Lhassa → owning department →
+    flow) with an audit-trail episode at the hop — same return contract, $0 extra.
     """
-    from lhassa.flows.engine import run_flow
     from lhassa.flows.store import FlowStore
+    from lhassa.org.delegate import delegate_flow
 
     flow_id = (getattr(config, "cv_flow_id", "") or "flow-zvzpry").strip()
     flow = FlowStore(config).get(flow_id)
     if flow is None:
         return None, flow_id
-    record = await run_flow(
+    record = await delegate_flow(
         flow,
         inputs={"summary": caption},
         config=config,

@@ -23,9 +23,9 @@ from typing import Any
 
 from fastapi import APIRouter, Body, HTTPException
 
-from lhassa.flows.engine import run_flow
 from lhassa.flows.model import Flow, FlowValidationError
 from lhassa.flows.store import FlowStore
+from lhassa.org.delegate import delegate_flow
 
 router = APIRouter(prefix="/api/flows", tags=["flows"])
 
@@ -115,6 +115,11 @@ async def run_flow_endpoint(flow_id: str, body: dict | None = Body(default=None)
     ``{"summary": "<text>"}``) and an optional ``"company"`` string (the CV-export
     override — override → context → ``"untitled"``). Returns the structured run
     record from :func:`lhassa.flows.engine.run_flow`.
+
+    The run goes through the deterministic org DELEGATION seam
+    (:func:`lhassa.org.delegate.delegate_flow`): the flow flows down the command chain
+    (Lhassa → owning department → flow) with an audit-trail episode at the hop, at $0
+    extra. The response is the same run record (with an added ``delegation`` field).
     """
     flow = _store().get(flow_id)
     if flow is None:
@@ -125,4 +130,4 @@ async def run_flow_endpoint(flow_id: str, body: dict | None = Body(default=None)
         # Convenience: a bare {"input": "<text>"} seeds the {input} placeholder.
         inputs = {"summary": body_dict.get("input")}
     company = body_dict.get("company")
-    return await run_flow(flow, inputs=inputs, company=company)
+    return await delegate_flow(flow, inputs=inputs, company=company)
