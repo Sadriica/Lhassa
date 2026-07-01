@@ -74,6 +74,11 @@ def test_overview_returns_all_sections(tmp_path, monkeypatch):
     )
     _seed(db, Config.instance_id)
 
+    # The AppState singleton is process-wide; isolate the run-derived sections.
+    from lhassa.state import state
+
+    state.agent_runs.clear()
+
     client = TestClient(server.app)
     res = client.get("/api/overview")
     assert res.status_code == 200
@@ -109,6 +114,64 @@ def test_overview_returns_all_sections(tmp_path, monkeypatch):
     # Skills counts are integers (read defensively from the store/catalog).
     assert isinstance(data["skills"]["installed"], int)
     assert isinstance(data["skills"]["recommended"], int)
+
+    # Command-center sections are always present with the right shape.
+    assert isinstance(data["now_running"], list)  # nothing running in a fresh state
+    assert data["now_running"] == []
+    assert set(data["pulse"]) >= {"last_beat", "mode", "alive"}
+    assert data["pulse"]["mode"] in ("online", "offline")
+    assert "next_tick" not in data["pulse"]  # never fabricated
+    assert isinstance(data["flows"]["count"], int)
+    assert data["flows"]["last_status"] is None  # flow runs aren't persisted yet
+    assert set(data["runs_today"]) == {"done", "stopped", "failed"}
+
+
+def test_overview_command_center_reflects_agent_runs(tmp_path, monkeypatch):
+    """now_running lists the in-flight runs; runs_today buckets terminal statuses."""
+    import time as _time
+
+    server, db, Config = _setup(tmp_path, monkeypatch)
+    from lhassa.health import checks
+
+    monkeypatch.setattr(
+        checks, "run_all", lambda *a, **k: {"worst_level": "info", "ok": True}
+    )
+    _seed(db, Config.instance_id)
+
+    from lhassa.state import AgentRun, state
+
+    state.agent_runs.clear()
+    now = _time.time()
+    state.agent_runs["r1"] = AgentRun(
+        id="r1", name="ai-cli (claude)", status="running", task="do a thing",
+        cli="claude", started_at=now,
+    )
+    state.agent_runs["r2"] = AgentRun(
+        id="r2", name="ai-cli (codex)", status="done", task="older", cli="codex",
+        started_at=now, finished_at=now,
+    )
+    state.agent_runs["r3"] = AgentRun(
+        id="r3", name="ai-cli (opencode)", status="stopped", task="halted",
+        cli="opencode", started_at=now, finished_at=now,
+    )
+    try:
+        client = TestClient(server.app)
+        data = client.get("/api/overview").json()
+
+        ids = [r["id"] for r in data["now_running"]]
+        assert ids == ["r1"]  # only the running one
+        assert data["now_running"][0]["cli"] == "claude"
+
+        assert data["runs_today"]["done"] == 1
+        assert data["runs_today"]["stopped"] == 1
+        assert data["runs_today"]["failed"] == 0
+
+        # last_beat comes from the seeded episode; mode is offline (ORG_LIVE unset).
+        assert data["pulse"]["last_beat"] is not None
+        assert data["pulse"]["mode"] == "offline"
+        assert data["pulse"]["alive"] is True
+    finally:
+        state.agent_runs.clear()
 
 
 def test_overview_degraded_subsystem_is_reported_not_fatal(tmp_path, monkeypatch):
