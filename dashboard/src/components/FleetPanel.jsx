@@ -34,13 +34,13 @@ export default function FleetPanel() {
         <h2 className="lh-card-title">
           Fleet
         </h2>
-        <span className="text-xs text-slate-500">{machines.length} machines</span>
+        <span className="text-xs" style={{ color: 'var(--lh-text-muted)' }}>{machines.length} machines</span>
       </div>
 
       {loading ? (
-        <p className="text-slate-600 text-xs">Loading…</p>
+        <p className="text-xs" style={{ color: 'var(--lh-text-faint)' }}>Loading…</p>
       ) : machines.length === 0 ? (
-        <p className="text-slate-600 text-xs">No machines known yet.</p>
+        <p className="text-xs" style={{ color: 'var(--lh-text-faint)' }}>No machines known yet.</p>
       ) : (
         <ul className="space-y-2">
           {machines.map(m => {
@@ -49,8 +49,8 @@ export default function FleetPanel() {
             return (
               <li key={m.machine_id} className="lh-row">
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-xs font-medium text-slate-200">{m.machine_id}</span>
-                  <span className="text-[10px] text-slate-600">
+                  <span className="text-xs font-medium" style={{ color: 'var(--lh-text)' }}>{m.machine_id}</span>
+                  <span className="text-[10px]" style={{ color: 'var(--lh-text-faint)' }}>
                     {m.last_checkin ? `seen ${m.last_checkin}` : 'never checked in'}
                   </span>
                 </div>
@@ -69,7 +69,7 @@ export default function FleetPanel() {
         </ul>
       )}
 
-      {error && <div className="text-xs text-amber-400 mt-2">{error}</div>}
+      {error && <div className="text-xs mt-2" style={{ color: 'var(--lh-alert)' }}>{error}</div>}
     </div>
   )
 }

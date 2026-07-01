@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
 
 const STATUS_COLOR = {
-  pending: 'text-amber-400',
-  done:    'text-green-400',
-  error:   'text-red-400',
+  pending: 'var(--lh-accent)',
+  done:    'var(--lh-ok)',
+  error:   'var(--lh-alert)',
 }
 
 export default function ScheduledPanel({ refreshTick = 0 }) {
@@ -25,7 +25,6 @@ export default function ScheduledPanel({ refreshTick = 0 }) {
   }, [refreshTick])
 
   const pending = tasks.filter(t => t.status === 'pending')
-  const done = tasks.filter(t => t.status === 'done')
 
   return (
     <div className="lh-card">
@@ -34,23 +33,23 @@ export default function ScheduledPanel({ refreshTick = 0 }) {
           Scheduled
         </h2>
         {pending.length > 0 && (
-          <span className="text-xs text-amber-400">{pending.length} pending</span>
+          <span className="text-xs" style={{ color: 'var(--lh-accent-text)' }}>{pending.length} pending</span>
         )}
       </div>
 
       {loading ? (
-        <p className="text-slate-600 text-xs">Loading…</p>
+        <p className="text-xs" style={{ color: 'var(--lh-text-faint)' }}>Loading…</p>
       ) : tasks.length === 0 ? (
-        <p className="text-slate-600 text-xs">No scheduled tasks.</p>
+        <p className="text-xs" style={{ color: 'var(--lh-text-faint)' }}>No scheduled tasks.</p>
       ) : (
         <div className="space-y-2 max-h-48 overflow-y-auto">
           {tasks.map(t => (
             <div key={t.id} className="flex items-start gap-2 text-xs">
-              <span className={`shrink-0 mt-0.5 ${STATUS_COLOR[t.status] || 'text-slate-400'}`}>●</span>
+              <span className="shrink-0 mt-0.5" style={{ color: STATUS_COLOR[t.status] || 'var(--lh-text-muted)' }}>●</span>
               <div className="min-w-0">
-                <div className="text-slate-300 truncate font-medium">{t.name}</div>
-                <div className="text-slate-500">{t.run_at?.slice(0, 16).replace('T', ' ')}</div>
-                <div className="text-slate-400 truncate">{t.message}</div>
+                <div className="truncate font-medium" style={{ color: 'var(--lh-text)' }}>{t.name}</div>
+                <div style={{ color: 'var(--lh-text-muted)' }}>{t.run_at?.slice(0, 16).replace('T', ' ')}</div>
+                <div className="truncate" style={{ color: 'var(--lh-text-muted)' }}>{t.message}</div>
               </div>
             </div>
           ))}

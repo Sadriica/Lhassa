@@ -19,6 +19,8 @@ import FleetPanel from './components/FleetPanel'
 import HealthPanel from './components/HealthPanel'
 import SettingsPanel from './components/SettingsPanel'
 import ErrorBoundary from './components/ErrorBoundary'
+import ToastHost from './components/ToastHost'
+import CommandPalette from './components/CommandPalette'
 import './index.css'
 
 const WS_URL = `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}/ws`
@@ -60,8 +62,45 @@ const SECTIONS = [
   { id: 'settings', label: 'Settings' },
 ]
 
+// Valid section keys + persistence — the active section deep-links via the URL
+// hash (#flows, #brains…) and remembers the last one in localStorage.
+const SECTION_IDS = new Set(SECTIONS.map((s) => s.id))
+const DEFAULT_SECTION = 'overview'
+const SECTION_STORAGE_KEY = 'lh-section'
+
+// The hash is `#<section>` with an optional `/<sub-route>` tail so a specific
+// flow's editor is deep-linkable (`#flows/<flowId>`). `section` is the part
+// before the first `/` (gated on the known section ids); `subRoute` is the
+// decoded part after it (or null). Only sections carry a sub-route today.
+function parseHash() {
+  const raw = window.location.hash.replace(/^#/, '')
+  const slash = raw.indexOf('/')
+  const rawSection = slash === -1 ? raw : raw.slice(0, slash)
+  const rawSub = slash === -1 ? '' : raw.slice(slash + 1)
+  const section = SECTION_IDS.has(rawSection) ? rawSection : null
+  let subRoute = null
+  if (section && rawSub) {
+    try { subRoute = decodeURIComponent(rawSub) } catch { subRoute = rawSub }
+  }
+  return { section, subRoute }
+}
+
+function initialSection() {
+  const fromHash = parseHash().section
+  if (fromHash) return fromHash
+  try {
+    const stored = localStorage.getItem(SECTION_STORAGE_KEY)
+    if (stored && SECTION_IDS.has(stored)) return stored
+  } catch {
+    // localStorage may be unavailable (private mode) — fall through to default.
+  }
+  return DEFAULT_SECTION
+}
+
 export default function App() {
-  const [section, setSection] = useState('overview')
+  const [section, setSection] = useState(initialSection)
+  const [subRoute, setSubRoute] = useState(() => parseHash().subRoute) // optional deep-link tail
+  const [navOpen, setNavOpen] = useState(false) // mobile drawer (≥1024px: static sidebar)
   const [connected, setConnected] = useState(false)
   const [voiceActive, setVoiceActive] = useState(false)
   const [metrics, setMetrics] = useState({ llm_calls: 0, tool_calls: 0, sessions: 0, agents_launched: 0 })
@@ -70,30 +109,10 @@ export default function App() {
   const [auditEvents, setAuditEvents] = useState([])
   const wsRef = useRef(null)
   const reconnectRef = useRef(null)
+  const connectRef = useRef(null)
+  const hashInitRef = useRef(false) // first hash sync normalizes without a history push
 
-  const connect = useCallback(() => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) return
-
-    const ws = new WebSocket(WS_URL)
-    wsRef.current = ws
-
-    ws.onopen = () => {
-      setConnected(true)
-      clearTimeout(reconnectRef.current)
-    }
-
-    ws.onclose = () => {
-      setConnected(false)
-      reconnectRef.current = setTimeout(connect, 3000)
-    }
-
-    ws.onmessage = (e) => {
-      const event = JSON.parse(e.data)
-      handleEvent(event)
-    }
-  }, [])
-
-  const handleEvent = (event) => {
+  const handleEvent = useCallback((event) => {
     switch (event.type) {
       case 'snapshot':
         setVoiceActive(event.voice_active)
@@ -161,9 +180,32 @@ export default function App() {
       default:
         break
     }
-  }
+  }, [])
+
+  const connect = useCallback(() => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) return
+
+    const ws = new WebSocket(WS_URL)
+    wsRef.current = ws
+
+    ws.onopen = () => {
+      setConnected(true)
+      clearTimeout(reconnectRef.current)
+    }
+
+    ws.onclose = () => {
+      setConnected(false)
+      reconnectRef.current = setTimeout(() => connectRef.current?.(), 3000)
+    }
+
+    ws.onmessage = (e) => {
+      const event = JSON.parse(e.data)
+      handleEvent(event)
+    }
+  }, [handleEvent])
 
   useEffect(() => {
+    connectRef.current = connect
     connect()
     return () => {
       clearTimeout(reconnectRef.current)
@@ -171,103 +213,208 @@ export default function App() {
     }
   }, [connect])
 
+  // Esc closes the mobile nav drawer. Selecting a section also closes it (below).
+  useEffect(() => {
+    if (!navOpen) return
+    const onKey = (e) => { if (e.key === 'Escape') setNavOpen(false) }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [navOpen])
+
+  // Section (+ optional sub-route) ↔ URL hash + localStorage. On change, mirror
+  // the section — and any `#<section>/<sub>` tail — into the hash (so it's
+  // bookmarkable) and remember the SECTION only (never the sub-route). The first
+  // sync normalizes the URL without adding a junk history entry; later changes
+  // push one so the browser Back/Forward buttons walk between sections *and*
+  // between the flow list and an open flow.
+  useEffect(() => {
+    try { localStorage.setItem(SECTION_STORAGE_KEY, section) } catch { /* ignore */ }
+    const target = subRoute ? `${section}/${encodeURIComponent(subRoute)}` : section
+    const current = window.location.hash.replace(/^#/, '')
+    if (current === target) { hashInitRef.current = true; return }
+    if (!hashInitRef.current) {
+      hashInitRef.current = true
+      window.history.replaceState(null, '', `#${target}`)
+    } else {
+      window.location.hash = target
+    }
+  }, [section, subRoute])
+
+  // Back/Forward (and manual hash edits) move between sections AND sub-routes.
+  useEffect(() => {
+    const onHashChange = () => {
+      const { section: s, subRoute: sub } = parseHash()
+      if (s) { setSection(s); setSubRoute(sub) }
+    }
+    window.addEventListener('hashchange', onHashChange)
+    return () => window.removeEventListener('hashchange', onHashChange)
+  }, [])
+
+  // Switching sections clears the sub-route so you never land on `#brains/<id>`.
+  const goToSection = (id) => { setSection(id); setSubRoute(null); setNavOpen(false) }
+  // The Flows panel opens/closes a flow by driving the sub-route (null = list).
+  const handleFlowRoute = useCallback((idOrNull) => setSubRoute(idOrNull || null), [])
+
   const agentList = Object.values(agents).sort((a, b) => (b.started_at || 0) - (a.started_at || 0))
 
   return (
-    <div className="min-h-screen p-4" style={{ background: 'var(--lh-bg)', color: 'var(--lh-text)' }}>
-      <StatusBar connected={connected} voiceActive={voiceActive} />
+    <div className="lh-shell" style={{ color: 'var(--lh-text)' }}>
+      <div className="lh-app-chrome">
+        <StatusBar connected={connected} voiceActive={voiceActive} />
 
-      <div className="flex flex-col lg:flex-row gap-4">
-        {/* Sidebar nav — a slim, elegant rail with icon + section label */}
-        <nav className="lg:w-52 lg:shrink-0">
-          <div
-            className="lg:sticky lg:top-4 p-2 rounded-[12px]"
-            style={{ background: 'var(--lh-surface)', border: '1px solid var(--lh-border)', boxShadow: 'var(--lh-shadow-sm)' }}
+        {/* Mobile top bar — hamburger + current section (sidebar is a drawer < 1024px) */}
+        <div className="lh-topbar lg:hidden">
+          <button
+            type="button"
+            className="lh-topbar-btn"
+            onClick={() => setNavOpen(true)}
+            aria-label="Open navigation"
+            aria-expanded={navOpen}
           >
-            <div className="lh-eyebrow px-2 pt-1.5 pb-2 hidden lg:block">Sections</div>
-            <div className="flex lg:flex-col gap-1 flex-row flex-wrap">
-              {SECTIONS.map((s) => (
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              strokeWidth="1.8" strokeLinecap="round" aria-hidden="true">
+              <path d="M4 6h16 M4 12h16 M4 18h16" />
+            </svg>
+          </button>
+          <span className="lh-topbar-title">
+            {SECTIONS.find((s) => s.id === section)?.label || 'Lhassa'}
+          </span>
+        </div>
+
+        {/* Scrim behind the open drawer (mobile only) */}
+        <div
+          className={`lh-nav-scrim ${navOpen ? 'open' : ''}`}
+          onClick={() => setNavOpen(false)}
+          aria-hidden="true"
+        />
+
+        <div className="flex flex-col lg:flex-row gap-4">
+          {/* Sidebar nav — a static rail ≥1024px; a slide-in drawer below it */}
+          <nav className={`lh-nav lg:w-64 lg:shrink-0 ${navOpen ? 'open' : ''}`}>
+            <div className="lh-sidebar lh-nav-panel lg:sticky lg:top-4 p-2 rounded-[10px]">
+              <div className="lh-brand-plate">
+                <div className="lh-brand-mark flex items-center justify-center">
+                  <svg width="20" height="20" viewBox="0 0 48 48" aria-hidden="true">
+                    <circle cx="24" cy="7.4" r="1.8" fill="#a23e34" />
+                    <path fill="#d9a521" d="M24 9.6l4.6 5.4h-9.2L24 9.6Z" />
+                    <path fill="#e8bf55" d="M18.4 17.4h11.2l2 4.8H16.4l2-4.8Z" />
+                    <path fill="#ece4d3" d="M16.6 24.4h14.8l2.4 8.2H14.2l2.4-8.2Z" />
+                  </svg>
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="lh-brand-name">Lhassa</div>
+                  <div className="lh-brand-rule" />
+                </div>
+                {/* Close affordance — only meaningful in the mobile drawer */}
                 <button
-                  key={s.id}
                   type="button"
-                  onClick={() => setSection(s.id)}
-                  className={`lh-nav-item ${section === s.id ? 'active' : ''}`}
-                  aria-current={section === s.id ? 'page' : undefined}
+                  className="lh-nav-close lg:hidden"
+                  onClick={() => setNavOpen(false)}
+                  aria-label="Close navigation"
                 >
-                  <Icon d={ICONS[s.id]} />
-                  <span>{s.label}</span>
+                  ✕
                 </button>
-              ))}
-            </div>
-          </div>
-        </nav>
-
-        {/* Main content — one section's blocks at a time */}
-        <main className="flex-1 min-w-0 space-y-4">
-          {section === 'overview' && (
-            <ErrorBoundary><OverviewPanel /></ErrorBoundary>
-          )}
-
-          {section === 'brains' && (
-            <ErrorBoundary><BrainsPanel /></ErrorBoundary>
-          )}
-
-          {section === 'skills' && (
-            <ErrorBoundary><SkillsPanel /></ErrorBoundary>
-          )}
-
-          {section === 'flows' && (
-            <ErrorBoundary><WorkflowsPanel /></ErrorBoundary>
-          )}
-
-          {section === 'run' && (
-            <ErrorBoundary><AgenticPanel agents={agents} /></ErrorBoundary>
-          )}
-
-          {section === 'approvals' && (
-            <ErrorBoundary><ApprovalQueuePanel /></ErrorBoundary>
-          )}
-
-          {section === 'tools' && (
-            <ErrorBoundary><QuarantinePanel /></ErrorBoundary>
-          )}
-
-          {section === 'reports' && (
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-              <ErrorBoundary><ReportsPanel /></ErrorBoundary>
-              <div className="space-y-4">
-                <ErrorBoundary><AIUsagePanel metrics={metrics} /></ErrorBoundary>
-                <ErrorBoundary><MetricsPanel metrics={metrics} /></ErrorBoundary>
               </div>
-            </div>
-          )}
 
-          {section === 'fleet' && (
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-              <ErrorBoundary><FleetPanel /></ErrorBoundary>
-              <ErrorBoundary><HealthPanel /></ErrorBoundary>
-            </div>
-          )}
-
-          {section === 'activity' && (
-            <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-              <div className="xl:col-span-2 space-y-4">
-                <ErrorBoundary><AgentsPanel agents={agentList} /></ErrorBoundary>
-                <ErrorBoundary><HistoryPanel /></ErrorBoundary>
+              <div className="flex flex-col gap-1">
+                {SECTIONS.map((s) => (
+                  <button
+                    key={s.id}
+                    type="button"
+                    onClick={() => goToSection(s.id)}
+                    className={`lh-nav-item ${section === s.id ? 'active' : ''}`}
+                    aria-current={section === s.id ? 'page' : undefined}
+                  >
+                    <Icon d={ICONS[s.id]} />
+                    <span>{s.label}</span>
+                  </button>
+                ))}
               </div>
-              <div className="space-y-4">
-                <ErrorBoundary><AuditPanel seed={auditEvents} /></ErrorBoundary>
-                <ErrorBoundary><ScheduledPanel refreshTick={scheduledTick} /></ErrorBoundary>
-                <ErrorBoundary><MemoryPanel /></ErrorBoundary>
-              </div>
-            </div>
-          )}
 
-          {section === 'settings' && (
-            <ErrorBoundary><SettingsPanel /></ErrorBoundary>
-          )}
-        </main>
+              {/* Subtle command-palette affordance — opens the ⌘K launcher. */}
+              <button
+                type="button"
+                className="lh-cmdk-hint"
+                onClick={() => window.dispatchEvent(new Event('lh-cmdk-open'))}
+                aria-label="Open command palette"
+              >
+                <span>Command palette</span>
+                <kbd className="lh-cmdk-kbd">⌘K</kbd>
+              </button>
+            </div>
+          </nav>
+
+          {/* Main content — one section's blocks at a time */}
+          <main className="flex-1 min-w-0 space-y-4">
+            {section === 'overview' && (
+              <ErrorBoundary><OverviewPanel /></ErrorBoundary>
+            )}
+
+            {section === 'brains' && (
+              <ErrorBoundary><BrainsPanel /></ErrorBoundary>
+            )}
+
+            {section === 'skills' && (
+              <ErrorBoundary><SkillsPanel /></ErrorBoundary>
+            )}
+
+            {section === 'flows' && (
+              <ErrorBoundary><WorkflowsPanel route={subRoute} onRoute={handleFlowRoute} /></ErrorBoundary>
+            )}
+
+            {section === 'run' && (
+              <ErrorBoundary><AgenticPanel agents={agents} /></ErrorBoundary>
+            )}
+
+            {section === 'approvals' && (
+              <ErrorBoundary><ApprovalQueuePanel /></ErrorBoundary>
+            )}
+
+            {section === 'tools' && (
+              <ErrorBoundary><QuarantinePanel /></ErrorBoundary>
+            )}
+
+            {section === 'reports' && (
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                <ErrorBoundary><ReportsPanel /></ErrorBoundary>
+                <div className="space-y-4">
+                  <ErrorBoundary><AIUsagePanel metrics={metrics} /></ErrorBoundary>
+                  <ErrorBoundary><MetricsPanel metrics={metrics} /></ErrorBoundary>
+                </div>
+              </div>
+            )}
+
+            {section === 'fleet' && (
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                <ErrorBoundary><FleetPanel /></ErrorBoundary>
+                <ErrorBoundary><HealthPanel /></ErrorBoundary>
+              </div>
+            )}
+
+            {section === 'activity' && (
+              <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+                <div className="xl:col-span-2 space-y-4">
+                  <ErrorBoundary><AgentsPanel agents={agentList} /></ErrorBoundary>
+                  <ErrorBoundary><HistoryPanel /></ErrorBoundary>
+                </div>
+                <div className="space-y-4">
+                  <ErrorBoundary><AuditPanel seed={auditEvents} /></ErrorBoundary>
+                  <ErrorBoundary><ScheduledPanel refreshTick={scheduledTick} /></ErrorBoundary>
+                  <ErrorBoundary><MemoryPanel /></ErrorBoundary>
+                </div>
+              </div>
+            )}
+
+            {section === 'settings' && (
+              <ErrorBoundary><SettingsPanel /></ErrorBoundary>
+            )}
+          </main>
+        </div>
       </div>
+
+      {/* App-level usability surfaces — mounted once. */}
+      <ToastHost />
+      <CommandPalette sections={SECTIONS} onNavigate={goToSection} />
     </div>
   )
 }

@@ -100,13 +100,20 @@ function Subtree({ id, byId, ...rest }) {
   )
 }
 
-export default function OrgTree({ topology, selectedId, routePath = [], onSelect }) {
+export default function OrgTree({ topology, selectedId, routePath = [], onSelect, onCreate }) {
   const nodes = topology?.nodes || []
   if (nodes.length === 0) {
     return (
-      <p className="text-xs" style={{ color: 'var(--lh-text-faint)' }}>
-        No brains yet. Create the first one to start the org chart.
-      </p>
+      <div className="space-y-2">
+        <p className="text-xs" style={{ color: 'var(--lh-text-faint)' }}>
+          No brains yet. Create the first one to start the org chart.
+        </p>
+        {onCreate && (
+          <button type="button" className="lh-btn lh-btn-primary" onClick={onCreate}>
+            + Create the first brain
+          </button>
+        )}
+      </div>
     )
   }
   const byId = {}

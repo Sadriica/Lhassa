@@ -27,15 +27,15 @@ export default function MemoryPanel() {
       </h2>
 
       {loading ? (
-        <p className="text-slate-600 text-xs">Loading…</p>
+        <p className="text-xs" style={{ color: 'var(--lh-text-faint)' }}>Loading…</p>
       ) : facts.length === 0 ? (
-        <p className="text-slate-600 text-xs">No facts stored yet.</p>
+        <p className="text-xs" style={{ color: 'var(--lh-text-faint)' }}>No facts stored yet.</p>
       ) : (
         <div className="space-y-2 max-h-64 overflow-y-auto">
           {facts.map((f, i) => (
             <div key={i} className="flex gap-2 text-xs">
-              <span className="text-purple-400 shrink-0 font-medium">{f.key}:</span>
-              <span className="text-slate-400">{f.value}</span>
+              <span className="shrink-0 font-medium" style={{ color: 'var(--lh-accent-text)' }}>{f.key}:</span>
+              <span style={{ color: 'var(--lh-text-muted)' }}>{f.value}</span>
             </div>
           ))}
         </div>

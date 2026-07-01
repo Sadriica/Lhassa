@@ -48,19 +48,19 @@ export default function ReportsPanel() {
         <h2 className="lh-card-title">
           Reports & projections
         </h2>
-        <span className="text-xs text-slate-500">{reports?.count ?? 0} episodes</span>
+        <span className="text-xs" style={{ color: 'var(--lh-text-muted)' }}>{reports?.count ?? 0} episodes</span>
       </div>
 
       {loading ? (
-        <p className="text-slate-600 text-xs">Loading…</p>
+        <p className="text-xs" style={{ color: 'var(--lh-text-faint)' }}>Loading…</p>
       ) : (
         <>
           {today && (
-            <div className="text-[11px] text-slate-400 mb-2">
-              <span className="text-slate-200">Today: {fmtUsd(today.cost_usd)}</span>
+            <div className="text-[11px] mb-2" style={{ color: 'var(--lh-text-muted)' }}>
+              <span style={{ color: 'var(--lh-text)' }}>Today: {fmtUsd(today.cost_usd)}</span>
               {' · '}{today.input_tokens}+{today.output_tokens} tokens
               {projection && (
-                <span className="text-slate-500">
+                <span style={{ color: 'var(--lh-text-muted)' }}>
                   {' · '}proj. day {fmtUsd(projection.projected_today_cost_usd)}
                   {' · '}month {fmtUsd(projection.projected_month_cost_usd)}
                 </span>
@@ -79,17 +79,17 @@ export default function ReportsPanel() {
           )}
 
           {recent.length === 0 ? (
-            <p className="text-slate-600 text-xs">No episodes yet.</p>
+            <p className="text-xs" style={{ color: 'var(--lh-text-faint)' }}>No episodes yet.</p>
           ) : (
             <ul className="space-y-1 max-h-64 overflow-y-auto">
               {recent.slice(0, 20).map(e => (
                 <li key={e.id} className="lh-row">
                   <div className="flex items-center justify-between gap-2">
-                    <span className="text-[11px] text-slate-300">{e.decision || e.despertar_por || '—'}</span>
-                    <span className="text-[10px] text-slate-600">{e.creado_en}</span>
+                    <span className="text-[11px]" style={{ color: 'var(--lh-text)' }}>{e.decision || e.despertar_por || '—'}</span>
+                    <span className="text-[10px]" style={{ color: 'var(--lh-text-faint)' }}>{e.creado_en}</span>
                   </div>
                   {e.resultado && (
-                    <div className="text-[11px] text-slate-500 mt-0.5 truncate">{e.resultado}</div>
+                    <div className="text-[11px] mt-0.5 truncate" style={{ color: 'var(--lh-text-muted)' }}>{e.resultado}</div>
                   )}
                 </li>
               ))}
@@ -98,7 +98,7 @@ export default function ReportsPanel() {
         </>
       )}
 
-      {error && <div className="text-xs text-amber-400 mt-2">{error}</div>}
+      {error && <div className="text-xs mt-2" style={{ color: 'var(--lh-alert)' }}>{error}</div>}
     </div>
   )
 }

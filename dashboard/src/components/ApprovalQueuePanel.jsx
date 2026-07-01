@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { toast } from '../lib/toast'
 
 // The approval queue (§2.9 — "la cola de aprobaciones"). Lists pending approvals
 // and lets a human approve or deny each one. Resolving feeds the autonomy knob on
@@ -44,8 +45,11 @@ export default function ApprovalQueuePanel() {
         throw new Error(d.detail || 'Resolve failed')
       }
       setApprovals(prev => prev.filter(a => a.id !== id))
+      toast.success(approved ? 'Approved.' : 'Denied.')
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Resolve failed')
+      const msg = e instanceof Error ? e.message : 'Resolve failed'
+      setError(msg)
+      toast.error(msg)
     } finally {
       setBusy(null)
     }
@@ -57,13 +61,13 @@ export default function ApprovalQueuePanel() {
         <h2 className="lh-card-title">
           Approval queue
         </h2>
-        <span className="text-xs text-slate-500">{approvals.length} pending</span>
+        <span className="text-xs" style={{ color: 'var(--lh-text-muted)' }}>{approvals.length} pending</span>
       </div>
 
       {loading ? (
-        <p className="text-slate-600 text-xs">Loading…</p>
+        <p className="text-xs" style={{ color: 'var(--lh-text-faint)' }}>Loading…</p>
       ) : approvals.length === 0 ? (
-        <p className="text-slate-600 text-xs">Nothing awaiting approval.</p>
+        <p className="text-xs" style={{ color: 'var(--lh-text-faint)' }}>Nothing awaiting approval.</p>
       ) : (
         <ul className="space-y-2">
           {approvals.map(a => {
@@ -71,11 +75,11 @@ export default function ApprovalQueuePanel() {
             return (
               <li key={a.id} className="lh-row">
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-xs font-medium text-slate-200">{a.tipo || p.accion || 'action'}</span>
-                  <span className="text-[10px] text-slate-500">{a.creado_en}</span>
+                  <span className="text-xs font-medium" style={{ color: 'var(--lh-text)' }}>{a.tipo || p.accion || 'action'}</span>
+                  <span className="text-[10px]" style={{ color: 'var(--lh-text-muted)' }}>{a.creado_en}</span>
                 </div>
                 {(p.objetivo || p.actor_id) && (
-                  <div className="text-[11px] text-slate-500 mt-1">
+                  <div className="text-[11px] mt-1" style={{ color: 'var(--lh-text-muted)' }}>
                     {p.objetivo ? `target: ${p.objetivo}` : ''}
                     {p.objetivo && p.actor_id ? ' · ' : ''}
                     {p.actor_id ? `who: ${p.actor_id}` : ''}
@@ -105,7 +109,7 @@ export default function ApprovalQueuePanel() {
         </ul>
       )}
 
-      {error && <div className="text-xs text-amber-400 mt-2">{error}</div>}
+      {error && <div className="text-xs mt-2" style={{ color: 'var(--lh-alert)' }}>{error}</div>}
     </div>
   )
 }

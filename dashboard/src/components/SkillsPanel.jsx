@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { toast } from '../lib/toast'
 
 // SKILLS admin panel — first-class SKILL.md skills. Drives the skills API:
 //   GET    /api/skills                    list installed
@@ -158,7 +159,7 @@ function CreateSkillForm({ busy, onCreate, onClose }) {
         <button type="button" className="lh-btn" onClick={onClose}>✕</button>
       </div>
       <div className="space-y-3">
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           <label className="space-y-1">
             <span className="lh-label">name *</span>
             <input className="lh-input" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. summarize" />
@@ -249,6 +250,7 @@ export default function SkillsPanel() {
   const [showAI, setShowAI] = useState(false)
   const [aiResult, setAiResult] = useState(null)
   const [recContext, setRecContext] = useState('')
+  const [filter, setFilter] = useState('') // client-side filter over installed skills
   const [skillBrains, setSkillBrains] = useState({}) // name → [brain ids]
 
   const loadSkills = useCallback(async () => {
@@ -301,7 +303,9 @@ export default function SkillsPanel() {
       await loadRecommended(recContext)
       return d
     } catch (e) {
-      setError(e instanceof Error ? e.message : `${label} failed`)
+      const msg = e instanceof Error ? e.message : `${label} failed`
+      setError(msg)
+      toast.error(msg)
       return null
     } finally {
       setBusy(false)
@@ -311,7 +315,7 @@ export default function SkillsPanel() {
   const createSkill = async (payload) => {
     const d = await run('Create', () =>
       fetch('/api/skills', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }))
-    if (d) { setShowCreate(false); setNotice(`Created ${d.name}.`) }
+    if (d) { setShowCreate(false); setNotice(`Created ${d.name}.`); toast.success(`Created ${d.name}.`) }
   }
 
   const draftWithAI = async (brief) => {
@@ -323,9 +327,13 @@ export default function SkillsPanel() {
       if (!r.ok) throw new Error(await errText(r, 'AI draft failed'))
       const d = await r.json()
       setAiResult(d) // {skill, saved, error}
-      if (d.saved) await loadSkills()
+      if (d.error) toast.error(d.error)
+      else if (d.saved) { await loadSkills(); toast.success(`Drafted ${d.skill?.name || 'skill'}.`) }
+      else toast.info('Draft ready (not saved).')
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'AI draft failed')
+      const msg = e instanceof Error ? e.message : 'AI draft failed'
+      setError(msg)
+      toast.error(msg)
     } finally {
       setBusy(false)
     }
@@ -334,19 +342,20 @@ export default function SkillsPanel() {
   const improveSkill = (name) =>
     run('Improve', () => fetch(`/api/skills/${encodeURIComponent(name)}/improve`, { method: 'POST' }),
       (d) => {
-        if (d.error) setError(d.error)
-        else setNotice(`Improved ${name}${d.saved ? '' : ' (not saved)'}.`)
+        if (d.error) { setError(d.error); toast.error(d.error) }
+        else { setNotice(`Improved ${name}${d.saved ? '' : ' (not saved)'}.`); toast.success(`Improved ${name}.`) }
       })
 
   const deleteSkill = (name) => run('Delete', () =>
-    fetch(`/api/skills/${encodeURIComponent(name)}`, { method: 'DELETE' }))
+    fetch(`/api/skills/${encodeURIComponent(name)}`, { method: 'DELETE' }),
+    () => { setNotice(`Deleted ${name}.`); toast.success(`Deleted ${name}.`) })
 
   const assignSkill = (name, brainId) =>
     run('Assign', () =>
       fetch(`/api/skills/${encodeURIComponent(name)}/assign`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ brain_id: brainId }),
       }),
-      () => setNotice(`Assigned ${name} → ${brainId}.`))
+      () => { setNotice(`Assigned ${name} → ${brainId}.`); toast.success(`Assigned ${name} → ${brainId}.`) })
 
   const addRecommended = (rec) => createSkill({
     name: rec.name,
@@ -368,6 +377,19 @@ export default function SkillsPanel() {
   }
 
   const recList = useMemo(() => recommended.slice(0, 12), [recommended])
+
+  // Client-side filter over installed skills (name / description / domain / tags).
+  const filteredSkills = useMemo(() => {
+    const q = filter.trim().toLowerCase()
+    if (!q) return skills
+    return skills.filter((s) => {
+      const m = s.metadata || {}
+      const tags = Array.isArray(m.tags) ? m.tags.join(' ') : ''
+      return [s.name, s.description, m.domain, tags]
+        .filter(Boolean)
+        .some((v) => String(v).toLowerCase().includes(q))
+    })
+  }, [skills, filter])
 
   return (
     <div className="lh-card">
@@ -414,14 +436,52 @@ export default function SkillsPanel() {
       ) : (
         <>
           {/* installed */}
-          <div className="lh-label mb-2">installed</div>
+          <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
+            <div className="lh-label">installed</div>
+            {skills.length > 0 && (
+              <div className="relative" style={{ width: 200 }}>
+                <input
+                  className="lh-input"
+                  style={{ paddingRight: filter ? '1.9rem' : undefined }}
+                  placeholder="filter skills…"
+                  value={filter}
+                  onChange={(e) => setFilter(e.target.value)}
+                />
+                {filter && (
+                  <button
+                    type="button"
+                    onClick={() => setFilter('')}
+                    aria-label="Clear filter"
+                    style={{
+                      position: 'absolute', right: '0.5rem', top: '50%', transform: 'translateY(-50%)',
+                      background: 'none', border: 'none', cursor: 'pointer', color: 'var(--lh-text-faint)', fontSize: '0.8rem',
+                    }}
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
           {skills.length === 0 ? (
-            <p className="text-xs lh-row" style={{ color: 'var(--lh-text-faint)' }}>
-              No skills installed yet. Create one, draft one with AI, or add a recommended skill below.
-            </p>
+            <div className="lh-row" style={{ textAlign: 'center' }}>
+              <p className="text-xs mb-2" style={{ color: 'var(--lh-text-muted)' }}>
+                No skills installed yet. Create one, draft one with AI, or add a recommended skill below.
+              </p>
+              <div className="flex gap-2 justify-center flex-wrap">
+                <button type="button" className="lh-btn" onClick={() => { setShowAI(true); setShowCreate(false) }}>
+                  ✦ Draft with AI
+                </button>
+                <button type="button" className="lh-btn lh-btn-primary" onClick={() => { setShowCreate(true); setShowAI(false) }}>
+                  + Create skill
+                </button>
+              </div>
+            </div>
+          ) : filteredSkills.length === 0 ? (
+            <p className="text-xs" style={{ color: 'var(--lh-text-faint)' }}>No skills match “{filter}”.</p>
           ) : (
             <div className="space-y-2">
-              {skills.map((s) => (
+              {filteredSkills.map((s) => (
                 <SkillCard
                   key={s.name} skill={s} brainIds={brainIds} busy={busy}
                   onImprove={improveSkill} onDelete={deleteSkill} onAssign={assignSkill}

@@ -23,21 +23,25 @@ function AgentCard({ agent }) {
   const isRunning = agent.status === 'running'
 
   return (
-    <div className={`border rounded-lg overflow-hidden transition-all ${
-      isRunning ? 'border-blue-500/50 bg-blue-500/5' : 'border-slate-700 bg-slate-800/30'
-    }`}>
+    <div
+      className="border rounded-lg overflow-hidden transition-all"
+      style={{
+        borderColor: isRunning ? 'rgba(217,165,33,0.4)' : 'var(--lh-border)',
+        background: isRunning ? 'var(--lh-accent-dim)' : 'var(--lh-surface-2)',
+      }}
+    >
       <button
-        className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-slate-800/50 transition-colors"
+        className="w-full flex items-center justify-between px-4 py-3 text-left transition-colors"
         onClick={() => setExpanded(e => !e)}
       >
         <div className="flex items-center gap-3">
           <span className="text-lg">{agentIcon(agent.name)}</span>
           <div>
-            <span className="text-sm font-medium text-slate-200">{agent.name}</span>
-            <span className="text-xs text-slate-500 ml-2">#{agent.id}</span>
+            <span className="text-sm font-medium" style={{ color: 'var(--lh-text)' }}>{agent.name}</span>
+            <span className="text-xs ml-2" style={{ color: 'var(--lh-text-muted)' }}>#{agent.id}</span>
           </div>
           {agent.task && (
-            <span className="text-xs text-slate-500 max-w-xs truncate hidden sm:block">
+            <span className="text-xs max-w-xs truncate hidden sm:block" style={{ color: 'var(--lh-text-muted)' }}>
               {agent.task}
             </span>
           )}
@@ -48,20 +52,23 @@ function AgentCard({ agent }) {
             {agent.status}
             {isRunning && <span className="ml-1 animate-pulse">●</span>}
           </span>
-          <span className="text-slate-600 text-xs">{expanded ? '▲' : '▼'}</span>
+          <span className="text-xs" style={{ color: 'var(--lh-text-faint)' }}>{expanded ? '▲' : '▼'}</span>
         </div>
       </button>
 
       {expanded && (
         <div className="px-4 pb-4">
           {agent.task && (
-            <div className="text-xs text-slate-500 mb-2 pb-2 border-b border-slate-700/50">
+            <div className="text-xs mb-2 pb-2" style={{ color: 'var(--lh-text-muted)', borderBottom: '1px solid var(--lh-border)' }}>
               Task: {agent.task}
             </div>
           )}
-          <pre className={`text-xs text-slate-300 whitespace-pre-wrap font-mono max-h-64 overflow-y-auto leading-relaxed ${
-            isRunning ? 'cursor-blink' : ''
-          }`}>
+          <pre
+            className={`text-xs whitespace-pre-wrap font-mono max-h-64 overflow-y-auto leading-relaxed ${
+              isRunning ? 'cursor-blink' : ''
+            }`}
+            style={{ color: 'var(--lh-text)' }}
+          >
             {agent.output || (isRunning ? 'Waiting for output…' : 'No output')}
           </pre>
         </div>
@@ -80,9 +87,9 @@ export default function AgentsPanel({ agents }) {
         <h2 className="lh-card-title">
           Agents
         </h2>
-        <div className="flex items-center gap-3 text-xs text-slate-500">
+        <div className="flex items-center gap-3 text-xs" style={{ color: 'var(--lh-text-muted)' }}>
           {running.length > 0 && (
-            <span className="text-blue-400 animate-pulse">
+            <span className="animate-pulse" style={{ color: 'var(--lh-accent-text)' }}>
               {running.length} running
             </span>
           )}
@@ -91,9 +98,14 @@ export default function AgentsPanel({ agents }) {
       </div>
 
       {agents.length === 0 ? (
-        <p className="text-slate-600 text-sm text-center py-8">
-          No agents launched yet. Tell Lhassa to delegate a task.
-        </p>
+        <div className="text-center py-8">
+          <p className="text-sm" style={{ color: 'var(--lh-text-muted)' }}>
+            No agents launched yet.
+          </p>
+          <p className="text-xs mt-1" style={{ color: 'var(--lh-text-faint)' }}>
+            Tell Lhassa to delegate a task and it will appear here.
+          </p>
+        </div>
       ) : (
         <div className="space-y-2">
           {running.map(a => <AgentCard key={a.id} agent={a} />)}

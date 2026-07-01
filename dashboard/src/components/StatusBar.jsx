@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 
 // The slim top bar: Lhassa wordmark + a provider/health status pill (pulled from
-// the existing /api/health) + live voice and WebSocket pills. A quiet, refined
-// chrome strip — warm gradient, mono for the machine-y bits, gold on the mark.
+// the existing /api/health) + live voice and WebSocket pills. A quiet, flat chrome
+// strip — matte, a hairline bottom divider, mono for the machine-y bits, a small
+// gold stupa mark with a monk-red finial.
 export default function StatusBar({ connected, voiceActive }) {
   const [health, setHealth] = useState(null)
 
@@ -25,41 +26,36 @@ export default function StatusBar({ connected, voiceActive }) {
 
   return (
     <header
-      className="flex items-center justify-between px-4 py-2.5 mb-4 rounded-[12px]"
+      className="flex items-center justify-between gap-3 px-3 py-3 mb-5 flex-wrap"
       style={{
-        background: 'var(--lh-grad-top)',
-        border: '1px solid var(--lh-border)',
-        boxShadow: 'var(--lh-shadow-sm)',
+        background: 'transparent',
+        borderBottom: '1px solid var(--lh-hairline)',
       }}
     >
-      <div className="flex items-center gap-2.5">
-        {/* Lhassa mark — the same gold stupa used for the favicon / app icon */}
+      <div className="flex items-center gap-3">
+        {/* Lhassa mark — the gold stupa with a monk-red finial */}
         <svg
-          width="26" height="26" viewBox="0 0 48 48"
-          className="rounded-[8px]"
-          style={{ boxShadow: 'var(--lh-glow-gold)', flexShrink: 0 }}
+          width="32" height="32" viewBox="0 0 48 48"
+          className="rounded-[9px]"
+          style={{ flexShrink: 0, border: '1px solid rgba(217,165,33,0.24)' }}
           aria-hidden="true"
         >
-          <rect width="48" height="48" rx="11" fill="#15120d" />
-          <rect x="0.6" y="0.6" width="46.8" height="46.8" rx="10.4" fill="none" stroke="#d9a521" strokeOpacity="0.22" />
+          <rect width="48" height="48" rx="9" fill="#16140f" />
           <circle cx="24" cy="7.2" r="1.7" fill="#a23e34" />
           <path fill="#d9a521" d="M24 9.5l4.4 5.2h-8.8L24 9.5z" />
           <path fill="#d9a521" d="M18.6 17h10.8l1.7 4.4H16.9L18.6 17z" />
           <path fill="#ece4d3" d="M17.4 23.4h13.2l2.1 5.3H15.3l2.1-5.3z" />
           <path fill="#d9a521" d="M14.6 30.7h18.8l2.4 8.3H12.2l2.4-8.3z" />
         </svg>
-        <span
-          className="font-bold text-lg tracking-[0.2em]"
-          style={{ color: 'var(--lh-accent)' }}
-        >
-          LHASSA
-        </span>
-        <span className="lh-eyebrow hidden sm:inline" style={{ marginLeft: 2 }}>
-          orchestrator
-        </span>
+        <div>
+          <div className="lh-brand-name" style={{ fontSize: '1.2rem' }}>
+            Lhassa
+          </div>
+          <div className="lh-brand-rule" />
+        </div>
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 flex-wrap justify-end">
         {health && (
           <span className="lh-pill" title="LLM provider / model">
             <span className="lh-dot lh-dot-accent" />

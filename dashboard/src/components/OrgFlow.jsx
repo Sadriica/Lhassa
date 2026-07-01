@@ -10,6 +10,7 @@ import {
   Position,
   useNodesState,
   useEdgesState,
+  useReactFlow,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { RELATION_KIND_ORDER, kindStyle, relationshipEdge } from './relationshipKinds'
@@ -20,8 +21,8 @@ import { RELATION_KIND_ORDER, kindStyle, relationshipEdge } from './relationship
 // reviews / collaborates) as dashed, animated, per-kind-colored edges with a small
 // kind label and direction arrows — a legend with per-kind layer toggles lets the
 // owner show/hide each kind so the two graphs never get confused. Lhassa (the admin / root)
-// is visually special and anchored — the sovereign: a gold fill with a thin deep-red
-// ring and soft glow, pinned at the top, with no drag-out handle (it can't be
+// is visually special and anchored — the sovereign: a matte gold fill with a thin
+// deep-red ring, pinned at the top, with no drag-out handle (it can't be
 // re-parented or deleted). Layout is a tidy layered
 // top-down tree computed from depth; no heavy layout dep.
 //
@@ -109,6 +110,35 @@ const DEPT_COLORS = [
   '120,150,120', // sage
 ]
 
+// ── persisted per-department layout offsets ─────────────────────────────────────
+// The owner can drag whole DEPARTMENT boxes to tidy the canvas. Each department
+// keeps a {dx,dy} pixel offset applied to its box AND to every member brain (so the
+// cluster moves as one unit while member nodes keep ABSOLUTE coords — the handle-based
+// re-parent path is untouched). Offsets persist here, keyed by department name, so an
+// arrangement survives reloads/Refresh. Departments with no saved offset auto-layout.
+const LAYOUT_KEY = 'lh-org-layout'
+function loadOffsets() {
+  try {
+    if (typeof localStorage === 'undefined') return {}
+    const raw = localStorage.getItem(LAYOUT_KEY)
+    if (!raw) return {}
+    const o = JSON.parse(raw)
+    if (!o || typeof o !== 'object') return {}
+    // keep only well-formed {dx,dy} numeric entries
+    const clean = {}
+    for (const [k, v] of Object.entries(o)) {
+      if (v && Number.isFinite(v.dx) && Number.isFinite(v.dy)) clean[k] = { dx: v.dx, dy: v.dy }
+    }
+    return clean
+  } catch { return {} }
+}
+function saveOffsets(o) {
+  try {
+    if (typeof localStorage === 'undefined') return
+    localStorage.setItem(LAYOUT_KEY, JSON.stringify(o))
+  } catch { /* storage unavailable — arrangement just won't persist */ }
+}
+
 function computeDeptGroups(topology, pos) {
   const nodes = topology?.nodes || []
   const admin = topology?.admin
@@ -124,6 +154,7 @@ function computeDeptGroups(topology, pos) {
 
   const groupNodes = []
   const deptStyle = {} // nodeId → { color, tinted }
+  const nodeDept = {} // nodeId → department, for members of a BOXED (draggable) dept
 
   depts.forEach((d) => {
     const ids = byDept.get(d).filter((id) => pos[id])
@@ -152,6 +183,9 @@ function computeDeptGroups(topology, pos) {
     ids.forEach((id) => { deptStyle[id] = { color, tinted: foreignInside } })
     if (foreignInside) return // scattered → per-node tint + chip instead of a box
 
+    // A clean box → it's a draggable layout handle; its members move with it.
+    ids.forEach((id) => { nodeDept[id] = d })
+
     const width = (maxX - minX) + DEPT_PAD * 2
     const height = (maxY - minY) + DEPT_PAD * 2 + DEPT_LABEL_H
     groupNodes.push({
@@ -162,15 +196,19 @@ function computeDeptGroups(topology, pos) {
       width,
       height,
       selectable: false,
-      draggable: false,
+      // Draggable: dragging the box repositions the whole department cluster.
+      draggable: true,
       connectable: false,
       deletable: false,
       focusable: false,
       zIndex: 0,
-      style: { pointerEvents: 'none', width, height },
+      // pointerEvents 'auto' so the box chrome (label + padding around/between the
+      // brains) is grabbable; the brains sit on zIndex 1 and still catch their own
+      // clicks, so only the empty box chrome starts a department drag.
+      style: { pointerEvents: 'auto', cursor: 'grab', width, height },
     })
   })
-  return { groupNodes, deptStyle }
+  return { groupNodes, deptStyle, nodeDept }
 }
 
 // A non-interactive, rounded, tinted rectangle with an uppercase tracked label.
@@ -178,6 +216,7 @@ function DeptGroupNode({ data }) {
   const { department, color, width, height } = data
   return (
     <div
+      title={`Drag to move the ${department} department`}
       style={{
         width,
         height,
@@ -186,7 +225,9 @@ function DeptGroupNode({ data }) {
         border: `1px solid rgba(${color},0.32)`,
         background: `rgba(${color},0.05)`,
         borderRadius: 18,
-        pointerEvents: 'none',
+        // Inherit the box's grab affordance; 'auto' lets the wrapper receive the drag.
+        pointerEvents: 'auto',
+        cursor: 'grab',
       }}
     >
       <span
@@ -194,6 +235,9 @@ function DeptGroupNode({ data }) {
           position: 'absolute',
           top: 6,
           left: 14,
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 5,
           fontSize: 10,
           fontWeight: 600,
           letterSpacing: '0.16em',
@@ -201,6 +245,8 @@ function DeptGroupNode({ data }) {
           color: `rgba(${color},0.92)`,
         }}
       >
+        {/* grip glyph → discoverable "you can drag this box" affordance */}
+        <span aria-hidden="true" style={{ letterSpacing: 0, opacity: 0.7, fontSize: 11 }}>⠿</span>
         {department}
       </span>
     </div>
@@ -235,10 +281,12 @@ function BrainFlowNode({ data }) {
             ? `rgba(${deptColor},0.6)`
             : 'var(--lh-border-strong)'
 
+  // Matte: the admin node keeps a tasteful gold fill + a thin deep-red ring (no
+  // glow); selection is a crisp gold hairline ring, not a blur halo.
   const glow = isAdmin
-    ? '0 0 0 1px rgba(162,62,52,0.7), 0 0 26px rgba(217,165,33,0.38), inset 0 1px 0 rgba(236,228,211,0.12)'
+    ? '0 0 0 1px var(--lh-red-deep), var(--lh-shadow)'
     : selected
-      ? '0 0 0 1px rgba(217,165,33,0.5), 0 0 18px rgba(217,165,33,0.18)'
+      ? '0 0 0 1px rgba(217,165,33,0.5), var(--lh-shadow)'
       : 'var(--lh-shadow)'
 
   return (
@@ -246,9 +294,9 @@ function BrainFlowNode({ data }) {
       style={{
         width: NODE_W,
         background: isAdmin
-          ? 'linear-gradient(180deg, rgba(217,165,33,0.24), rgba(217,165,33,0.06) 60%, var(--lh-surface))'
+          ? 'rgba(217,165,33,0.12)'
           : 'var(--lh-surface)',
-        border: `1px solid ${borderColor}`,
+        border: `1px solid ${isAdmin ? 'rgba(217,165,33,0.55)' : borderColor}`,
         borderRadius: 'var(--lh-radius)',
         padding: '0.6rem 0.7rem',
         boxShadow: glow,
@@ -446,6 +494,30 @@ function FlowInner({ topology, selectedId, routePath, relationships, kindMeta, o
 
   const routeSet = useMemo(() => new Set(routePath || []), [routePath])
   const admin = topology?.admin
+  const rf = useReactFlow()
+
+  // #12 — the tidy-tree layout and the department bounding-box math are the heavy
+  // derivations. Memoize them on the topology so re-selecting a node or toggling a
+  // relationship layer (edges-only churn) never recomputes the whole layout.
+  const layout = useMemo(() => computeLayout(topology), [topology])
+  const { groupNodes, deptStyle, nodeDept } = useMemo(
+    () => computeDeptGroups(topology, layout),
+    [topology, layout],
+  )
+
+  // Per-department drag offsets {dept: {dx,dy}} — the user's manual arrangement,
+  // seeded from localStorage so it survives reloads/Refresh. Applied to each dept
+  // box AND its member brains so the cluster moves as a unit.
+  const [deptOffsets, setDeptOffsets] = useState(loadOffsets)
+  // Base (un-offset) box position per department, so a drag's absolute offset is
+  // draggedPosition − basePosition regardless of any previously-applied offset.
+  const baseBoxByDept = useMemo(() => {
+    const m = {}
+    groupNodes.forEach((g) => { m[g.data.department] = g.position })
+    return m
+  }, [groupNodes])
+  // Bumped by Reset to re-fit the graph (fitView otherwise ignores offset changes).
+  const [refitTick, setRefitTick] = useState(0)
 
   // Legend layers: which relationship KINDS are visible. Default all on; the owner can
   // hide a kind to declutter. Stored as the HIDDEN set so a newly-seen kind defaults on.
@@ -468,16 +540,19 @@ function FlowInner({ topology, selectedId, routePath, relationships, kindMeta, o
   // (which would reset any cosmetic drag the owner nudged).
   useEffect(() => {
     const nodes = topology?.nodes || []
-    const pos = computeLayout(topology)
     const routeLeaf = routePath && routePath.length ? routePath[routePath.length - 1] : null
-    // Department grouping: tinted boxes behind contiguous clusters; per-node tint
-    // for scattered ones. Recomputed here so it tracks every layout/topology change.
-    const { groupNodes, deptStyle } = computeDeptGroups(topology, pos)
+
+    // Apply the manual department offset to a base position, if the node/box is in
+    // a boxed (draggable) department that the user has moved.
+    const withOffset = (base, dept) => {
+      const off = dept ? deptOffsets[dept] : null
+      return off ? { x: base.x + off.dx, y: base.y + off.dy } : base
+    }
 
     const brainNodes = nodes.map((n) => ({
       id: n.id,
       type: 'brain',
-      position: pos[n.id] || { x: 0, y: 0 },
+      position: withOffset(layout[n.id] || { x: 0, y: 0 }, nodeDept[n.id]),
       zIndex: 1, // above the department group boxes
       data: {
         node: n,
@@ -492,9 +567,49 @@ function FlowInner({ topology, selectedId, routePath, relationships, kindMeta, o
       draggable: !(n.is_admin || n.id === admin),
     }))
 
+    // Department boxes carry their own offset too, so box + members stay aligned.
+    const offsetGroupNodes = groupNodes.map((g) => ({
+      ...g,
+      position: withOffset(g.position, g.data.department),
+    }))
+
     // Group boxes first so they paint behind the brains they enclose.
-    setRfNodes([...groupNodes, ...brainNodes])
-  }, [topology, selectedId, routePath, routeSet, admin, setRfNodes])
+    setRfNodes([...offsetGroupNodes, ...brainNodes])
+  }, [topology, selectedId, routePath, routeSet, admin, layout, groupNodes, deptStyle, nodeDept, deptOffsets, setRfNodes])
+
+  // #7 — keep freshly-created/refreshed nodes on screen. A signature of the node-id
+  // SET (not positions) so this fires only when brains are added/removed, not on a
+  // cosmetic drag. When a brain is selected we center IT (dock-aware, below) instead
+  // of refitting the whole graph.
+  const nodeIdSig = useMemo(
+    () => (topology?.nodes || []).map((n) => n.id).sort().join('|'),
+    [topology],
+  )
+
+  // #7a — after the node set changes, fit the whole graph so new departments/brains
+  // aren't rendered off-screen. #7b — when a node is selected (incl. a just-created
+  // one), pan it into the VISIBLE area: on desktop the inspector docks on the right,
+  // so we bias the node left of centre so the dock never covers it. Pan/zoom stay
+  // usable — this only nudges on a set/selection change, animated.
+  useEffect(() => {
+    const raf = requestAnimationFrame(() => {
+      const target = selectedId && rf.getNode(selectedId)
+      if (target) {
+        const zoom = rf.getViewport().zoom || 1
+        const dockPx = typeof window !== 'undefined' && window.innerWidth >= 768 ? 380 : 0
+        const w = target.measured?.width || NODE_W
+        const h = target.measured?.height || NODE_H_EST
+        const cx = target.position.x + w / 2 + (dockPx / 2) / zoom
+        const cy = target.position.y + h / 2
+        rf.setCenter(cx, cy, { zoom, duration: 350 })
+      } else {
+        rf.fitView({ padding: 0.2, duration: 350 })
+      }
+    })
+    return () => cancelAnimationFrame(raf)
+    // refitTick: bumped by Reset layout so the graph re-frames after offsets clear.
+    // Manual drag offsets deliberately do NOT re-fit (they'd fight the drag).
+  }, [nodeIdSig, selectedId, rf, refitTick])
 
   // (Re)build EDGES: the solid command spine (parent→child, gold on a route) PLUS the
   // typed relationship overlay (dashed/animated, per-kind color + label), filtered by
@@ -541,12 +656,163 @@ function FlowInner({ topology, selectedId, routePath, relationships, kindMeta, o
     onMove(conn.source, conn.target)
   }, [isValidConnection, onMove])
 
-  const onNodeClick = useCallback((_e, node) => onSelect(node.id), [onSelect])
+  const onNodeClick = useCallback((_e, node) => {
+    if (node.type === 'deptGroup') return // the box is a layout handle, not selectable
+    onSelect(node.id)
+  }, [onSelect])
+
+  // ── department-box drag: move the whole cluster as a unit ──────────────────────
+  // While a department box is dragged, React Flow owns the BOX node's position; we
+  // live-move only its member brains so the cluster tracks the box. On drop we commit
+  // the department's absolute offset (dragged − base) to state + localStorage; the
+  // node-build effect then re-lays box + members consistently (no snap). Brain-node
+  // drags fall through untouched (cosmetic; re-parent still happens via the handle).
+  const onNodeDrag = useCallback((_e, node) => {
+    if (node.type !== 'deptGroup') return
+    const dept = node.data.department
+    const base = baseBoxByDept[dept]
+    if (!base) return
+    const off = { dx: node.position.x - base.x, dy: node.position.y - base.y }
+    setRfNodes((cur) => cur.map((rn) => {
+      if (nodeDept[rn.id] !== dept) return rn
+      const b = layout[rn.id]
+      if (!b) return rn
+      return { ...rn, position: { x: b.x + off.dx, y: b.y + off.dy } }
+    }))
+  }, [baseBoxByDept, nodeDept, layout, setRfNodes])
+
+  const onNodeDragStop = useCallback((_e, node) => {
+    if (node.type !== 'deptGroup') return
+    const dept = node.data.department
+    const base = baseBoxByDept[dept]
+    if (!base) return
+    const off = { dx: node.position.x - base.x, dy: node.position.y - base.y }
+    setDeptOffsets((prev) => {
+      const next = { ...prev, [dept]: off }
+      saveOffsets(next)
+      return next
+    })
+  }, [baseBoxByDept])
+
+  const resetLayout = useCallback(() => {
+    setDeptOffsets({})
+    saveOffsets({})
+    setRefitTick((t) => t + 1)
+  }, [])
+  const hasOffsets = Object.keys(deptOffsets).length > 0
+
+  // Right-click a node → a floating "Move under ▸" menu of VALID new parents. This
+  // makes re-parenting reachable without a drag (and usable on trackpads/touch via
+  // a long-press → contextmenu). Validity reuses isValidConnection — no cycles, not
+  // itself, not its current parent, admin anchored — so the menu can never offer an
+  // illegal move. The admin node has no valid targets (it's pinned at the root).
+  const [menu, setMenu] = useState(null) // { x, y, nodeId } | null
+  const onNodeContextMenu = useCallback((e, node) => {
+    if (node.type === 'deptGroup') return // no re-parent menu for a layout box
+    e.preventDefault()
+    setMenu({ x: e.clientX, y: e.clientY, nodeId: node.id })
+  }, [])
+  const onPaneContextMenu = useCallback(() => setMenu(null), [])
+
+  // Dismiss the menu on any outside click / Esc.
+  useEffect(() => {
+    if (!menu) return undefined
+    const onDown = () => setMenu(null)
+    const onKey = (e) => { if (e.key === 'Escape') setMenu(null) }
+    window.addEventListener('click', onDown)
+    window.addEventListener('keydown', onKey)
+    return () => {
+      window.removeEventListener('click', onDown)
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [menu])
+
+  const menuIsAdmin = menu ? (menu.nodeId === admin || byId[menu.nodeId]?.is_admin) : false
+  const menuTargets = useMemo(() => {
+    if (!menu || menuIsAdmin) return []
+    return (topology?.nodes || [])
+      .filter((n) => isValidConnection({ source: menu.nodeId, target: n.id }))
+      .map((n) => n.id)
+  }, [menu, menuIsAdmin, topology, isValidConnection])
 
   return (
+    <>
+      {menu && (
+        <div
+          onClick={(e) => e.stopPropagation()}
+          role="menu"
+          style={{
+            position: 'fixed',
+            top: menu.y,
+            left: menu.x,
+            zIndex: 50,
+            minWidth: 190,
+            maxHeight: 320,
+            overflowY: 'auto',
+            background: 'var(--lh-surface)',
+            border: '1px solid var(--lh-border)',
+            borderRadius: 'var(--lh-radius)',
+            boxShadow: 'var(--lh-shadow)',
+            padding: '0.35rem',
+          }}
+        >
+          <div
+            style={{
+              fontSize: 9,
+              fontWeight: 600,
+              letterSpacing: '0.14em',
+              textTransform: 'uppercase',
+              color: 'var(--lh-text-muted)',
+              padding: '0.15rem 0.4rem 0.35rem',
+            }}
+          >
+            <span className="lh-mono" style={{ textTransform: 'none', letterSpacing: 0, color: 'var(--lh-text)' }}>
+              {menu.nodeId}
+            </span>
+            {' · move under ▸'}
+          </div>
+          {menuIsAdmin ? (
+            <div style={{ fontSize: 11, color: 'var(--lh-text-faint)', padding: '0.3rem 0.4rem' }}>
+              Lhassa is anchored at the root — it can&apos;t be moved.
+            </div>
+          ) : menuTargets.length === 0 ? (
+            <div style={{ fontSize: 11, color: 'var(--lh-text-faint)', padding: '0.3rem 0.4rem' }}>
+              No valid parent to move under.
+            </div>
+          ) : (
+            menuTargets.map((pid) => (
+              <button
+                key={pid}
+                type="button"
+                role="menuitem"
+                className="lh-mono"
+                onClick={() => { onMove(menu.nodeId, pid); setMenu(null) }}
+                onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--lh-bg-2)' }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
+                style={{
+                  display: 'block',
+                  width: '100%',
+                  textAlign: 'left',
+                  background: 'transparent',
+                  border: 'none',
+                  cursor: 'pointer',
+                  color: 'var(--lh-text)',
+                  fontSize: 12,
+                  padding: '0.3rem 0.4rem',
+                  borderRadius: 6,
+                }}
+              >
+                {pid}
+              </button>
+            ))
+          )}
+        </div>
+      )}
     <div
+      className="lh-flow-canvas"
       style={{
-        height: 480,
+        // Fluid, viewport-driven height: never cramped, never absurdly tall.
+        height: 'clamp(440px, 72vh, 880px)',
         border: '1px solid var(--lh-border)',
         borderRadius: 'var(--lh-radius)',
         overflow: 'hidden',
@@ -562,6 +828,10 @@ function FlowInner({ topology, selectedId, routePath, relationships, kindMeta, o
         onConnect={onConnect}
         isValidConnection={isValidConnection}
         onNodeClick={onNodeClick}
+        onNodeDrag={onNodeDrag}
+        onNodeDragStop={onNodeDragStop}
+        onNodeContextMenu={onNodeContextMenu}
+        onPaneContextMenu={onPaneContextMenu}
         fitView
         fitViewOptions={{ padding: 0.2 }}
         minZoom={0.2}
@@ -578,6 +848,34 @@ function FlowInner({ topology, selectedId, routePath, relationships, kindMeta, o
             onToggle={toggleKind}
           />
         </Panel>
+        {/* Layout controls: drag a department box to arrange the canvas; Reset returns
+            to pure auto-layout. Shown only once the owner has moved something. */}
+        <Panel position="top-right">
+          {hasOffsets ? (
+            <button
+              type="button"
+              className="lh-btn"
+              onClick={resetLayout}
+              title="Clear the manual department arrangement and re-fit the graph"
+            >
+              ⤺ Reset layout
+            </button>
+          ) : (
+            <span
+              style={{
+                fontSize: 10,
+                color: 'var(--lh-text-faint)',
+                background: 'var(--lh-surface)',
+                border: '1px solid var(--lh-border)',
+                borderRadius: 'var(--lh-radius)',
+                padding: '0.3rem 0.5rem',
+                letterSpacing: '0.04em',
+              }}
+            >
+              Drag a department box to arrange
+            </span>
+          )}
+        </Panel>
         <MiniMap
           pannable
           zoomable
@@ -589,6 +887,7 @@ function FlowInner({ topology, selectedId, routePath, relationships, kindMeta, o
         <Controls showInteractive={false} />
       </ReactFlow>
     </div>
+    </>
   )
 }
 
@@ -596,9 +895,16 @@ export default function OrgFlow(props) {
   const nodes = props.topology?.nodes || []
   if (nodes.length === 0) {
     return (
-      <p className="text-xs" style={{ color: 'var(--lh-text-faint)' }}>
-        No brains yet. Create the first one to start the org chart.
-      </p>
+      <div className="space-y-2">
+        <p className="text-xs" style={{ color: 'var(--lh-text-faint)' }}>
+          No brains yet. Create the first one to start the org chart.
+        </p>
+        {props.onCreate && (
+          <button type="button" className="lh-btn lh-btn-primary" onClick={props.onCreate}>
+            + Create the first brain
+          </button>
+        )}
+      </div>
     )
   }
   return (
