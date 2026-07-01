@@ -464,6 +464,10 @@ class Config:
     flows_file: str = os.getenv(
         "LHASSA_FLOWS_FILE", str(Path.home() / ".lhassa" / "flows.json")
     )
+    # The stored work-flow id the Telegram → CV bridge runs when the owner sends a CV
+    # document (the "Impossible-to-reject CV" work-flow). Looked up via FlowStore; a
+    # missing flow degrades to a "not set up yet" reply, never a crash.
+    cv_flow_id: str = os.getenv("LHASSA_CV_FLOW_ID", "flow-zvzpry")
 
     # ── Skills (first-class, SKILL.md format) ─────────────────────────────────
     # Skills live as folders here, each with a SKILL.md (YAML frontmatter

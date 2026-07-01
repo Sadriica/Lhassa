@@ -351,6 +351,7 @@ async def run_flow(
     config: Optional[Config] = None,
     executor: Optional[Executor] = None,
     company: Optional[str] = None,
+    base_cv: Optional[str] = None,
 ) -> dict:
     """Execute ``flow`` and return a structured run record. Never raises.
 
@@ -358,6 +359,12 @@ async def run_flow(
     brain (the test/offline seam); ``company`` is an optional override for the CV
     export filename/prompts (override → context → ``"untitled"``). See the module
     docstring for execution order and branch semantics.
+
+    ``base_cv`` optionally OVERRIDES the base CV used for ``{base_cv}`` interpolation
+    and the contact-preservation gate: when non-``None`` it is used verbatim (e.g. a
+    CV a caller extracted from an uploaded document), instead of reading
+    ``cv.load_base()`` from disk. ``None`` (the default) keeps the historical
+    load-from-disk behaviour, so existing callers are unchanged.
     """
     if config is None:
         # Local import: stay correct if a test reloads ``lhassa.config`` (a stale
@@ -367,15 +374,17 @@ async def run_flow(
         config = _Config()
     executor = executor or _default_executor
 
-    # Load the fixed base CV once (for {base_cv} interpolation) and resolve the
-    # company (override → context → "untitled"). Both degrade gracefully offline.
-    try:
-        from lhassa import cv
+    # Resolve the fixed base CV once (for {base_cv} interpolation + the contact gate)
+    # and the company (override → context → "untitled"). Both degrade gracefully.
+    # A caller-supplied ``base_cv`` wins (e.g. an uploaded CV); otherwise read disk.
+    if base_cv is None:
+        try:
+            from lhassa import cv
 
-        base_cv = cv.load_base() or ""
-    except Exception as exc:  # a broken CV seam must never crash a run
-        logger.debug("flows: base CV unavailable ({})", exc)
-        base_cv = ""
+            base_cv = cv.load_base() or ""
+        except Exception as exc:  # a broken CV seam must never crash a run
+            logger.debug("flows: base CV unavailable ({})", exc)
+            base_cv = ""
     resolved_company = resolve_company(company, inputs)
     run_id = uuid.uuid4().hex
 
