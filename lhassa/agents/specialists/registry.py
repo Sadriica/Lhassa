@@ -64,7 +64,7 @@ class Specialist:
 # / gates.promote: tests_spec proves "correcta", higher_is_better=False is the
 # lower-is-better direction MetricVerifier uses for "mejor".
 OPTIMIZATION = Specialist(
-    name="optimizador",
+    name="optimizer",
     domain="optimization",
     instructions=(
         "You are operating as the OPTIMIZATION specialist. Your job is to make an "
