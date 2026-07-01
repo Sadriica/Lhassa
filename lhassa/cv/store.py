@@ -94,3 +94,31 @@ def export(content: str, *, company: Optional[str], run_id: Optional[str] = None
             os.unlink(tmp_name)
         raise
     return dest
+
+
+# ── extract compile-ready LaTeX from a model answer ──────────────────────────
+_FENCE_RE = re.compile(r"```(?:latex|tex)?\s*\n(.*?)```", re.DOTALL | re.IGNORECASE)
+
+
+def clean_latex(text: str) -> str:
+    """Return just the LaTeX document from a model answer.
+
+    Models tend to wrap the CV in prose ("Here is the final CV:") and/or a Markdown
+    ``latex`` code fence. Prefer the first fenced block; else take from
+    ``\\documentclass`` to ``\\end{document}``; strip stray fences. Degrades to the
+    stripped input, so a plain-LaTeX answer passes through unchanged.
+    """
+    if not text:
+        return ""
+    s = text.strip()
+    m = _FENCE_RE.search(s)
+    if m:
+        s = m.group(1).strip()
+    idx = s.find("\\documentclass")
+    if idx > 0:  # drop leading prose before the preamble
+        s = s[idx:]
+    end = s.rfind("\\end{document}")
+    if end != -1:  # drop trailing prose/fences after the document ends
+        s = s[: end + len("\\end{document}")]
+    s = s.replace("```latex", "").replace("```tex", "").replace("```", "")
+    return s.strip() + "\n"

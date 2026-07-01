@@ -140,3 +140,52 @@ async def test_engine_injects_base_cv_and_company_into_prompt(cv_dir):
     await run_flow(flow, company="Acme Backend", executor=_exec)
     assert "BASE-CV-BODY" in seen["goal"]
     assert "Acme Backend" in seen["goal"]
+
+
+# ── clean_latex: strip prose/fences down to a compile-ready document ──────────────
+def test_clean_latex_unwraps_a_markdown_fence(cv_dir):
+    wrapped = ("Here is the final CV:\n```latex\n"
+               "\\documentclass{article}\n\\begin{document}\nHi\n\\end{document}\n```\nHope it helps!")
+    out = cv.clean_latex(wrapped)
+    assert out.startswith("\\documentclass")
+    assert out.rstrip().endswith("\\end{document}")
+    assert "Here is" not in out and "```" not in out and "Hope it helps" not in out
+
+
+def test_clean_latex_strips_leading_and_trailing_prose(cv_dir):
+    prose = ("Sure! Below is the optimized CV.\n\n"
+             "\\documentclass{article}\n\\begin{document}\nBody\n\\end{document}\n\nLet me know.")
+    out = cv.clean_latex(prose)
+    assert out.startswith("\\documentclass") and out.rstrip().endswith("\\end{document}")
+    assert "Sure!" not in out and "Let me know" not in out
+
+
+def test_clean_latex_passes_plain_latex_through(cv_dir):
+    plain = "\\documentclass{article}\n\\begin{document}\nClean\n\\end{document}"
+    assert cv.clean_latex(plain).strip() == plain.strip()
+
+
+def test_clean_latex_empty_is_empty(cv_dir):
+    assert cv.clean_latex("") == ""
+
+
+# ── engine threads a task node's max_tokens down to the executor ──────────────────
+@pytest.mark.asyncio
+async def test_task_max_tokens_threaded_to_executor(cv_dir):
+    seen = {}
+
+    async def _exec(goal, *, department, config, **kw):
+        seen["max_tokens"] = kw.get("max_tokens")
+        return {"ok": True, "summary": "x", "department": department}
+
+    flow = Flow(
+        id="mtf", name="max tokens",
+        nodes=[
+            FlowNode("t", NodeKind.TRIGGER, {"type": "manual"}),
+            FlowNode("w", NodeKind.TASK, {"brain": "cv-writer", "prompt": "go", "max_tokens": 1234}),
+            FlowNode("o", NodeKind.OUTPUT, {"type": "log"}),
+        ],
+        edges=[FlowEdge("t", "w"), FlowEdge("w", "o")],
+    )
+    await run_flow(flow, executor=_exec)
+    assert seen["max_tokens"] == 1234

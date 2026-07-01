@@ -173,6 +173,7 @@ async def brain_executor(
     instance_id: Optional[str] = None,
     config: Optional[Config] = None,
     skills: Optional[list] = None,
+    max_tokens: Optional[int] = None,
 ) -> dict:
     """Run ``goal`` through the department's one-turn brain think path.
 
@@ -246,7 +247,7 @@ async def brain_executor(
         result = await provider.complete(
             messages,
             model=decision.model,
-            max_tokens=_ORG_MAX_TOKENS,
+            max_tokens=max_tokens or _ORG_MAX_TOKENS,
             system=system,
         )
 
