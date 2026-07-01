@@ -102,6 +102,14 @@ def _safe_int(val: str, default: int) -> int:
         return default
 
 
+def _safe_float(val: str, default: float) -> float:
+    """Parse val as float, returning default if it's not a valid number."""
+    try:
+        return float(val)
+    except (TypeError, ValueError):
+        return default
+
+
 def _parse_csv_set(raw: str) -> "set[str]":
     """Parse a CSV env var into a set of trimmed, non-empty tokens."""
     return {item.strip() for item in (raw or "").split(",") if item.strip()}
@@ -493,6 +501,29 @@ class Config:
     plugins_dir: str = os.getenv(
         "LHASSA_PLUGINS_DIR", str(Path.home() / ".lhassa" / "plugins")
     )
+
+    # ── Monitor watcher (the always-on, $0 "ear") ────────────────────────────
+    # A standing, deterministic loop that watches the environment cheaply (no
+    # tokens) and only wakes the brain / alerts when something notable happens.
+    # OFF by default — opt in via the systemd service (scripts/systemd/
+    # lhassa-monitor.service). The module no-ops + exits when this is off.
+    monitor_enabled: bool = os.getenv("LHASSA_MONITOR_ENABLED", "0") not in ("0", "false", "")
+    # Cadence: while nothing is running it checks every idle interval; while a run
+    # IS executing it listens on the short active interval (seconds).
+    monitor_idle_interval: float = _safe_float(
+        os.getenv("LHASSA_MONITOR_IDLE_INTERVAL", "300"), 300.0
+    )
+    monitor_active_interval: float = _safe_float(
+        os.getenv("LHASSA_MONITOR_ACTIVE_INTERVAL", "15"), 15.0
+    )
+    # The department the watcher attributes its episodes/alerts to.
+    monitor_department: str = os.getenv("LHASSA_MONITOR_DEPARTMENT", "interns")
+    # Push a Telegram/desktop alert for important events (failures / health-alert /
+    # pending-approvals). On by default; episodes are always logged regardless.
+    monitor_notify: bool = os.getenv("LHASSA_MONITOR_NOTIFY", "1") not in ("0", "false", "")
+    # Optionally spend a token on a richer live "think" per reaction — the ONLY
+    # place the watcher can cost anything. OFF by default; also needs LHASSA_ORG_LIVE.
+    monitor_think: bool = os.getenv("LHASSA_MONITOR_THINK", "0") not in ("0", "false", "")
 
     # ── Tool guardrails ───────────────────────────────────────────────────────
     # If true, reject obviously destructive shell commands unless explicitly
