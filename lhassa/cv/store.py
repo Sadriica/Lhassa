@@ -11,6 +11,8 @@ the flow engine:
     (so a filename is stable per run), fresh & random otherwise.
   * :func:`export`       — write ``content`` to ``out/{id}_{slug}.tex`` atomically and
     return the path.
+  * :func:`save_base`    — replace ``cv_largo.tex`` (backing up any existing file first).
+  * :func:`base_info`    — a small ``{exists, path, chars, first_line}`` view of the base.
 """
 
 from __future__ import annotations
@@ -19,11 +21,15 @@ import contextlib
 import hashlib
 import os
 import re
+import shutil
 import tempfile
+import time
 import unicodedata
 import uuid
 from pathlib import Path
 from typing import Optional
+
+from loguru import logger
 
 from lhassa.cv.paths import base_path, out_dir
 
@@ -94,6 +100,66 @@ def export(content: str, *, company: Optional[str], run_id: Optional[str] = None
             os.unlink(tmp_name)
         raise
     return dest
+
+
+def save_base(text: str, *, timestamp: Optional[float] = None) -> Path:
+    """Write ``text`` as the base CV (``cv_largo.tex``); return its path. Never raises.
+
+    Before overwriting, any existing base is first BACKED UP to
+    ``cv_largo.<timestamp>.bak`` in the same directory (a mistaken upload never
+    destroys the previous base). The write is ATOMIC (temp file in the same dir +
+    ``os.replace``), so an interrupted write leaves the old base intact.
+
+    ``timestamp`` is supplied by the caller (or defaults to :func:`time.time`); the CV
+    seam is leaf infrastructure, so a plain ``time`` read is fine here (unlike the
+    deterministic spine). On any failure it logs and returns the intended path — the
+    caller re-checks with :func:`base_info` rather than catching.
+    """
+    dest = base_path()
+    ts = int(timestamp if timestamp is not None else time.time())
+    payload = text if isinstance(text, str) else str(text)
+    try:
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        if dest.exists():
+            backup = dest.with_name(f"cv_largo.{ts}.bak")
+            with contextlib.suppress(OSError):
+                shutil.copy2(dest, backup)
+        fd, tmp_name = tempfile.mkstemp(dir=str(dest.parent), prefix=".cv-", suffix=".tmp")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as fh:
+                fh.write(payload)
+                fh.flush()
+                os.fsync(fh.fileno())
+            os.replace(tmp_name, dest)
+        except BaseException:
+            with contextlib.suppress(OSError):
+                os.unlink(tmp_name)
+            raise
+    except Exception as exc:  # never raise — a failed save degrades, it doesn't crash
+        logger.warning(f"cv.store: save_base failed: {exc}")
+    return dest
+
+
+def base_info() -> dict:
+    """Describe the on-disk base CV: ``{exists, path, chars, first_line}``. Never raises.
+
+    ``exists`` is ``False`` (with ``chars`` 0 / ``first_line`` ``""``) when the base is
+    absent or unreadable, so a caller can render a status without a try/except.
+    """
+    path = base_path()
+    info = {"exists": False, "path": str(path), "chars": 0, "first_line": ""}
+    try:
+        if path.exists():
+            content = path.read_text(encoding="utf-8")
+            info["exists"] = True
+            info["chars"] = len(content)
+            for line in content.splitlines():
+                if line.strip():
+                    info["first_line"] = line.strip()
+                    break
+    except OSError as exc:
+        logger.debug(f"cv.store: base_info read failed: {exc}")
+    return info
 
 
 # ── extract compile-ready LaTeX from a model answer ──────────────────────────

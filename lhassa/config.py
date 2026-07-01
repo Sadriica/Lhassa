@@ -419,6 +419,10 @@ class Config:
     # foreign model from the router (e.g. a groq name) falls back to this.
     claude_bin: str = os.getenv("LHASSA_CLAUDE_BIN", "claude")
     claude_model: str = os.getenv("LHASSA_CLAUDE_MODEL", "")
+    # LaTeX engine used to compile a tailored CV ``.tex`` into a PDF before sending it
+    # over Telegram. ``tectonic`` by default (self-contained, non-interactive); resolved
+    # via ``shutil.which`` so a machine without it degrades to sending the raw ``.tex``.
+    tectonic_bin: str = os.getenv("LHASSA_TECTONIC_BIN", "tectonic")
 
     # Fallback provider CHAIN for chat/think when the routine provider flakes
     # (opencode boots a runtime per call and is flaky under a long-running poller).

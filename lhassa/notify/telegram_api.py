@@ -10,8 +10,9 @@ or chat id → no network, returns falsy) and **fully defensive** (any HTTP/tran
 error is logged and yields a falsy result — these helpers never raise into the
 poller).
 
-  * :func:`get_file`      — ``getFile`` → ``file_path`` → GET the CDN URL → ``bytes``.
-  * :func:`send_document` — multipart ``sendDocument`` of a local path to the owner chat.
+  * :func:`get_file`       — ``getFile`` → ``file_path`` → GET the CDN URL → ``bytes``.
+  * :func:`send_document`  — multipart ``sendDocument`` of a local path to the owner chat.
+  * :func:`set_my_commands`— ``setMyCommands`` (register the bot's command menu).
 """
 
 from __future__ import annotations
@@ -29,9 +30,32 @@ from lhassa.notify.telegram import _credentials
 _GET_FILE_URL = "https://api.telegram.org/bot{token}/getFile"
 _FILE_URL = "https://api.telegram.org/file/bot{token}/{file_path}"
 _SEND_DOCUMENT_URL = "https://api.telegram.org/bot{token}/sendDocument"
+_SET_COMMANDS_URL = "https://api.telegram.org/bot{token}/setMyCommands"
 
 # A file transfer can take longer than a text message.
 _TIMEOUT = 60.0
+
+
+def _response_ok(response, label: str) -> bool:
+    """True iff ``response`` is HTTP 200 with an ``ok: true`` Bot API body.
+
+    The shared "was this Bot API call accepted?" check, logging (never raising) on a
+    bad status, undecodable JSON, or an ``ok: false`` payload.
+    """
+    if response.status_code != 200:
+        logger.warning(
+            f"Telegram {label} failed: HTTP {response.status_code} {response.text[:200]}"
+        )
+        return False
+    try:
+        data = response.json()
+    except Exception:
+        logger.warning(f"Telegram {label}: could not decode response JSON")
+        return False
+    if not isinstance(data, dict) or not data.get("ok"):
+        logger.warning(f"Telegram {label} rejected: {str(data)[:200]}")
+        return False
+    return True
 
 
 async def get_file(file_id: str, *, config=None) -> Optional[bytes]:
@@ -137,3 +161,57 @@ async def send_document(path, *, caption: str = "", config=None) -> bool:
         return False
 
     return True
+
+
+def _owner_scope(chat_id: str):
+    """A ``BotCommandScopeChat`` for the owner's private chat, or ``None``.
+
+    ``setMyCommands`` can be scoped to a specific chat; a numeric chat id yields a
+    ``{"type": "chat", "chat_id": …}`` scope, else we fall back to the default scope
+    (``None`` → the caller omits ``scope``).
+    """
+    try:
+        return {"type": "chat", "chat_id": int(chat_id)}
+    except (TypeError, ValueError):
+        return None
+
+
+async def set_my_commands(commands, *, config=None) -> bool:
+    """Register the bot's command menu via ``setMyCommands``.
+
+    ``commands`` is a list of ``(command, description)`` pairs (a leading ``/`` on the
+    command is stripped, the name lower-cased). Scoped to the owner's private chat when
+    the chat id is numeric, else the default scope. Credential-gated (no token/chat id →
+    no network, ``False``) and defensive; it never raises.
+    """
+    if config is None:
+        from lhassa.config import Config
+
+        config = Config()
+
+    token, chat_id = _credentials(config)
+    if not token or not chat_id:
+        return False
+
+    cmds = [
+        {"command": str(command).lstrip("/").lower(), "description": str(description)}
+        for command, description in (commands or [])
+    ]
+    if not cmds:
+        return False
+
+    payload: dict = {"commands": cmds}
+    scope = _owner_scope(chat_id)
+    if scope is not None:
+        payload["scope"] = scope
+
+    try:
+        async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+            response = await client.post(
+                _SET_COMMANDS_URL.format(token=token), json=payload
+            )
+    except Exception as exc:  # transport error — never propagate
+        logger.warning(f"Telegram setMyCommands failed (transport): {exc}")
+        return False
+
+    return _response_ok(response, "setMyCommands")
