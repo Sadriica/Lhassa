@@ -172,12 +172,13 @@ def test_document_update_runs_flow_and_sends_tex(monkeypatch, tmp_path):
 
     monkeypatch.setattr(store_mod.FlowStore, "get", lambda self, fid: object())
 
-    # Fake run_flow: record what it was called with, return a completed tex record.
+    # Fake the DELEGATION seam: record what it was called with, return a tex record.
+    # (The bridge now runs through org.delegate.delegate_flow, not run_flow directly.)
     out_file = tmp_path / "ab12cd_acme.tex"
     out_file.write_text("% tailored", encoding="utf-8")
     seen = {}
 
-    async def _fake_run_flow(flow, *, inputs, config, company, base_cv):
+    async def _fake_delegate_flow(flow, *, inputs, config, company, base_cv):
         seen.update(inputs=inputs, company=company, base_cv=base_cv)
         return {
             "status": "completed",
@@ -188,14 +189,14 @@ def test_document_update_runs_flow_and_sends_tex(monkeypatch, tmp_path):
             ],
         }
 
-    import lhassa.flows.engine as engine_mod
+    from lhassa.org import delegate as delegate_mod
 
-    monkeypatch.setattr(engine_mod, "run_flow", _fake_run_flow)
+    monkeypatch.setattr(delegate_mod, "delegate_flow", _fake_delegate_flow)
 
     new_offset = asyncio.run(telegram_inbound.poll_once(_cfg(), offset=None))
 
     assert new_offset == 301
-    # run_flow got the EXTRACTED text as base_cv, the caption as summary, parsed company.
+    # delegate_flow got the EXTRACTED text as base_cv, caption as summary, parsed company.
     assert seen["base_cv"] == tex_body
     assert seen["inputs"] == {"summary": "Senior Backend Engineer @ Acme"}
     assert seen["company"] == "Acme"
@@ -295,16 +296,16 @@ def test_held_cv_then_followup_text_runs_flow(monkeypatch, tmp_path):
     out_file.write_text("% tailored", encoding="utf-8")
     seen = {}
 
-    async def _fake_run_flow(flow, *, inputs, config, company, base_cv):
+    async def _fake_delegate_flow(flow, *, inputs, config, company, base_cv):
         seen.update(inputs=inputs, company=company, base_cv=base_cv)
         return {
             "status": "completed",
             "steps": [{"kind": "output", "output": "tex", "path": str(out_file)}],
         }
 
-    import lhassa.flows.engine as engine_mod
+    from lhassa.org import delegate as delegate_mod
 
-    monkeypatch.setattr(engine_mod, "run_flow", _fake_run_flow)
+    monkeypatch.setattr(delegate_mod, "delegate_flow", _fake_delegate_flow)
 
     asyncio.run(telegram_inbound.poll_once(_cfg(), offset=None))
 
@@ -346,12 +347,12 @@ def test_gate_failure_replies_and_sends_no_file(monkeypatch):
     monkeypatch.setattr(telegram_api, "send_document", _boom_send_doc)
     sent = _patch_send(monkeypatch)
 
-    import lhassa.flows.engine as engine_mod
     import lhassa.flows.store as store_mod
+    from lhassa.org import delegate as delegate_mod
 
     monkeypatch.setattr(store_mod.FlowStore, "get", lambda self, fid: object())
 
-    async def _fake_run_flow(flow, *, inputs, config, company, base_cv):
+    async def _fake_delegate_flow(flow, *, inputs, config, company, base_cv):
         # The contact gate failed → the path never reached the tex output.
         return {
             "status": "completed",
@@ -365,7 +366,7 @@ def test_gate_failure_replies_and_sends_no_file(monkeypatch):
             ],
         }
 
-    monkeypatch.setattr(engine_mod, "run_flow", _fake_run_flow)
+    monkeypatch.setattr(delegate_mod, "delegate_flow", _fake_delegate_flow)
 
     new_offset = asyncio.run(telegram_inbound.poll_once(_cfg(), offset=None))
 
@@ -473,20 +474,20 @@ def test_cv_command_runs_against_disk_base(monkeypatch, tmp_path):
     out_file = tmp_path / "zz99_untitled.tex"
     out_file.write_text("% tailored", encoding="utf-8")
 
-    import lhassa.flows.engine as engine_mod
     import lhassa.flows.store as store_mod
+    from lhassa.org import delegate as delegate_mod
 
     monkeypatch.setattr(store_mod.FlowStore, "get", lambda self, fid: object())
     seen = {}
 
-    async def _fake_run_flow(flow, *, inputs, config, company, base_cv):
+    async def _fake_delegate_flow(flow, *, inputs, config, company, base_cv):
         seen.update(inputs=inputs, company=company, base_cv=base_cv)
         return {
             "status": "completed",
             "steps": [{"kind": "output", "output": "tex", "path": str(out_file)}],
         }
 
-    monkeypatch.setattr(engine_mod, "run_flow", _fake_run_flow)
+    monkeypatch.setattr(delegate_mod, "delegate_flow", _fake_delegate_flow)
 
     sent_docs = []
 

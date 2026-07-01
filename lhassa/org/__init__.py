@@ -25,13 +25,14 @@ execute; communication is typed messages; one read-only commons (no diverging
 memories); start with TWO brains (one general + one department), never six.
 """
 
-from lhassa.org import commons, executor, messaging, monitor, rbac, routing, topology
+from lhassa.org import commons, delegate, executor, messaging, monitor, rbac, routing, topology
 from lhassa.org.coordinator import (
     DepartmentBrain,
     GeneralBrain,
     route_in_topology,
     run_goal,
 )
+from lhassa.org.delegate import delegate_flow, owning_department
 from lhassa.org.executor import brain_executor
 from lhassa.org.messaging import Message, MessageKind, UnknownMessageKind
 from lhassa.org.monitor import (
@@ -57,6 +58,9 @@ from lhassa.org.topology import (
 
 __all__ = [
     "commons",
+    "delegate",
+    "delegate_flow",
+    "owning_department",
     "executor",
     "messaging",
     "monitor",
