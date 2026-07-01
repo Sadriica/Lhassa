@@ -414,6 +414,11 @@ class Config:
     opencode_bin: str = os.getenv("LHASSA_OPENCODE_BIN", "opencode")
     # A cheap/free model is right for a routine beat (e.g. a free flash tier).
     opencode_model: str = os.getenv("LHASSA_OPENCODE_MODEL", "opencode/deepseek-v4-flash-free")
+    # Claude Code CLI (``claude`` provider): the model to request. Empty ⇒ the CLI's
+    # own default subscription model. The provider ONLY forwards a Claude model, so a
+    # foreign model from the router (e.g. a groq name) falls back to this.
+    claude_bin: str = os.getenv("LHASSA_CLAUDE_BIN", "claude")
+    claude_model: str = os.getenv("LHASSA_CLAUDE_MODEL", "")
 
     # Fallback provider CHAIN for chat/think when the routine provider flakes
     # (opencode boots a runtime per call and is flaky under a long-running poller).

@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import re
 from dataclasses import dataclass
 from loguru import logger
@@ -555,8 +556,9 @@ class OpenCodeProvider:
 # handles it instead of crashing the turn.
 
 # Single CLI beat timeout: long enough for a subscription model, short enough that
-# a stuck CLI degrades the turn instead of hanging it.
-_CLI_TIMEOUT = 120.0
+# a stuck CLI degrades the turn instead of hanging it. Configurable (LHASSA_CLI_TIMEOUT)
+# because a large generation — e.g. a full-page CV — legitimately runs past two minutes.
+_CLI_TIMEOUT = float(os.getenv("LHASSA_CLI_TIMEOUT", "300"))
 
 
 def _flatten_messages(messages: list[dict], system: Any) -> str:
@@ -719,8 +721,14 @@ class ClaudeCodeProvider:
         self, messages: list[dict], *, model: str | None = None, max_tokens: int = 1024, **opts
     ) -> Completion:
         binary = (getattr(self._config, "claude_bin", "") or "") or "claude"
-        # None ⇒ let the CLI pick the subscription's model; a config attr can override.
-        model = model or (getattr(self._config, "claude_model", "") or "") or None
+        # Only honor a Claude model. The router may pair THIS CLI provider with the
+        # config's default model (e.g. a groq/openai name) — forwarding that as
+        # ``--model`` makes the claude CLI 404. So a non-Claude model falls back to
+        # the configured ``claude_model``, else None ⇒ the CLI's own subscription model.
+        claude_model = (getattr(self._config, "claude_model", "") or "").strip() or None
+        ml = str(model).lower() if model else ""
+        if not ml.startswith(("claude", "opus", "sonnet", "haiku")):
+            model = claude_model
         prompt = _flatten_messages(messages, opts.get("system"))
         argv = [binary, "--print", "--output-format", "json"]
         if model:
