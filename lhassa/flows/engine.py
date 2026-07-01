@@ -237,10 +237,14 @@ def _format_goal(prompt: str, data: Any, *, base_cv: str = "", company: str = ""
         return prompt
 
 
-async def _run_gate(node: FlowNode, data: Any, *, config: Config) -> tuple[dict, Any, bool]:
+async def _run_gate(
+    node: FlowNode, data: Any, *, config: Config, base_cv: str = ""
+) -> tuple[dict, Any, bool]:
     """Execute a gate node; returns ``(step_extra, data_out, passed)``.
 
     ``passed`` drives edge-following: a non-pass drops unconditional outgoing edges.
+    ``base_cv`` is passed to the verifier via ``context`` so an objective check (e.g.
+    contact-detail preservation) can compare the artifact against the fixed base CV.
     """
     cfg = node.config or {}
     gate_type = str(cfg.get("type") or "verify").lower()
@@ -273,7 +277,7 @@ async def _run_gate(node: FlowNode, data: Any, *, config: Config) -> tuple[dict,
     artifact = data
     if isinstance(data, dict):
         artifact = data.get("summary", data.get("output", data))
-    verdict = verify(artifact, spec=spec)
+    verdict = verify(artifact, spec=spec, context={"base_cv": base_cv})
     return (
         {"gate": "verify", "passed": bool(verdict.passed), "detail": verdict.detail},
         data,
@@ -416,7 +420,9 @@ async def run_flow(
                 )
                 step.update(extra)
             elif node.kind == NodeKind.GATE:
-                extra, data_out, passed = await _run_gate(node, data, config=config)
+                extra, data_out, passed = await _run_gate(
+                    node, data, config=config, base_cv=base_cv
+                )
                 step.update(extra)
             elif node.kind == NodeKind.OUTPUT:
                 record = _run_output(
