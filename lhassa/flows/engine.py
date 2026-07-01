@@ -24,7 +24,9 @@ Per-kind behaviour
     parks a request via :mod:`lhassa.security.approval`. The step records the
     verdict (``passed`` / ``needs_approval``). On a non-pass the path STOPS unless an
     outgoing edge's ``when`` explicitly handles the failure.
-  * ``output``  — records the output (notify/doc/log); best-effort, never raises.
+  * ``output``  — records the output (notify/doc/log); best-effort, never raises. The
+    ``tex`` type additionally EXPORTS a tailored ``.tex`` file (``lhassa.cv.export``)
+    to ``~/.lhassa/cv/out/{id}_{company}.tex`` and records its path.
   * ``branch``  — evaluates the outgoing edges' ``when`` and follows the FIRST match
     (an unconditional edge is the ``else``).
 
@@ -46,6 +48,7 @@ A structured run record::
 from __future__ import annotations
 
 import os
+import uuid
 from typing import Any, Awaitable, Callable, Optional
 
 from loguru import logger
@@ -163,13 +166,24 @@ async def _default_executor(goal: str, *, department: str, config: Config, **_: 
 
 # ── per-node execution ───────────────────────────────────────────────────────
 async def _run_task(
-    node: FlowNode, data: Any, *, config: Config, executor: Executor
+    node: FlowNode,
+    data: Any,
+    *,
+    config: Config,
+    executor: Executor,
+    base_cv: str = "",
+    company: str = "",
 ) -> tuple[dict, Any]:
-    """Execute a task node; returns ``(step_extra, data_out)``."""
+    """Execute a task node; returns ``(step_extra, data_out)``.
+
+    ``base_cv`` and ``company`` are injected into the prompt alongside ``{input}``
+    (see :func:`_format_goal`) so a task can build on the fixed base CV and address
+    the resolved company by name.
+    """
     cfg = node.config or {}
     department, pinned = resolve_brain(node, data, config)
     prompt = cfg.get("prompt") or cfg.get("goal") or ""
-    goal = _format_goal(prompt, data) or department
+    goal = _format_goal(prompt, data, base_cv=base_cv, company=company) or department
     result = await executor(goal, department=department, config=config)
     extra = {
         "brain": department,
@@ -181,16 +195,33 @@ async def _run_task(
     return extra, result
 
 
-def _format_goal(prompt: str, data: Any) -> str:
-    """Build a task's goal: the prompt with ``{input}`` filled from upstream data."""
+def _format_goal(prompt: str, data: Any, *, base_cv: str = "", company: str = "") -> str:
+    """Build a task's goal by interpolating the available placeholders into ``prompt``.
+
+    Placeholders (each substituted only if present, so behaviour for a prompt that
+    uses none is unchanged):
+
+      * ``{input}``   — the upstream node's output (a dict's ``summary``/``output``).
+      * ``{base_cv}`` — the fixed base CV text (``cv.load_base()`` at run start).
+      * ``{company}`` — the resolved company (override → context → ``"untitled"``).
+    """
     prompt = str(prompt or "").strip()
     if not prompt:
         return ""
     summary = data
     if isinstance(data, dict):
         summary = data.get("summary", data.get("output", data))
+    replacements = {
+        "{input}": str(summary),
+        "{base_cv}": base_cv or "",
+        "{company}": company or "",
+    }
     try:
-        return prompt.replace("{input}", str(summary)) if "{input}" in prompt else prompt
+        out = prompt
+        for token, value in replacements.items():
+            if token in out:
+                out = out.replace(token, value)
+        return out
     except Exception:
         return prompt
 
@@ -239,8 +270,28 @@ async def _run_gate(node: FlowNode, data: Any, *, config: Config) -> tuple[dict,
     )
 
 
-def _run_output(node: FlowNode, data: Any) -> dict:
-    """Record an output node (notify/doc/log) — best-effort, never raises."""
+def resolve_company(override: Optional[str], context: Optional[dict]) -> str:
+    """Resolve the company/convocatoria name for a run.
+
+    Precedence: a run-level ``override`` WINS; else the value the pipeline put in
+    ``context`` (e.g. what the jd-analyst extracted, keyed ``"company"``); else
+    ``"untitled"``. Whitespace-only values are treated as absent.
+    """
+    for candidate in (override, (context or {}).get("company")):
+        if candidate and str(candidate).strip():
+            return str(candidate).strip()
+    return "untitled"
+
+
+def _run_output(
+    node: FlowNode, data: Any, *, company: str = "untitled", run_id: Optional[str] = None
+) -> dict:
+    """Record an output node — best-effort, never raises.
+
+    Types: ``notify`` / ``doc`` / ``log`` record the payload; ``tex`` additionally
+    EXPORTS a tailored ``.tex`` file for the CV work-flow via :func:`lhassa.cv.export`
+    and records the written path (``{"output": "tex", "path": "…/out/{id}_{company}.tex"}``).
+    """
     cfg = node.config or {}
     out_type = str(cfg.get("type") or "log").lower()
     target = cfg.get("target")
@@ -248,6 +299,23 @@ def _run_output(node: FlowNode, data: Any) -> dict:
     if isinstance(data, dict):
         payload = data.get("summary", data.get("output", data))
     record = {"output_type": out_type, "target": target, "payload": _safe(payload)}
+
+    if out_type == "tex":
+        try:
+            from lhassa import cv
+
+            artifact = payload if isinstance(payload, str) else str(payload)
+            path = cv.export(artifact, company=company, run_id=run_id)
+            record["output"] = "tex"
+            record["path"] = str(path)
+            logger.info("flows: output[tex] {} → {}", node.id, path)
+            return record
+        except Exception as exc:  # writing a file is best-effort; never crash the run
+            record["output"] = "tex"
+            record["error"] = str(exc)
+            logger.warning("flows: output[tex] {} could not export: {}", node.id, exc)
+            return record
+
     logger.info("flows: output[{}] {} → {}", out_type, node.id, target)
     return record
 
@@ -266,12 +334,14 @@ async def run_flow(
     inputs: Optional[dict] = None,
     config: Optional[Config] = None,
     executor: Optional[Executor] = None,
+    company: Optional[str] = None,
 ) -> dict:
     """Execute ``flow`` and return a structured run record. Never raises.
 
     ``inputs`` seed the trigger; ``executor`` overrides the default org department
-    brain (the test/offline seam). See the module docstring for execution order and
-    branch semantics.
+    brain (the test/offline seam); ``company`` is an optional override for the CV
+    export filename/prompts (override → context → ``"untitled"``). See the module
+    docstring for execution order and branch semantics.
     """
     if config is None:
         # Local import: stay correct if a test reloads ``lhassa.config`` (a stale
@@ -280,6 +350,18 @@ async def run_flow(
 
         config = _Config()
     executor = executor or _default_executor
+
+    # Load the fixed base CV once (for {base_cv} interpolation) and resolve the
+    # company (override → context → "untitled"). Both degrade gracefully offline.
+    try:
+        from lhassa import cv
+
+        base_cv = cv.load_base() or ""
+    except Exception as exc:  # a broken CV seam must never crash a run
+        logger.debug("flows: base CV unavailable ({})", exc)
+        base_cv = ""
+    resolved_company = resolve_company(company, inputs)
+    run_id = uuid.uuid4().hex
 
     # Validate up front — an invalid graph is a single failed run record, not a crash.
     try:
@@ -317,14 +399,17 @@ async def run_flow(
                 step["inputs"] = _safe(data)
             elif node.kind == NodeKind.TASK:
                 extra, data_out = await _run_task(
-                    node, data, config=config, executor=executor
+                    node, data, config=config, executor=executor,
+                    base_cv=base_cv, company=resolved_company,
                 )
                 step.update(extra)
             elif node.kind == NodeKind.GATE:
                 extra, data_out, passed = await _run_gate(node, data, config=config)
                 step.update(extra)
             elif node.kind == NodeKind.OUTPUT:
-                record = _run_output(node, data)
+                record = _run_output(
+                    node, data, company=resolved_company, run_id=run_id
+                )
                 step.update(record)
                 last_output = record
                 data_out = data

@@ -28,6 +28,7 @@ from typing import Iterator
 #   spine         : core                                      (the do-and-sleep loop)
 #   interfaces    : memory, security, llm                     (mid layers / contracts)
 #   adapters      : harness, tools, agents, remote, health    (the rentable "hands")
+#   cv seam       : cv                                         (leaf file-I/O used by flows)
 #   leaf infra    : registry.py, plugins.py                   (keystone — depend on nothing)
 #
 # The forbidden directions encode "inner layers must not reach out to shells",
@@ -70,6 +71,10 @@ RULES: tuple[Rule, ...] = (
     # independently. The reverse edge (llm/router.py choosing a harness) is the
     # intentional bridge seam and is therefore NOT forbidden.
     Rule("swap-axis-independence", frozenset({"harness"}), frozenset({"llm"})),
+    # The CV file-I/O seam is leaf infrastructure used BY the flow engine (the "build
+    # on a base CV, export a tailored .tex" foundation). Like the other inner layers
+    # it must never reach out to a shell — it depends only on the standard library.
+    Rule("cv-infra-isolation", frozenset({"cv"}), frozenset(SHELLS)),
 )
 
 # Keystone leaf-infrastructure files: pure generic infrastructure that must not
