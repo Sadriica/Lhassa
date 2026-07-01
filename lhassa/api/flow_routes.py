@@ -110,11 +110,19 @@ async def delete_flow(flow_id: str) -> dict:
 async def run_flow_endpoint(flow_id: str, body: dict | None = Body(default=None)) -> dict:
     """Execute a stored flow (offline/stubbed unless ``LHASSA_ORG_LIVE``).
 
-    The optional body may carry ``{"inputs": {...}}`` to seed the trigger. Returns
-    the structured run record from :func:`lhassa.flows.engine.run_flow`.
+    The optional body may carry ``{"inputs": {...}}`` to seed the trigger (a bare
+    ``{"input": "<text>"}`` is accepted as a convenience and wrapped as
+    ``{"summary": "<text>"}``) and an optional ``"company"`` string (the CV-export
+    override — override → context → ``"untitled"``). Returns the structured run
+    record from :func:`lhassa.flows.engine.run_flow`.
     """
     flow = _store().get(flow_id)
     if flow is None:
         raise HTTPException(status_code=404, detail=f"flow {flow_id!r} not found")
-    inputs = (body or {}).get("inputs") if isinstance(body, dict) else None
-    return await run_flow(flow, inputs=inputs)
+    body_dict = body if isinstance(body, dict) else {}
+    inputs = body_dict.get("inputs")
+    if inputs is None and "input" in body_dict:
+        # Convenience: a bare {"input": "<text>"} seeds the {input} placeholder.
+        inputs = {"summary": body_dict.get("input")}
+    company = body_dict.get("company")
+    return await run_flow(flow, inputs=inputs, company=company)
