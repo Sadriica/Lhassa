@@ -145,22 +145,48 @@ export default function WorkflowsPanel({ route, onRoute } = {}) {
     onRoute?.(null) // a new flow has no persistent id yet — keep the URL on the list
   }, [onRoute])
 
+  // #10 — recreate a just-deleted flow from its cached JSON (Undo). PUT re-creates the
+  // flow at its id (replace-or-create), then refresh the list so it reappears.
+  const recreateFlow = useCallback(async (flow) => {
+    try {
+      const r = await fetch(`/api/flows/${encodeURIComponent(flow.id)}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(flow),
+      })
+      if (!r.ok) throw new Error('restore failed')
+      await loadFlows()
+      toast.success(`Flow "${flow.name || flow.id}" restored.`)
+    } catch {
+      toast.error('Could not restore that flow.')
+    }
+  }, [loadFlows])
+
+  // #10 — DELETE is optimistic + undoable. The flow leaves the list the instant Confirm
+  // is clicked; on success the toast offers Undo, which re-creates it from the cached
+  // JSON. On failure the optimistic removal is rolled back and an error toast fires.
   const deleteFlow = useCallback(async (id) => {
+    const prevFlows = flows
+    const cached = flows.find((f) => f.id === id) // full flow dict (nodes/edges) for Undo
+    setFlows((prev) => prev.filter((f) => f.id !== id)) // optimistic removal
+    if (editing?.id === id) { setEditing(null); setIsNew(false); onRoute?.(null) }
     setBusy(true)
     setError('')
     try {
       const r = await fetch(`/api/flows/${encodeURIComponent(id)}`, { method: 'DELETE' })
       if (!r.ok && r.status !== 404) throw new Error('delete failed')
-      if (editing?.id === id) { setEditing(null); setIsNew(false); onRoute?.(null) }
-      await loadFlows()
-      toast.success('Flow deleted.')
+      await loadFlows() // reconcile with the server (preserves existing refetch behavior)
+      toast.show({
+        type: 'success',
+        message: `Flow "${cached?.name || id}" deleted`,
+        action: cached ? { label: 'Undo', onClick: () => recreateFlow(cached) } : null,
+      })
     } catch {
+      setFlows(prevFlows) // revert the optimistic removal
       setError('Could not delete that flow.')
       toast.error('Could not delete that flow.')
     } finally {
       setBusy(false)
     }
-  }, [editing, loadFlows, onRoute])
+  }, [flows, editing, loadFlows, onRoute, recreateFlow])
 
   // Save the canvas: POST a new flow, PUT an existing one. Returns {ok, flow|detail}
   // so the editor can show a 400 {detail} inline.

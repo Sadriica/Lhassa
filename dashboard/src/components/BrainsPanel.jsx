@@ -66,6 +66,44 @@ function descendantIds(rootId, byId) {
   return out
 }
 
+// ── optimistic-update helpers (#10) ───────────────────────────────────────────
+// Pure, immutable transforms of the topology so a mutation can be reflected on the
+// canvas INSTANTLY (before the backend confirms) and rolled back exactly on failure.
+// Each returns a fresh topology; the caller keeps the pre-mutation value to revert.
+function cloneNodes(topology) {
+  return (topology?.nodes || []).map((n) => ({ ...n, children: [...(n.children || [])] }))
+}
+// is_leaf drives a small tag — recompute it so an optimistic frame stays coherent.
+function withRecomputedLeaves(nodes) {
+  return nodes.map((n) => ({ ...n, is_leaf: (n.children || []).length === 0 }))
+}
+function reparentTopology(topology, id, newParent) {
+  if (!topology?.nodes) return topology
+  const nodes = cloneNodes(topology)
+  const byId = Object.fromEntries(nodes.map((n) => [n.id, n]))
+  const node = byId[id]
+  if (!node) return topology
+  const old = node.parent
+  if (old && byId[old]) byId[old].children = byId[old].children.filter((c) => c !== id)
+  node.parent = newParent || null
+  if (newParent && byId[newParent] && !byId[newParent].children.includes(id)) {
+    byId[newParent].children.push(id)
+  }
+  return { ...topology, nodes: withRecomputedLeaves(nodes) }
+}
+function removeNodeLocal(topology, id) {
+  if (!topology?.nodes) return topology
+  const nodes = cloneNodes(topology)
+    .filter((n) => n.id !== id)
+    .map((n) => ({ ...n, children: (n.children || []).filter((c) => c !== id) }))
+  return { ...topology, nodes: withRecomputedLeaves(nodes) }
+}
+function setNodeSkills(topology, id, skills) {
+  if (!topology?.nodes) return topology
+  const nodes = (topology.nodes || []).map((n) => (n.id === id ? { ...n, skills: [...skills] } : n))
+  return { ...topology, nodes }
+}
+
 // ── department field ──────────────────────────────────────────────────────────
 // A dropdown over the EXISTING departments (distinct non-empty values across the
 // chart) plus a "+ New department…" option that reveals a text input to coin a new
@@ -361,7 +399,7 @@ function RelationshipsEditor({ node, nodes, relationships, relKinds, onAdd, onRe
 }
 
 // ── inspector for the selected brain ────────────────────────────────────────
-function Inspector({ node, nodes, departments, installedSet, onInstall, onAddSkill, onPatch, onMove, onPromote, onDelete, relationships, relKinds, onAddRel, onRemoveRel, busy }) {
+function Inspector({ node, nodes, departments, installedSet, onInstall, onAddSkill, onRemoveSkill, onPatch, onMove, onPromote, onDelete, relationships, relKinds, onAddRel, onRemoveRel, busy }) {
   const [role, setRole] = useState(node.role || '')
   const [department, setDepartment] = useState(node.department || '')
   const [pickedSkills, setPickedSkills] = useState(node.skills || [])
@@ -391,6 +429,16 @@ function Inspector({ node, nodes, departments, installedSet, onInstall, onAddSki
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [node.id])
 
+  // #10 — skills are now mutated INSTANTLY (the recommended assign AND the ✕ remove are
+  // optimistic backend ops), so keep the assigned-skills view in lockstep with the
+  // authoritative topology whenever THIS node's skill set changes — including an
+  // optimistic frame, a rollback, or an Undo. Role/department/limits still re-init on
+  // selection only, so in-progress edits to those are never disturbed.
+  useEffect(() => {
+    setPickedSkills(node.skills || [])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [node.id, (node.skills || []).join('')])
+
   // Auto-disarm the Delete button a few seconds after it's armed, so a stray
   // first click never leaves a live "Confirm" primed indefinitely.
   useEffect(() => {
@@ -411,9 +459,6 @@ function Inspector({ node, nodes, departments, installedSet, onInstall, onAddSki
       .catch(() => { if (!cancelled) setRecs([]) })
     return () => { cancelled = true }
   }, [node.id, node.department, node.role])
-
-  const toggleSkill = (d) =>
-    setPickedSkills((prev) => (prev.includes(d) ? prev.filter((x) => x !== d) : [...prev, d]))
 
   const byId = useMemo(() => Object.fromEntries(nodes.map((n) => [n.id, n])), [nodes])
   const descendants = useMemo(() => descendantIds(node.id, byId), [node.id, byId])
@@ -455,8 +500,9 @@ function Inspector({ node, nodes, departments, installedSet, onInstall, onAddSki
                 type="button"
                 className="lh-tag lh-tag-accent"
                 style={{ cursor: 'pointer' }}
-                title="Remove this skill"
-                onClick={() => toggleSkill(s)}
+                title="Remove this skill (you can undo)"
+                disabled={busy}
+                onClick={() => onRemoveSkill(node.id, s)}
               >
                 {s} ✕
               </button>
@@ -464,7 +510,7 @@ function Inspector({ node, nodes, departments, installedSet, onInstall, onAddSki
           </div>
         )}
         <p className="text-[10px]" style={{ color: 'var(--lh-text-faint)' }}>
-          The skills this brain carries (✕ to remove). Click Save changes to persist.
+          The skills this brain carries. ✕ removes one immediately — an Undo toast lets you put it back.
         </p>
       </div>
 
@@ -584,22 +630,33 @@ function Inspector({ node, nodes, departments, installedSet, onInstall, onAddSki
             >
               ↑ Promote to root
             </button>
-            {confirmDelete ? (
-              <div className="flex gap-1.5 flex-1">
+            {(node.children?.length || 0) > 0 ? (
+              // Subtree/force delete — effectively irreversible → keep the two-step
+              // confirm and offer no Undo (the success toast says the subtree was removed).
+              confirmDelete ? (
+                <div className="flex gap-1.5 flex-1">
+                  <button
+                    type="button" className="lh-btn lh-btn-danger" disabled={busy}
+                    onClick={() => onDelete(node.id, true)}
+                  >
+                    {`Delete brain + ${node.children.length} sub-brain${node.children.length === 1 ? '' : 's'}?`}
+                  </button>
+                  <button type="button" className="lh-btn" onClick={() => setConfirmDelete(false)}>Cancel</button>
+                </div>
+              ) : (
                 <button
                   type="button" className="lh-btn lh-btn-danger" disabled={busy}
-                  onClick={() => onDelete(node.id, (node.children?.length || 0) > 0)}
+                  onClick={() => setConfirmDelete(true)}
                 >
-                  {(node.children?.length || 0) > 0
-                    ? `Delete brain + ${node.children.length} sub-brain${node.children.length === 1 ? '' : 's'}?`
-                    : 'Confirm delete'}
+                  Delete
                 </button>
-                <button type="button" className="lh-btn" onClick={() => setConfirmDelete(false)}>Cancel</button>
-              </div>
+              )
             ) : (
+              // Leaf — optimistic + undoable, so a single click is safe (Undo recreates it).
               <button
                 type="button" className="lh-btn lh-btn-danger" disabled={busy}
-                onClick={() => setConfirmDelete(true)}
+                onClick={() => onDelete(node.id, false)}
+                title="Delete this brain (you can undo)"
               >
                 Delete
               </button>
@@ -900,15 +957,127 @@ export default function BrainsPanel() {
       fetch(`/api/org/brains/${encodeURIComponent(id)}`, {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
       }))
-  const moveBrain = async (id, parent) => {
-    const ok = await mutate('Move', () =>
-      fetch(`/api/org/brains/${encodeURIComponent(id)}/move`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ parent }),
+  // #10 — Undo a move: put the brain back under its PREVIOUS parent (promote if it was
+  // a root). Non-optimistic (adopts the canonical chart), so the restore is exact.
+  const undoMove = useCallback(async (id, prevParent) => {
+    if (prevParent) {
+      const ok = await mutate('Move', () =>
+        fetch(`/api/org/brains/${encodeURIComponent(id)}/move`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ parent: prevParent }),
+        }))
+      if (ok) toast.success(`Moved "${id}" back under "${prevParent}"`)
+      else toast.error(`Could not move "${id}" back`)
+    } else {
+      const ok = await mutate('Promote', () =>
+        fetch(`/api/org/brains/${encodeURIComponent(id)}/promote`, { method: 'POST' }))
+      if (ok) toast.success(`Moved "${id}" back to root`)
+      else toast.error(`Could not move "${id}" back`)
+    }
+  }, [mutate])
+
+  // #10 — recreate a just-deleted LEAF from its cached data (Undo). Reuses the create
+  // path; on success the restored brain is re-selected so it's visible again.
+  const recreateBrain = useCallback(async (cached) => {
+    if (!cached) return
+    const ok = await mutate('Create', () =>
+      fetch('/api/org/brains', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: cached.id,
+          role: cached.role || undefined,
+          parent: cached.parent || undefined,
+          department: cached.department || undefined,
+          skills: cached.skills || [],
+          limits: cached.limits || {},
+        }),
       }))
-    if (ok) toast.success(`Moved under ${parent}`)
-    else toast.error(`Could not move "${id}"`)
-    return ok
-  }
+    if (ok) { setSelectedId(cached.id); toast.success(`Restored "${cached.id}"`) }
+    else toast.error(`Could not restore "${cached.id}"`)
+  }, [mutate])
+
+  // #10 — Undo a skill removal: restore the EXACT prior skill set via PATCH.
+  const reAddSkill = useCallback(async (brainId, skill, prevSkills) => {
+    const ok = await mutate('Assign', () =>
+      fetch(`/api/org/brains/${encodeURIComponent(brainId)}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ skills: prevSkills }),
+      }))
+    if (ok) toast.success(`Re-added "${skill}"`)
+    else toast.error(`Could not re-add "${skill}"`)
+  }, [mutate])
+
+  // #10 — remove a skill from a brain (the ✕): optimistic removal from the canvas, then
+  // persist via PATCH (the update path replaces the skill set). The success toast offers
+  // Undo → restore the prior set. On failure the optimistic topology change is reverted.
+  const removeSkillFromBrain = useCallback(async (brainId, skill) => {
+    const prevTopology = topology
+    const node = (topology?.nodes || []).find((n) => n.id === brainId)
+    if (!node) return
+    const prevSkills = node.skills || []
+    const nextSkills = prevSkills.filter((s) => s !== skill)
+    setTopology((t) => setNodeSkills(t, brainId, nextSkills))
+    setBusy(true)
+    setError('')
+    try {
+      const r = await fetch(`/api/org/brains/${encodeURIComponent(brainId)}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ skills: nextSkills }),
+      })
+      if (!r.ok) {
+        const d = await r.json().catch(() => ({}))
+        throw new Error(d.detail || 'Remove failed')
+      }
+      const chart = await r.json()
+      if (chart && chart.nodes) setTopology(chart)
+      toast.show({
+        type: 'success',
+        message: `Removed "${skill}" from "${brainId}"`,
+        action: { label: 'Undo', onClick: () => reAddSkill(brainId, skill, prevSkills) },
+      })
+    } catch (e) {
+      setTopology(prevTopology)
+      setError(e instanceof Error ? e.message : 'Remove failed')
+      toast.error(`Could not remove "${skill}"`)
+    } finally {
+      setBusy(false)
+    }
+  }, [topology, reAddSkill])
+
+  // #10 — MOVE is optimistic + undoable. Re-parent locally the instant the drag/menu/
+  // dropdown fires, then commit to the backend: adopt the canonical chart on success,
+  // roll back to the exact pre-move topology on failure. The success toast carries an
+  // Undo that moves the brain back under its PREVIOUS parent.
+  const moveBrain = useCallback(async (id, parent) => {
+    const prevTopology = topology
+    const node = (topology?.nodes || []).find((n) => n.id === id)
+    if (!node) return false
+    const prevParent = node.parent || ''
+    setTopology((t) => reparentTopology(t, id, parent))
+    setBusy(true)
+    setError('')
+    try {
+      const r = await fetch(`/api/org/brains/${encodeURIComponent(id)}/move`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ parent }),
+      })
+      if (!r.ok) {
+        const d = await r.json().catch(() => ({}))
+        throw new Error(d.detail || 'Move failed')
+      }
+      const chart = await r.json()
+      if (chart && chart.nodes) setTopology(chart)
+      toast.show({
+        type: 'success',
+        message: `Moved "${id}" under "${parent}"`,
+        action: { label: 'Undo', onClick: () => undoMove(id, prevParent) },
+      })
+      return true
+    } catch (e) {
+      setTopology(prevTopology)
+      setError(e instanceof Error ? e.message : 'Move failed')
+      toast.error(`Could not move "${id}"`)
+      return false
+    } finally {
+      setBusy(false)
+    }
+  }, [topology, undoMove])
   const promoteBrain = (id) =>
     mutate('Promote', () =>
       fetch(`/api/org/brains/${encodeURIComponent(id)}/promote`, { method: 'POST' }))
@@ -939,17 +1108,63 @@ export default function BrainsPanel() {
     }
   }, [loadTopology, loadInstalled])
 
-  const deleteBrain = async (id, force) => {
-    const ok = await mutate('Delete', () =>
-      fetch(`/api/org/brains/${encodeURIComponent(id)}?force=${force ? 'true' : 'false'}`, { method: 'DELETE' }))
-    if (ok) {
-      toast.success(`Deleted "${id}"`)
-      if (selectedId === id) setSelectedId(null)
-      loadOverlay() // a removed brain may have left dangling overlay edges
-    } else {
-      toast.error(`Could not delete "${id}"`)
+  // #10 — DELETE. A LEAF (no children) is optimistic + undoable: it disappears from the
+  // canvas immediately and the success toast offers Undo, which RECREATES it from the
+  // cached (id, role, parent, department, skills, limits) via the create path. A brain
+  // WITH children is a force/subtree delete — effectively irreversible, so it keeps the
+  // (caller's) two-step confirm and gets a plain, non-undoable success toast that says so.
+  const deleteBrain = useCallback(async (id, force) => {
+    const node = (topology?.nodes || []).find((n) => n.id === id)
+    if (force) {
+      const ok = await mutate('Delete', () =>
+        fetch(`/api/org/brains/${encodeURIComponent(id)}?force=true`, { method: 'DELETE' }))
+      if (ok) {
+        if (selectedId === id) setSelectedId(null)
+        loadOverlay() // a removed subtree may have left dangling overlay edges
+        toast.success(`Deleted "${id}" and its sub-brains — the whole subtree was removed.`)
+      } else {
+        toast.error(`Could not delete "${id}"`)
+      }
+      return
     }
-  }
+    // Leaf — optimistic + undoable.
+    const prevTopology = topology
+    const cached = node
+      ? {
+          id: node.id,
+          role: node.role,
+          parent: node.parent,
+          department: node.department,
+          skills: node.skills || [],
+          limits: node.limits || {},
+        }
+      : null
+    setTopology((t) => removeNodeLocal(t, id))
+    if (selectedId === id) setSelectedId(null)
+    setBusy(true)
+    setError('')
+    try {
+      const r = await fetch(`/api/org/brains/${encodeURIComponent(id)}?force=false`, { method: 'DELETE' })
+      if (!r.ok) {
+        const d = await r.json().catch(() => ({}))
+        throw new Error(d.detail || 'Delete failed')
+      }
+      const chart = await r.json()
+      if (chart && chart.nodes) setTopology(chart)
+      loadOverlay() // a removed brain may have left dangling overlay edges
+      toast.show({
+        type: 'success',
+        message: `Deleted "${id}"`,
+        action: cached ? { label: 'Undo', onClick: () => recreateBrain(cached) } : null,
+      })
+    } catch (e) {
+      setTopology(prevTopology)
+      setError(e instanceof Error ? e.message : 'Delete failed')
+      toast.error(`Could not delete "${id}"`)
+    } finally {
+      setBusy(false)
+    }
+  }, [topology, selectedId, loadOverlay, mutate, recreateBrain])
 
   // Relationship overlay mutations. POST/DELETE return the updated overlay (describe),
   // so we adopt the response directly — the canvas (OrgFlow) and the inspector both
@@ -1162,6 +1377,7 @@ export default function BrainsPanel() {
                 <Inspector
                   key={selected.id} node={selected} nodes={nodes} departments={departments}
                   installedSet={installedSet} onInstall={installSkill} onAddSkill={addSkillToBrain}
+                  onRemoveSkill={removeSkillFromBrain}
                   onPatch={patchBrain} onMove={moveBrain} onPromote={promoteBrain}
                   onDelete={deleteBrain}
                   relationships={overlay.relationships} relKinds={relKinds}
