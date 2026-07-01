@@ -21,6 +21,13 @@ function fmtInt(n) {
   return Number(n || 0).toLocaleString()
 }
 
+function clampPct(n, total) {
+  const value = Number(n || 0)
+  const max = Number(total || 0)
+  if (!max) return 0
+  return Math.max(0, Math.min(100, Math.round((value / max) * 100)))
+}
+
 // worst_level → a dot class + a label tone.
 function healthDot(level, ok) {
   const l = String(level || '').toLowerCase()
@@ -31,7 +38,7 @@ function healthDot(level, ok) {
 }
 
 // ── a compact stat card ───────────────────────────────────────────────────────
-function StatCard({ label, value, sub, children, accent }) {
+function StatCard({ label, value, sub, children, accent, pct }) {
   return (
     <div className="lh-card" style={{ padding: '0.85rem 0.95rem' }}>
       <div className="lh-eyebrow">{label}</div>
@@ -43,6 +50,9 @@ function StatCard({ label, value, sub, children, accent }) {
       </div>
       {sub && (
         <div className="text-[11px] mt-1.5" style={{ color: 'var(--lh-text-faint)' }}>{sub}</div>
+      )}
+      {typeof pct === 'number' && (
+        <div className="lh-metric-bar mt-3" aria-hidden="true"><span style={{ width: `${pct}%` }} /></div>
       )}
       {children}
     </div>
@@ -100,18 +110,22 @@ export default function OverviewPanel() {
 
   if (loading) {
     return (
-      <div className="lh-card">
-        <h2 className="lh-card-title mb-3">Overview</h2>
-        <p className="text-xs" style={{ color: 'var(--lh-text-faint)' }}>Loading the overview…</p>
+      <div className="lh-card lh-command-hero">
+        <div className="lh-eyebrow">Lhassa Command</div>
+        <h2 className="lh-display-title mt-2">Control center</h2>
+        <p className="text-xs mt-3" style={{ color: 'var(--lh-text-faint)' }}>Loading the overview…</p>
       </div>
     )
   }
 
   if (error && !data) {
     return (
-      <div className="lh-card">
+      <div className="lh-card lh-command-hero">
         <div className="flex items-center justify-between mb-3">
-          <h2 className="lh-card-title">Overview</h2>
+          <div>
+            <div className="lh-eyebrow">Lhassa Command</div>
+            <h2 className="lh-display-title mt-2">Control center</h2>
+          </div>
           <button type="button" className="lh-btn" onClick={load}>Retry</button>
         </div>
         <div className="lh-row" style={{ borderColor: 'rgba(162,62,52,0.45)', color: 'var(--lh-alert)' }}>{error}</div>
@@ -136,25 +150,56 @@ export default function OverviewPanel() {
   const budgetLabel = !budget || budget === 0
     ? 'unlimited budget'
     : `${fmtInt(cost.output_tokens_today)} / ${fmtInt(budget)} out tok`
+  const budgetPct = budget ? clampPct(cost.output_tokens_today, budget) : 18
 
   return (
     <div className="space-y-4">
       {/* Header */}
-      <div className="lh-card">
-        <div className="flex items-center justify-between flex-wrap gap-2">
-          <div className="flex items-center gap-2">
-            <h2 className="lh-card-title">Overview</h2>
-            <span className="text-[11px]" style={{ color: 'var(--lh-text-faint)' }}>
-              everything at a glance · approve from here
-            </span>
+      <div className="lh-card lh-command-hero lh-precision-grid">
+        <div className="grid grid-cols-1 lg:grid-cols-[1.55fr_0.9fr] gap-4 items-stretch">
+          <div className="flex flex-col justify-between min-h-[200px] relative z-10">
+            <div>
+              <div className="lh-kicker">Lhasa / Lhassa</div>
+              <h2 className="lh-display-title mt-3">Control center</h2>
+              <p className="text-[12px] mt-3 max-w-xl" style={{ color: 'var(--lh-text-muted)' }}>
+                Brain state, spend, health, approvals and live work in one ordered surface.
+              </p>
+            </div>
+            <div className="flex items-center gap-2 flex-wrap mt-5">
+              {data?.instance_id && (
+                <span className="lh-pill lh-mono text-[10px]">
+                  {data.instance_id}
+                </span>
+              )}
+              <button type="button" className="lh-btn" onClick={load}>Refresh</button>
+            </div>
+            <div className="mt-5 lh-rule" />
           </div>
-          <div className="flex items-center gap-2">
-            {data?.instance_id && (
-              <span className="lh-mono text-[10px]" style={{ color: 'var(--lh-text-faint)' }}>
-                {data.instance_id}
-              </span>
-            )}
-            <button type="button" className="lh-btn" onClick={load}>Refresh</button>
+          <div className="grid grid-cols-2 gap-3 relative z-10">
+            <div className="lh-nav-stat">
+              <div className="lh-nav-stat-label">Budget</div>
+              <div className="lh-nav-stat-value">{budgetLabel}</div>
+              <div className="lh-nav-stat-label mt-2">spent today</div>
+              <div className="lh-metric-bar mt-2" aria-hidden="true"><span style={{ width: `${budgetPct}%` }} /></div>
+            </div>
+            <div className="lh-nav-stat">
+              <div className="lh-nav-stat-label">Health</div>
+              <div className="lh-nav-stat-value">{health.ok ? 'All clear' : (health.worst_level || 'Check')}</div>
+              <div className="lh-nav-stat-label mt-2">worst level</div>
+              <div className="lh-metric-bar mt-2" aria-hidden="true"><span style={{ width: `${health.ok ? 100 : 48}%` }} /></div>
+            </div>
+            <div className="lh-nav-stat">
+              <div className="lh-nav-stat-label">Approvals</div>
+              <div className="lh-nav-stat-value">{approvals.pending} pending</div>
+              <div className="lh-nav-stat-label mt-2">queue pressure</div>
+              <div className="lh-metric-bar mt-2" aria-hidden="true"><span style={{ width: `${Math.min(100, approvals.pending * 25)}%` }} /></div>
+            </div>
+            <div className="lh-nav-stat">
+              <div className="lh-nav-stat-label">Activity</div>
+              <div className="lh-nav-stat-value">{recent.length} recent</div>
+              <div className="lh-nav-stat-label mt-2">live trace</div>
+              <div className="lh-metric-bar mt-2" aria-hidden="true"><span style={{ width: `${Math.min(100, recent.length * 12)}%` }} /></div>
+            </div>
           </div>
         </div>
       </div>
@@ -165,17 +210,20 @@ export default function OverviewPanel() {
           label="Brains"
           value={fmtInt(brains.count)}
           sub={brains.admin ? `admin · ${brains.admin}` : (brains.standalone ? 'standalone' : '—')}
+          pct={Math.min(100, Math.max(12, Number(brains.count || 0) * 16))}
         />
         <StatCard
           label="Skills"
           value={fmtInt(skills.installed)}
           sub={`${fmtInt(skills.recommended)} recommended`}
+          pct={Math.min(100, Math.max(10, Number(skills.installed || 0) * 8))}
         />
         <StatCard
           label="Cost today"
           value={fmtUsd(cost.today_cost_usd)}
           accent="var(--lh-green)"
           sub={budgetLabel}
+          pct={budgetPct}
         >
           {cost.kill_switch && (
             <div className="mt-2">
@@ -185,13 +233,13 @@ export default function OverviewPanel() {
             </div>
           )}
         </StatCard>
-        <StatCard label="Health" value={
+        <StatCard label="Health" pct={health.ok ? 100 : 48} value={
           <span className="inline-flex items-center gap-2">
             <span className={`lh-dot ${healthDot(health.worst_level, health.ok)}`} style={{ width: 12, height: 12 }} />
             <span style={{ fontSize: 16 }}>{health.ok ? 'OK' : (health.worst_level || 'check')}</span>
           </span>
         } sub={health.ok ? 'all checks pass' : `worst: ${health.worst_level || '—'}`} />
-        <StatCard label="Tools" value={fmtInt(tools.count)} sub="self-written">
+        <StatCard label="Tools" value={fmtInt(tools.count)} sub="self-written" pct={Math.min(100, Math.max(8, Number(tools.count || 0) * 10))}>
           {estados.length > 0 && (
             <div className="flex flex-wrap gap-1 mt-2">
               {estados.map(([estado, n]) => (
@@ -265,9 +313,9 @@ export default function OverviewPanel() {
         {recent.length === 0 ? (
           <p className="text-xs" style={{ color: 'var(--lh-text-faint)' }}>No episodes yet.</p>
         ) : (
-          <ul className="space-y-1.5">
+          <ul className="lh-timeline space-y-2">
             {recent.map((ep) => (
-              <li key={ep.id} className="lh-row" style={{ padding: '0.5rem 0.7rem' }}>
+              <li key={ep.id} className="lh-row lh-timeline-item" style={{ padding: '0.55rem 0.75rem' }}>
                 <div className="flex items-center justify-between gap-2 flex-wrap">
                   <span className="text-[12px]" style={{ color: 'var(--lh-text-muted)' }}>
                     <span className="lh-tag" style={{ marginRight: 6 }}>{ep.despertar_por || 'beat'}</span>

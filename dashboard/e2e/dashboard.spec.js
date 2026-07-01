@@ -139,12 +139,16 @@ test('runtime panel renders and imports a snapshot through dry-run flow', async 
   page.on('dialog', (dialog) => dialog.accept())
 
   await page.goto('/')
+  await page.getByRole('button', { name: /Fleet/ }).click()
 
   await expect(page.getByText('Runtime')).toBeVisible()
   await expect(page.getByText('openai / gpt-4o-mini')).toBeVisible()
-  await expect(page.locator('text=Blocked').last()).toBeVisible()
-  await expect(page.locator('text=1').first()).toBeVisible()
+  await expect(page.getByText('127.0.0.1:7766')).toBeVisible()
+
+  await page.getByRole('button', { name: /Activity/ }).click()
   await expect(page.getByText('shell', { exact: true })).toBeVisible()
+
+  await page.getByRole('button', { name: /Fleet/ }).click()
 
   const fileInput = page.locator('input[type="file"]')
   await fileInput.setInputFiles({
@@ -164,6 +168,7 @@ test('runtime panel renders and imports a snapshot through dry-run flow', async 
 
 test('dashboard updates when a live audit event arrives over websocket', async ({ page }) => {
   await page.goto('/')
+  await page.getByRole('button', { name: /Activity/ }).click()
 
   await expect(page.getByText('pwd')).toBeVisible()
   await expect(page.getByText('/tmp/new.txt').first()).toBeVisible()
@@ -172,6 +177,7 @@ test('dashboard updates when a live audit event arrives over websocket', async (
 
 test('export link points to backend snapshot endpoint', async ({ page }) => {
   await page.goto('/')
+  await page.getByRole('button', { name: /Fleet/ }).click()
 
   const exportLink = page.getByRole('link', { name: 'Open JSON export' })
   await expect(exportLink).toHaveAttribute('href', '/api/export')

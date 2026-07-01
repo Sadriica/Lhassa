@@ -1,75 +1,81 @@
 @import "tailwindcss";
 
-/* ── The Lhasa palette ─────────────────────────────────────────────────────────
-   A high-craft, warm dark theme drawn from the city of Lhasa: temple GOLD (the
-   brand), monk-robe deep RED (a sparing accent — never a harsh bright red),
-   snow-white WHITE walls for the body, sage GREEN for "good / healthy", muted
-   STONE for secondary text. Surfaces are warm near-blacks (no pure black, no cold
-   grays); borders are hairline warm-white. Everything themeable from :root +
-   @theme — a future light/alt theme is a token swap.                              */
+/* ── Matte Obsidian — the Lhasa palette ────────────────────────────────────────
+   A quiet-luxury dark theme drawn from the city of Lhasa: a DUOTONE of temple
+   GOLD and monk-robe deep RED on warm-charcoal walls. Surfaces are FLAT and MATTE
+   (no gradients, no blur, no colored glows); borders are warm-white HAIRLINES;
+   shape is modest. Gold is a hairline accent (active bar, brand mark, small tags);
+   red is a real second voice (brand finial, section marks, the admin ring) — warm
+   and regal, never an alarm. Sage GREEN means healthy. Typography is editorial:
+   a transitional serif (Fraunces) for headings + the wordmark, Inter for UI,
+   JetBrains Mono for ids/metrics. Everything themeable from :root + @theme.       */
 :root {
-  /* ── the five palette roles (match lhassa/cli/theme.py) ─────────────────────── */
-  --lh-gold:        #d9a521;  /* temple gold — primary / brand / active / focus    */
-  --lh-gold-soft:   #e8bf55;  /* lifted gold — hover text / light accents          */
+  /* ── gold (restrained — hairline accent, never a fill/glow) ─────────────────── */
+  --lh-gold:        #d9a521;  /* temple gold — accent / active / focus             */
+  --lh-gold-soft:   #e8bf55;  /* lifted gold — hover text                          */
   --lh-gold-deep:   #b9881a;  /* pressed gold                                       */
-  --lh-red:         #a23e34;  /* monk-robe deep red — accent, used sparingly        */
-  --lh-red-soft:    #c0584c;  /* lifted red — destructive text                      */
-  --lh-white:       #ece4d3;  /* warm snow-white — primary text                     */
-  --lh-green:       #7c9a5b;  /* sage — success / good cost / healthy               */
-  --lh-stone:       #8a8276;  /* muted stone — secondary / dim text                 */
 
-  /* ── canvas + warm-neutral surfaces (lifted, never pure black) ──────────────── */
-  --lh-bg:          #15120d;  /* warm near-black canvas                             */
-  --lh-bg-2:        #100e09;  /* recessed wells (inputs, canvas)                    */
-  --lh-surface:     #1c1813;  /* card                                               */
-  --lh-surface-2:   #221d16;  /* inset row / lifted surface                         */
-  --lh-surface-3:   #2a241b;  /* tags / pressed                                     */
+  /* ── red (a real co-accent — identity, used tastefully + sparingly) ─────────── */
+  --lh-red:         #a23e34;  /* monk-robe deep red — identity accent              */
+  --lh-red-deep:    #8f342b;  /* deeper red — fills / rings                         */
+  --lh-red-soft:    #c0584c;  /* lifted red — text on dark                         */
+  --lh-danger:      #cf5142;  /* clearer red — genuinely DESTRUCTIVE only          */
+
+  /* ── the rest of the five roles ─────────────────────────────────────────────── */
+  --lh-white:       #ece4d3;  /* warm snow-white — primary text                    */
+  --lh-green:       #7c9a5b;  /* sage — success / good cost / healthy              */
+  --lh-stone:       #8a8276;  /* muted stone — secondary / dim text                */
+
+  /* ── canvas + warm-charcoal surfaces (matte, flat, never pure black) ────────── */
+  --lh-bg:          #14110d;  /* deep warm-charcoal canvas                         */
+  --lh-bg-2:        #100e0a;  /* recessed wells (inputs, canvas)                   */
+  --lh-surface:     #1c1813;  /* lifted card                                       */
+  --lh-surface-2:   #211c16;  /* inset row / lifted surface                        */
+  --lh-surface-3:   #2a241c;  /* tags / pressed                                    */
+  --lh-obsidian:    #16140f;  /* shell surface                                     */
+  --lh-champagne:   #ecd6a0;  /* very sparing warm highlight text                  */
 
   /* ── hairline borders in warm-white at ~6–9% ───────────────────────────────── */
   --lh-border:        rgba(236, 228, 211, 0.07);
-  --lh-border-strong: rgba(236, 228, 211, 0.14);
+  --lh-border-strong: rgba(236, 228, 211, 0.11);
   --lh-hairline:      rgba(236, 228, 211, 0.06);
-  --lh-highlight:     rgba(236, 228, 211, 0.05); /* faint inner-top highlight       */
+  --lh-highlight:     rgba(236, 228, 211, 0.04);
 
   /* ── text scale ─────────────────────────────────────────────────────────────── */
   --lh-text:        #ece4d3;
-  --lh-text-muted:  #a59d8e;  /* light stone                                        */
-  --lh-text-faint:  #756d60;  /* faint stone                                        */
+  --lh-text-muted:  #8a8276;  /* clear muted-secondary                              */
+  --lh-text-faint:  #6b6458;  /* faint stone                                        */
 
-  /* ── accent (GOLD) + semantic (green/gold/red) ──────────────────────────────── */
+  /* ── accent roles (gold-led, green/red semantic) ────────────────────────────── */
   --lh-accent:      var(--lh-gold);
-  --lh-accent-dim:  rgba(217, 165, 33, 0.13);
+  --lh-accent-dim:  rgba(217, 165, 33, 0.10);
   --lh-accent-text: var(--lh-gold-soft);
-  --lh-accent-on:   #1c1206;   /* text on a solid-gold button                       */
+  --lh-accent-on:   #14110d;   /* text on a solid-gold chip                         */
   --lh-ok:          var(--lh-green);
   --lh-warn:        var(--lh-gold);
   --lh-alert:       var(--lh-red-soft);
 
-  /* ── focus ring (gold) ──────────────────────────────────────────────────────── */
-  --lh-ring:        0 0 0 2px var(--lh-bg), 0 0 0 4px rgba(217, 165, 33, 0.55);
+  /* ── focus ring (gold — a crisp ring, 0 blur, not a glow) ───────────────────── */
+  --lh-ring:        0 0 0 2px var(--lh-bg), 0 0 0 4px rgba(217, 165, 33, 0.5);
 
-  /* ── shape + soft warm shadows ──────────────────────────────────────────────── */
-  --lh-radius:      12px;
+  /* ── shape + a single soft NEUTRAL matte shadow (low-opacity black, no spread) ─ */
+  --lh-radius:      10px;
   --lh-radius-sm:   8px;
-  --lh-radius-lg:   14px;
-  --lh-shadow:      0 1px 2px rgba(0,0,0,0.45), 0 10px 30px rgba(0,0,0,0.30);
-  --lh-shadow-sm:   0 1px 2px rgba(0,0,0,0.4);
-  --lh-glow-gold:   0 0 22px rgba(217, 165, 33, 0.16);
+  --lh-radius-lg:   12px;
+  --lh-shadow:      0 1px 2px rgba(0, 0, 0, 0.35);
+  --lh-shadow-sm:   0 1px 1px rgba(0, 0, 0, 0.28);
 
-  /* ── gradients (subtle, for chrome + primary buttons) ───────────────────────── */
-  --lh-grad-top:    linear-gradient(180deg, #211c14 0%, #1a1610 100%);
-  --lh-grad-gold:   linear-gradient(180deg, #e4b53a 0%, #d9a521 55%, #c79518 100%);
-
-  /* ── fonts ──────────────────────────────────────────────────────────────────── */
-  --lh-font-sans:   "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  --lh-font-mono:   "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  /* ── fonts (editorial serif for display, grotesque sans for UI, mono for data) ─ */
+  --lh-font-sans:    "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --lh-font-mono:    "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --lh-font-display: "Fraunces", "Newsreader", "Iowan Old Style", Georgia, "Times New Roman", serif;
 }
 
 /* ── Tailwind v4 palette remap ─────────────────────────────────────────────────
-   The panels are sprinkled with Tailwind named-color utilities (slate/amber/green/
-   red/blue…). Remapping the scale variables here folds the WHOLE app into the warm
-   Lhasa family with zero JSX/logic changes — neutrals → warm stone, amber/yellow →
-   gold, green/emerald/lime → sage, red/rose → monk-red, cool blues → gold.         */
+   The panels use Tailwind named-color utilities (slate/amber/green/red/blue…).
+   Remapping the scale here folds the WHOLE app into the matte Lhasa family with
+   zero JSX changes — neutrals → warm charcoal, amber/yellow → gold, green → sage,
+   red/rose → monk-red, cool blues → gold.                                          */
 @theme {
   --font-sans: var(--lh-font-sans);
   --font-mono: var(--lh-font-mono);
@@ -77,11 +83,11 @@
   /* warm neutrals (slate/gray/zinc/neutral) */
   --color-slate-200: #ece4d3;  --color-gray-200: #ece4d3;  --color-zinc-200: #ece4d3;  --color-neutral-200: #ece4d3;
   --color-slate-300: #d8cfbe;  --color-gray-300: #d8cfbe;  --color-zinc-300: #d8cfbe;  --color-neutral-300: #d8cfbe;
-  --color-slate-400: #a59d8e;  --color-gray-400: #a59d8e;  --color-zinc-400: #a59d8e;  --color-neutral-400: #a59d8e;
+  --color-slate-400: #9a9284;  --color-gray-400: #9a9284;  --color-zinc-400: #9a9284;  --color-neutral-400: #9a9284;
   --color-slate-500: #8a8276;  --color-gray-500: #8a8276;  --color-zinc-500: #8a8276;  --color-neutral-500: #8a8276;
-  --color-slate-600: #756d60;  --color-gray-600: #756d60;  --color-zinc-600: #756d60;  --color-neutral-600: #756d60;
-  --color-slate-700: #2a241b;  --color-gray-700: #2a241b;  --color-zinc-700: #2a241b;  --color-neutral-700: #2a241b;
-  --color-slate-800: #221d16;  --color-gray-800: #221d16;  --color-zinc-800: #221d16;  --color-neutral-800: #221d16;
+  --color-slate-600: #6b6458;  --color-gray-600: #6b6458;  --color-zinc-600: #6b6458;  --color-neutral-600: #6b6458;
+  --color-slate-700: #2a241c;  --color-gray-700: #2a241c;  --color-zinc-700: #2a241c;  --color-neutral-700: #2a241c;
+  --color-slate-800: #211c16;  --color-gray-800: #211c16;  --color-zinc-800: #211c16;  --color-neutral-800: #211c16;
   --color-slate-900: #1c1813;  --color-gray-900: #1c1813;  --color-zinc-900: #1c1813;  --color-neutral-900: #1c1813;
 
   /* gold family (amber / yellow / orange) */
@@ -104,13 +110,13 @@
   --color-red-300: #c97a6f;  --color-rose-300: #c97a6f;
   --color-red-400: #c0584c;  --color-rose-400: #c0584c;
   --color-red-500: #a23e34;  --color-rose-500: #a23e34;
-  --color-red-600: #8c352c;  --color-rose-600: #8c352c;
+  --color-red-600: #8f342b;  --color-rose-600: #8f342b;
   --color-red-700: #5a241d;  --color-rose-700: #5a241d;
   --color-red-800: #43201a;  --color-rose-800: #43201a;
   --color-red-900: #2a1512;  --color-rose-900: #2a1512;
   --color-red-950: #1f0f0d;  --color-rose-950: #1f0f0d;
 
-  /* cool blues have no place in a warm Tibetan palette → fold into gold (active/info) */
+  /* cool blues have no place in a warm Tibetan palette → fold into gold */
   --color-blue-300: #e8bf55;  --color-cyan-300: #e8bf55;  --color-sky-300: #e8bf55;  --color-indigo-300: #e8bf55;
   --color-blue-400: #d9a521;  --color-cyan-400: #d9a521;  --color-sky-400: #d9a521;  --color-indigo-400: #d9a521;
   --color-blue-500: #d9a521;  --color-cyan-500: #d9a521;  --color-sky-500: #d9a521;  --color-indigo-500: #d9a521;
@@ -118,14 +124,13 @@
 
 html, body {
   margin: 0;
-  background:
-    radial-gradient(1200px 600px at 80% -10%, rgba(217,165,33,0.05), transparent 60%),
-    var(--lh-bg);
+  background: var(--lh-bg);
   color: var(--lh-text);
   font-family: var(--lh-font-sans);
   font-feature-settings: "cv11", "ss01";
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+  line-height: 1.5;
 }
 
 #root { min-height: 100vh; }
@@ -140,7 +145,7 @@ html, body {
 ::-webkit-scrollbar { width: 7px; height: 7px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--lh-border-strong); border-radius: 4px; }
-::-webkit-scrollbar-thumb:hover { background: rgba(217,165,33,0.4); }
+::-webkit-scrollbar-thumb:hover { background: rgba(217, 165, 33, 0.35); }
 
 /* Streaming text animation (kept from the original UX) */
 @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
@@ -152,16 +157,69 @@ html, body {
 }
 
 @layer components {
-  /* ── Card — the elegant "block". Hairline border, soft layered shadow, a faint
-     inner-top highlight so it reads lifted, not flat. ──────────────────────────── */
+  /* ── Shell + chrome (flat matte canvas, no gradients/glow/grid) ──────────────── */
+  .lh-shell {
+    min-height: 100vh;
+    padding: 1rem;
+    background: var(--lh-bg);
+  }
+
+  .lh-app-chrome {
+    width: min(100%, 1500px);
+    margin: 0 auto;
+    padding: 0.25rem 0.5rem 2rem;
+  }
+
+  /* ── Brand (clean: stupa mark + serif wordmark + a thin gold/red rule) ───────── */
+  .lh-brand-plate {
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+    padding: 0.5rem 0.6rem 0.9rem;
+    margin-bottom: 0.4rem;
+    border-bottom: 1px solid var(--lh-hairline);
+  }
+  .lh-brand-mark {
+    width: 34px;
+    height: 34px;
+    flex-shrink: 0;
+    border-radius: 9px;
+    background: var(--lh-bg-2);
+    border: 1px solid rgba(217, 165, 33, 0.24);
+  }
+  .lh-brand-name {
+    font-family: var(--lh-font-display);
+    font-optical-sizing: auto;
+    font-size: 1.4rem;
+    font-weight: 500;
+    letter-spacing: 0.005em;
+    color: var(--lh-text);
+    line-height: 1;
+  }
+  /* a thin rule under the wordmark: gold, tipped with monk-red (the duotone) */
+  .lh-brand-rule {
+    margin-top: 0.4rem;
+    width: 34px;
+    height: 2px;
+    border-radius: 2px;
+    background: linear-gradient(90deg, var(--lh-gold) 0 68%, var(--lh-red) 68% 100%);
+  }
+  .lh-brand-sub {
+    margin-top: 0.3rem;
+    font-size: 0.6rem;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--lh-text-faint);
+  }
+
+  /* ── Card — the elegant "block": flat matte surface, hairline border, modest
+     radius, a single soft neutral shadow. No gradient, no inner glow. ──────────── */
   .lh-card {
     position: relative;
-    background:
-      linear-gradient(180deg, var(--lh-highlight), transparent 56px),
-      var(--lh-surface);
+    background: var(--lh-surface);
     border: 1px solid var(--lh-border);
     border-radius: var(--lh-radius);
-    padding: 1.1rem;
+    padding: 1.25rem;
     box-shadow: var(--lh-shadow);
   }
 
@@ -169,39 +227,77 @@ html, body {
   .lh-card-title {
     font-size: 0.6875rem;
     font-weight: 600;
-    letter-spacing: 0.14em;
+    letter-spacing: 0.12em;
     text-transform: uppercase;
     color: var(--lh-text-muted);
   }
-  /* Optional: section header that sits over a hairline rule */
+  .lh-display-title {
+    font-family: var(--lh-font-display);
+    font-optical-sizing: auto;
+    font-size: clamp(2.2rem, 3vw, 3.4rem);
+    line-height: 1.04;
+    font-weight: 400;
+    letter-spacing: 0.005em;
+    color: var(--lh-text);
+  }
+  /* (kept as plain wrapper — the decorative crosshair grid is gone) */
+  .lh-precision-grid { position: relative; }
+
+  /* small eyebrow kicker — a restrained gold tag, hairline only */
+  .lh-kicker {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    padding: 0.24rem 0.55rem;
+    border-radius: 6px;
+    border: 1px solid rgba(217, 165, 33, 0.22);
+    background: transparent;
+    color: var(--lh-accent-text);
+    font-size: 0.6rem;
+    font-weight: 600;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+  }
+  /* Section header sitting over a hairline rule, with a small gold+red tick */
   .lh-card-head {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 0.75rem;
-    padding-bottom: 0.7rem;
-    margin-bottom: 0.9rem;
+    padding-bottom: 0.75rem;
+    margin-bottom: 1rem;
     border-bottom: 1px solid var(--lh-hairline);
   }
 
-  /* Uppercase tracked section label (the Oz "USE CASES" look) */
+  /* Uppercase tracked section label — paired with a tiny red identity mark */
   .lh-eyebrow {
+    display: inline-flex;
+    align-items: center;
     font-size: 0.625rem;
     font-weight: 600;
-    letter-spacing: 0.18em;
+    letter-spacing: 0.16em;
     text-transform: uppercase;
-    color: var(--lh-text-faint);
+    color: var(--lh-text-muted);
+  }
+  .lh-eyebrow::before {
+    content: "";
+    width: 5px;
+    height: 5px;
+    border-radius: 999px;
+    margin-right: 0.5rem;
+    background: var(--lh-red);
+    flex-shrink: 0;
   }
 
   /* Mono data treatment */
   .lh-mono { font-family: var(--lh-font-mono); font-feature-settings: "zero", "ss01"; }
 
-  /* Inset sub-card (rows inside a block) */
+  /* Inset sub-card (rows inside a block) — flat, hairline */
   .lh-row {
     background: var(--lh-surface-2);
     border: 1px solid var(--lh-border);
     border-radius: var(--lh-radius-sm);
-    padding: 0.7rem 0.8rem;
+    padding: 0.75rem 0.85rem;
     transition: border-color 0.15s ease, background 0.15s ease;
   }
   .lh-row:hover { border-color: var(--lh-border-strong); }
@@ -219,7 +315,7 @@ html, body {
     color: var(--lh-text-muted);
   }
   .lh-tag-accent {
-    border-color: rgba(217, 165, 33, 0.42);
+    border-color: rgba(217, 165, 33, 0.38);
     background: var(--lh-accent-dim);
     color: var(--lh-accent-text);
   }
@@ -236,56 +332,105 @@ html, body {
     color: var(--lh-text-muted);
   }
 
-  /* Status pill */
+  /* Status pill — flat, no blur */
   .lh-pill {
     display: inline-flex;
     align-items: center;
-    gap: 0.4rem;
+    gap: 0.45rem;
     font-size: 0.75rem;
-    padding: 0.24rem 0.62rem;
+    padding: 0.26rem 0.62rem;
     border-radius: 999px;
     border: 1px solid var(--lh-border);
     background: var(--lh-surface-2);
     color: var(--lh-text-muted);
   }
-  .lh-dot { width: 7px; height: 7px; border-radius: 999px; background: var(--lh-text-faint); }
-  .lh-dot-ok    { background: var(--lh-ok);    box-shadow: 0 0 8px rgba(124,154,91,0.6); }
-  .lh-dot-accent{ background: var(--lh-gold);  box-shadow: 0 0 8px rgba(217,165,33,0.6); }
+  /* Status dots — solid matte, no colored glow */
+  .lh-dot { width: 7px; height: 7px; border-radius: 999px; background: var(--lh-text-faint); flex-shrink: 0; }
+  .lh-dot-ok    { background: var(--lh-ok); }
+  .lh-dot-accent{ background: var(--lh-gold); }
   .lh-dot-warn  { background: var(--lh-warn); }
-  .lh-dot-alert { background: var(--lh-alert); box-shadow: 0 0 8px rgba(162,62,52,0.55); }
+  .lh-dot-alert { background: var(--lh-red); }
 
-  /* Buttons */
+  /* ── Buttons — quiet ghost/outlined, gold or red HAIRLINE, no glowing slabs ──── */
   .lh-btn {
     display: inline-flex;
     align-items: center;
-    gap: 0.35rem;
+    gap: 0.4rem;
     font-size: 0.75rem;
     font-weight: 500;
-    padding: 0.4rem 0.75rem;
+    padding: 0.42rem 0.8rem;
     border-radius: var(--lh-radius-sm);
     border: 1px solid var(--lh-border-strong);
     background: var(--lh-surface-2);
     color: var(--lh-text);
     cursor: pointer;
-    transition: background 0.14s ease, border-color 0.14s ease, transform 0.06s ease;
+    transition: background 0.14s ease, border-color 0.14s ease, color 0.14s ease, transform 0.06s ease;
   }
   .lh-btn:hover { background: var(--lh-surface-3); border-color: var(--lh-border-strong); }
   .lh-btn:active { transform: translateY(0.5px); }
   .lh-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+  /* primary = quiet gold-outlined ghost (the brand accent, not a fill) */
   .lh-btn-primary {
-    background: var(--lh-grad-gold);
-    border-color: var(--lh-gold-deep);
-    color: var(--lh-accent-on);
+    background: transparent;
+    border-color: rgba(217, 165, 33, 0.5);
+    color: var(--lh-accent-text);
     font-weight: 600;
-    box-shadow: 0 1px 0 rgba(255,255,255,0.18) inset, 0 6px 16px rgba(217,165,33,0.18);
   }
-  .lh-btn-primary:hover { filter: brightness(1.06); }
+  .lh-btn-primary:hover { background: var(--lh-accent-dim); border-color: var(--lh-gold); }
+  /* danger = genuinely DESTRUCTIVE, a clearer red so it never reads as decorative */
   .lh-btn-danger {
-    background: rgba(162, 62, 52, 0.14);
-    border-color: rgba(162, 62, 52, 0.5);
-    color: var(--lh-red-soft);
+    background: transparent;
+    border-color: rgba(207, 81, 66, 0.55);
+    color: var(--lh-danger);
+    font-weight: 600;
   }
-  .lh-btn-danger:hover { background: rgba(162, 62, 52, 0.24); }
+  .lh-btn-danger:hover { background: rgba(207, 81, 66, 0.12); border-color: var(--lh-danger); }
+
+  /* ── Command hero — now a calm, flat content header (no gradients, no grid) ──── */
+  .lh-command-hero {
+    position: relative;
+    background: var(--lh-obsidian);
+  }
+
+  /* Metric bar — solid gold fill, no glow */
+  .lh-metric-bar {
+    height: 4px;
+    border-radius: 999px;
+    background: rgba(236, 228, 211, 0.07);
+    overflow: hidden;
+  }
+  .lh-metric-bar > span {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: var(--lh-gold);
+  }
+
+  /* Timeline — hairline spine, solid gold node, no glow */
+  .lh-timeline {
+    position: relative;
+    padding-left: 1.05rem;
+  }
+  .lh-timeline::before {
+    content: "";
+    position: absolute;
+    left: 0.25rem;
+    top: 0.25rem;
+    bottom: 0.25rem;
+    width: 1px;
+    background: var(--lh-border-strong);
+  }
+  .lh-timeline-item { position: relative; }
+  .lh-timeline-item::before {
+    content: "";
+    position: absolute;
+    left: -0.98rem;
+    top: 0.85rem;
+    width: 7px;
+    height: 7px;
+    border-radius: 999px;
+    background: var(--lh-gold);
+  }
 
   /* Form controls */
   .lh-input, .lh-select {
@@ -302,8 +447,8 @@ html, body {
   }
   .lh-input::placeholder { color: var(--lh-text-faint); }
   .lh-input:focus, .lh-select:focus {
-    border-color: rgba(217, 165, 33, 0.55);
-    box-shadow: 0 0 0 3px rgba(217, 165, 33, 0.12);
+    border-color: rgba(217, 165, 33, 0.5);
+    box-shadow: 0 0 0 3px rgba(217, 165, 33, 0.1);
   }
   .lh-label {
     font-size: 0.6875rem;
@@ -312,49 +457,443 @@ html, body {
     color: var(--lh-text-faint);
   }
 
-  /* ── Dual-rail nav item: an icon-led row with a gold left-bar active indicator
-     + a faint gold glow when active. Smooth transitions on hover/active. ───────── */
+  /* ── Nav rail item: an icon-led row with a thin GOLD active bar tipped in RED.
+     Flat, calm, hairline; no glow, no gradient fill. ──────────────────────────── */
   .lh-nav-item {
     position: relative;
     display: flex;
     align-items: center;
-    gap: 0.6rem;
+    gap: 0.65rem;
     width: 100%;
     text-align: left;
     font-size: 0.8125rem;
     font-weight: 500;
-    padding: 0.55rem 0.7rem 0.55rem 0.85rem;
+    padding: 0.6rem 0.75rem 0.6rem 0.95rem;
     border-radius: var(--lh-radius-sm);
     border: 1px solid transparent;
     color: var(--lh-text-muted);
     background: transparent;
     cursor: pointer;
-    transition: background 0.14s ease, color 0.14s ease, border-color 0.14s ease;
+    transition: background 0.14s ease, color 0.14s ease;
   }
-  /* the left indicator bar (hidden until hover/active) */
+  /* the left indicator bar: a gold bar tipped at the top with monk-red */
   .lh-nav-item::before {
     content: "";
     position: absolute;
     left: 3px; top: 50%;
     height: 0; width: 3px;
     border-radius: 3px;
-    background: var(--lh-gold);
+    background: linear-gradient(180deg, var(--lh-red) 0 24%, var(--lh-gold) 24% 100%);
     transform: translateY(-50%);
     transition: height 0.18s ease;
   }
-  .lh-nav-item:hover { background: var(--lh-surface-2); color: var(--lh-text); }
-  .lh-nav-item:hover::before { height: 40%; opacity: 0.5; }
+  .lh-nav-item:hover { background: rgba(236, 228, 211, 0.04); color: var(--lh-text); }
+  .lh-nav-item:hover::before { height: 38%; opacity: 0.55; }
   .lh-nav-item.active {
-    background: var(--lh-accent-dim);
-    border-color: rgba(217, 165, 33, 0.28);
-    color: var(--lh-accent-text);
-    box-shadow: var(--lh-glow-gold);
+    background: rgba(236, 228, 211, 0.045);
+    color: var(--lh-text);
   }
-  .lh-nav-item.active::before { height: 58%; opacity: 1; }
-  .lh-nav-item .lh-nav-icon {
-    width: 16px; height: 16px;
+  .lh-nav-item.active::before { height: 60%; opacity: 1; }
+  .lh-nav-item .lh-nav-icon { width: 16px; height: 16px; flex-shrink: 0; opacity: 0.7; }
+  .lh-nav-item.active .lh-nav-icon { opacity: 1; color: var(--lh-gold); }
+
+  /* Sidebar — flat surface, hairline, soft neutral shadow, NO blur */
+  .lh-sidebar {
+    background: var(--lh-obsidian);
+    border: 1px solid var(--lh-border);
+    box-shadow: var(--lh-shadow);
+  }
+  .lh-nav-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  /* Stat block (Overview budget/health/etc.) — flat, hairline */
+  .lh-nav-stat {
+    padding: 0.75rem 0.85rem;
+    border-radius: var(--lh-radius-sm);
+    border: 1px solid var(--lh-border);
+    background: var(--lh-surface-2);
+  }
+  .lh-nav-stat-label {
+    font-size: 0.6rem;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--lh-text-faint);
+  }
+  .lh-nav-stat-value {
+    margin-top: 0.3rem;
+    font-family: var(--lh-font-display);
+    font-optical-sizing: auto;
+    font-size: 1.05rem;
+    font-weight: 500;
+    color: var(--lh-text);
+  }
+
+  /* A thin rule — gold tipped with red (the duotone divider) */
+  .lh-rule {
+    height: 1px;
+    background: linear-gradient(90deg, var(--lh-red) 0 14%, rgba(217, 165, 33, 0.55) 14% 46%, var(--lh-border) 46% 100%);
+  }
+
+  /* ── Brains canvas stage — full-width canvas with a floating inspector overlay ── */
+  .lh-canvas-stage { position: relative; }
+
+  /* The inspector popup: on desktop/tablet it docks to the right edge of the canvas
+     stage as a floating overlay (it sits ABOVE the canvas, never reflows it); on
+     mobile it becomes a bottom sheet (see the @media block below). */
+  .lh-inspector-pop {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: min(400px, 94%);
+    max-height: min(100%, 80vh);
+    display: flex;
+    flex-direction: column;
+    background: var(--lh-surface);
+    border: 1px solid var(--lh-border-strong);
+    border-radius: var(--lh-radius);
+    box-shadow: 0 10px 34px rgba(0, 0, 0, 0.5);
+    z-index: 20; /* above the React-Flow controls / minimap / legend */
+    overflow: hidden;
+  }
+  .lh-inspector-pop-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex: 0 0 auto;
+    padding: 0.55rem 0.7rem;
+    border-bottom: 1px solid var(--lh-hairline);
+    background: var(--lh-surface-2);
+  }
+  .lh-inspector-pop-body {
+    overflow-y: auto;
+    padding: 0.85rem;
+  }
+  /* The scrim is inert on desktop (the dock is a non-modal overlay); it only dims
+     and captures taps on mobile, where the inspector is a true modal bottom sheet. */
+  .lh-inspector-scrim { display: none; }
+
+  /* ── Mobile top bar (hamburger) — only shown < 1024px (lg:hidden mirrors it) ──── */
+  .lh-topbar {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    margin-bottom: 0.85rem;
+  }
+  .lh-topbar-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 42px;
+    height: 42px;
     flex-shrink: 0;
-    opacity: 0.85;
+    border-radius: var(--lh-radius-sm);
+    border: 1px solid var(--lh-border-strong);
+    background: var(--lh-surface-2);
+    color: var(--lh-text);
+    cursor: pointer;
+    transition: background 0.14s ease, border-color 0.14s ease;
   }
-  .lh-nav-item.active .lh-nav-icon { opacity: 1; }
+  .lh-topbar-btn:hover { background: var(--lh-surface-3); border-color: var(--lh-gold); }
+  .lh-topbar-title {
+    font-family: var(--lh-font-display);
+    font-size: 1.05rem;
+    font-weight: 500;
+    color: var(--lh-text);
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* The drawer scrim + in-drawer close button (both mobile-only). */
+  .lh-nav-scrim { display: none; }
+  .lh-nav-close {
+    margin-left: auto;
+    align-self: flex-start;
+    width: 30px;
+    height: 30px;
+    flex-shrink: 0;
+    border-radius: var(--lh-radius-sm);
+    border: 1px solid var(--lh-border);
+    background: var(--lh-surface-2);
+    color: var(--lh-text-muted);
+    cursor: pointer;
+  }
+
+  /* ── Toast host — fixed, stacked action feedback. Matte surface + hairline +
+     soft neutral shadow; a thin left mark carries the semantic color. Top-right
+     on desktop; the responsive layer moves it to the bottom on phones. ────────── */
+  .lh-toast-region {
+    position: fixed;
+    top: 1rem;
+    right: 1rem;
+    z-index: 90;
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+    width: min(360px, calc(100vw - 2rem));
+    pointer-events: none; /* let clicks fall through the gaps; toasts re-enable it */
+  }
+  .lh-toast {
+    position: relative;
+    display: flex;
+    align-items: flex-start;
+    gap: 0.6rem;
+    pointer-events: auto;
+    padding: 0.7rem 0.75rem 0.7rem 0.85rem;
+    border-radius: var(--lh-radius-sm);
+    border: 1px solid var(--lh-border-strong);
+    background: var(--lh-surface);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+    overflow: hidden;
+    animation: lh-toast-in 0.16s ease;
+  }
+  @keyframes lh-toast-in {
+    from { opacity: 0; transform: translateY(-4px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .lh-toast-mark {
+    flex-shrink: 0;
+    align-self: stretch;
+    width: 3px;
+    border-radius: 3px;
+    background: var(--lh-stone);
+  }
+  .lh-toast-success .lh-toast-mark { background: var(--lh-green); }
+  .lh-toast-error   .lh-toast-mark { background: var(--lh-danger); }
+  .lh-toast-info    .lh-toast-mark { background: var(--lh-gold); }
+  .lh-toast-body {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-size: 0.8125rem;
+    line-height: 1.4;
+    color: var(--lh-text);
+    word-break: break-word;
+  }
+  .lh-toast-action {
+    flex-shrink: 0;
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 0.2rem 0.5rem;
+    border-radius: 6px;
+    border: 1px solid rgba(217, 165, 33, 0.5);
+    background: transparent;
+    color: var(--lh-accent-text);
+    cursor: pointer;
+    transition: background 0.14s ease, border-color 0.14s ease;
+  }
+  .lh-toast-action:hover { background: var(--lh-accent-dim); border-color: var(--lh-gold); }
+  .lh-toast-close {
+    flex-shrink: 0;
+    width: 20px;
+    height: 20px;
+    line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    background: transparent;
+    color: var(--lh-text-faint);
+    cursor: pointer;
+    border-radius: 5px;
+    font-size: 0.7rem;
+    transition: color 0.14s ease, background 0.14s ease;
+  }
+  .lh-toast-close:hover { color: var(--lh-text); background: rgba(236, 228, 211, 0.06); }
+
+  /* ── Command palette (⌘K) — a dimmed backdrop + a matte modal launcher ───────── */
+  .lh-cmdk-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 12vh 1rem 1rem;
+    background: rgba(8, 6, 4, 0.62);
+    animation: lh-cmdk-fade 0.12s ease;
+  }
+  @keyframes lh-cmdk-fade { from { opacity: 0; } to { opacity: 1; } }
+  .lh-cmdk {
+    width: min(560px, 100%);
+    max-height: min(60vh, 480px);
+    display: flex;
+    flex-direction: column;
+    background: var(--lh-surface);
+    border: 1px solid var(--lh-border-strong);
+    border-radius: var(--lh-radius-lg);
+    box-shadow: 0 18px 48px rgba(0, 0, 0, 0.55);
+    overflow: hidden;
+  }
+  .lh-cmdk-search {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    padding: 0.7rem 0.85rem;
+    border-bottom: 1px solid var(--lh-hairline);
+    background: var(--lh-surface-2);
+  }
+  .lh-cmdk-search-icon { flex-shrink: 0; color: var(--lh-text-faint); }
+  .lh-cmdk-input {
+    flex: 1 1 auto;
+    min-width: 0;
+    border: none;
+    background: transparent;
+    outline: none;
+    color: var(--lh-text);
+    font-size: 0.9rem;
+    font-family: var(--lh-font-sans);
+  }
+  .lh-cmdk-input::placeholder { color: var(--lh-text-faint); }
+  .lh-cmdk-kbd {
+    flex-shrink: 0;
+    font-family: var(--lh-font-mono);
+    font-size: 0.625rem;
+    padding: 0.1rem 0.35rem;
+    border-radius: 5px;
+    border: 1px solid var(--lh-border-strong);
+    background: var(--lh-bg-2);
+    color: var(--lh-text-faint);
+  }
+  .lh-cmdk-list {
+    list-style: none;
+    margin: 0;
+    padding: 0.35rem;
+    overflow-y: auto;
+  }
+  .lh-cmdk-empty {
+    padding: 0.9rem 0.75rem;
+    font-size: 0.8125rem;
+    color: var(--lh-text-faint);
+    text-align: center;
+  }
+  .lh-cmdk-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    width: 100%;
+    text-align: left;
+    padding: 0.55rem 0.65rem;
+    border-radius: var(--lh-radius-sm);
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--lh-text-muted);
+    cursor: pointer;
+  }
+  .lh-cmdk-item.active {
+    background: rgba(236, 228, 211, 0.05);
+    border-color: var(--lh-border);
+    color: var(--lh-text);
+  }
+  .lh-cmdk-item-label { font-size: 0.8125rem; }
+  .lh-cmdk-item-hint {
+    flex-shrink: 0;
+    font-size: 0.6rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--lh-text-faint);
+  }
+  .lh-cmdk-item.active .lh-cmdk-item-hint { color: var(--lh-accent-text); }
+
+  /* The unobtrusive sidebar affordance that opens the palette. */
+  .lh-cmdk-hint {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    width: 100%;
+    margin-top: 0.35rem;
+    padding: 0.5rem 0.6rem 0.5rem 0.75rem;
+    border-radius: var(--lh-radius-sm);
+    border: 1px solid var(--lh-border);
+    background: var(--lh-surface-2);
+    color: var(--lh-text-faint);
+    font-size: 0.6875rem;
+    letter-spacing: 0.04em;
+    cursor: pointer;
+    transition: color 0.14s ease, border-color 0.14s ease, background 0.14s ease;
+  }
+  .lh-cmdk-hint:hover { color: var(--lh-text-muted); border-color: var(--lh-border-strong); background: var(--lh-surface-3); }
+}
+
+/* Phone: toasts anchor to the bottom so they don't cover the top bar. */
+@media (max-width: 640px) {
+  .lh-toast-region {
+    top: auto;
+    bottom: 1rem;
+    left: 1rem;
+    right: 1rem;
+    width: auto;
+  }
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   Responsive layer — the dashboard is mobile-first usable (phone → desktop).
+   Tailwind's lg: breakpoint is 1024px; these queries establish the drawer nav,
+   the inspector bottom sheet, and touch-friendly sizing the utilities can't cover.
+   ════════════════════════════════════════════════════════════════════════════ */
+
+/* Tablet & phone: the sidebar becomes an off-canvas slide-in drawer. */
+@media (max-width: 1023px) {
+  .lh-nav {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: min(290px, 86vw);
+    z-index: 70;
+    padding: 0.5rem;
+    overflow-y: auto;
+    transform: translateX(-100%);
+    transition: transform 0.22s ease;
+  }
+  .lh-nav.open { transform: translateX(0); }
+  .lh-nav-scrim.open {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 65;
+    background: rgba(8, 6, 4, 0.6);
+  }
+}
+
+/* Desktop: no top bar, no in-drawer close; the static sidebar handles everything. */
+@media (min-width: 1024px) {
+  .lh-topbar,
+  .lh-nav-close { display: none; }
+}
+
+/* Phone: the inspector popup is a full-width bottom sheet over a dimmed backdrop,
+   and the React-Flow MiniMap is hidden so the legend/controls never overlap. */
+@media (max-width: 767px) {
+  .lh-inspector-scrim {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+    background: rgba(8, 6, 4, 0.6);
+  }
+  .lh-inspector-pop {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    top: auto;
+    width: 100%;
+    max-height: 85vh;
+    border-radius: var(--lh-radius-lg) var(--lh-radius-lg) 0 0;
+    border-bottom: none;
+    z-index: 50;
+  }
+  /* The minimap crowds a small canvas — hide it (legend + controls stay reachable). */
+  .lh-flow-canvas .react-flow__minimap { display: none; }
+
+  /* Touch-friendly: comfortable tap targets and full-width form controls. */
+  .lh-nav-item { padding-top: 0.7rem; padding-bottom: 0.7rem; }
+  .lh-btn { padding-top: 0.5rem; padding-bottom: 0.5rem; }
+  .lh-select { width: 100%; }
 }

@@ -1,5 +1,18 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import WorkflowEditor from './WorkflowEditor'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react'
+import { toast } from '../lib/toast'
+
+// The React-Flow canvas is heavy (React Flow + its styles). Lazy-load it so it is
+// code-split out of the initial dashboard bundle and only fetched when a flow opens.
+const WorkflowEditor = lazy(() => import('./WorkflowEditor'))
+
+// A small, matte placeholder shown while the editor chunk loads.
+function EditorFallback() {
+  return (
+    <div className="lh-card">
+      <p className="text-xs" style={{ color: 'var(--lh-text-faint)' }}>Loading the flow editor…</p>
+    </div>
+  )
+}
 
 // The "Flows" section: an n8n-style work-flow surface. It lists the stored flows
 // (GET /api/flows) and opens the canvas editor for one. A flow wires
@@ -61,7 +74,10 @@ function FlowRow({ flow, onOpen, onDelete, busy }) {
   )
 }
 
-export default function WorkflowsPanel() {
+// Props (all optional so this works before App.jsx wires the hash sub-route):
+//   route     — a flow id to auto-open (string), or null/undefined for the list
+//   onRoute   — onRoute(idOrNull): update the URL hash (id opens a flow, null → list)
+export default function WorkflowsPanel({ route, onRoute } = {}) {
   const [flows, setFlows] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -107,17 +123,27 @@ export default function WorkflowsPanel() {
       const d = await r.json()
       setEditing(d)
       setIsNew(false)
+      onRoute?.(d.id) // deep-link: mirror the open flow into the URL hash
     } catch {
       setError('Could not open that flow.')
     } finally {
       setBusy(false)
     }
-  }, [])
+  }, [onRoute])
+
+  // Deep-link: when the `route` prop names a flow id (on mount or a hash change),
+  // auto-open it. Guarded so re-opening the same flow doesn't refetch in a loop.
+  useEffect(() => {
+    if (!route || editing?.id === route) return
+    openFlow(route)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [route])
 
   const newFlow = useCallback(() => {
     setEditing(starterFlow())
     setIsNew(true)
-  }, [])
+    onRoute?.(null) // a new flow has no persistent id yet — keep the URL on the list
+  }, [onRoute])
 
   const deleteFlow = useCallback(async (id) => {
     setBusy(true)
@@ -125,14 +151,16 @@ export default function WorkflowsPanel() {
     try {
       const r = await fetch(`/api/flows/${encodeURIComponent(id)}`, { method: 'DELETE' })
       if (!r.ok && r.status !== 404) throw new Error('delete failed')
-      if (editing?.id === id) { setEditing(null); setIsNew(false) }
+      if (editing?.id === id) { setEditing(null); setIsNew(false); onRoute?.(null) }
       await loadFlows()
+      toast.success('Flow deleted.')
     } catch {
       setError('Could not delete that flow.')
+      toast.error('Could not delete that flow.')
     } finally {
       setBusy(false)
     }
-  }, [editing, loadFlows])
+  }, [editing, loadFlows, onRoute])
 
   // Save the canvas: POST a new flow, PUT an existing one. Returns {ok, flow|detail}
   // so the editor can show a 400 {detail} inline.
@@ -147,12 +175,13 @@ export default function WorkflowsPanel() {
       if (!r.ok) return { ok: false, detail: d.detail || `Save failed (${r.status})` }
       setIsNew(false)
       setEditing(d) // adopt the canonical stored flow (same id → editor keeps the canvas)
+      onRoute?.(d.id) // a freshly-created flow now has a persistent id — deep-link it
       await loadFlows()
       return { ok: true, flow: d }
     } catch {
       return { ok: false, detail: 'Save failed — network error.' }
     }
-  }, [isNew, loadFlows])
+  }, [isNew, loadFlows, onRoute])
 
   const runFlow = useCallback(async (id) => {
     try {
@@ -167,7 +196,7 @@ export default function WorkflowsPanel() {
     }
   }, [])
 
-  const closeEditor = useCallback(() => { setEditing(null); setIsNew(false) }, [])
+  const closeEditor = useCallback(() => { setEditing(null); setIsNew(false); onRoute?.(null) }, [onRoute])
 
   const sorted = useMemo(
     () => [...flows].sort((a, b) => (a.name || a.id).localeCompare(b.name || b.id)),
@@ -176,17 +205,19 @@ export default function WorkflowsPanel() {
 
   if (editing) {
     return (
-      <div className="lh-card">
-        <WorkflowEditor
-          flow={editing}
-          isNew={isNew}
-          brains={brains}
-          skills={skills}
-          onSave={saveFlow}
-          onRun={runFlow}
-          onClose={closeEditor}
-        />
-      </div>
+      <Suspense fallback={<EditorFallback />}>
+        <div className="lh-card">
+          <WorkflowEditor
+            flow={editing}
+            isNew={isNew}
+            brains={brains}
+            skills={skills}
+            onSave={saveFlow}
+            onRun={runFlow}
+            onClose={closeEditor}
+          />
+        </div>
+      </Suspense>
     )
   }
 
@@ -214,8 +245,11 @@ export default function WorkflowsPanel() {
       {loading ? (
         <p className="text-xs" style={{ color: 'var(--lh-text-faint)' }}>Loading flows…</p>
       ) : sorted.length === 0 ? (
-        <div className="lh-row" style={{ color: 'var(--lh-text-faint)' }}>
-          No flows yet. Create one — it starts with a single trigger you can wire into tasks, gates, and outputs.
+        <div className="lh-row" style={{ textAlign: 'center' }}>
+          <p className="text-xs mb-2" style={{ color: 'var(--lh-text-muted)' }}>
+            No flows yet. A flow starts with a single trigger you can wire into tasks, gates, and outputs.
+          </p>
+          <button type="button" className="lh-btn lh-btn-primary" onClick={newFlow}>+ New flow</button>
         </div>
       ) : (
         <div className="space-y-2">

@@ -52,7 +52,6 @@ function Toggle({ on, disabled, onChange, danger }) {
           height: 16,
           borderRadius: 999,
           background: on ? accent : 'var(--lh-text-faint)',
-          boxShadow: on ? '0 0 8px rgba(217,165,33,0.5)' : 'none',
           transition: 'left 0.16s ease, background 0.16s ease',
         }}
       />

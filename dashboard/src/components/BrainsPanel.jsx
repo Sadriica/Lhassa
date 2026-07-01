@@ -1,8 +1,12 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react'
 import OrgTree from './OrgTree'
-import OrgFlow from './OrgFlow'
 import TemplatesPicker from './TemplatesPicker'
 import { RELATION_KIND_ORDER, kindStyle } from './relationshipKinds'
+import { toast } from '../lib/toast'
+
+// #12 — code-split the heavy React-Flow canvas out of the initial bundle. OrgFlow
+// (and all of @xyflow/react) only loads when the Flow view is actually rendered.
+const OrgFlow = lazy(() => import('./OrgFlow'))
 
 // The Brains management panel — the centerpiece. Drives the slice-J org API:
 //   GET    /api/org/topology              read the chart
@@ -74,14 +78,27 @@ function DepartmentField({ value, options, onChange }) {
   const [adding, setAdding] = useState(value !== '' && !known)
 
   if (adding) {
+    // The input is bound LIVE to `value`, so the typed name is already the field's
+    // value. Confirming (↵ / Enter) just leaves type-mode and KEEPS that value —
+    // it must never be discarded. ↩ goes back to the dropdown and clears.
     return (
       <div className="flex gap-1.5">
         <input
           className="lh-input" autoFocus placeholder="new department name"
           value={value} onChange={(e) => onChange(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') { e.preventDefault(); if (value.trim()) setAdding(false) }
+          }}
         />
         <button
-          type="button" className="lh-btn" title="pick from existing"
+          type="button" className="lh-btn" title="Use this department"
+          disabled={!value.trim()}
+          onClick={() => { if (value.trim()) setAdding(false) }}
+        >
+          ↵
+        </button>
+        <button
+          type="button" className="lh-btn" title="Pick from existing"
           onClick={() => { setAdding(false); onChange('') }}
         >
           ↩
@@ -89,16 +106,20 @@ function DepartmentField({ value, options, onChange }) {
       </div>
     )
   }
+  // A confirmed brand-new department isn't in `options` yet — surface it as its own
+  // selected option so the field shows the coined name (never snaps back to "(none)").
+  const isCustom = value !== '' && !known
   return (
     <select
       className="lh-select"
-      value={known ? value : ''}
+      value={value}
       onChange={(e) => {
         if (e.target.value === NEW_DEPT) { setAdding(true); onChange('') }
         else onChange(e.target.value)
       }}
     >
       <option value="">(none)</option>
+      {isCustom && <option value={value}>{value}</option>}
       {options.map((d) => <option key={d} value={d}>{d}</option>)}
       <option value={NEW_DEPT}>+ New department…</option>
     </select>
@@ -370,6 +391,14 @@ function Inspector({ node, nodes, departments, installedSet, onInstall, onAddSki
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [node.id])
 
+  // Auto-disarm the Delete button a few seconds after it's armed, so a stray
+  // first click never leaves a live "Confirm" primed indefinitely.
+  useEffect(() => {
+    if (!confirmDelete) return undefined
+    const t = setTimeout(() => setConfirmDelete(false), 4000)
+    return () => clearTimeout(t)
+  }, [confirmDelete])
+
   // Recommended skills for THIS brain, ranked by its department (or, if it has
   // none, its id/role) — the recommend endpoint scores catalog skills by those
   // words. Refetched whenever the selected brain or its department changes.
@@ -401,7 +430,7 @@ function Inspector({ node, nodes, departments, installedSet, onInstall, onAddSki
         </span>
       </div>
 
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
         <label className="space-y-1">
           <span className="lh-label">role</span>
           <input className="lh-input" value={role} onChange={(e) => setRole(e.target.value)} />
@@ -466,6 +495,9 @@ function Inspector({ node, nodes, departments, installedSet, onInstall, onAddSki
                   if (ok) {
                     setPickedSkills((prev) => (prev.includes(r.name) ? prev : [...prev, r.name]))
                     setRecs((prev) => prev.filter((x) => x.name !== r.name))
+                    toast.success(`Installed + assigned "${r.name}"`)
+                  } else {
+                    toast.error(`Could not assign "${r.name}"`)
                   }
                   setAddingSkill('')
                 }}
@@ -476,7 +508,8 @@ function Inspector({ node, nodes, departments, installedSet, onInstall, onAddSki
           </div>
         )}
         <p className="text-[10px]" style={{ color: 'var(--lh-text-faint)' }}>
-          Suggested from this brain&apos;s {node.department ? 'department' : 'name'}. Click to install and assign it.
+          Suggested from this brain&apos;s {node.department ? 'department' : 'name'}. Click to install and
+          assign it — this is saved immediately (no need to press Save changes).
         </p>
       </div>
 
@@ -511,15 +544,32 @@ function Inspector({ node, nodes, departments, installedSet, onInstall, onAddSki
         </div>
       ) : (
         <>
-          <div className="pt-2" style={{ borderTop: '1px solid var(--lh-border)' }}>
+          <div
+            className="pt-2 mt-1"
+            style={{ borderTop: '1px solid var(--lh-border)' }}
+          >
             <span className="lh-label">move — change who it reports to</span>
-            <div className="flex gap-1.5 mt-1">
-              <select className="lh-select" value={moveTo} onChange={(e) => setMoveTo(e.target.value)}>
+            <p className="text-[10px] mt-0.5" style={{ color: 'var(--lh-text-faint)' }}>
+              Drag a node onto another, right-click → Move under, or pick a parent here.
+            </p>
+            <div
+              className="flex gap-1.5 mt-1.5 p-1.5"
+              style={{
+                background: 'var(--lh-surface-2)',
+                border: '1px solid var(--lh-border)',
+                borderRadius: 'var(--lh-radius)',
+              }}
+            >
+              <select
+                className="lh-select" style={{ flex: 1 }}
+                value={moveTo} onChange={(e) => setMoveTo(e.target.value)}
+              >
                 <option value="">choose new parent…</option>
                 {moveTargets.map((id) => <option key={id} value={id}>{id}</option>)}
               </select>
               <button
-                type="button" className="lh-btn" disabled={busy || !moveTo || moveTo === node.parent}
+                type="button" className="lh-btn lh-btn-primary"
+                disabled={busy || !moveTo || moveTo === node.parent}
                 onClick={() => onMove(node.id, moveTo)}
               >
                 Move
@@ -540,7 +590,9 @@ function Inspector({ node, nodes, departments, installedSet, onInstall, onAddSki
                   type="button" className="lh-btn lh-btn-danger" disabled={busy}
                   onClick={() => onDelete(node.id, (node.children?.length || 0) > 0)}
                 >
-                  {(node.children?.length || 0) > 0 ? 'Delete subtree' : 'Confirm delete'}
+                  {(node.children?.length || 0) > 0
+                    ? `Delete brain + ${node.children.length} sub-brain${node.children.length === 1 ? '' : 's'}?`
+                    : 'Confirm delete'}
                 </button>
                 <button type="button" className="lh-btn" onClick={() => setConfirmDelete(false)}>Cancel</button>
               </div>
@@ -565,6 +617,44 @@ function Inspector({ node, nodes, departments, installedSet, onInstall, onAddSki
   )
 }
 
+// ── inspector popup shell ───────────────────────────────────────────────────
+// The inspector is no longer a permanent column — it appears only when a node is
+// selected. On desktop/tablet (≥768px) it docks as a floating overlay on the right
+// edge of the canvas (it sits ABOVE the canvas, never reflowing it). On mobile
+// (<768px) the same content becomes a bottom sheet with a dimmed backdrop. Esc,
+// the ✕, or a backdrop tap dismiss it (→ setSelectedId(null)). The canvas underneath
+// keeps working; the dock has a z-index above the React-Flow controls.
+function InspectorPopup({ onClose, children }) {
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+
+  return (
+    <>
+      {/* Backdrop — only visible (and dimming) on mobile; inert on desktop. */}
+      <div className="lh-inspector-scrim" onClick={onClose} aria-hidden="true" />
+      <aside className="lh-inspector-pop" role="dialog" aria-modal="true" aria-label="Brain inspector">
+        <div className="lh-inspector-pop-head">
+          <span className="lh-label" style={{ margin: 0 }}>inspector</span>
+          <button
+            type="button"
+            className="lh-btn"
+            style={{ padding: '0.2rem 0.55rem' }}
+            onClick={onClose}
+            aria-label="Close inspector"
+            title="Close (Esc)"
+          >
+            ✕
+          </button>
+        </div>
+        <div className="lh-inspector-pop-body">{children}</div>
+      </aside>
+    </>
+  )
+}
+
 // ── create-brain form ───────────────────────────────────────────────────────
 function CreateForm({ allIds, departments, defaultParent, skills, onCreate, onClose, busy }) {
   const [id, setId] = useState('')
@@ -577,15 +667,19 @@ function CreateForm({ allIds, departments, defaultParent, skills, onCreate, onCl
   const toggleSkill = (d) =>
     setPickedSkills((prev) => (prev.includes(d) ? prev.filter((x) => x !== d) : [...prev, d]))
 
-  const submit = () => {
-    onCreate({
+  // `keepOpen` powers "Create & add another": build a team of siblings fast by
+  // keeping the form open and PREFILLED with the same parent/department/role/skills,
+  // clearing only the ID so the next sibling is one field away.
+  const submit = async (keepOpen = false) => {
+    const ok = await onCreate({
       id: id.trim(),
       role: role.trim() || undefined,
       parent: parent || undefined,
       department: department.trim() || undefined,
       skills: pickedSkills,
       limits: rowsToLimits(limitRows),
-    })
+    }, { keepOpen })
+    if (ok && keepOpen) setId('')
   }
 
   return (
@@ -595,10 +689,10 @@ function CreateForm({ allIds, departments, defaultParent, skills, onCreate, onCl
         <button type="button" className="lh-btn" onClick={onClose}>✕</button>
       </div>
       <div className="space-y-3">
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           <label className="space-y-1">
             <span className="lh-label">id *</span>
-            <input className="lh-input" value={id} onChange={(e) => setId(e.target.value)} placeholder="e.g. finanzas" />
+            <input className="lh-input" value={id} onChange={(e) => setId(e.target.value)} placeholder="e.g. research" />
           </label>
           <label className="space-y-1">
             <span className="lh-label">role</span>
@@ -624,9 +718,21 @@ function CreateForm({ allIds, departments, defaultParent, skills, onCreate, onCl
           <span className="lh-label">limits</span>
           <LimitsEditor rows={limitRows} setRows={setLimitRows} />
         </div>
-        <button type="button" className="lh-btn lh-btn-primary" disabled={busy || !id.trim()} onClick={submit}>
-          Create brain
-        </button>
+        <div className="flex gap-2 flex-wrap">
+          <button
+            type="button" className="lh-btn lh-btn-primary" disabled={busy || !id.trim()}
+            onClick={() => submit(false)}
+          >
+            Create brain
+          </button>
+          <button
+            type="button" className="lh-btn" disabled={busy || !id.trim()}
+            title="Create it and keep this form open (same parent + department) to add a sibling"
+            onClick={() => submit(true)}
+          >
+            Create &amp; add another
+          </button>
+        </div>
       </div>
     </div>
   )
@@ -702,6 +808,28 @@ export default function BrainsPanel() {
       .catch(() => setRelKinds([]))
   }, [loadTopology, loadInstalled, loadOverlay])
 
+  // #6 — the canvas can go stale when the topology/overlay changes elsewhere (another
+  // tab, the CLI, a heartbeat). Real-time WS push is out of scope here; a lightweight
+  // focus-refetch is enough: re-pull the chart + overlay when the tab/window regains
+  // focus, debounced so a focus+visibilitychange burst fires only one fetch. The
+  // listeners are cleaned up on unmount.
+  useEffect(() => {
+    let t = null
+    const refetch = () => {
+      if (document.visibilityState !== 'visible') return
+      clearTimeout(t)
+      t = setTimeout(() => { loadTopology(); loadOverlay() }, 300)
+    }
+    const onVisible = () => { if (document.visibilityState === 'visible') refetch() }
+    window.addEventListener('focus', refetch)
+    document.addEventListener('visibilitychange', onVisible)
+    return () => {
+      clearTimeout(t)
+      window.removeEventListener('focus', refetch)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
+  }, [loadTopology, loadOverlay])
+
   // The set a carried skill is matched against — installed skill names AND their
   // domains (the org picker keys by domain, SKILL.md by name; accept either).
   const installedSet = useMemo(() => {
@@ -752,23 +880,35 @@ export default function BrainsPanel() {
     }
   }, [loadTopology])
 
-  const createBrain = async (payload) => {
+  const createBrain = async (payload, { keepOpen = false } = {}) => {
     const ok = await mutate('Create', () =>
       fetch('/api/org/brains', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
       }))
-    if (ok) { setShowCreate(false); setSelectedId(payload.id) }
+    if (ok) {
+      toast.success(`Created "${payload.id}"`)
+      // "Create & add another" keeps the form open (and unselected) so the owner can
+      // keep adding siblings; the normal path selects the new brain and closes.
+      if (!keepOpen) { setShowCreate(false); setSelectedId(payload.id) }
+    } else {
+      toast.error(`Could not create "${payload.id}"`)
+    }
+    return ok
   }
   const patchBrain = (id, payload) =>
     mutate('Save', () =>
       fetch(`/api/org/brains/${encodeURIComponent(id)}`, {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
       }))
-  const moveBrain = (id, parent) =>
-    mutate('Move', () =>
+  const moveBrain = async (id, parent) => {
+    const ok = await mutate('Move', () =>
       fetch(`/api/org/brains/${encodeURIComponent(id)}/move`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ parent }),
       }))
+    if (ok) toast.success(`Moved under ${parent}`)
+    else toast.error(`Could not move "${id}"`)
+    return ok
+  }
   const promoteBrain = (id) =>
     mutate('Promote', () =>
       fetch(`/api/org/brains/${encodeURIComponent(id)}/promote`, { method: 'POST' }))
@@ -803,8 +943,11 @@ export default function BrainsPanel() {
     const ok = await mutate('Delete', () =>
       fetch(`/api/org/brains/${encodeURIComponent(id)}?force=${force ? 'true' : 'false'}`, { method: 'DELETE' }))
     if (ok) {
+      toast.success(`Deleted "${id}"`)
       if (selectedId === id) setSelectedId(null)
       loadOverlay() // a removed brain may have left dangling overlay edges
+    } else {
+      toast.error(`Could not delete "${id}"`)
     }
   }
 
@@ -968,32 +1111,54 @@ export default function BrainsPanel() {
           }}
         />
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
-          {/* Canvas */}
-          <div className="lg:col-span-3">
-            <div className="lh-label mb-2">
-              {view === 'flow'
-                ? 'flow — drag a node onto another to re-parent it'
-                : 'hierarchy — who commands whom'}
-            </div>
+        <div>
+          <div className="lh-label mb-2">
+            {view === 'flow'
+              ? 'flow — drag a node onto another to re-parent it · click a brain to inspect'
+              : 'hierarchy — who commands whom · click a brain to inspect'}
+          </div>
+          {/* The canvas spans the full panel width; the inspector floats over its
+              right edge (desktop) or as a bottom sheet (mobile) when a node is picked. */}
+          <div className="lh-canvas-stage">
             {view === 'flow' ? (
-              <OrgFlow
-                topology={topology} selectedId={selectedId} routePath={routePath}
-                relationships={overlay.relationships} kindMeta={relKinds}
-                onSelect={(id) => setSelectedId(id)} onMove={moveBrain}
-              />
+              <Suspense
+                fallback={(
+                  <div
+                    className="lh-flow-canvas"
+                    style={{
+                      height: 'clamp(440px, 72vh, 880px)',
+                      border: '1px solid var(--lh-border)',
+                      borderRadius: 'var(--lh-radius)',
+                      background: 'var(--lh-bg)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: 'var(--lh-text-faint)',
+                      fontSize: 12,
+                    }}
+                  >
+                    Loading canvas…
+                  </div>
+                )}
+              >
+                <OrgFlow
+                  topology={topology} selectedId={selectedId} routePath={routePath}
+                  relationships={overlay.relationships} kindMeta={relKinds}
+                  onSelect={(id) => setSelectedId(id)} onMove={moveBrain}
+                  onCreate={() => setShowCreate(true)}
+                />
+              </Suspense>
             ) : (
               <OrgTree
                 topology={topology} selectedId={selectedId} routePath={routePath}
                 onSelect={(id) => setSelectedId(id)}
+                onCreate={() => setShowCreate(true)}
               />
             )}
-          </div>
-          {/* Inspector */}
-          <div className="lg:col-span-2">
-            <div className="lh-label mb-2">inspector</div>
-            {selected ? (
-              <>
+
+            {/* Inspector — a dismissible popup, only while a brain is selected. */}
+            {selected && (
+              <InspectorPopup onClose={() => setSelectedId(null)}>
                 <Inspector
                   key={selected.id} node={selected} nodes={nodes} departments={departments}
                   installedSet={installedSet} onInstall={installSkill} onAddSkill={addSkillToBrain}
@@ -1008,11 +1173,7 @@ export default function BrainsPanel() {
                     {skillNotice}
                   </div>
                 )}
-              </>
-            ) : (
-              <p className="text-xs lh-row" style={{ color: 'var(--lh-text-faint)' }}>
-                Select a brain in the tree to edit its role, skills, limits, move it, promote it, or delete it.
-              </p>
+              </InspectorPopup>
             )}
           </div>
         </div>

@@ -16,6 +16,7 @@ import {
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { KINDS, KIND_ORDER, kindMeta, freshNodeId } from './flowNodeKinds'
+import { toast } from '../lib/toast'
 
 // The n8n-style WORK-FLOW canvas: a flow wires trigger → task → gate → output (with
 // branches), left-to-right. A small palette drops kinds onto the canvas (click or
@@ -30,7 +31,10 @@ const COL_GAP = 92
 const ROW_GAP = 28
 const ROW_H = 96
 
-function computeLayout(nodes, edges) {
+// `direction`: 'horizontal' | 'vertical' | undefined. When undefined we AUTO-pick:
+// a long / deep chain lays out vertically (top→bottom) so a 10-node linear flow is
+// readable without endless horizontal panning; short/wide graphs stay left→right.
+function computeLayout(nodes, edges, direction) {
   const byId = {}
   nodes.forEach((n) => { byId[n.id] = n })
   const indeg = {}
@@ -63,13 +67,36 @@ function computeLayout(nodes, edges) {
     const d = depth[n.id]
     ;(byCol[d] = byCol[d] || []).push(n.id)
   })
+  const maxDepth = nodes.reduce((m, n) => Math.max(m, depth[n.id] || 0), 0)
+  // A long chain (5+ deep) defaults to a vertical stack; otherwise left→right.
+  const vertical = direction === 'vertical' || (!direction && maxDepth >= 5)
   const pos = {}
   Object.keys(byCol).forEach((d) => {
     byCol[d].forEach((id, row) => {
-      pos[id] = { x: Number(d) * (NODE_W + COL_GAP), y: row * (ROW_H + ROW_GAP) }
+      pos[id] = vertical
+        ? { x: row * (NODE_W + COL_GAP), y: Number(d) * (ROW_H + ROW_GAP) }
+        : { x: Number(d) * (NODE_W + COL_GAP), y: row * (ROW_H + ROW_GAP) }
     })
   })
   return pos
+}
+
+// Pick a sensible node to auto-wire a freshly-added node FROM: the currently
+// selected node (if it can emit), else the nearest "tail" — a node with a source
+// handle and no outgoing edge (most-recently-added first), else the last emitter.
+function pickAutoSource(nodes, edges, selId) {
+  const byId = {}
+  nodes.forEach((n) => { byId[n.id] = n })
+  const canEmit = (id) => Boolean(byId[id] && kindMeta(byId[id].data.kind).hasSource)
+  if (selId && canEmit(selId)) return selId
+  const hasOutgoing = new Set(edges.map((e) => e.source))
+  for (let i = nodes.length - 1; i >= 0; i -= 1) {
+    if (canEmit(nodes[i].id) && !hasOutgoing.has(nodes[i].id)) return nodes[i].id
+  }
+  for (let i = nodes.length - 1; i >= 0; i -= 1) {
+    if (canEmit(nodes[i].id)) return nodes[i].id
+  }
+  return null
 }
 
 // ── per-kind config summary shown inside a node ─────────────────────────────────
@@ -96,12 +123,12 @@ function FlowCanvasNode({ data, selected }) {
     <div
       style={{
         width: NODE_W,
-        background: `linear-gradient(180deg, rgba(${rgb},0.14), var(--lh-surface))`,
-        border: `1px solid ${selected ? `rgba(${rgb},0.95)` : `rgba(${rgb},0.5)`}`,
+        background: 'var(--lh-surface)',
+        border: `1px solid ${selected ? `rgba(${rgb},0.9)` : `rgba(${rgb},0.45)`}`,
         borderRadius: 'var(--lh-radius)',
         padding: '0.5rem 0.6rem',
         boxShadow: selected
-          ? `0 0 0 1px rgba(${rgb},0.55), 0 0 16px rgba(${rgb},0.22)`
+          ? `0 0 0 1px rgba(${rgb},0.5), var(--lh-shadow-sm)`
           : 'var(--lh-shadow-sm)',
         cursor: 'pointer',
       }}
@@ -526,27 +553,66 @@ function EditorInner({ flow, skills, brains, isNew, onSave, onRun, onClose }) {
   const [selEdge, setSelEdge] = useState(null)
   const [saving, setSaving] = useState(false)
   const [running, setRunning] = useState(false)
-  const [saveMsg, setSaveMsg] = useState(null) // {ok, text}
   const [run, setRun] = useState(null)
   const wrapperRef = useRef(null)
-  const { screenToFlowPosition } = useReactFlow()
+  const { screenToFlowPosition, fitView } = useReactFlow()
 
   const triggerCount = useMemo(() => rfNodes.filter((n) => n.data.kind === 'trigger').length, [rfNodes])
 
-  // ── add a node (palette click or drop) ────────────────────────────────────────
+  // Nodes that can't be reached from the trigger — surfaced as a non-blocking
+  // warning so a visually-"connected" flow can't be saved silently disconnected.
+  const disconnected = useMemo(() => {
+    const trigger = rfNodes.find((n) => n.data.kind === 'trigger')
+    if (!trigger) return []
+    const adj = {}
+    rfEdges.forEach((e) => { (adj[e.source] = adj[e.source] || []).push(e.target) })
+    const reachable = new Set([trigger.id])
+    const stack = [trigger.id]
+    while (stack.length) {
+      const cur = stack.pop()
+      ;(adj[cur] || []).forEach((t) => { if (!reachable.has(t)) { reachable.add(t); stack.push(t) } })
+    }
+    return rfNodes.filter((n) => n.data.kind !== 'trigger' && !reachable.has(n.id)).map((n) => n.id)
+  }, [rfNodes, rfEdges])
+
+  // ── add a node (palette click or drop) — AUTO-WIRES it from a sensible source ──
   const addNode = useCallback((kind, position) => {
-    setRfNodes((nds) => {
-      const used = new Set(nds.map((n) => n.id))
-      const id = freshNodeId(kind, used)
-      const node = {
-        id,
-        type: 'flowNode',
-        position: position || { x: 40 + nds.length * 26, y: 40 + nds.length * 22 },
-        data: { id, kind, label: '', config: { ...KINDS[kind].defaultConfig } },
-      }
-      return [...nds, node]
-    })
-  }, [setRfNodes])
+    const meta = KINDS[kind]
+    const used = new Set(rfNodes.map((n) => n.id))
+    const id = freshNodeId(kind, used)
+    const node = {
+      id,
+      type: 'flowNode',
+      position: position || { x: 40 + rfNodes.length * 26, y: 40 + rfNodes.length * 22 },
+      data: { id, kind, label: '', config: { ...meta.defaultConfig } },
+    }
+    // Only auto-connect INTO a node that accepts input (never into a trigger).
+    const sourceId = meta.hasTarget ? pickAutoSource(rfNodes, rfEdges, selNode) : null
+    setRfNodes((nds) => [...nds, node])
+    if (sourceId && sourceId !== id) {
+      setRfEdges((eds) => addEdge({
+        source: sourceId,
+        target: id,
+        id: `e${Date.now()}-${sourceId}-${id}`,
+        data: { when: null },
+        label: '',
+        style: edgeStyle(null),
+        markerEnd: { type: MarkerType.ArrowClosed, color: 'var(--lh-border-strong)' },
+      }, eds))
+    }
+    // Select the new node so a chain keeps building linearly from it (easy to rewire).
+    setSelEdge(null)
+    setSelNode(id)
+  }, [rfNodes, rfEdges, selNode, setRfNodes, setRfEdges])
+
+  // ── Tidy: re-run the auto-layout, optionally forcing a direction ──────────────
+  const relayout = useCallback((direction) => {
+    const modelNodes = rfNodes.map((n) => ({ id: n.id, data: { kind: n.data.kind }, kind: n.data.kind }))
+    const modelEdges = rfEdges.map((e) => ({ from_node: e.source, to_node: e.target }))
+    const pos = computeLayout(modelNodes, modelEdges, direction)
+    setRfNodes((nds) => nds.map((n) => (pos[n.id] ? { ...n, position: pos[n.id] } : n)))
+    window.requestAnimationFrame(() => { try { fitView({ padding: 0.2 }) } catch { /* canvas not ready */ } })
+  }, [rfNodes, rfEdges, setRfNodes, fitView])
 
   const onDrop = useCallback((event) => {
     event.preventDefault()
@@ -623,11 +689,10 @@ function EditorInner({ flow, skills, brains, isNew, onSave, onRun, onClose }) {
 
   const doSave = useCallback(async () => {
     setSaving(true)
-    setSaveMsg(null)
     const res = await onSave(buildFlow())
     setSaving(false)
-    if (res.ok) setSaveMsg({ ok: true, text: isNew ? 'Created.' : 'Saved.' })
-    else setSaveMsg({ ok: false, text: res.detail || 'Save failed.' })
+    if (res.ok) toast.success(isNew ? 'Flow created' : 'Flow saved')
+    else toast.error(res.detail || 'Save failed')
     return res
   }, [onSave, buildFlow, isNew])
 
@@ -639,8 +704,12 @@ function EditorInner({ flow, skills, brains, isNew, onSave, onRun, onClose }) {
     if (!saved.ok) { setRunning(false); return }
     const res = await onRun(flow.id)
     setRunning(false)
-    if (res.ok) setRun(res.run)
-    else setSaveMsg({ ok: false, text: res.detail || 'Run failed.' })
+    if (res.ok) {
+      setRun(res.run)
+      toast.success(`Run completed — ${res.run?.status || 'done'}`)
+    } else {
+      toast.error(res.detail || 'Run failed')
+    }
   }, [doSave, onRun, flow.id])
 
   const selectedNode = rfNodes.find((n) => n.id === selNode) || null
@@ -679,21 +748,16 @@ function EditorInner({ flow, skills, brains, isNew, onSave, onRun, onClose }) {
         </div>
       </div>
 
-      {/* validation + save feedback */}
+      {/* validation (save/run feedback is delivered via global toasts) */}
       {triggerCount !== 1 && (
         <div className="lh-row" style={{ borderColor: 'rgba(217,165,33,0.45)', color: 'var(--lh-warn)' }}>
           A flow needs exactly one trigger — found {triggerCount}. {triggerCount === 0 ? 'Add a Trigger.' : 'Remove the extras.'}
         </div>
       )}
-      {saveMsg && (
-        <div
-          className="lh-row"
-          style={{
-            borderColor: saveMsg.ok ? 'rgba(124,154,91,0.45)' : 'rgba(162,62,52,0.45)',
-            color: saveMsg.ok ? 'var(--lh-ok)' : 'var(--lh-alert)',
-          }}
-        >
-          {saveMsg.text}
+      {disconnected.length > 0 && (
+        <div className="lh-row" style={{ borderColor: 'rgba(162,62,52,0.45)', color: 'var(--lh-alert)' }}>
+          {disconnected.length} node{disconnected.length === 1 ? " isn't" : "s aren't"} connected to the trigger:{' '}
+          <span className="lh-mono">{disconnected.join(', ')}</span>. Wire {disconnected.length === 1 ? 'it' : 'them'} from an upstream node or it won&apos;t run.
         </div>
       )}
 
@@ -702,8 +766,10 @@ function EditorInner({ flow, skills, brains, isNew, onSave, onRun, onClose }) {
         <div className="lg:col-span-3">
           <div
             ref={wrapperRef}
+            className="lh-flow-canvas"
             style={{
-              height: 480,
+              // Fluid, generous height so long vertical chains stay readable.
+              height: 'clamp(460px, 72vh, 920px)',
               border: '1px solid var(--lh-border)',
               borderRadius: 'var(--lh-radius)',
               overflow: 'hidden',
@@ -736,6 +802,16 @@ function EditorInner({ flow, skills, brains, isNew, onSave, onRun, onClose }) {
               <Background color="rgba(217,165,33,0.07)" gap={22} />
               <Panel position="top-left">
                 <NodePalette onAdd={(k) => addNode(k)} />
+              </Panel>
+              <Panel position="top-right">
+                <div style={{ display: 'flex', gap: 4 }}>
+                  <button type="button" className="lh-btn" onClick={() => relayout('vertical')} title="Tidy: stack the flow top-to-bottom (best for long chains)">
+                    Tidy ↓
+                  </button>
+                  <button type="button" className="lh-btn" onClick={() => relayout('horizontal')} title="Tidy: lay the flow out left-to-right">
+                    Tidy →
+                  </button>
+                </div>
               </Panel>
               <MiniMap
                 pannable

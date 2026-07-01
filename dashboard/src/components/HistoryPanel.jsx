@@ -27,15 +27,15 @@ export default function HistoryPanel() {
       </h2>
 
       {loading ? (
-        <p className="text-slate-600 text-xs">Loading…</p>
+        <p className="text-xs" style={{ color: 'var(--lh-text-faint)' }}>Loading…</p>
       ) : sessions.length === 0 ? (
-        <p className="text-slate-600 text-xs">No sessions saved yet.</p>
+        <p className="text-xs" style={{ color: 'var(--lh-text-faint)' }}>No sessions saved yet.</p>
       ) : (
         <div className="space-y-3 max-h-72 overflow-y-auto">
           {sessions.map((s, i) => (
-            <div key={i} className="border-l-2 border-slate-700 pl-3">
-              <div className="text-xs text-slate-500 mb-1">{s.date?.slice(0, 16).replace('T', ' ')}</div>
-              <p className="text-xs text-slate-400 leading-relaxed">{s.summary}</p>
+            <div key={i} className="pl-3" style={{ borderLeft: '2px solid var(--lh-border-strong)' }}>
+              <div className="text-xs mb-1" style={{ color: 'var(--lh-text-muted)' }}>{s.date?.slice(0, 16).replace('T', ' ')}</div>
+              <p className="text-xs leading-relaxed" style={{ color: 'var(--lh-text-muted)' }}>{s.summary}</p>
             </div>
           ))}
         </div>

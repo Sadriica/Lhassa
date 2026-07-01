@@ -22,7 +22,7 @@ function TemplateCard({ tpl, onApply, confirming, onConfirm, onCancel, applying,
       style={{
         background: 'var(--lh-surface-2)',
         ...(showcase
-          ? { borderColor: 'rgba(217,165,33,0.42)', boxShadow: 'var(--lh-glow-gold)' }
+          ? { borderColor: 'rgba(217,165,33,0.42)' }
           : {}),
       }}
     >

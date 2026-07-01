@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { toast } from '../lib/toast'
 
 // The quarantine room (§2.9 — "sala de cuarentena"). Lists self-written tools by
 // estado (cuarentena / graduada / rechazada) with their gate metric + usage info,
@@ -55,9 +56,12 @@ export default function QuarantinePanel() {
         const d = await r.json().catch(() => ({}))
         throw new Error(d.detail || 'Graduation failed')
       }
+      toast.success(`Graduated ${nombre}.`)
       await load()
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Graduation failed')
+      const msg = e instanceof Error ? e.message : 'Graduation failed'
+      setError(msg)
+      toast.error(msg)
     } finally {
       setBusy(null)
     }
@@ -69,32 +73,36 @@ export default function QuarantinePanel() {
         <h2 className="lh-card-title">
           Quarantine room
         </h2>
-        <span className="text-xs text-slate-500">{tools.length} tools</span>
+        <span className="text-xs" style={{ color: 'var(--lh-text-muted)' }}>{tools.length} tools</span>
       </div>
 
       {loading ? (
-        <p className="text-slate-600 text-xs">Loading…</p>
+        <p className="text-xs" style={{ color: 'var(--lh-text-faint)' }}>Loading…</p>
       ) : tools.length === 0 ? (
-        <p className="text-slate-600 text-xs">No self-written tools yet.</p>
+        <p className="text-xs" style={{ color: 'var(--lh-text-faint)' }}>No self-written tools yet.</p>
       ) : (
         <ul className="space-y-2">
           {tools.map(t => {
             const estado = t.estado || 'cuarentena'
-            const badge = ESTADO_STYLES[estado] || 'bg-slate-800 text-slate-300 border-slate-700'
+            const badge = ESTADO_STYLES[estado]
             return (
               <li key={t.id || t.nombre} className="lh-row">
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-xs font-medium text-slate-200">{t.nombre}</span>
-                  <span className={`text-[10px] px-1.5 py-0.5 rounded border ${badge}`}>
-                    {estado}
-                  </span>
+                  <span className="text-xs font-medium" style={{ color: 'var(--lh-text)' }}>{t.nombre}</span>
+                  {badge ? (
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded border ${badge}`}>
+                      {estado}
+                    </span>
+                  ) : (
+                    <span className="lh-badge text-[10px]">{estado}</span>
+                  )}
                 </div>
-                <div className="text-[11px] text-slate-500 mt-1">
+                <div className="text-[11px] mt-1" style={{ color: 'var(--lh-text-muted)' }}>
                   {t.dominio ? `domain: ${t.dominio}` : 'domain: —'}
                   {' · '}
                   metric: {fmtMetric(t.metrica_actual)} (baseline {fmtMetric(t.metrica_baseline)})
                 </div>
-                <div className="text-[11px] text-slate-600 mt-0.5">
+                <div className="text-[11px] mt-0.5" style={{ color: 'var(--lh-text-faint)' }}>
                   uses: {t.usos ?? 0} · fails: {t.fallos ?? 0}
                 </div>
                 {estado === 'cuarentena' && (
@@ -115,7 +123,7 @@ export default function QuarantinePanel() {
         </ul>
       )}
 
-      {error && <div className="text-xs text-amber-400 mt-2">{error}</div>}
+      {error && <div className="text-xs mt-2" style={{ color: 'var(--lh-alert)' }}>{error}</div>}
     </div>
   )
 }

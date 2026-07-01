@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
+import { toast } from '../lib/toast'
 
-function Item({ label, value, tone = 'text-slate-300' }) {
+function Item({ label, value, tone = 'var(--lh-text)' }) {
   return (
     <div className="flex items-center justify-between gap-3 text-xs">
-      <span className="text-slate-500">{label}</span>
-      <span className={`text-right ${tone}`}>{String(value)}</span>
+      <span style={{ color: 'var(--lh-text-muted)' }}>{label}</span>
+      <span className="text-right" style={{ color: tone }}>{String(value)}</span>
     </div>
   )
 }
@@ -94,9 +95,13 @@ export default function HealthPanel() {
         throw new Error(data.detail || 'Import failed')
       }
 
-      setMessage(`Import complete: ${data.audit_events} audit, ${data.facts} facts, ${data.sessions} sessions, ${data.scheduled_tasks} tasks`)
+      const summary = `Import complete: ${data.audit_events} audit, ${data.facts} facts, ${data.sessions} sessions, ${data.scheduled_tasks} tasks`
+      setMessage(summary)
+      toast.success(summary)
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Import failed')
+      const msg = error instanceof Error ? error.message : 'Import failed'
+      setMessage(msg)
+      toast.error(msg)
     } finally {
       setImporting(false)
     }
@@ -107,16 +112,16 @@ export default function HealthPanel() {
       <div className="flex items-center justify-between mb-3">
         <h2 className="lh-card-title">Runtime</h2>
         {!loading && health && (
-          <span className={health.voice_active ? 'text-xs text-green-400' : 'text-xs text-slate-500'}>
+          <span className="text-xs" style={{ color: health.voice_active ? 'var(--lh-ok)' : 'var(--lh-text-muted)' }}>
             {health.voice_active ? 'awake' : 'sleeping'}
           </span>
         )}
       </div>
 
       {loading ? (
-        <p className="text-slate-600 text-xs">Loading…</p>
+        <p className="text-xs" style={{ color: 'var(--lh-text-faint)' }}>Loading…</p>
       ) : !health ? (
-        <p className="text-slate-600 text-xs">Runtime info unavailable.</p>
+        <p className="text-xs" style={{ color: 'var(--lh-text-faint)' }}>Runtime info unavailable.</p>
       ) : (
         <div className="space-y-2">
           <Item label="Uptime" value={fmtUptime(health.uptime_seconds)} />
@@ -129,26 +134,27 @@ export default function HealthPanel() {
           <Item
             label="Dashboard"
             value={health.dashboard_built ? 'built' : 'not built'}
-            tone={health.dashboard_built ? 'text-green-400' : 'text-amber-400'}
+            tone={health.dashboard_built ? 'var(--lh-ok)' : 'var(--lh-accent)'}
           />
           <Item
             label="Destructive shell"
             value={health.allow_destructive_shell ? 'allowed' : 'blocked'}
-            tone={health.allow_destructive_shell ? 'text-amber-400' : 'text-green-400'}
+            tone={health.allow_destructive_shell ? 'var(--lh-accent)' : 'var(--lh-ok)'}
           />
           <Item
             label="Write root"
             value={health.file_write_root || 'unrestricted'}
-            tone={health.file_write_root ? 'text-blue-300' : 'text-amber-400'}
+            tone={health.file_write_root ? 'var(--lh-accent-text)' : 'var(--lh-accent)'}
           />
           <Item label="API" value={`${health.api_host}:${health.api_port}`} />
-          <div className="pt-2 border-t border-slate-800">
+          <div className="pt-2" style={{ borderTop: '1px solid var(--lh-border)' }}>
             <div className="flex items-center gap-3">
               <a
                 href="/api/export"
                 target="_blank"
                 rel="noreferrer"
-                className="text-xs text-blue-400 hover:text-blue-300"
+                className="text-xs"
+                style={{ color: 'var(--lh-accent-text)' }}
               >
                 Open JSON export
               </a>
@@ -156,7 +162,8 @@ export default function HealthPanel() {
                 type="button"
                 onClick={handleImportClick}
                 disabled={importing}
-                className="text-xs text-amber-400 hover:text-amber-300 disabled:text-slate-600"
+                className="text-xs"
+                style={{ color: importing ? 'var(--lh-text-faint)' : 'var(--lh-accent-text)' }}
               >
                 {importing ? 'Importing…' : 'Import JSON snapshot'}
               </button>
@@ -169,7 +176,7 @@ export default function HealthPanel() {
               />
             </div>
             {message && (
-              <div className="text-xs text-slate-500 mt-2">
+              <div className="text-xs mt-2" style={{ color: 'var(--lh-text-muted)' }}>
                 {message}
               </div>
             )}
