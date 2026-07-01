@@ -187,6 +187,36 @@ halts the path. `api/flow_routes.py`: `GET/POST /api/flows`,
 `GET/PUT/PATCH/DELETE /api/flows/{id}`, `POST /api/flows/{id}/run`. The dashboard
 "Flows" section is the n8n-style canvas. No dedicated `lhassa` CLI subcommand yet.
 
+**Standing principle — every flow runs through the hierarchy.** A flow is never run
+bare: `POST /api/flows/{id}/run`, the Telegram bridge, and any future caller go through
+`org/delegate.py:delegate_flow(flow, …)`, NOT `run_flow` directly (`run_flow` is the
+internal engine). `delegate_flow` resolves the flow's **owning department** (pinned-brain →
+department, e.g. the CV flow → `interns`), walks the command path `lhassa → … → dept`, logs
+one **deterministic, $0, never-LLM** `org-delegate` Episode, then runs the flow (lazy import,
+no org↔flows cycle). It NEVER blocks the work — a topology failure degrades to a direct run.
+The hierarchy hops are deterministic on purpose: sovereignty + a full audit trail at no extra
+token cost. The "Impossible-to-reject CV" flow (`flow-zvzpry`) is the live exemplar — driven
+from Telegram (`/cv <posting>` → tailors the on-disk `cv_largo.tex` → replies with a
+tectonic-compiled PDF), guarded by a `contact_preserved` gate (an objective, LLM-free árbitro
+that fails if the model altered the candidate's email/phone).
+
+## The monitor role (`org/monitor.py` + `org/watcher.py`)
+
+**Standing principle — "monitor" is a first-class, constant role.** `org/monitor.py`:
+`gather_signals()` (read-only, $0 — recent episodes, health digest, flows, approvals,
+failures) + `monitor_pass()` → `{observations, risks, improvements, delegations}` (offline
+stub $0; live reasons via `brain_executor`). `make_brain_monitor(brain_id)` makes ANY brain a
+monitor (applied to `interns`: role → `monitor`, "everyone reports to it"); `lhassa org
+monitor` CLI. `org/watcher.py` is the always-on **$0 "ear"**: `detect_events()` diffs two
+`gather_signals` snapshots (transitions only), `watch_loop()` runs an ELASTIC cadence — idle
+`LHASSA_MONITOR_IDLE_INTERVAL` (300s) / active (`state.agent_runs` running)
+`LHASSA_MONITOR_ACTIVE_INTERVAL` (15s) — and `react()` logs a monitor Episode always + a
+de-duped Telegram alert only on IMPORTANT events (failures/health-alert/approvals). Idle is
+$0; a token is only spent under `LHASSA_MONITOR_THINK` + `LHASSA_ORG_LIVE`. Config
+`LHASSA_MONITOR_*` (default OFF); `scripts/systemd/lhassa-monitor.service` (opt-in). It reads
+the same episode/signal plane the delegation + flows write to, so it watches the WHOLE
+hierarchy: Lhassa delegates → departments execute → the cheap monitor reacts only on events.
+
 ## Agentic run surface (`api/code_routes.py`)
 
 `POST /api/code {task, cli?}` launches an agentic coding task through a local AI CLI
