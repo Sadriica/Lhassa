@@ -37,6 +37,7 @@ from lhassa.cli import commands as _commands  # noqa: E402
 from lhassa.cli import config_cmds as _config_cmds  # noqa: E402
 from lhassa.cli import extra_cmds as _extra_cmds  # noqa: E402
 from lhassa.cli import org_cmds as _org_cmds  # noqa: E402
+from lhassa.cli import seed_cmds as _seed_cmds  # noqa: E402
 from lhassa.cli import skills_cmds as _skills_cmds  # noqa: E402
 from lhassa.cli.theme import LHASSA_THEME, cost_markup, prompt_fragments  # noqa: E402
 
@@ -256,6 +257,9 @@ app.command("doctor")(_capabilities.capabilities_cmd)
 # Attach the `lhassa org` management sub-app (topology: 1..N brains + hierarchy).
 app.add_typer(_org_cmds.org_app, name="org")
 app.add_typer(_skills_cmds.skills_app, name="skills")
+
+# Attach the `lhassa seed` sub-app (reproducible bootstrap seeds — cv, …).
+app.add_typer(_seed_cmds.seed_app, name="seed")
 
 # Attach the `lhassa config` sub-app (runtime settings → ~/.lhassa/settings.env).
 app.add_typer(_config_cmds.config_app, name="config")
