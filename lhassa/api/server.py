@@ -107,16 +107,19 @@ app.add_middleware(
 # ``server`` at load time (that would risk a cycle) — shared constants live in
 # ``api/_shared.py`` and the few call-time seams import ``server`` lazily.
 from lhassa.api import (  # noqa: E402
+    activity_routes,
     approval_routes,
     checkin_routes,
     code_routes,
     config_routes,
+    fleet_routes,
     flow_routes,
     llm_routes,
     memory_routes,
-    misc_routes,
     org_routes,
+    overview_routes,
     relationship_routes,
+    reports_routes,
     runtime_routes,
     skills_routes,
     tools_routes,
@@ -124,7 +127,7 @@ from lhassa.api import (  # noqa: E402
 
 # Re-exported for the CLI's ``lhassa status``, which reuses the aggregate in-process
 # (``lhassa.cli.extra_cmds`` imports ``server.build_overview`` — no HTTP round-trip).
-from lhassa.api.misc_routes import build_overview  # noqa: F401,E402
+from lhassa.api.overview_routes import build_overview  # noqa: F401,E402
 
 app.include_router(code_routes.router)
 app.include_router(relationship_routes.router)
@@ -138,7 +141,10 @@ app.include_router(tools_routes.router)
 app.include_router(config_routes.router)
 app.include_router(org_routes.router)
 app.include_router(skills_routes.router)
-app.include_router(misc_routes.router)
+app.include_router(activity_routes.router)
+app.include_router(reports_routes.router)
+app.include_router(fleet_routes.router)
+app.include_router(overview_routes.router)
 
 
 # ── WebSocket ──────────────────────────────────────────────────────────────────

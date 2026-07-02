@@ -1,210 +1,33 @@
-"""Misc read-only routes — agents, audit, scheduled, reports, projections, fleet,
-and the dashboard-home ``/api/overview`` aggregate.
+"""Overview routes — one defensive aggregate for the dashboard home.
 
-The remaining singletons of the dashboard surface, gathered here so the integrator
-stays a pure composer:
-
-  * ``/api/agents`` / ``/api/audit`` — in-memory state + audit-log reads.
-  * ``/api/scheduled`` — the scheduled-tasks read (from the memory store).
-  * Phase-6 read-only surfaces ``/api/reports`` / ``/api/projections`` / ``/api/fleet``
-    (episodes summary, cost projection off the gateway ledger, and the multi-machine
-    fleet). All read-only and instance-scoped.
-  * ``/api/overview`` — one defensive aggregate for the dashboard home / ``lhassa
-    status`` (``build_overview``, reused in-process by the CLI, no HTTP).
+A single read-only digest for the dashboard's "home" surface and ``lhassa
+status``: brains, skills, pending approvals, today's cost, health, recent
+activity, and tool states — everything the owner needs to see (and approve) at a
+glance. Each sub-section is gathered INDEPENDENTLY and DEFENSIVELY: a failing
+subsystem is reported under ``errors`` and replaced with a safe default, so the
+response is always complete and NEVER 500s. LLM-free (no provider is constructed,
+no model is called). ``build_overview`` is the in-process function the CLI's
+``lhassa status`` reuses directly (it does not HTTP back to localhost).
 
 ``Config`` is read through the ``lhassa.config`` MODULE (``lhassa_config.Config``)
 rather than a bound name, so a config reload (some endpoint tests reload it) is
 picked up live — the same seam ``runtime_routes`` uses.
 
-Mounted by the integrator with ``app.include_router(misc_routes.router)``.
+Mounted by the integrator with ``app.include_router(overview_routes.router)``.
 """
 
 import time
-from dataclasses import asdict
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter
 
 import lhassa.config as lhassa_config
 from lhassa.core import db
-from lhassa.memory.store import load_all_scheduled_tasks
 from lhassa.security import approval
 from lhassa.state import state
 
 router = APIRouter()
 
-
-@router.get("/api/agents")
-async def get_agents():
-    return [
-        {
-            "id": r.id,
-            "name": r.name,
-            "status": r.status,
-            "task": r.task,
-            "output": r.output,
-            "started_at": r.started_at,
-            "finished_at": r.finished_at,
-        }
-        for r in state.agent_runs.values()
-    ]
-
-
-@router.get("/api/scheduled")
-async def get_scheduled():
-    return await load_all_scheduled_tasks()
-
-
-@router.get("/api/audit")
-async def get_audit():
-    state.load_audit_events()
-    return [asdict(event) for event in state.audit_events]
-
-
-# ── Phase 6: reports / projections / fleet (read-only, additive) ─────────────────
-#
-# Rich dashboard surfaces for "madurez": what the brain has been doing (reports),
-# where cost is trending (projections, off the same ledger/ccusage as
-# /api/llm/*), and the multi-machine fleet (last check-in + desired_state). All
-# read-only and instance-scoped, matching the existing endpoints' await style.
-
-@router.get("/api/reports")
-async def get_reports(n: int = Query(default=50, ge=1, le=500)):
-    """Recent episodes + an outcomes summary (counts by wake trigger / decision)."""
-    await db.init_db()
-    rows = await db.load_recent_episodes(lhassa_config.Config.instance_id, n)
-
-    by_despertar: dict[str, int] = {}
-    by_decision: dict[str, int] = {}
-    for r in rows:
-        trigger = str(r.get("despertar_por") or "?").split(":", 1)[0]
-        by_despertar[trigger] = by_despertar.get(trigger, 0) + 1
-        decision = str(r.get("decision") or "?")
-        by_decision[decision] = by_decision.get(decision, 0) + 1
-
-    recent = [
-        {
-            "id": r.get("id"),
-            "creado_en": r.get("creado_en"),
-            "despertar_por": r.get("despertar_por"),
-            "decision": r.get("decision"),
-            "accion": r.get("accion"),
-            "resultado": r.get("resultado"),
-            "dominio": r.get("dominio"),
-            "costo_usd": r.get("costo_usd"),
-        }
-        for r in rows
-    ]
-    return {
-        "count": len(rows),
-        "by_despertar": by_despertar,
-        "by_decision": by_decision,
-        "recent": recent,
-    }
-
-
-@router.get("/api/projections")
-async def get_projections():
-    """Cost projection from the gateway ledger (same data as /api/llm/*).
-
-    Spend so far today + a simple linear projection to day/month end. Pricing is
-    NOT duplicated — the ledger already carries per-call ``cost_usd``. The
-    cross-harness ccusage read is included (defensive; never blocks)."""
-    from lhassa.llm.ccusage import read_ccusage
-    from lhassa.llm.gateway import gateway
-
-    config = lhassa_config.Config()
-    rows = await gateway.ledger_rows()
-
-    now = datetime.now(timezone.utc)
-    today = now.strftime("%Y-%m-%d")
-    today_cost = 0.0
-    today_in = 0
-    today_out = 0
-    for r in rows:
-        if str(r.get("ts") or "").startswith(today):
-            today_cost += float(r.get("cost_usd") or 0.0)
-            today_in += int(r.get("input_tokens") or 0)
-            today_out += int(r.get("output_tokens") or 0)
-
-    seconds_elapsed = now.hour * 3600 + now.minute * 60 + now.second
-    day_fraction = max(seconds_elapsed / 86400.0, 1e-6)
-    projected_today = round(today_cost / day_fraction, 6)
-
-    return {
-        "today": {
-            "date": today,
-            "cost_usd": round(today_cost, 6),
-            "input_tokens": today_in,
-            "output_tokens": today_out,
-        },
-        "budget": {
-            "daily_token_budget": gateway.effective_daily_budget(config),
-            "output_tokens_today": await gateway.daily_output_tokens(),
-        },
-        "projection": {
-            "day_fraction_elapsed": round(day_fraction, 4),
-            "projected_today_cost_usd": projected_today,
-            "projected_month_cost_usd": round(projected_today * 30, 6),
-        },
-        "ccusage": await read_ccusage(),
-    }
-
-
-@router.get("/api/fleet")
-async def get_fleet():
-    """Known machines with their last check-in and desired_state.
-
-    Derived from existing reads: check-in episodes (``despertar_por`` =
-    ``checkin:<machine>``) carry the last-seen time; ``desired_state`` carries the
-    reconciliation target per machine. A small inline query unions the two."""
-    from lhassa._vendor import aiosqlite
-
-    await db.init_db()
-    inst = lhassa_config.Config.instance_id
-    machines: dict[str, dict] = {}
-    async with aiosqlite.connect(db.DB_PATH) as conn:
-        conn.row_factory = aiosqlite.Row
-        async with conn.execute(
-            """SELECT despertar_por AS dp, MAX(creado_en) AS last
-               FROM episodes
-               WHERE instance_id = ? AND despertar_por LIKE 'checkin:%'
-               GROUP BY despertar_por""",
-            (inst,),
-        ) as cur:
-            for row in await cur.fetchall():
-                mid = str(row["dp"]).split("checkin:", 1)[1]
-                machines.setdefault(mid, {})["last_checkin"] = row["last"]
-        async with conn.execute(
-            "SELECT DISTINCT machine_id FROM desired_state WHERE instance_id = ?",
-            (inst,),
-        ) as cur:
-            for row in await cur.fetchall():
-                machines.setdefault(row["machine_id"], {})
-
-    fleet = []
-    for mid in sorted(machines):
-        ds = await db.get_desired_state(inst, mid)
-        fleet.append(
-            {
-                "machine_id": mid,
-                "last_checkin": machines[mid].get("last_checkin"),
-                "desired_state": ds,
-            }
-        )
-    return fleet
-
-
-# ── Overview — one defensive aggregate for the dashboard home ──────────────────
-#
-# A single read-only digest for the dashboard's "home" surface and ``lhassa
-# status``: brains, skills, pending approvals, today's cost, health, recent
-# activity, and tool states — everything the owner needs to see (and approve) at a
-# glance. Each sub-section is gathered INDEPENDENTLY and DEFENSIVELY: a failing
-# subsystem is reported under ``errors`` and replaced with a safe default, so the
-# response is always complete and NEVER 500s. LLM-free (no provider is constructed,
-# no model is called). ``build_overview`` is the in-process function the CLI's
-# ``lhassa status`` reuses directly (it does not HTTP back to localhost).
 
 async def _overview_brains() -> dict:
     """Brain count + permanent admin id + standalone? (from the org topology)."""
