@@ -23,6 +23,17 @@ current high-level map see [`doc/architecture.md`](doc/architecture.md).
 
 ## Quickstart
 
+### Requirements
+
+System dependencies (install these first):
+
+- **[`uv`](https://docs.astral.sh/uv/)** — the Python toolchain (`uv sync` resolves the venv). Required.
+- **`node` + `npm`** — build the React/Vite dashboard (`npm ci && npm run build`). Required for the dashboard.
+- **`docker`** — only for the containerized path / the installer smoke test (skip with `--no-docker`).
+- **`tectonic`** *(optional)* — the LaTeX engine that compiles a tailored CV `.tex` into a PDF. Without it, the CV bridge falls back to sending the raw `.tex`. See the CV pipeline below.
+
+The subscription CLIs (`claude` / `codex` / `opencode`) are optional and need **no API key** — install whichever you use.
+
 ### One-command install (always-on Linux)
 
 ```bash
@@ -32,9 +43,21 @@ bash scripts/install.sh
 
 Preflights `python3`/`uv`/`docker`, runs `uv sync`, builds the dashboard, builds
 and smoke-tests the Docker image, installs the systemd **user** units (app +
-heartbeat, plus the Telegram poller if a token is set), and enables boot
-lingering. Dashboard then lives at **http://127.0.0.1:7766**. Full details and
-flags: [`doc/install.md`](doc/install.md).
+heartbeat + health timer + the always-on `$0` monitor watcher, plus the Telegram
+poller if a token is set), and enables boot lingering. Dashboard then lives at
+**http://127.0.0.1:7766**. Full details and flags: [`doc/install.md`](doc/install.md).
+
+### CV pipeline bootstrap
+
+On a fresh machine, seed the "Impossible-to-reject CV" work-flow with:
+
+```bash
+lhassa seed list       # list the registered seeds
+lhassa seed apply cv   # recreates the interns department + the CV work-flow
+```
+
+Then drop your real CV at `~/.lhassa/cv/cv_largo.tex` (or set `LHASSA_CV_DIR`).
+Install the optional `tectonic` dep to get a compiled PDF instead of raw `.tex`.
 
 ### Developer path
 

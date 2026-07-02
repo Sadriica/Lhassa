@@ -4,7 +4,7 @@
 # One command makes Lhassa an always-on Linux tool:
 #   - resolves the Python venv and (if needed) builds the dashboard,
 #   - builds the Docker image and smoke-tests it,
-#   - installs the systemd USER services that keep the dashboard + brain alive,
+#   - installs the systemd USER units (app + heartbeat + health + monitor + telegram),
 #   - enables them now AND on boot (via user lingering).
 #
 # It is idempotent: re-running it is safe (re-sync, re-copy units, re-enable).
@@ -36,6 +36,9 @@ APP_UNIT="lhassa-app.service"
 HEARTBEAT_SERVICE="lhassa-heartbeat.service"
 HEARTBEAT_TIMER="lhassa-heartbeat.timer"
 TELEGRAM_UNIT="lhassa-telegram.service"
+HEALTH_SERVICE="lhassa-health.service"
+HEALTH_TIMER="lhassa-health.timer"
+MONITOR_UNIT="lhassa-monitor.service"
 
 # ── Flags ─────────────────────────────────────────────────────────────────────
 DO_DOCKER=1
@@ -143,7 +146,8 @@ install_services() {
     command -v systemctl >/dev/null 2>&1 || die "systemctl not found — this step needs a systemd user session"
     mkdir -p "$SYSTEMD_DST"
 
-    local units=("$APP_UNIT" "$HEARTBEAT_SERVICE" "$HEARTBEAT_TIMER" "$TELEGRAM_UNIT")
+    local units=("$APP_UNIT" "$HEARTBEAT_SERVICE" "$HEARTBEAT_TIMER" "$TELEGRAM_UNIT" \
+                 "$HEALTH_SERVICE" "$HEALTH_TIMER" "$MONITOR_UNIT")
     local u
     for u in "${units[@]}"; do
         if [ -f "$SYSTEMD_SRC/$u" ]; then
@@ -157,11 +161,17 @@ install_services() {
     systemctl --user daemon-reload
     ok "daemon-reload"
 
-    log "Services — enabling the always-on app + heartbeat timer"
+    log "Services — enabling the always-on app + heartbeat timer + health timer + monitor"
     systemctl --user enable --now "$APP_UNIT"
     ok "enabled --now $APP_UNIT"
     systemctl --user enable --now "$HEARTBEAT_TIMER"
     ok "enabled --now $HEARTBEAT_TIMER"
+    systemctl --user enable --now "$HEALTH_TIMER"
+    ok "enabled --now $HEALTH_TIMER"
+    # The monitor unit ships LHASSA_MONITOR_ENABLED=1, so enabling it turns the
+    # always-on $0 "ear" on. Idle ticks cost zero tokens.
+    systemctl --user enable --now "$MONITOR_UNIT"
+    ok "enabled --now $MONITOR_UNIT"
 
     if telegram_configured; then
         log "Services — Telegram token detected, enabling the poller"
@@ -189,7 +199,7 @@ enable_boot() {
 summary() {
     log "Summary — what is running"
     local u
-    for u in "$APP_UNIT" "$HEARTBEAT_TIMER" "$TELEGRAM_UNIT"; do
+    for u in "$APP_UNIT" "$HEARTBEAT_TIMER" "$HEALTH_TIMER" "$MONITOR_UNIT" "$TELEGRAM_UNIT"; do
         if systemctl --user list-unit-files "$u" >/dev/null 2>&1 && \
            systemctl --user cat "$u" >/dev/null 2>&1; then
             printf '\n'
@@ -201,8 +211,13 @@ summary() {
     ok "Dashboard:  $DASHBOARD_URL"
     ok "Logs:       journalctl --user -u lhassa-app -f"
     ok "            journalctl --user -u lhassa-heartbeat -f"
+    ok "            journalctl --user -u lhassa-monitor -f"
     ok "Status:     systemctl --user status lhassa-app"
     ok "Uninstall:  bash scripts/uninstall.sh"
+    printf '\n'
+    warn "Optional system dep: 'tectonic' (LaTeX engine) — install it so the CV"
+    warn "  bridge compiles the tailored CV to PDF; without it, it sends raw .tex."
+    warn "  Bootstrap the CV pipeline on a fresh env with: lhassa seed apply cv"
 }
 
 # ── Main ──────────────────────────────────────────────────────────────────────
