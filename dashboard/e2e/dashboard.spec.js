@@ -162,8 +162,10 @@ test('runtime panel renders and imports a snapshot through dry-run flow', async 
     })),
   })
 
-  await expect(page.getByText(/Import complete:/)).toBeVisible()
-  await expect(page.getByText(/1 audit, 1 facts, 1 sessions, 1 tasks/)).toBeVisible()
+  // Scope to the panel (role=main): the success message now also appears as a global
+  // toast (role=status), so an unscoped locator matches two elements.
+  await expect(page.getByRole('main').getByText(/Import complete:/)).toBeVisible()
+  await expect(page.getByRole('main').getByText(/1 audit, 1 facts, 1 sessions, 1 tasks/)).toBeVisible()
 })
 
 test('dashboard updates when a live audit event arrives over websocket', async ({ page }) => {
