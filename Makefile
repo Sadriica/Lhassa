@@ -1,4 +1,4 @@
-.PHONY: install install-health install-heartbeat install-privileged dashboard run dev check test lint clean
+.PHONY: install install-health install-heartbeat install-telegram install-monitor install-privileged dashboard run dev check test lint clean
 
 # First-time setup: install Python deps + build the dashboard
 install:
@@ -21,6 +21,25 @@ install-heartbeat:
 	systemctl --user daemon-reload
 	systemctl --user enable --now lhassa-heartbeat.timer
 	@echo "Heartbeat scheduled. Status: systemctl --user status lhassa-heartbeat.timer"
+
+# Install + enable the Telegram inbound poller (user unit, no sudo). Credential-
+# gated: set LHASSA_TELEGRAM_BOT_TOKEN + LHASSA_TELEGRAM_CHAT_ID in .env first, or
+# it logs once and exits without touching the network.
+install-telegram:
+	mkdir -p $(HOME)/.config/systemd/user
+	cp scripts/systemd/lhassa-telegram.service $(HOME)/.config/systemd/user/
+	systemctl --user daemon-reload
+	systemctl --user enable --now lhassa-telegram.service
+	@echo "Telegram poller enabled. Status: systemctl --user status lhassa-telegram.service"
+
+# Install + enable the always-on $0 monitor watcher (user unit, no sudo). The unit
+# ships LHASSA_MONITOR_ENABLED=1; idle ticks cost zero tokens.
+install-monitor:
+	mkdir -p $(HOME)/.config/systemd/user
+	cp scripts/systemd/lhassa-monitor.service $(HOME)/.config/systemd/user/
+	systemctl --user daemon-reload
+	systemctl --user enable --now lhassa-monitor.service
+	@echo "Monitor watcher enabled. Status: systemctl --user status lhassa-monitor.service"
 
 # Install the scoped NOPASSWD sudoers drop-in so lhassa can run admin commands as
 # root (allowlist only). Needs sudo — you'll be prompted for your password.

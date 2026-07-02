@@ -6,6 +6,20 @@ ticks on a timer, and everything comes back on boot. For the containerized story
 (image design, the Compose roles, portability caveats) see
 [`deployment.md`](deployment.md).
 
+## System dependencies
+
+Install these before running the installer:
+
+| Dependency | Why | Required? |
+|------------|-----|-----------|
+| [`uv`](https://docs.astral.sh/uv/) | Python toolchain — `uv sync` resolves the `.venv`. | Yes |
+| `node` + `npm` | Build the React/Vite dashboard (`npm ci && npm run build`). | Yes (for the dashboard) |
+| `docker` | The containerized path + the installer's build/smoke test. | Only without `--no-docker` |
+| `tectonic` | LaTeX engine that compiles a tailored CV `.tex` into a PDF. Without it the CV bridge sends the raw `.tex`. | Optional |
+
+The subscription CLIs (`claude` / `codex` / `opencode`) are optional and need **no
+API key**. The preflight checks `python3`/`uv`/`docker` and fails early if missing.
+
 ## Quickstart
 
 ```bash
@@ -25,8 +39,8 @@ That single command:
    `--no-docker`.
 4. **Install services** — copies the systemd USER units into
    `~/.config/systemd/user/`, `daemon-reload`, and `enable --now` the app +
-   heartbeat timer (and the Telegram poller only if a bot token is set in
-   `.env`).
+   heartbeat timer + health timer + the always-on `$0` monitor watcher (and the
+   Telegram poller only if a bot token is set in `.env`).
 5. **Run on boot** — `loginctl enable-linger "$USER"` so the user services start
    at boot even before you log in. If that needs elevated rights it prints the
    exact `sudo loginctl enable-linger $USER` to run.
@@ -55,11 +69,30 @@ All units are **USER** units (under `systemctl --user`, never system-wide):
 |------|------|--------------|
 | `lhassa-app.service` | simple (foreground) | Dashboard + REST API + scheduler on `127.0.0.1:7766`. Reuses `docker/run_api.py`, so it needs no audio devices and no Deepgram/Cartesia keys. `Restart=on-failure`. |
 | `lhassa-heartbeat.timer` → `.service` | oneshot timer | One brain `step()` tick shortly after boot, then every 2 min. Routine beats are deterministic and cost $0. |
+| `lhassa-health.timer` → `.service` | oneshot timer | LLM-free PC-state health checks shortly after boot, then every 10 min. No tokens. |
+| `lhassa-monitor.service` | simple | The always-on `$0` "ear": a deterministic watch loop over episodes/health/flows/approvals that only alerts on notable events. Ships `LHASSA_MONITOR_ENABLED=1`; idle ticks cost zero tokens (a token is spent only under `LHASSA_MONITOR_THINK=1` + `LHASSA_ORG_LIVE=1`). |
 | `lhassa-telegram.service` | simple | Telegram inbound poller. Enabled only when `LHASSA_TELEGRAM_BOT_TOKEN` is set in `.env`; otherwise installed-but-disabled. |
+
+Individual units can also be installed via `make`: `make install-heartbeat`,
+`make install-health`, `make install-telegram`, `make install-monitor`.
 
 The voice pipeline (`make run` / `main.py`) is **not** run as a service — it
 needs host audio and the Deepgram/Cartesia keys. The always-on path is API-only
 by design.
+
+### CV pipeline bootstrap
+
+The "Impossible-to-reject CV" work-flow (driven from Telegram) needs its
+department + flow seeded once on a fresh env:
+
+```bash
+lhassa seed list       # list the registered seeds
+lhassa seed apply cv   # recreates the interns department + the CV work-flow
+```
+
+Then drop your real CV at `~/.lhassa/cv/cv_largo.tex` (or point `LHASSA_CV_DIR`
+elsewhere). Install the optional `tectonic` system dep to have the bridge reply
+with a compiled PDF; without it, it sends the raw `.tex`.
 
 ### Boot persistence
 
