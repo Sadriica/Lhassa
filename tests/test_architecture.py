@@ -83,12 +83,14 @@ KEYSTONE_FILES = ("registry.py", "plugins.py")
 
 # Documented allowed exceptions — precise (source-file-suffix, imported-module)
 # pairs that are intentionally permitted despite tripping a rule above.
-#   tools/{monitor,registry}.py -> lhassa.voice.notifier:
+#   tools/{monitor.py, handlers/agents.py} -> lhassa.voice.notifier:
 #     ``voice/notifier.py`` is the cross-platform DESKTOP notification router
 #     (notify-send / osascript / BurntToast), a shared utility, not the voice
-#     conversation shell. Tools legitimately use it to surface alerts. Keying the
-#     exception on the exact module keeps the rest of the ``voice`` package (e.g.
-#     ``voice.pipeline``, ``voice.brain_bridge``) forbidden to adapters.
+#     conversation shell. Tools legitimately use it to surface alerts (the
+#     delegate-to-agent handler notifies when a background agent finishes).
+#     Keying the exception on the exact module keeps the rest of the ``voice``
+#     package (e.g. ``voice.pipeline``, ``voice.brain_bridge``) forbidden to
+#     adapters.
 #   plugins.py -> lhassa.config:
 #     ``config`` is itself leaf infrastructure (pure configuration, not a feature
 #     module), so the plugin loader reading ``Config`` does not break the keystone
@@ -96,7 +98,7 @@ KEYSTONE_FILES = ("registry.py", "plugins.py")
 ALLOWED_EXCEPTIONS: frozenset[tuple[str, str]] = frozenset(
     {
         ("tools/monitor.py", "lhassa.voice.notifier"),
-        ("tools/registry.py", "lhassa.voice.notifier"),
+        ("tools/handlers/agents.py", "lhassa.voice.notifier"),
         ("plugins.py", "lhassa.config"),
     }
 )
