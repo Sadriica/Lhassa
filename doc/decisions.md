@@ -5,6 +5,66 @@ build. The source of truth for the architecture is `doc/lhassa-brief.md` (a
 living doc — correct it after each phase per §4). This file records the choices
 made along the way. Newest first.
 
+## 2026-07-02 — Reviewer-driven refactor & reproducibility pass: split the giants, seed registry, e2e net
+
+A hygiene arc (no new features): make the codebase reproducible on a fresh machine, shrink the
+biggest modules into thin compositions, and add an automated frontend safety net — all
+**behavior-preserving** (proven by an unchanged **1071-test** backend suite + a green e2e +
+per-panel live browser verification). Driven by a reviewer's prioritised list; the guiding rule
+throughout: pure structural moves, gates green after each step, one small committable slice at a
+time.
+
+**Reproducibility hardening.** `.env.example` gained the ~22 missing knobs (telegram, org-live,
+heartbeat/claude/CLI providers, CV dir/flow/tectonic, monitor_*), grouped + commented with
+defaults; `scripts/install.sh` and the `Makefile` now install + enable the `lhassa-monitor` and
+`lhassa-health` units too (all units use `%h`, no hardcoded paths); README + `doc/install.md`
+document `uv`/`node`/`tectonic` (the last optional — CV→PDF else `.tex` fallback). (`62daad8`,
+`eac7d34`)
+
+**Seed registry (elastic bootstrap).** `lhassa/seeds/` — a `Seed` unit + a `SEEDS` Registry
+(`@register_seed`, plugins-discoverable like the other swap points) with `list_seeds`/`apply_seed`/
+`apply_all` and `lhassa seed list|apply <name>|apply-all`. The `cv` seed reproduces a fresh env's
+interns department + 6 worker brains + the monitor role + the canonical `flow-zvzpry` (captured
+verbatim from the live definition), idempotent + non-destructive. Future pipelines drop in as new
+seeds. So `lhassa seed apply cv` bootstraps the whole CV pipeline on a clean machine; the owner
+only supplies their real `cv_largo.tex`. (`8854db0`)
+
+**Split the giants (behavior-preserving, each browser- or smoke-verified).** The recurring shape:
+extract cohesive pieces into folder-neighbour sub-modules, leave the original as a thin composition
+that re-exports / lazy-imports EXACTLY as before, prove it with the unchanged suite + a live check.
+- `api/server.py` **1464 → 227** lines, a pure integrator (app + auth middleware + CORS + `/ws` +
+  static + `run_api_server` + 13 `include_router`). Two passes: runtime/llm/approval/checkin
+  (`18d8498`), then skills/org/memory/config/tools/misc (`4245623`) — 0 inline HTTP routes left,
+  all moved routes smoke-200 live, test-monkeypatch seams preserved (overview reads Config via the
+  module namespace; export/import + `build_overview` re-exported from `server` for the existing
+  test/CLI importers).
+- `tools/registry.py` **981 → 128** — `TOOLS` → `tools/schemas.py`, handlers → `tools/handlers/{web,
+  shell,files,agents,schedule,outlook,github,vision,monitor,jobs}.py` + `_shared`; `registry.py`
+  re-exports every previously-importable symbol via `__all__` so callers/tests are untouched. The
+  one architecture `ALLOWED_EXCEPTIONS` (voice.notifier edge) moved to `handlers/agents.py`.
+  (`09c65fc`)
+- Dashboard: `App.jsx` **420 → 124** (hooks `useWebSocketEvents`/`useSectionRouting` + layout
+  `NavRail`/`MobileNav`/`PanelShell` + `lib/sections.js`; the WS reconnect + hash routing byte-for-
+  byte, `9f1629e`); then the three big React-Flow/feature panels, each **live-verified in Chrome**
+  before commit: `OrgFlow` **915 → 372** (`9da440d` — render, click→inspector, dept-box drag),
+  `WorkflowEditor` **944 → 387** (`e2cd855` — deep-link open, vertical layout, HYBRID inspector),
+  `BrainsPanel` **1399 → 151** (`7f780d3` — inspector incl. skills+Undo/limits/monitor role, create
+  form, Flow/Tree/Templates switch). Every lazy-import contract + toast call preserved verbatim.
+
+**Automated frontend net.** Ran the previously-unrun Playwright e2e (browsers already installed);
+it immediately earned its keep — a stale assertion failed because the toast system now also surfaces
+the "Import complete" message (role=status) alongside the panel copy (role=main), so an unscoped
+`getByText` matched two nodes. Scoped the two assertions to `role=main`; **3 e2e green**, which also
+confirms the dashboard survives all the panel refactors. (`6a22093`)
+
+**Verdict + remaining debt.** The reviewer's "dominant risk" (`server.py`) is resolved; tools and
+the original big panels are no longer concentration points. What's left is **normal growth debt, to
+split on friction, not preemptively**: `OverviewPanel` (668), `SkillsPanel` (534), `SettingsPanel`
+(474), `AgenticPanel` (478), `index.css` (899). `useBrainsData` (481) is a cohesive data hook — kept
+whole on purpose. `[SUPUESTO]`: the panel splits were verified by manual browser click-through +
+build/lint + the 3 e2e; broader automated panel coverage would let future frontend refactors skip
+the manual pass.
+
 ## 2026-07-01 — Live CV pipeline over Telegram, a governed-flow hierarchy & the constant monitor role
 
 The CV work-flow went from an offline skeleton to a real, live, gate-guarded product a person
