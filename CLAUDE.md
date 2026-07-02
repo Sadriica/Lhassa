@@ -94,7 +94,9 @@ feature module. See `doc/architecture-layers.md`.
 `get`/`get_or_none`/`NotRegistered`; duplicate-protection; `as_mapping` live view).
 Every swap point adopts it: providers (`PROVIDERS`), harnesses (`ADAPTERS`),
 verifiers (`VERIFIERS`), specialists (`SPECIALISTS`), channels (`CHANNELS`),
-commands (`COMMANDS`), actions (`core/actions.ACTIONS`), org departments.
+commands (`COMMANDS`), actions (`core/actions.ACTIONS`), **seeds** (`seeds.SEEDS` —
+`@register_seed`, a drop-in preset that bootstraps an env; e.g. the `cv` seed rebuilds the
+interns department + the CV work-flow; `lhassa seed list|apply <name>|apply-all`), org departments.
 `plugins.py:load_plugins(config)` imports every module under `plugins_dir` **and**
 every `lhassa.plugins` entry point — self-registration with **no core edit**;
 idempotent, never raises. To add a provider/channel/command/verifier/specialist/
@@ -267,8 +269,12 @@ current directory. See `doc/cli.md` for the full CLI reference.
 
 ## API + dashboard
 
-`api/server.py` (FastAPI) serves the dashboard and the REST surface plus a
-WebSocket `/ws` fan-out (`state.broadcast(dict)`). Routes include `/api/status`,
+`api/server.py` (FastAPI) is a thin **integrator** — app + `require_local_or_token` auth
+middleware + CORS + the WebSocket `/ws` fan-out (`state.broadcast(dict)`) + static serving +
+`run_api_server` + `include_router(...)`; the actual routes live in domain routers
+(`api/<domain>_routes.py`: runtime/llm/approval/checkin/skills/org/memory/config/tools/misc/code/
+flow/relationship). Add a new endpoint group as its own `*_routes.py` with an `APIRouter`, don't
+grow server.py. Routes include `/api/status`,
 `/api/overview`, `/api/memory/*`, `/api/agents`, `/api/metrics`,
 `/api/llm/{ledger,limits,ccusage}`, `/api/approvals`, `/api/audit`,
 `/api/scheduled`, `/api/tools` (+ graduate), `/api/reports`, `/api/projections`,
