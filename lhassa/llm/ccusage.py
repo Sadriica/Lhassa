@@ -110,17 +110,21 @@ def parse_ccusage(data, source: str = "ccusage") -> dict:
     }
 
 
-async def read_ccusage(timeout: float = 15.0) -> dict:
+async def read_ccusage(timeout: float = 15.0, allow_npx: bool = True) -> dict:
     """Run ``ccusage --json`` (or the npx fallback) and return a normalized summary.
 
     ``timeout`` is a TOTAL budget shared across the candidate commands (a deadline),
-    so trying the binary then the ``npx`` fallback can never exceed it — otherwise a
-    slow ``npx`` cold-start could block a caller for ~2× the timeout. Fully defensive:
-    a missing binary, a non-zero exit, a timeout, or malformed output all yield
+    so trying the binary then the ``npx`` fallback can never exceed it. ``allow_npx``
+    gates the ``npx ccusage@latest`` fallback: its cold-start downloads the package and
+    is far too slow for a dashboard auto-load, so those callers pass ``allow_npx=False``
+    (only the installed binary; instant degrade when it is absent). Fully defensive: a
+    missing binary, a non-zero exit, a timeout, or malformed output all yield
     ``{"available": False, ...}``. This function never raises.
     """
     deadline = asyncio.get_event_loop().time() + max(0.0, timeout)
     for argv in _CCUSAGE_COMMANDS:
+        if not allow_npx and argv and argv[0] == "npx":
+            continue  # skip the slow npx cold-start for snappy callers
         remaining = deadline - asyncio.get_event_loop().time()
         if remaining <= 0:
             break  # budget spent — degrade rather than block on the next candidate
