@@ -11,6 +11,8 @@ This is the adapter only. Wiring it into the heartbeat loop is a later step.
 
 from __future__ import annotations
 
+from typing import Optional
+
 import httpx
 from loguru import logger
 
@@ -33,8 +35,20 @@ def is_configured(config) -> bool:
     return bool(token and chat_id)
 
 
-async def send(text: str, *, config=None) -> bool:
+async def send(
+    text: str,
+    *,
+    config=None,
+    parse_mode: Optional[str] = None,
+    reply_markup: Optional[dict] = None,
+) -> bool:
     """Send ``text`` to the configured Telegram chat. Returns whether it was sent.
+
+    ``parse_mode`` (e.g. ``"HTML"``) and ``reply_markup`` (an inline-keyboard dict,
+    passed straight through) are optional and default to ``None`` — omitted from the
+    payload, so existing callers behave identically. A caller using
+    ``parse_mode="HTML"`` is responsible for HTML-escaping any interpolated dynamic
+    content (``html.escape``) before it reaches this function.
 
     Credential-gated: with no token or no chat id this returns ``False`` and makes
     **no network call**. Fully defensive: any HTTP error is logged and yields
@@ -51,7 +65,11 @@ async def send(text: str, *, config=None) -> bool:
         return False
 
     url = _SEND_URL.format(token=token)
-    payload = {"chat_id": chat_id, "text": text}
+    payload: dict = {"chat_id": chat_id, "text": text}
+    if parse_mode:
+        payload["parse_mode"] = parse_mode
+    if reply_markup:
+        payload["reply_markup"] = reply_markup
 
     try:
         async with httpx.AsyncClient(timeout=_TIMEOUT) as client:

@@ -58,8 +58,13 @@ class Channel(Protocol):
         """True when this channel has everything it needs to deliver."""
         ...
 
-    async def send(self, text: str, *, level: str = "info", config=None) -> bool:
-        """Deliver ``text``. Never raises; returns whether it was delivered."""
+    async def send(self, text: str, *, level: str = "info", config=None, **kwargs) -> bool:
+        """Deliver ``text``. Never raises; returns whether it was delivered.
+
+        ``**kwargs`` carries channel-specific extras (e.g. Telegram's ``parse_mode``
+        / ``reply_markup``); a channel that has no use for them simply ignores them
+        rather than raising on an unexpected keyword.
+        """
         ...
 
 
@@ -140,9 +145,9 @@ class TelegramChannel:
     def is_configured(self, config) -> bool:
         return telegram.is_configured(config)
 
-    async def send(self, text: str, *, level: str = "info", config=None) -> bool:
+    async def send(self, text: str, *, level: str = "info", config=None, **kwargs) -> bool:
         try:
-            return await telegram.send(text, config=config)
+            return await telegram.send(text, config=config, **kwargs)
         except Exception as exc:  # the adapter shouldn't, but a Channel never raises
             logger.warning(f"notify: telegram channel raised: {exc}")
             return False
@@ -172,7 +177,9 @@ class LogChannel:
     def is_configured(self, config=None) -> bool:
         return True
 
-    async def send(self, text: str, *, level: str = "info", config=None) -> bool:
+    async def send(self, text: str, *, level: str = "info", config=None, **kwargs) -> bool:
+        # kwargs (e.g. Telegram's parse_mode/reply_markup) are irrelevant here — a
+        # log line has no notion of formatting/buttons, so they are simply ignored.
         log_level = _LOG_LEVELS.get(str(level).lower(), "INFO")
         try:
             logger.log(log_level, f"[notify] {text}")

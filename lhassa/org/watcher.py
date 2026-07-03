@@ -248,6 +248,42 @@ def _summarize(events: list[dict]) -> str:
 
 # ── the reaction (episode always; notify + think only when warranted) ─────────────
 
+# Cap on how many pending approvals get an inline Approve/Deny row (keep the
+# keyboard short even when the queue is long).
+_APPROVAL_KEYBOARD_CAP = 5
+
+
+async def _approval_keyboard(instance_id: str) -> Optional[dict]:
+    """An inline keyboard with an Approve/Deny row per pending approval, or ``None``.
+
+    Callback data is the simple ``"approve:<id>"`` / ``"deny:<id>"`` encoding the
+    inbound Telegram poller parses (:mod:`lhassa.notify.telegram_inbound`). Never
+    raises — a lookup failure (or nothing pending) degrades to ``None`` (no keyboard
+    attached, the alert is still sent as plain text).
+    """
+    try:
+        from lhassa.security import approval as _approval
+
+        pending = await _approval.pending(instance_id)
+    except Exception as exc:
+        logger.debug("monitor watcher: could not build approval keyboard: {}", exc)
+        return None
+    if not pending:
+        return None
+
+    rows = []
+    for ap in pending[:_APPROVAL_KEYBOARD_CAP]:
+        ap_id = ap.get("id")
+        if not ap_id:
+            continue
+        rows.append(
+            [
+                {"text": f"✅ Approve {ap_id}", "callback_data": f"approve:{ap_id}"},
+                {"text": f"❌ Deny {ap_id}", "callback_data": f"deny:{ap_id}"},
+            ]
+        )
+    return {"inline_keyboard": rows} if rows else None
+
 
 async def react(events: list[dict], *, department: str, config: Optional[Config] = None) -> dict:
     """React to detected events: ALWAYS log an episode; notify only when important.
@@ -292,11 +328,21 @@ async def react(events: list[dict], *, department: str, config: Optional[Config]
         if getattr(config, "monitor_notify", True) and fp != _STATE.get("last_alert_fp"):
             message = f"monitor · {department}: {_summarize(important)}"
             level = "error" if any(e.get("level") == "alert" for e in important) else "warning"
+
+            # A NEW pending approval gets an inline Approve/Deny keyboard attached
+            # (Telegram-specific; other channels simply ignore the extra kwarg).
+            extra: dict = {}
+            if any(e.get("kind") == _KIND_APPROVALS for e in important):
+                with contextlib.suppress(Exception):
+                    keyboard = await _approval_keyboard(instance_id)
+                    if keyboard:
+                        extra["reply_markup"] = keyboard
+
             with contextlib.suppress(Exception):
                 # Lazy import: keep the module's import graph shell-agnostic.
                 from lhassa.notify.dispatch import notify
 
-                notified = await notify(message, level=level, config=config)
+                notified = await notify(message, level=level, config=config, **extra)
             _STATE["last_alert_fp"] = fp
     else:
         # Condition no longer present → forget it so a recurrence alerts afresh.

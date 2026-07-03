@@ -47,8 +47,12 @@ class DesktopChannel:
         """True when the ``notify-send`` binary is available on ``PATH``."""
         return shutil.which(_NOTIFY_SEND) is not None
 
-    async def send(self, text: str, *, level: str = "info", config=None) -> bool:
-        """Show ``text`` as a desktop toast. Never raises; returns delivered?."""
+    async def send(self, text: str, *, level: str = "info", config=None, **kwargs) -> bool:
+        """Show ``text`` as a desktop toast. Never raises; returns delivered?.
+
+        ``**kwargs`` (e.g. Telegram's ``parse_mode`` / ``reply_markup``) has no
+        equivalent on a desktop toast and is simply ignored.
+        """
         if shutil.which(_NOTIFY_SEND) is None:
             return False
         try:
