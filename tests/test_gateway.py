@@ -468,3 +468,61 @@ async def test_tool_turn_cost_correct_for_known_model(gw, metrics_guard):
     rows = await gw.ledger_rows()
     assert rows[-1]["cache_hit"] == 0
     assert rows[-1]["cost_usd"] == pytest.approx(expected)
+
+
+# ── spend_summary — "spend as a signal" ─────────────────────────────────────
+
+
+async def test_spend_summary_reports_tokens_budget_pct_and_cost(gw, metrics_guard):
+    cfg = FakeConfig(
+        model="claude-opus-4-8-20251101", llm_daily_token_budget=200, llm_cache_enabled=False
+    )
+    fake, _ = make_fake_completion(output_tokens=50, input_tokens=100)
+
+    await gw.complete(MESSAGES, config=cfg, completion_fn=fake)
+
+    summary = await gw.spend_summary(cfg)
+    assert summary["output_tokens"] == 50
+    assert summary["budget"] == 200
+    assert summary["pct_used"] == pytest.approx(0.25)
+    expected_cost = (100 * 5.0 + 50 * 25.0) / 1_000_000
+    assert summary["cost_usd"] == pytest.approx(expected_cost)
+    assert summary["day"]
+
+
+async def test_spend_summary_unlimited_budget_pct_is_zero(gw, metrics_guard):
+    cfg = FakeConfig(llm_daily_token_budget=0, llm_cache_enabled=False)
+    fake, _ = make_fake_completion(output_tokens=999)
+
+    await gw.complete(MESSAGES, config=cfg, completion_fn=fake)
+
+    summary = await gw.spend_summary(cfg)
+    assert summary["budget"] == 0
+    assert summary["pct_used"] == 0.0
+    assert summary["output_tokens"] == 999
+
+
+async def test_spend_summary_no_calls_yet_is_zeroed(gw, metrics_guard):
+    cfg = FakeConfig(llm_daily_token_budget=100)
+    summary = await gw.spend_summary(cfg)
+    assert summary["output_tokens"] == 0
+    assert summary["cost_usd"] == 0.0
+    assert summary["pct_used"] == 0.0
+
+
+async def test_module_level_spend_summary_wraps_default_gateway(monkeypatch, metrics_guard):
+    """``lhassa.llm.gateway.spend_summary()`` is a thin wrapper over the default
+    module-level ``gateway`` instance."""
+    import lhassa.llm.gateway as gw_mod
+
+    called = {}
+
+    async def _fake(self, config=None):
+        called["config"] = config
+        return {"day": "x", "output_tokens": 1, "budget": 2, "pct_used": 0.5, "cost_usd": 0.01}
+
+    monkeypatch.setattr(gw_mod.LedgerGateway, "spend_summary", _fake)
+    cfg = FakeConfig()
+    result = await gw_mod.spend_summary(cfg)
+    assert result["pct_used"] == 0.5
+    assert called["config"] is cfg

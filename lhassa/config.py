@@ -304,6 +304,43 @@ class Config:
     context_token_budget: int = _safe_int(
         os.getenv("LHASSA_CONTEXT_TOKEN_BUDGET", "2000"), 2000
     )
+    # Token budget for a "minimal" context load — the tier the deterministic
+    # policy layer (core/policy.py) requests for routine/default judgment (no
+    # reflex flagged it hard). Cheaper than the full budget above; fewer recent
+    # episodes are pulled too (see core/step.py's _judge tier handling).
+    context_token_budget_minimal: int = _safe_int(
+        os.getenv("LHASSA_CONTEXT_TOKEN_BUDGET_MINIMAL", "600"), 600
+    )
+
+    # ── Deterministic policy layer ("reflexes", core/policy.py) ───────────────
+    # Repos that reconcile themselves automatically (sync_repo, no judgment) the
+    # moment the watchlist sees a new commit. CSV of absolute paths; empty = no
+    # repo auto-syncs (every repo_changed trigger routes to judgment, as before).
+    auto_sync_repos: str = os.getenv("LHASSA_AUTO_SYNC_REPOS", "")
+
+    # ── Budget soft-limit (router downgrade) ──────────────────────────────────
+    # Once today's spend crosses this fraction of the daily token budget, the
+    # router never picks the smart model for a "hard" judgment (it downgrades to
+    # the cheap/routine path, which also prefers $0 providers) — a soft brake
+    # before BudgetExceeded hits outright. Only meaningful when
+    # llm_daily_token_budget > 0 (0 = unlimited, so no soft limit either).
+    budget_soft_pct: float = _safe_float(
+        os.getenv("LHASSA_BUDGET_SOFT_PCT", "0.8"), 0.8
+    )
+
+    # ── Deferred-task retry sweep (resilience) ────────────────────────────────
+    # A task the judgment path could not run (no provider / budget spent) is
+    # marked "diferida". Each heartbeat re-queues a "diferida" task back to
+    # "pendiente" once it has sat for at least this many seconds, so a transient
+    # outage/budget window doesn't strand it forever.
+    deferred_retry_backoff_seconds: float = _safe_float(
+        os.getenv("LHASSA_DEFERRED_RETRY_BACKOFF", "300"), 300.0
+    )
+    # After this many retries a still-deferred task is marked "rechazada"
+    # (terminal — never retried again) instead of requeued indefinitely.
+    deferred_max_retries: int = _safe_int(
+        os.getenv("LHASSA_DEFERRED_MAX_RETRIES", "3"), 3
+    )
 
     # ── Dashboard API ─────────────────────────────────────────────────────────
     # Bind to localhost only by default. If you expose the API beyond loopback,

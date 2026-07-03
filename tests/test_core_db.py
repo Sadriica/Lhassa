@@ -194,3 +194,103 @@ async def test_add_load_and_resolve_approval(tmp_path, monkeypatch):
 
     await db.resolve_approval("inst_personal", ap_id, "aprobada")
     assert await db.load_pending_approvals("inst_personal") == []
+
+
+# ── sweep_deferred_tasks (resilience: retry / reject deferred tasks) ────────────
+
+_OLD_TS = "2000-01-01T00:00:00+00:00"
+
+
+async def _defer(db, monkeypatch, instance_id, task_id):
+    """Mark ``task_id`` diferida with a stale ``updated_en`` (well past any backoff)."""
+    with monkeypatch.context() as m:
+        m.setattr(db, "_now", lambda: _OLD_TS)
+        await db.set_task_state(instance_id, task_id, "diferida")
+
+
+@pytest.mark.asyncio
+async def test_sweep_deferred_tasks_respects_backoff_window(tmp_path, monkeypatch):
+    db = await _init(tmp_path, monkeypatch)
+    task_id = await db.add_task("inst_personal", "algo", "x", params={})
+    # Deferred just now (updated_en ~= now) — a large backoff window means it is
+    # NOT yet due for retry.
+    await db.set_task_state("inst_personal", task_id, "diferida")
+
+    result = await db.sweep_deferred_tasks(
+        "inst_personal", backoff_seconds=3600, max_retries=3
+    )
+    assert result == {"requeued": 0, "rejected_ids": []}
+    tasks = await db.list_tasks("inst_personal")
+    assert tasks[0]["estado"] == "diferida"
+
+
+@pytest.mark.asyncio
+async def test_sweep_deferred_tasks_requeues_after_backoff(tmp_path, monkeypatch):
+    db = await _init(tmp_path, monkeypatch)
+    task_id = await db.add_task("inst_personal", "algo", "x", params={"foo": "bar"})
+    await _defer(db, monkeypatch, "inst_personal", task_id)
+
+    result = await db.sweep_deferred_tasks(
+        "inst_personal", backoff_seconds=1, max_retries=3
+    )
+    assert result["requeued"] == 1
+    assert result["rejected_ids"] == []
+
+    tasks = await db.list_tasks("inst_personal")
+    assert tasks[0]["estado"] == "pendiente"
+    assert tasks[0]["params"]["_retries"] == 1
+    # The original params survive the requeue (only _retries is added/bumped).
+    assert tasks[0]["params"]["foo"] == "bar"
+
+
+@pytest.mark.asyncio
+async def test_sweep_deferred_tasks_rejects_after_max_retries(tmp_path, monkeypatch):
+    db = await _init(tmp_path, monkeypatch)
+    task_id = await db.add_task("inst_personal", "algo", "x", params={})
+    max_retries = 2
+
+    # Exhaust the retries: each cycle defers, then the sweep requeues it.
+    for expected_retries in range(1, max_retries + 1):
+        await _defer(db, monkeypatch, "inst_personal", task_id)
+        result = await db.sweep_deferred_tasks(
+            "inst_personal", backoff_seconds=1, max_retries=max_retries
+        )
+        assert result["requeued"] == 1
+        assert result["rejected_ids"] == []
+        tasks = await db.list_tasks("inst_personal")
+        assert tasks[0]["params"]["_retries"] == expected_retries
+
+    # One more deferral: retries already at max_retries → terminal rejection.
+    await _defer(db, monkeypatch, "inst_personal", task_id)
+    result = await db.sweep_deferred_tasks(
+        "inst_personal", backoff_seconds=1, max_retries=max_retries
+    )
+    assert result["requeued"] == 0
+    assert result["rejected_ids"] == [task_id]
+
+    tasks = await db.list_tasks("inst_personal")
+    assert tasks[0]["estado"] == "rechazada"
+
+    # A rejected task is terminal — a further sweep leaves it alone.
+    result = await db.sweep_deferred_tasks(
+        "inst_personal", backoff_seconds=1, max_retries=max_retries
+    )
+    assert result == {"requeued": 0, "rejected_ids": []}
+
+
+@pytest.mark.asyncio
+async def test_sweep_deferred_tasks_ignores_other_states_and_instances(tmp_path, monkeypatch):
+    db = await _init(tmp_path, monkeypatch)
+    pending_id = await db.add_task("inst_personal", "algo", "x", params={})
+    done_id = await db.add_task("inst_personal", "algo", "y", params={})
+    await db.set_task_state("inst_personal", done_id, "hecha")
+    other_task = await db.add_task("inst_other", "algo", "z", params={})
+    await _defer(db, monkeypatch, "inst_other", other_task)
+
+    result = await db.sweep_deferred_tasks(
+        "inst_personal", backoff_seconds=1, max_retries=3
+    )
+    assert result == {"requeued": 0, "rejected_ids": []}
+
+    assert (await db.list_tasks("inst_personal", estado="pendiente"))[0]["id"] == pending_id
+    assert (await db.list_tasks("inst_other", estado="diferida"))[0]["id"] == other_task

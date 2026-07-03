@@ -255,6 +255,35 @@ EDITABLE: list[dict] = [
         "restart": RESTART_NONE,
     },
     {
+        "key": "budget_soft_pct",
+        "attr": "budget_soft_pct",
+        "env_var": "LHASSA_BUDGET_SOFT_PCT",
+        "type": "float",
+        "label": "Budget soft-limit fraction (downgrade smart→cheap)",
+        "help": (
+            "Once today's spend crosses this fraction of the daily token budget, "
+            "the router never picks the smart model — it downgrades to cheap/$0 "
+            "providers as a brake before the budget is fully exhausted."
+        ),
+        "group": "Budget & Safety",
+        "default": 0.8,
+        "restart": RESTART_NONE,
+    },
+    {
+        "key": "deferred_max_retries",
+        "attr": "deferred_max_retries",
+        "env_var": "LHASSA_DEFERRED_MAX_RETRIES",
+        "type": "int",
+        "label": "Max retries before a deferred task is rejected",
+        "help": (
+            "A task the judgment path could not run (no provider / budget spent) "
+            "is retried this many times before it is marked 'rechazada' (terminal)."
+        ),
+        "group": "Budget & Safety",
+        "default": 3,
+        "restart": RESTART_NONE,
+    },
+    {
         "key": "pseudonymize_remote",
         "attr": "pseudonymize_remote",
         "env_var": "LHASSA_PSEUDONYMIZE_REMOTE",
@@ -304,6 +333,37 @@ EDITABLE: list[dict] = [
         "group": "Memory",
         "default": "nomic-embed-text",
         "restart": RESTART_APP,
+    },
+    {
+        "key": "context_token_budget_minimal",
+        "attr": "context_token_budget_minimal",
+        "env_var": "LHASSA_CONTEXT_TOKEN_BUDGET_MINIMAL",
+        "type": "int",
+        "label": "Minimal context token budget (routine reflex think)",
+        "help": (
+            "Token budget the deterministic policy layer requests for a routine "
+            "judgment (no reflex flagged it hard) — cheaper than the full "
+            "context_token_budget used for a hard judgment."
+        ),
+        "group": "Memory",
+        "default": 600,
+        "restart": RESTART_NONE,
+    },
+    # ── Watchlist ────────────────────────────────────────────────────────────────
+    {
+        "key": "auto_sync_repos",
+        "attr": "auto_sync_repos",
+        "env_var": "LHASSA_AUTO_SYNC_REPOS",
+        "type": "str",
+        "label": "Auto-sync repos on change (CSV paths)",
+        "help": (
+            "Repos in this list reconcile themselves automatically (sync_repo) "
+            "the moment the watchlist sees a new commit — no judgment needed. "
+            "Repos NOT in this list still route a repo_changed trigger to judgment."
+        ),
+        "group": "Watchlist",
+        "default": "",
+        "restart": RESTART_NONE,
     },
     # ── Surfaces ─────────────────────────────────────────────────────────────────
     {

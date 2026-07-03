@@ -407,6 +407,55 @@ class LedgerGateway:
                 row = await cur.fetchone()
         return int(row[0]) if row else 0
 
+    async def _cost_today(self, day: str) -> float:
+        """Sum of ``ledger.cost_usd`` for calls timestamped on ``day`` (UTC)."""
+        await self._ensure_db()
+        async with aiosqlite.connect(self.db_path) as db:
+            async with db.execute(
+                "SELECT COALESCE(SUM(cost_usd), 0) FROM ledger WHERE ts LIKE ?",
+                (f"{day}%",),
+            ) as cur:
+                row = await cur.fetchone()
+        return float(row[0]) if row else 0.0
+
+    async def spend_summary(self, config: "Config | None" = None) -> dict:
+        """Give the brain visibility into its own spend — "spend as a signal".
+
+        Returns ``{"day", "output_tokens", "budget", "pct_used", "cost_usd"}`` for
+        today (UTC): today's output-token spend, the effective daily budget
+        (runtime override if set, else ``config.llm_daily_token_budget``; 0 =
+        unlimited), the fraction of that budget already used (``0.0`` when
+        unlimited), and today's real cost in USD from the ledger. Never raises —
+        a query error degrades to a zeroed summary so a caller (e.g. the
+        ``check_spend`` action) can always report *something*.
+        """
+        if config is None:
+            from lhassa.config import Config
+
+            config = Config()
+        try:
+            day = _today()
+            spent = await self.daily_output_tokens(day)
+            budget = self.effective_daily_budget(config)
+            pct_used = (spent / budget) if budget > 0 else 0.0
+            cost_today = await self._cost_today(day)
+            return {
+                "day": day,
+                "output_tokens": spent,
+                "budget": budget,
+                "pct_used": pct_used,
+                "cost_usd": cost_today,
+            }
+        except Exception as exc:
+            logger.warning(f"LLM gateway: spend_summary failed: {exc}")
+            return {
+                "day": _today(),
+                "output_tokens": 0,
+                "budget": 0,
+                "pct_used": 0.0,
+                "cost_usd": 0.0,
+            }
+
     async def _add_daily_spend(self, day: str, output_tokens: int) -> None:
         async with aiosqlite.connect(self.db_path) as db:
             await db.execute(
@@ -909,3 +958,13 @@ class LedgerGateway:
 # Module-level default instance — import from anywhere via
 # `from lhassa.llm.gateway import gateway`.
 gateway = LedgerGateway()
+
+
+async def spend_summary(config: "Config | None" = None) -> dict:
+    """Module-level convenience wrapping the default :data:`gateway` instance.
+
+    See :meth:`LedgerGateway.spend_summary`. This is the seam the ``check_spend``
+    actionpack action (and any other caller that just wants "today's spend")
+    uses without needing the ``LedgerGateway`` instance.
+    """
+    return await gateway.spend_summary(config)

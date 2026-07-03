@@ -23,9 +23,11 @@ and returns immediately. A later tick's ``runner.supervise()`` reaps it via disk
 
 from typing import Optional
 
+from loguru import logger
+
 from lhassa.agents import verify as verify_agent
 from lhassa.config import Config
-from lhassa.core import actions, db, dispatch, watchlist
+from lhassa.core import actions, db, dispatch, policy, watchlist
 from lhassa.core.episode import Episode
 from lhassa.harness import runner
 from lhassa.harness.adapter import get_adapter
@@ -65,6 +67,18 @@ def _build_messages(trigger: "watchlist.Trigger", ctx: "memory_load.Context") ->
     return [{"role": "user", "content": body}]
 
 
+# Fewer recent episodes for a "minimal" context load (a routine/default judgment
+# with no reflex flagging it hard) than the full-tier default (memory_load.load's
+# own default of 20).
+_MINIMAL_RECENT_N = 5
+_FULL_RECENT_N = 20
+
+
+def _judgment_query(trigger: "watchlist.Trigger") -> str:
+    """The semantic-layer query text for a trigger: its objetivo, else kind:action."""
+    return trigger.objetivo or f"{trigger.kind}:{trigger.action}"
+
+
 async def _judge(
     trigger: "watchlist.Trigger",
     ep: Episode,
@@ -75,14 +89,37 @@ async def _judge(
     completion_fn,
     force_think: bool,
     force_justdo: bool,
+    context_tier: str = "full",
 ) -> bool:
     """Run the think-path for a non-fixed trigger. Returns True if the model ran.
 
-    On ``ProviderNotConfigured`` / ``BudgetExceeded`` the episode is finished as
-    ``DEFERRED_DECISION`` and False is returned — the caller counts it as deferred.
+    ``context_tier`` ("minimal" or "full", from the deterministic policy layer —
+    ``core/policy.py``) sizes the memory load: "minimal" uses
+    ``config.context_token_budget_minimal`` and fewer recent episodes; "full" uses
+    the standard ``config.context_token_budget``. The load always passes a
+    ``query`` (the trigger's objetivo, so the semantic/tag layers can actually
+    fire) and ``active_tags=[trigger.kind]``.
+
+    On ``ProviderNotConfigured`` / ``BudgetExceeded`` the router's fallback CHAIN
+    (``lhassa.llm.router.fallback_chain`` — the owner's CLI subscriptions before
+    cloud) is walked before giving up; only if every entry in the chain also
+    fails does the episode finish as ``DEFERRED_DECISION`` and False is returned
+    (the caller counts it as deferred).
     """
     try:
-        ctx = await memory_load.load(instance_id, token_budget=config.context_token_budget)
+        minimal = context_tier == "minimal"
+        token_budget = (
+            config.context_token_budget_minimal if minimal else config.context_token_budget
+        )
+        recent_n = _MINIMAL_RECENT_N if minimal else _FULL_RECENT_N
+        ctx = await memory_load.load(
+            instance_id,
+            token_budget=token_budget,
+            recent_n=recent_n,
+            active_tags=[trigger.kind],
+            query=_judgment_query(trigger),
+            config=config,
+        )
         decision = router.decide(
             trigger, ctx, config=config,
             force_think=force_think, force_justdo=force_justdo,
@@ -105,28 +142,98 @@ async def _judge(
         # verifier never calls a model — it only reads the produced text.
         vspec = (getattr(trigger, "params", {}) or {}).get("verify")
         decision_note = decision.reason
-        if vspec:
-            def _check(completion) -> bool:
-                # Pure, LLM-free gate over the answer text. Errors → not good.
-                return verify_agent.verify(completion.text, spec=vspec).passed
 
-            result = await router.cascade(
+        last_exc: Optional[Exception] = None
+        result = None
+
+        def _run_one(attempt_provider, attempt_model, opts_local):
+            if vspec:
+                def _check(completion) -> bool:
+                    # Pure, LLM-free gate over the answer text. Errors → not good.
+                    return verify_agent.verify(completion.text, spec=vspec).passed
+
+                return router.cascade(
+                    messages,
+                    config=config,
+                    provider=attempt_provider,
+                    verify=_check,
+                    max_tokens=_JUDGMENT_MAX_TOKENS,
+                    **opts_local,
+                )
+            return attempt_provider.complete(
                 messages,
-                config=config,
-                provider=chosen,
-                verify=_check,
+                model=attempt_model,
                 max_tokens=_JUDGMENT_MAX_TOKENS,
-                **opts,
+                **opts_local,
             )
+
+        # 1) Try the router's own choice first.
+        try:
+            result = await _run_one(chosen, decision.model, opts)
+        except (ProviderNotConfigured, BudgetExceeded) as exc:
+            last_exc = exc
+        except Exception as exc:  # a live provider can fail in untyped ways too
+            logger.warning(f"step: primary provider {chosen.name!r} failed: {exc}")
+            last_exc = exc
+
+        # 2) Resilience fallback CHAIN — only when the caller did NOT pin an
+        # explicit provider (``provider`` is the offline injection seam tests/CLI
+        # overrides use to force one exact provider deterministically; honoring
+        # that pin keeps the seam meaningful and never silently reaches into the
+        # real config-driven chain). On BudgetExceeded only the $0 CLI providers
+        # are tried (paying cloud again would just hit the same exhausted
+        # budget); on ProviderNotConfigured (or any other failure) the full
+        # configured chain is walked, including the cloud gateway.
+        attempts: list[tuple] = []
+        if result is None and provider is None:
+            chain = router.fallback_chain(config, chosen)
+            if isinstance(last_exc, BudgetExceeded):
+                chain = [
+                    (p, m) for p, m in chain if getattr(p, "name", "") in router.CLI_PROVIDERS
+                ]
+            attempts = chain
+
+        for attempt_provider, attempt_model in attempts:
+            try:
+                result = await _run_one(attempt_provider, attempt_model, opts)
+                decision_note = (
+                    f"{decision.reason} | fallback: {getattr(attempt_provider, 'name', '?')}"
+                )
+                break
+            except (ProviderNotConfigured, BudgetExceeded) as exc:
+                last_exc = exc
+                result = None
+                continue
+            except Exception as exc:
+                # A live provider/CLI can fail in ways neither of the two typed
+                # exceptions cover (a real network error, an auth failure, a CLI
+                # crash) — this must degrade to the next attempt (or defer), the
+                # same as ``notify/telegram_inbound._brain_reply``'s chain walk,
+                # never propagate and crash the tick.
+                logger.warning(
+                    f"step: provider {getattr(attempt_provider, 'name', '?')!r} "
+                    f"failed in the judgment fallback chain: {exc}"
+                )
+                last_exc = exc
+                result = None
+                continue
+
+        # A checked (verify-spec) judgment folds the pass/fail verdict into the
+        # decision note, whichever attempt (primary or fallback) produced ``result``.
+        if result is not None and vspec:
             vres = verify_agent.verify(result.text, spec=vspec)
             verdict = "passed" if vres.passed else "failed"
-            decision_note = f"{decision.reason} | verificado: {verdict}"
-        else:
-            result = await chosen.complete(
-                messages,
-                model=decision.model,
-                max_tokens=_JUDGMENT_MAX_TOKENS,
-                **opts,
+            decision_note = f"{decision_note} | verificado: {verdict}"
+
+        if result is None:
+            # Always surface as one of the two typed, degrade-safe exceptions the
+            # outer except below (and the caller) already handle — an arbitrary
+            # exception type from a live provider/CLI must never escape and crash
+            # the tick.
+            if isinstance(last_exc, (ProviderNotConfigured, BudgetExceeded)):
+                raise last_exc
+            raise ProviderNotConfigured(
+                f"every provider in the judgment fallback chain failed: {last_exc}"
             )
 
         # Close the loop: parse the model's reply for structured effects (facts +
@@ -224,17 +331,54 @@ async def step(
     # supervision — never blocks). This is how long work is followed across ticks.
     reaped = await runner.supervise(instance_id)
 
+    # Deferred-task retry sweep: a task the judgment path could not run (no
+    # provider / budget spent) sits "diferida" — re-queue it once the backoff
+    # window has passed, or reject it (terminal) once it has exhausted its
+    # retries. Wrapped defensively: a sweep failure must never crash a tick.
+    n_rejected = 0
+    try:
+        sweep = await db.sweep_deferred_tasks(
+            instance_id,
+            backoff_seconds=config.deferred_retry_backoff_seconds,
+            max_retries=config.deferred_max_retries,
+        )
+        for rejected_id in sweep.get("rejected_ids", []):
+            try:
+                rej_ep = Episode.begin(
+                    despertar_por="task-retry-exhausted", instance_id=instance_id
+                )
+                rej_ep.finish(
+                    decision="deferred retry exhausted",
+                    accion="reject_task",
+                    resultado=(
+                        f"task {rejected_id} exceeded "
+                        f"{config.deferred_max_retries} retries; marked rechazada"
+                    ),
+                )
+                await rej_ep.append()
+                n_rejected += 1
+            except Exception as exc:
+                logger.warning(
+                    "step: could not log rejection episode for task {}: {}",
+                    rejected_id, exc,
+                )
+    except Exception as exc:
+        logger.warning("step: deferred retry sweep failed: {}", exc)
+
     triggers = await watchlist.check(instance_id)
     if not triggers:
         summary = {"triggers": 0}
         if reaped:
             summary["reaped"] = len(reaped)
+        if n_rejected:
+            summary["rejected"] = n_rejected
         return summary
 
     n_actions = 0
     n_judged = 0
     n_deferred = 0
     n_delegated = 0
+    n_skipped = 0
 
     for trigger in triggers:
         ep = Episode.begin(
@@ -253,30 +397,62 @@ async def step(
             n_actions += 1
             ran_model = False
         else:
-            # The trigger needs the model (§2.4). First, a free rules-based decide:
-            # is this delegated CODE work (Axis 2) or direct thinking (Axis 1)?
-            decision = router.decide(
-                trigger, None, config=config,
-                force_think=force_think, force_justdo=force_justdo,
-            )
-            if decision.kind == "delegate":
-                # Long work — LAUNCH a harness process and return; do NOT block.
-                await _delegate(trigger, ep, decision, instance_id=instance_id)
-                n_delegated += 1
-                ran_model = True
+            # Deterministic policy layer FIRST (§ core/policy.py "reflexes"):
+            # zero-token triage before the router/judgment path even loads memory.
+            # NEVER raises — degrades to think/minimal on any error.
+            pdecision = policy.evaluate(trigger)
+
+            if pdecision.kind == "action":
+                result = await actions.run(
+                    pdecision.action, pdecision.params, ep
+                )
+                ep.finish(
+                    decision=pdecision.reason,
+                    accion=pdecision.action or trigger.action,
+                    resultado=result,
+                )
+                n_actions += 1
+                ran_model = False
+            elif pdecision.kind == "skip":
+                ep.finish(
+                    decision=pdecision.reason,
+                    accion=trigger.action,
+                    resultado=pdecision.reason,
+                )
+                n_skipped += 1
+                ran_model = True  # handled — the task is done, not deferred
             else:
-                # Judgment — the model wakes for criteria. Guarded so a missing
-                # provider or a spent budget degrades to a deferred episode, no crash.
-                ran_model = await _judge(
-                    trigger, ep,
-                    instance_id=instance_id, config=config,
-                    provider=provider, completion_fn=completion_fn,
+                # "think" — thread the policy's hardness hint into the trigger so
+                # the router's existing trigger.params["hard"] seam picks it up
+                # (least-code path; force_think/force_justdo still win if set).
+                if pdecision.hard:
+                    trigger.params = {**(trigger.params or {}), "hard": True}
+
+                # First, a free rules-based decide: is this delegated CODE work
+                # (Axis 2) or direct thinking (Axis 1)?
+                decision = router.decide(
+                    trigger, None, config=config,
                     force_think=force_think, force_justdo=force_justdo,
                 )
-                if ran_model:
-                    n_judged += 1
+                if decision.kind == "delegate":
+                    # Long work — LAUNCH a harness process and return; do NOT block.
+                    await _delegate(trigger, ep, decision, instance_id=instance_id)
+                    n_delegated += 1
+                    ran_model = True
                 else:
-                    n_deferred += 1
+                    # Judgment — the model wakes for criteria. Guarded so a missing
+                    # provider or a spent budget degrades to a deferred episode.
+                    ran_model = await _judge(
+                        trigger, ep,
+                        instance_id=instance_id, config=config,
+                        provider=provider, completion_fn=completion_fn,
+                        force_think=force_think, force_justdo=force_justdo,
+                        context_tier=pdecision.context_tier,
+                    )
+                    if ran_model:
+                        n_judged += 1
+                    else:
+                        n_deferred += 1
 
         await ep.append()
 
@@ -329,7 +505,6 @@ async def step(
                     )
                 except Exception as exc:
                     # Recurrence minting must never crash step().
-                    from loguru import logger
                     logger.warning(
                         "step: recurrence mint failed for task {}: {}",
                         trigger.task_id,
@@ -342,7 +517,10 @@ async def step(
         "judged": n_judged,
         "deferred": n_deferred,
         "delegated": n_delegated,
+        "skipped": n_skipped,
     }
     if reaped:
         summary["reaped"] = len(reaped)
+    if n_rejected:
+        summary["rejected"] = n_rejected
     return summary

@@ -307,6 +307,143 @@ async def test_step_verify_fails_both_records_failed(tmp_path, monkeypatch):
     assert "verificado: failed" in ep["decision"]
 
 
+# ── judgment resilience: the fallback CHAIN on ProviderNotConfigured/BudgetExceeded ──
+
+
+@pytest.mark.asyncio
+async def test_step_judgment_falls_back_through_chain_on_provider_not_configured(
+    tmp_path, monkeypatch
+):
+    db = await _init(tmp_path, monkeypatch)
+    from lhassa.core import step
+    from lhassa.llm import router as router_mod
+    from lhassa.llm.router import Decision
+
+    await db.add_task("inst_personal", "decide_thing", "asunto", params={})
+
+    primary = FakeProvider(name="opencode", raises=ProviderNotConfigured("opencode down"))
+    fallback_ok = FakeProvider(name="claude", text="fallback answer", cost_usd=0.0)
+
+    def _fake_decide(trigger, ctx=None, *, config, **kwargs):
+        return Decision(kind="think", provider=primary, model="m", reason="think: provider=opencode")
+
+    def _fake_chain(config, primary_provider):
+        assert primary_provider is primary
+        return [(fallback_ok, None)]
+
+    monkeypatch.setattr(router_mod, "decide", _fake_decide)
+    monkeypatch.setattr(router_mod, "fallback_chain", _fake_chain)
+
+    # provider=None (no injected seam) so the fallback chain is actually walked.
+    summary = await step.step("inst_personal")
+    assert summary["judged"] == 1
+    assert summary["deferred"] == 0
+
+    assert len(primary.calls) == 1
+    assert len(fallback_ok.calls) == 1
+
+    ep = (await db.load_recent_episodes("inst_personal"))[0]
+    assert ep["resultado"] == "fallback answer"
+    assert "fallback: claude" in ep["decision"]
+
+
+@pytest.mark.asyncio
+async def test_step_judgment_all_chain_entries_fail_still_defers_no_crash(
+    tmp_path, monkeypatch
+):
+    db = await _init(tmp_path, monkeypatch)
+    from lhassa.core import step
+    from lhassa.llm import router as router_mod
+    from lhassa.llm.router import Decision
+
+    await db.add_task("inst_personal", "decide_thing", "asunto", params={})
+
+    primary = FakeProvider(name="opencode", raises=ProviderNotConfigured("opencode down"))
+    also_broken = FakeProvider(name="claude", raises=RuntimeError("claude CLI crashed"))
+
+    def _fake_decide(trigger, ctx=None, *, config, **kwargs):
+        return Decision(kind="think", provider=primary, model="m", reason="think: provider=opencode")
+
+    def _fake_chain(config, primary_provider):
+        return [(also_broken, None)]
+
+    monkeypatch.setattr(router_mod, "decide", _fake_decide)
+    monkeypatch.setattr(router_mod, "fallback_chain", _fake_chain)
+
+    summary = await step.step("inst_personal")  # must not raise
+    assert summary["judged"] == 0
+    assert summary["deferred"] == 1
+
+    ep = (await db.load_recent_episodes("inst_personal"))[0]
+    assert ep["decision"] == step.DEFERRED_DECISION
+
+
+@pytest.mark.asyncio
+async def test_step_judgment_budget_exceeded_only_tries_cli_providers_in_chain(
+    tmp_path, monkeypatch
+):
+    """On BudgetExceeded only the $0 CLI providers in the chain are tried —
+    retrying the same exhausted cloud budget through another cloud entry is
+    pointless, so a non-CLI chain entry must be skipped."""
+    db = await _init(tmp_path, monkeypatch)
+    from lhassa.core import step
+    from lhassa.llm import router as router_mod
+    from lhassa.llm.gateway import BudgetExceeded
+    from lhassa.llm.router import Decision
+
+    await db.add_task("inst_personal", "decide_thing", "asunto", params={})
+
+    primary = FakeProvider(name="default", raises=BudgetExceeded("out of budget"))
+    cli_ok = FakeProvider(name="claude", text="cli fallback", cost_usd=0.0)
+    other_cloud = FakeProvider(name="other-cloud", text="should not run")
+
+    def _fake_decide(trigger, ctx=None, *, config, **kwargs):
+        return Decision(kind="think", provider=primary, model="m", reason="think: provider=default")
+
+    def _fake_chain(config, primary_provider):
+        # Chain order deliberately puts the non-CLI entry first so a bug that
+        # tries everything (not just CLI providers) would call it.
+        return [(other_cloud, None), (cli_ok, None)]
+
+    monkeypatch.setattr(router_mod, "decide", _fake_decide)
+    monkeypatch.setattr(router_mod, "fallback_chain", _fake_chain)
+
+    summary = await step.step("inst_personal")
+    assert summary["judged"] == 1
+
+    assert len(cli_ok.calls) == 1
+    assert len(other_cloud.calls) == 0  # skipped: not a $0 CLI provider
+
+    ep = (await db.load_recent_episodes("inst_personal"))[0]
+    assert ep["resultado"] == "cli fallback"
+
+
+@pytest.mark.asyncio
+async def test_step_judgment_explicit_provider_pin_skips_fallback_chain(
+    tmp_path, monkeypatch
+):
+    """The offline injection seam (``provider=``) must be honored exactly —
+    it must never silently fall through to the config-driven chain."""
+    db = await _init(tmp_path, monkeypatch)
+    from lhassa.core import step
+    from lhassa.llm import router as router_mod
+
+    await db.add_task("inst_personal", "decide_thing", "asunto", params={})
+
+    chain_called = {"n": 0}
+
+    def _fake_chain(config, primary_provider):
+        chain_called["n"] += 1
+        return [(FakeProvider(text="should not be used"), None)]
+
+    monkeypatch.setattr(router_mod, "fallback_chain", _fake_chain)
+
+    prov = FakeProvider(raises=ProviderNotConfigured("nope"))
+    summary = await step.step("inst_personal", provider=prov)
+    assert summary["deferred"] == 1
+    assert chain_called["n"] == 0  # the pinned provider seam skips the chain entirely
+
+
 # ── delegate branch — launches a harness job, never blocks ───────────────────────
 
 

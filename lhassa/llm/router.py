@@ -209,6 +209,115 @@ def pick_model(provider: ModelProvider, *, hard: bool, config: "Config") -> str:
     return config.model_smart if hard else config.model_cheap
 
 
+# ── Fallback provider CHAIN (moved from notify/telegram_inbound.py) ───────────
+#
+# Originally telegram_inbound-only; the heartbeat's judgment path (core/step.py
+# ``_judge``) needs the exact same "walk the owner's CLI subscriptions before
+# paying for cloud" behavior on a ProviderNotConfigured/BudgetExceeded, so this
+# lives in the interface layer (llm/) where both a shell (notify/) and the spine
+# (core/) can reach it. ``notify/telegram_inbound.py`` keeps a thin re-export so
+# existing imports/tests are unaffected.
+
+# Provider names that are backed by a local CLI binary — skipped from the chain
+# when that binary is not installed (``shutil.which``), so the chain degrades
+# cleanly on a machine that lacks a given subscription CLI. The binary name can be
+# overridden per-provider via a ``<name>_bin`` config attr (e.g. ``opencode_bin``).
+CLI_PROVIDERS = {"opencode", "claude", "codex"}
+
+
+def _fallback_model_for(name: str, config: "Config") -> "str | None":
+    """The model arg for a chain provider.
+
+    The cloud gateway (``default``) uses the cheap routine model, as before; the
+    CLI subscriptions (claude/codex/opencode) and other providers pass ``None`` so
+    each CLI/provider picks its own model from the owner's subscription/config.
+    """
+    if name == "default":
+        return (getattr(config, "model_cheap", "") or getattr(config, "model", "") or None)
+    return None
+
+
+def fallback_chain(config: "Config", primary: Optional[ModelProvider]) -> list[tuple]:
+    """Build the configured chat/think fallback chain as ``[(provider, model), …]``.
+
+    Walks ``config.fallback_providers`` (comma-separated names, default
+    ``"claude,codex,default"``) IN ORDER, resolving each via
+    :func:`lhassa.llm.provider.get_model_provider`. This keeps the owner on their
+    CLI subscriptions (``opencode → claude → codex``) before paying for the cloud
+    gateway (``default``). Each entry is:
+
+    - **skipped if it is the same kind as the primary** (``name == primary.name``) —
+      don't retry e.g. opencode→opencode;
+    - **skipped if it is a CLI provider whose binary is not installed**
+      (``shutil.which``), so the chain degrades cleanly on a machine missing that CLI;
+    - **skipped if it cannot be resolved** (unknown/raising factory).
+
+    Never raises — a bad config or a failed resolve yields a shorter chain. This is
+    the seam tests patch to assert the chain order / skipping behaviour.
+    """
+    chain: list[tuple] = []
+    try:
+        names = [
+            n.strip()
+            for n in (getattr(config, "fallback_providers", "") or "").split(",")
+            if n.strip()
+        ]
+    except Exception:
+        return chain
+
+    # Local (not module-level) import so a caller/test that monkeypatches
+    # ``lhassa.llm.provider.get_model_provider`` is picked up fresh on every
+    # call — mirrors the original telegram_inbound._fallback_chain behaviour.
+    from lhassa.llm.provider import get_model_provider
+
+    primary_name = getattr(primary, "name", "")
+    seen: set[str] = set()
+    for name in names:
+        if name in seen:
+            continue
+        seen.add(name)
+        if name == primary_name:
+            continue  # don't retry the same kind as the primary
+        if name in CLI_PROVIDERS:
+            binary = (getattr(config, f"{name}_bin", "") or "") or name
+            if shutil.which(binary) is None:
+                continue  # CLI not installed → skip, degrade cleanly
+        try:
+            provider = get_model_provider(config, name=name)
+        except Exception:
+            continue
+        if provider is not None:
+            chain.append((provider, _fallback_model_for(name, config)))
+    return chain
+
+
+# ── Budget soft-limit (a brake before BudgetExceeded hits outright) ──────────
+
+
+def _budget_pct_used(config: "Config") -> float:
+    """Best-effort fraction of today's daily token budget already spent.
+
+    Router functions are synchronous (``decide``/``pick_model`` are called
+    without an event loop in several places), while the accurate ledger read
+    (``gateway.spend_summary``) is async — so this reads the live in-process
+    mirror (``lhassa.state.state.metrics``) instead of hitting the DB. That
+    mirror is reset per-process (not per-UTC-day), so it is a *conservative
+    approximation* good enough to trip the soft brake during a long-running
+    process; it is not the authoritative accounting (the gateway ledger is).
+    Returns 0.0 when unlimited (budget<=0) or on any error.
+    """
+    budget = getattr(config, "llm_daily_token_budget", 0) or 0
+    if budget <= 0:
+        return 0.0
+    try:
+        from lhassa.state import state
+
+        spent = int(state.metrics.get("llm_output_tokens", 0) or 0)
+        return spent / budget
+    except Exception:
+        return 0.0
+
+
 # ── Sensitivity / hardness heuristics (rules-based, Phase 0/1) ─────────────────
 
 
@@ -275,6 +384,19 @@ def decide(
     else:
         hard = _is_hard(trigger, ctx)
 
+    # Budget soft-limit: once today's spend crosses ``budget_soft_pct`` of the
+    # daily token budget, never pick the smart model — downgrading ``hard`` to
+    # False both picks the cheap model AND re-enters the routine provider
+    # preference (local/opencode before cloud), so this is also how spend
+    # pressure steers the brain toward $0 providers.
+    budget_note = ""
+    soft_pct = getattr(config, "budget_soft_pct", 0.8)
+    if hard:
+        pct_used = _budget_pct_used(config)
+        if pct_used >= soft_pct:
+            hard = False
+            budget_note = f" budget_downgrade(pct_used={pct_used:.0%}>=soft={soft_pct:.0%})"
+
     # Thread the routine/hard signal into provider selection so the heartbeat
     # (routine) path can prefer the local model (§3-Fase 6).
     provider = pick_provider(sensitive=sensitive, config=config, hard=hard)
@@ -285,6 +407,7 @@ def decide(
         f"think: provider={provider.name} model={model} "
         f"sensitive={sensitive} hard={hard}"
         + (f" forced={forced}" if forced else "")
+        + budget_note
     )
     return Decision(kind="think", provider=provider, model=model, reason=reason)
 
