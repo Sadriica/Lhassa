@@ -132,28 +132,47 @@ async def mint_task(
     params: dict | None = None,
     *,
     origin: "Origin",
+    due_at: Optional[str] = None,
+    recurrence: Optional[str] = None,
+    judgment: bool = False,
 ) -> "tuple[str, str]":
     """Build, sign, and persist a Task with the approval frontier applied.
 
     Returns ``(task_id, estado)`` on success. If ``accion`` is not in the
-    ``ACTIONS`` registry, returns ``("", "refused: unknown accion '<accion>'")``
-    without writing anything. Any other error returns ``("", "mint_task error:
-    <exc>")``. Never raises.
+    ``ACTIONS`` registry AND ``judgment`` is False, returns
+    ``("", "refused: unknown accion '<accion>'")``. When ``judgment=True`` any
+    accion is allowed — the brain thinks about it on the next tick instead of
+    running a fixed deterministic action. Token cost applies.
+
+    ``due_at`` is an ISO 8601 UTC timestamp; the task is not returned by
+    ``load_pending_tasks`` until that time arrives.
+    ``recurrence`` is an interval in SECONDS (string); the brain mints the next
+    occurrence after marking this task "hecha".
+
+    Any other error returns ``("", "mint_task error: <exc>")``. Never raises.
 
     This is extracted from ``_apply_inner``'s task-minting block so that the
     ``add_task`` actionpack action can reuse the exact same security path
     (signing + approval frontier + DB write) without duplicating the logic.
     """
     try:
-        if not accion or accion not in _actions.ACTIONS:
-            return ("", f"refused: unknown accion {accion!r}")
+        if not accion:
+            return ("", "refused: empty accion")
+        if not judgment and accion not in _actions.ACTIONS:
+            names = sorted(_actions.ACTIONS.keys())
+            return ("", f"refused: unknown accion {accion!r}. Registered: {names}")
+
+        # Stamp the judgment flag into params so recurring tasks can recover it.
+        _params = dict(params or {})
+        if judgment:
+            _params["_judgment"] = True
 
         task = Task(
             id=_db._new_id("t"),
             instance_id=instance_id,
             accion=accion,
             objetivo=objetivo or "",
-            params=params or {},
+            params=_params,
             origen=origin,
             estado="pendiente",
             creado_en=_db._now(),
@@ -169,7 +188,7 @@ async def mint_task(
                 payload={
                     "accion": accion,
                     "objetivo": objetivo,
-                    "params": params or {},
+                    "params": _params,
                     "actor_id": origin.actor_id or "",
                     "origen_trust": int(origin.trust),
                     "task_id": task.id,
@@ -177,7 +196,10 @@ async def mint_task(
                 },
             )
 
-        await _db.add_task(**task.to_db_kwargs())
+        kwargs = task.to_db_kwargs()
+        kwargs["due_at"] = due_at
+        kwargs["recurrence"] = recurrence
+        await _db.add_task(**kwargs)
         return (task.id, task.estado)
 
     except Exception as exc:

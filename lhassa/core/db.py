@@ -66,9 +66,18 @@ def _loads(raw: Optional[str], default: Any) -> Any:
 
 # ── schema ──────────────────────────────────────────────────────────────────────
 
+async def _has_column(conn, table: str, column: str) -> bool:
+    """Return True if ``column`` exists in ``table`` (PRAGMA table_info check)."""
+    async with conn.execute(f"PRAGMA table_info({table})") as cur:
+        return any(row[1] == column for row in await cur.fetchall())
+
+
 async def init_db() -> None:
     """
     Enable WAL and create every table. Idempotent — safe to call repeatedly.
+
+    Migrations for existing production DBs are handled with idempotent
+    ALTER TABLE statements guarded by PRAGMA table_info checks.
     """
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     async with aiosqlite.connect(DB_PATH) as db:
@@ -289,6 +298,30 @@ async def init_db() -> None:
             )
         """)
 
+        # ── Phase 4 migrations: add columns to existing tables ───────────────
+        # tasks: due_at (ISO timestamp when the task becomes ready)
+        if not await _has_column(db, "tasks", "due_at"):
+            await db.execute("ALTER TABLE tasks ADD COLUMN due_at TEXT")
+        # tasks: recurrence (seconds as a string; None = one-shot)
+        if not await _has_column(db, "tasks", "recurrence"):
+            await db.execute("ALTER TABLE tasks ADD COLUMN recurrence TEXT")
+        # jobs: acked (1 once the watchlist has fired job_review for this job)
+        if not await _has_column(db, "jobs", "acked"):
+            await db.execute("ALTER TABLE jobs ADD COLUMN acked INTEGER DEFAULT 0")
+
+        # watch_state — generic key/value store for watchlist dedup hashes.
+        # Each sense writes its last-seen state here so a persistent condition
+        # fires ONCE per transition rather than on every 2-minute beat.
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS watch_state (
+                instance_id TEXT NOT NULL,
+                key         TEXT NOT NULL,
+                value       TEXT,
+                updated_en  TEXT NOT NULL,
+                PRIMARY KEY (instance_id, key)
+            )
+        """)
+
         await db.commit()
 
 
@@ -506,18 +539,28 @@ async def add_task(
     estado: str = "pendiente",
     firma: str = "",
     task_id: Optional[str] = None,
+    due_at: Optional[str] = None,
+    recurrence: Optional[str] = None,
 ) -> str:
-    """Insert a task. Returns its id (generated if not supplied)."""
+    """Insert a task. Returns its id (generated if not supplied).
+
+    ``due_at`` is an ISO 8601 UTC timestamp; a task with a future ``due_at``
+    is NOT returned by :func:`load_pending_tasks` until its time arrives.
+    ``recurrence`` is an interval in SECONDS (stored as a string); the brain
+    mints the next occurrence when it marks this task "hecha".
+    """
     task_id = task_id or _new_id("t")
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute(
             """INSERT INTO tasks(
                    id, instance_id, accion, objetivo, params,
-                   origen_trust, origen_actor, estado, firma, creado_en)
-               VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                   origen_trust, origen_actor, estado, firma, creado_en,
+                   due_at, recurrence)
+               VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 task_id, instance_id, accion, objetivo, _dumps(params or {}),
                 origen_trust, origen_actor, estado, firma, _now(),
+                due_at, recurrence,
             ),
         )
         await db.commit()
@@ -525,15 +568,49 @@ async def add_task(
 
 
 async def load_pending_tasks(instance_id: str) -> list[dict]:
-    """Return pending tasks for ``instance_id`` (oldest first), params decoded."""
+    """Return pending tasks for ``instance_id`` (oldest first), params decoded.
+
+    Due-aware: a task with a ``due_at`` timestamp in the future is NOT returned
+    until its scheduled time arrives. One-shot tasks (``due_at IS NULL``) are
+    always returned when pendiente.
+    """
+    now = _now()
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         async with db.execute(
             """SELECT * FROM tasks
                WHERE instance_id = ? AND estado = 'pendiente'
+                 AND (due_at IS NULL OR due_at <= ?)
                ORDER BY creado_en""",
-            (instance_id,),
+            (instance_id, now),
         ) as cur:
+            rows = [dict(row) for row in await cur.fetchall()]
+    for row in rows:
+        row["params"] = _loads(row.get("params"), {})
+    return rows
+
+
+async def list_tasks(
+    instance_id: str,
+    *,
+    estado: Optional[str] = None,
+    limit: int = 200,
+) -> list[dict]:
+    """Return tasks for ``instance_id`` (newest first, cap ``limit``).
+
+    Optionally filtered by ``estado``. Params decoded. Always scoped to
+    ``instance_id``.
+    """
+    sql = "SELECT * FROM tasks WHERE instance_id = ?"
+    args: list[Any] = [instance_id]
+    if estado is not None:
+        sql += " AND estado = ?"
+        args.append(estado)
+    sql += " ORDER BY creado_en DESC, rowid DESC LIMIT ?"
+    args.append(limit)
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(sql, args) as cur:
             rows = [dict(row) for row in await cur.fetchall()]
     for row in rows:
         row["params"] = _loads(row.get("params"), {})
@@ -1132,3 +1209,76 @@ async def get_all_commons(instance_id: str) -> dict[str, Any]:
         ) as cur:
             rows = await cur.fetchall()
     return {row["clave"]: _loads(row["valor"], None) for row in rows}
+
+
+# ── watch_state (watchlist dedup key/value store — Phase 4) ──────────────────────
+#
+# A generic, lightweight key/value store for watchlist transition dedup. Each
+# sense writes its last-seen state here so a persistent condition fires ONCE per
+# transition rather than every 2-minute heartbeat beat. Keys are per-sense
+# identifiers (e.g. ``repo:<path>``, ``health:level``); values are opaque strings.
+
+
+async def get_watch_state(instance_id: str, key: str) -> Optional[str]:
+    """Return the stored value for ``key``, or ``None`` if not yet set.
+
+    Scoped to ``instance_id`` so different brain instances don't cross-talk.
+    """
+    async with aiosqlite.connect(DB_PATH) as conn:
+        async with conn.execute(
+            "SELECT value FROM watch_state WHERE instance_id = ? AND key = ?",
+            (instance_id, key),
+        ) as cur:
+            row = await cur.fetchone()
+    return row[0] if row is not None else None
+
+
+async def set_watch_state(instance_id: str, key: str, value: str) -> None:
+    """Upsert the state for ``key`` to ``value``, scoped to ``instance_id``."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        await conn.execute(
+            """INSERT INTO watch_state(instance_id, key, value, updated_en)
+               VALUES(?, ?, ?, ?)
+               ON CONFLICT(instance_id, key)
+               DO UPDATE SET value = excluded.value,
+                             updated_en = excluded.updated_en""",
+            (instance_id, key, value, _now()),
+        )
+        await conn.commit()
+
+
+# ── jobs: ack surface (Phase 4 watchlist job_review sense) ───────────────────────
+#
+# ``acked`` prevents the ``_from_finished_jobs`` watchlist sense from re-firing for
+# the same finished job on every subsequent tick. The sense marks ``acked=1`` as
+# it fires, so each job_review Trigger is emitted exactly once.
+
+
+async def load_unacked_finished_jobs(instance_id: str) -> list[dict]:
+    """Return finished (done/error) jobs that have not yet been acked.
+
+    A job is "finished" when its ``estado`` is either ``done`` or starts with
+    ``error`` (runner.py uses ``"error: harness unavailable"`` and plain
+    ``"error"``). Sorted oldest-first. Scoped to ``instance_id``.
+    """
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        async with conn.execute(
+            """SELECT * FROM jobs
+               WHERE instance_id = ?
+                 AND acked = 0
+                 AND (estado = 'done' OR estado LIKE 'error%')
+               ORDER BY creado_en""",
+            (instance_id,),
+        ) as cur:
+            return [dict(row) for row in await cur.fetchall()]
+
+
+async def ack_job(instance_id: str, job_id: str) -> None:
+    """Mark a job as acked (job_review Trigger already fired). Scoped to instance."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        await conn.execute(
+            "UPDATE jobs SET acked = 1 WHERE instance_id = ? AND id = ?",
+            (instance_id, job_id),
+        )
+        await conn.commit()

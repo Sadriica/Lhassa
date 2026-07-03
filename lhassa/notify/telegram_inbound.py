@@ -28,10 +28,12 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import json as _json
 import re
 import shutil
 import time
 from pathlib import Path
+from typing import Optional
 
 import httpx
 from loguru import logger
@@ -320,14 +322,93 @@ async def _brain_reply(text: str, *, config) -> str:
             await ep.append()
 
 
+# ── Watch rules (message-pattern task minting) ───────────────────────────────
+
+
+def _load_watch_rules(config) -> list[dict]:
+    """Load ``~/.lhassa/watch_rules.json`` (or configured path). Never raises.
+
+    Returns a list of validated rule dicts: {pattern: re.Pattern, accion: str,
+    params: dict}. Missing/malformed file → empty list (feature silently off).
+    Invalid regex entries are skipped.
+    """
+    path_raw = getattr(config, "watch_rules_file", "") or ""
+    if not path_raw:
+        return []
+    import pathlib as _pathlib
+
+    try:
+        text = _pathlib.Path(path_raw).read_text(encoding="utf-8")
+        raw = _json.loads(text)
+    except (OSError, _json.JSONDecodeError, Exception):
+        return []
+
+    if not isinstance(raw, list):
+        return []
+
+    rules: list[dict] = []
+    for entry in raw:
+        if not isinstance(entry, dict):
+            continue
+        pattern_src = str(entry.get("pattern") or "").strip()
+        accion = str(entry.get("accion") or "").strip()
+        if not pattern_src or not accion:
+            continue
+        try:
+            pattern = re.compile(pattern_src, re.IGNORECASE)
+        except re.error:
+            logger.debug(f"Telegram inbound: skipping invalid rule regex {pattern_src!r}")
+            continue
+        params = entry.get("params") or {}
+        if not isinstance(params, dict):
+            params = {}
+        rules.append({"pattern": pattern, "accion": accion, "params": dict(params)})
+    return rules
+
+
+async def _try_mint_rule_task(text: str, rules: list[dict], *, config) -> Optional[str]:
+    """Try matching ``text`` against watch rules; mint the first matching task.
+
+    Returns a short confirmation string (task id) if a rule matched and the task
+    was minted, else ``None``. Never raises.
+    """
+    if not rules:
+        return None
+    try:
+        from lhassa.core import db as _db
+        from lhassa.core import dispatch as _dispatch
+        from lhassa.security.trust import Origin, TrustLevel
+
+        instance_id = getattr(config, "instance_id", None) or "inst_personal"
+        await _db.init_db()
+
+        for rule in rules:
+            if rule["pattern"].search(text):
+                origin = Origin(trust=TrustLevel.HUMANO, actor_id="telegram-rule")
+                task_id, estado = await _dispatch.mint_task(
+                    instance_id,
+                    rule["accion"],
+                    params=dict(rule["params"]),
+                    origin=origin,
+                    judgment=True,  # rule-minted tasks are judgment (any accion)
+                )
+                if task_id:
+                    return task_id
+                break  # rule matched but mint refused — don't try fallback rules
+    except Exception as exc:
+        logger.debug(f"Telegram inbound: rule task mint failed: {exc}")
+    return None
+
+
 async def _answer(text: str, *, config, chat_id: str = "") -> None:
     """Answer one message and reply with it. Never raises.
 
-    A slash command is handled by the modular command registry
-    (:mod:`lhassa.notify.commands`) — a fast, LLM-free local reply, no brain
-    episode. Anything else (plain language, or an unrecognised command that the
-    registry already turned into a help hint) falls through to the tool-less brain
-    think only when the registry returns ``None`` (i.e. it was not a command).
+    Order of handling:
+      1. ``/cv`` and CV work-flow commands.
+      2. A pending held CV from a caption-less upload.
+      3. Watch-rule matching (mint a task + reply with the id).
+      4. Slash command registry (LLM-free).
+      5. Brain think (the existing plain-language path).
     """
     # The ``/cv <job posting>`` command runs the CV work-flow against the on-disk base
     # CV and replies with the tailored file itself (not a plain string), so it is
@@ -354,6 +435,22 @@ async def _answer(text: str, *, config, chat_id: str = "") -> None:
     command_name, _ = commands.parse(stripped)
     if command_name == "cvnewbase":
         _arm_base(chat_id)
+
+    # Watch-rule matching: check rules BEFORE the command/brain fallback. A match
+    # mints a task and confirms with the task id, then returns (does not fall through).
+    if not stripped.startswith("/"):
+        rules = _load_watch_rules(config)
+        if rules:
+            task_id = await _try_mint_rule_task(stripped, rules, config=config)
+            if task_id:
+                try:
+                    await telegram.send(
+                        f"Noted. Task {task_id} minted.",
+                        config=config,
+                    )
+                except Exception as exc:
+                    logger.warning(f"Telegram inbound: rule reply send failed: {exc}")
+                return
 
     reply = None
     try:

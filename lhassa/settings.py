@@ -68,9 +68,39 @@ OPENCODE_MODEL_HINTS = [
 # Cloud model ids per provider, used to populate the cheap/smart model dropdowns.
 # [SUPUESTO] current-ish ids — kept small and defensive.
 MODEL_HINTS: dict[str, list[str]] = {
-    "groq": ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"],
-    "openai": ["gpt-4o", "gpt-4o-mini"],
-    "anthropic": ["claude-opus-4-8", "claude-haiku-4-5-20251001"],
+    "groq": [
+        "llama-3.3-70b-versatile",
+        "llama-3.1-8b-instant",
+    ],
+    "openai": [
+        "gpt-4o",
+        "gpt-4o-mini",
+    ],
+    "anthropic": [
+        "claude-sonnet-4-6",
+        "claude-opus-4-8",
+        "claude-opus-4-7",
+        "claude-opus-4-6",
+        "claude-haiku-4-5-20251001",
+        "claude-haiku-4-5",
+    ],
+    "openrouter": [
+        "anthropic/claude-sonnet-4-6",
+        "anthropic/claude-opus-4-8",
+        "anthropic/claude-haiku-4-5",
+        "openai/gpt-4o",
+        "openai/gpt-4o-mini",
+    ],
+    "cerebras": [
+        "llama3.3-70b",
+        "llama3.1-8b",
+    ],
+    "ollama": [
+        "llama3.2",
+        "llama3.3",
+        "qwen2.5-coder",
+        "nomic-embed-text",
+    ],
 }
 
 

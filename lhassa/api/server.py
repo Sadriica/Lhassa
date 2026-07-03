@@ -122,6 +122,7 @@ from lhassa.api import (  # noqa: E402
     reports_routes,
     runtime_routes,
     skills_routes,
+    task_routes,
     tools_routes,
 )
 
@@ -129,6 +130,7 @@ from lhassa.api import (  # noqa: E402
 # (``lhassa.cli.extra_cmds`` imports ``server.build_overview`` — no HTTP round-trip).
 from lhassa.api.overview_routes import build_overview  # noqa: F401,E402
 
+app.include_router(task_routes.router)
 app.include_router(code_routes.router)
 app.include_router(relationship_routes.router)
 app.include_router(flow_routes.router)
