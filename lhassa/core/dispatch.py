@@ -98,8 +98,12 @@ def _extract_json(raw_text: str) -> Optional[dict]:
 # ── Tag validation ───────────────────────────────────────────────────────────
 
 
-def _clean_tags(raw_tags: Any) -> list[str]:
-    """Validate and normalise tags: at most ``_TAGS_MAX_COUNT`` short strings."""
+def clean_tags(raw_tags: Any) -> list[str]:
+    """Validate and normalise tags: at most ``_TAGS_MAX_COUNT`` short strings.
+
+    Public since Phase 3 — actionpack actions reuse this helper to normalise
+    tags without duplicating the length/count logic.
+    """
     if not isinstance(raw_tags, list):
         return []
     cleaned: list[str] = []
@@ -112,6 +116,72 @@ def _clean_tags(raw_tags: Any) -> list[str]:
         if len(cleaned) >= _TAGS_MAX_COUNT:
             break
     return cleaned
+
+
+# Backward-compatible alias for any code that referenced the private name.
+_clean_tags = clean_tags
+
+
+# ── Public task-minting surface ──────────────────────────────────────────────
+
+
+async def mint_task(
+    instance_id: str,
+    accion: str,
+    objetivo: str = "",
+    params: dict | None = None,
+    *,
+    origin: "Origin",
+) -> "tuple[str, str]":
+    """Build, sign, and persist a Task with the approval frontier applied.
+
+    Returns ``(task_id, estado)`` on success. If ``accion`` is not in the
+    ``ACTIONS`` registry, returns ``("", "refused: unknown accion '<accion>'")``
+    without writing anything. Any other error returns ``("", "mint_task error:
+    <exc>")``. Never raises.
+
+    This is extracted from ``_apply_inner``'s task-minting block so that the
+    ``add_task`` actionpack action can reuse the exact same security path
+    (signing + approval frontier + DB write) without duplicating the logic.
+    """
+    try:
+        if not accion or accion not in _actions.ACTIONS:
+            return ("", f"refused: unknown accion {accion!r}")
+
+        task = Task(
+            id=_db._new_id("t"),
+            instance_id=instance_id,
+            accion=accion,
+            objetivo=objetivo or "",
+            params=params or {},
+            origen=origin,
+            estado="pendiente",
+            creado_en=_db._now(),
+        )
+        task.firma = _signing.sign_task(task)
+
+        needs_human = _approval.needs_approval(task)
+        if needs_human:
+            task.estado = "esperando_aprobacion"
+            await _approval.request_approval(
+                instance_id,
+                tipo="task",
+                payload={
+                    "accion": accion,
+                    "objetivo": objetivo,
+                    "params": params or {},
+                    "actor_id": origin.actor_id or "",
+                    "origen_trust": int(origin.trust),
+                    "task_id": task.id,
+                    "source": "mint_task",
+                },
+            )
+
+        await _db.add_task(**task.to_db_kwargs())
+        return (task.id, task.estado)
+
+    except Exception as exc:
+        return ("", f"mint_task error: {exc}")
 
 
 # ── Public surface ───────────────────────────────────────────────────────────
@@ -211,7 +281,7 @@ async def _apply_inner(
             continue
         # Truncate overlong content rather than rejecting it.
         contenido = contenido[:_FACT_CONTENT_MAX]
-        tags = _clean_tags(item.get("tags"))
+        tags = clean_tags(item.get("tags"))
         # SECURITY: tipo is FORCED to "dato". A model may NEVER write a
         # "directiva" or a pinned fact — those shape identity and standing
         # instructions, and their authority belongs to a human author only.
@@ -263,39 +333,22 @@ async def _apply_inner(
                 skipped_unknown.append(accion)
             continue
 
-        # Build and sign the Task — mirroring the checkin_routes pattern exactly.
-        task = Task(
-            id=_db._new_id("t"),
-            instance_id=instance_id,
-            accion=accion,
+        # Delegate signing + approval + DB write to mint_task (extracted so that
+        # the add_task actionpack action reuses the same security path).
+        task_id, estado = await mint_task(
+            instance_id,
+            accion,
             objetivo=objetivo,
             params=params,
-            origen=task_origin,
-            estado="pendiente",
-            creado_en=_db._now(),
+            origin=task_origin,
         )
-        task.firma = _signing.sign_task(task)
+        if not task_id:
+            # mint_task already refused for a reason other than unknown accion
+            # (shouldn't happen after the registry check above, but belt-and-suspenders)
+            continue
 
-        # Apply the approval frontier — HITL per flow, not global.
-        needs_human = _approval.needs_approval(task)
-        if needs_human:
-            task.estado = "esperando_aprobacion"
-            await _approval.request_approval(
-                instance_id,
-                tipo="task",
-                payload={
-                    "accion": accion,
-                    "objetivo": objetivo,
-                    "params": params,
-                    "actor_id": _JUDGMENT_ACTOR,
-                    "origen_trust": int(minted_trust),
-                    "task_id": task.id,
-                    "source": f"judgment:{episode.id}",
-                },
-            )
+        if estado == "esperando_aprobacion":
             n_awaiting += 1
-
-        await _db.add_task(**task.to_db_kwargs())
         n_tasks += 1
 
     if n_tasks:

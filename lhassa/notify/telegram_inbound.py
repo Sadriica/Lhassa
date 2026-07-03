@@ -674,6 +674,9 @@ async def run_forever(config=None) -> None:
     When polling is disabled or unconfigured this logs once and returns
     immediately — no network, no loop.
     """
+    from lhassa import actionpack
+    actionpack.register_all()
+
     if config is None:
         from lhassa.config import Config
 

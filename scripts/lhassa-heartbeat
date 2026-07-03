@@ -29,6 +29,8 @@ import sys
 sys.path.insert(0, os.environ.get("LHASSA_ROOT", os.getcwd()))
 
 from lhassa.core.heartbeat import beat
+from lhassa import actionpack
+actionpack.register_all()
 
 
 def _summarize(summary: dict) -> str:
