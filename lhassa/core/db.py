@@ -309,6 +309,17 @@ async def init_db() -> None:
         if not await _has_column(db, "jobs", "acked"):
             await db.execute("ALTER TABLE jobs ADD COLUMN acked INTEGER DEFAULT 0")
 
+        # tasks: updated_en — last time estado changed (drives the deferred-retry
+        # backoff sweep: a task sits "diferida" for at least the backoff window
+        # before it is retried). Defaults to creado_en for pre-existing rows via
+        # the UPDATE below so the very first sweep after upgrade doesn't treat
+        # every old deferred task as instantly due.
+        if not await _has_column(db, "tasks", "updated_en"):
+            await db.execute("ALTER TABLE tasks ADD COLUMN updated_en TEXT")
+            await db.execute(
+                "UPDATE tasks SET updated_en = creado_en WHERE updated_en IS NULL"
+            )
+
         # ── Phase 5 migration: fact_embeddings.model (embedder stamp) ────────
         # The column is in the CREATE TABLE above (new DBs have it), but a DB
         # created before the stamp existed lacks it — add it idempotently so
@@ -327,6 +338,64 @@ async def init_db() -> None:
                 updated_en  TEXT NOT NULL,
                 PRIMARY KEY (instance_id, key)
             )
+        """)
+
+        # runs / run_steps — durable execution history for analytics. Episodes stay
+        # the narrative audit log; these rows answer operational questions like
+        # "how many times did this flow/brain run, how long did it take, did it fail".
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS runs (
+                id             TEXT PRIMARY KEY,
+                instance_id    TEXT NOT NULL,
+                kind           TEXT NOT NULL,
+                entity_id      TEXT,
+                parent_run_id  TEXT,
+                status         TEXT NOT NULL,
+                trigger        TEXT,
+                summary        TEXT,
+                started_at     TEXT NOT NULL,
+                finished_at    TEXT,
+                duration_ms    INTEGER DEFAULT 0,
+                cost_usd       REAL DEFAULT 0.0,
+                input_tokens   INTEGER DEFAULT 0,
+                output_tokens  INTEGER DEFAULT 0,
+                raw            TEXT
+            )
+        """)
+        await db.execute("""
+            CREATE INDEX IF NOT EXISTS runs_by_instance_kind_entity
+            ON runs(instance_id, kind, entity_id, started_at)
+        """)
+        await db.execute("""
+            CREATE INDEX IF NOT EXISTS runs_by_instance_started
+            ON runs(instance_id, started_at)
+        """)
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS run_steps (
+                id             TEXT PRIMARY KEY,
+                instance_id    TEXT NOT NULL,
+                run_id         TEXT NOT NULL,
+                idx            INTEGER NOT NULL,
+                kind           TEXT NOT NULL,
+                entity_id      TEXT,
+                status         TEXT NOT NULL,
+                started_at     TEXT,
+                finished_at    TEXT,
+                duration_ms    INTEGER DEFAULT 0,
+                cost_usd       REAL DEFAULT 0.0,
+                input_summary  TEXT,
+                output_summary TEXT,
+                error          TEXT,
+                raw            TEXT
+            )
+        """)
+        await db.execute("""
+            CREATE INDEX IF NOT EXISTS run_steps_by_instance_run
+            ON run_steps(instance_id, run_id, idx)
+        """)
+        await db.execute("""
+            CREATE INDEX IF NOT EXISTS run_steps_by_instance_kind_entity
+            ON run_steps(instance_id, kind, entity_id)
         """)
 
         await db.commit()
@@ -399,6 +468,122 @@ async def load_recent_episodes(instance_id: str, n: int = 20) -> list[dict]:
             rows = [dict(row) for row in await cur.fetchall()]
     for row in rows:
         row["memoria_cargada"] = _loads(row.get("memoria_cargada"), [])
+    return rows
+
+
+# ── runs / run_steps (durable execution analytics) ─────────────────────────────
+
+async def record_run(row: dict) -> str:
+    """Insert or replace one durable run record, scoped to ``instance_id``."""
+    run_id = row.get("id") or _new_id("run")
+    instance_id = row["instance_id"]
+    raw = row.get("raw")
+    if not isinstance(raw, str):
+        raw = json.dumps(raw if raw is not None else row, ensure_ascii=False)
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            """INSERT OR REPLACE INTO runs(
+                   id, instance_id, kind, entity_id, parent_run_id, status, trigger,
+                   summary, started_at, finished_at, duration_ms, cost_usd,
+                   input_tokens, output_tokens, raw)
+               VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                run_id,
+                instance_id,
+                row.get("kind") or "",
+                row.get("entity_id"),
+                row.get("parent_run_id"),
+                row.get("status") or "completed",
+                row.get("trigger"),
+                row.get("summary"),
+                row.get("started_at") or _now(),
+                row.get("finished_at"),
+                int(row.get("duration_ms") or 0),
+                float(row.get("cost_usd") or 0.0),
+                int(row.get("input_tokens") or 0),
+                int(row.get("output_tokens") or 0),
+                raw,
+            ),
+        )
+        await db.commit()
+    return run_id
+
+
+async def record_run_step(row: dict) -> str:
+    """Insert one durable run step row, scoped to ``instance_id``."""
+    step_id = row.get("id") or _new_id("step")
+    raw = row.get("raw")
+    if not isinstance(raw, str):
+        raw = json.dumps(raw if raw is not None else row, ensure_ascii=False)
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            """INSERT INTO run_steps(
+                   id, instance_id, run_id, idx, kind, entity_id, status,
+                   started_at, finished_at, duration_ms, cost_usd,
+                   input_summary, output_summary, error, raw)
+               VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                step_id,
+                row["instance_id"],
+                row["run_id"],
+                int(row.get("idx") or 0),
+                row.get("kind") or "",
+                row.get("entity_id"),
+                row.get("status") or "completed",
+                row.get("started_at"),
+                row.get("finished_at"),
+                int(row.get("duration_ms") or 0),
+                float(row.get("cost_usd") or 0.0),
+                row.get("input_summary"),
+                row.get("output_summary"),
+                row.get("error"),
+                raw,
+            ),
+        )
+        await db.commit()
+    return step_id
+
+
+async def list_runs(
+    instance_id: str,
+    *,
+    kind: Optional[str] = None,
+    entity_id: Optional[str] = None,
+    limit: int = 200,
+) -> list[dict]:
+    """Return durable runs, newest first, optionally filtered by kind/entity."""
+    sql = "SELECT * FROM runs WHERE instance_id = ?"
+    args: list[Any] = [instance_id]
+    if kind is not None:
+        sql += " AND kind = ?"
+        args.append(kind)
+    if entity_id is not None:
+        sql += " AND entity_id = ?"
+        args.append(entity_id)
+    sql += " ORDER BY started_at DESC, rowid DESC LIMIT ?"
+    args.append(limit)
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(sql, args) as cur:
+            rows = [dict(row) for row in await cur.fetchall()]
+    for row in rows:
+        row["raw"] = _loads(row.get("raw"), {})
+    return rows
+
+
+async def list_run_steps(instance_id: str, run_id: str) -> list[dict]:
+    """Return the steps for one run, ordered by execution index."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            """SELECT * FROM run_steps
+               WHERE instance_id = ? AND run_id = ?
+               ORDER BY idx, rowid""",
+            (instance_id, run_id),
+        ) as cur:
+            rows = [dict(row) for row in await cur.fetchall()]
+    for row in rows:
+        row["raw"] = _loads(row.get("raw"), {})
     return rows
 
 
@@ -557,17 +742,18 @@ async def add_task(
     mints the next occurrence when it marks this task "hecha".
     """
     task_id = task_id or _new_id("t")
+    now = _now()
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute(
             """INSERT INTO tasks(
                    id, instance_id, accion, objetivo, params,
                    origen_trust, origen_actor, estado, firma, creado_en,
-                   due_at, recurrence)
-               VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                   due_at, recurrence, updated_en)
+               VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 task_id, instance_id, accion, objetivo, _dumps(params or {}),
-                origen_trust, origen_actor, estado, firma, _now(),
-                due_at, recurrence,
+                origen_trust, origen_actor, estado, firma, now,
+                due_at, recurrence, now,
             ),
         )
         await db.commit()
@@ -625,13 +811,85 @@ async def list_tasks(
 
 
 async def set_task_state(instance_id: str, task_id: str, estado: str) -> None:
-    """Update a task's state, scoped to ``instance_id``."""
+    """Update a task's state, scoped to ``instance_id``.
+
+    Also stamps ``updated_en`` — the deferred-retry sweep uses it to know how
+    long a task has sat "diferida" before it is due for a retry.
+    """
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute(
-            "UPDATE tasks SET estado = ? WHERE instance_id = ? AND id = ?",
-            (estado, instance_id, task_id),
+            "UPDATE tasks SET estado = ?, updated_en = ? WHERE instance_id = ? AND id = ?",
+            (estado, _now(), instance_id, task_id),
         )
         await db.commit()
+
+
+# ── deferred-task retry sweep (Phase-Resilience) ──────────────────────────────
+#
+# A task the judgment path could not run (no usable provider, or the daily
+# budget spent) is marked "diferida" and, today, never revisited — the provider
+# outage/budget window can pass and the task simply rots. This sweep re-queues
+# a "diferida" task back to "pendiente" once it has sat for at least
+# ``backoff_seconds``, tracking a retry counter in its params; once that counter
+# reaches ``max_retries`` the task is marked "rechazada" (terminal — never
+# retried again) instead of being requeued forever.
+
+
+async def sweep_deferred_tasks(
+    instance_id: str, *, backoff_seconds: float, max_retries: int
+) -> dict:
+    """Re-queue stale "diferida" tasks; reject the ones that exhausted retries.
+
+    A "diferida" task whose ``updated_en`` is older than ``backoff_seconds`` is
+    either requeued to "pendiente" (with ``params["_retries"]`` incremented) or,
+    if it has already reached ``max_retries``, marked "rechazada" (terminal).
+    Returns ``{"requeued": int, "rejected_ids": [task_id, ...]}``. Scoped to
+    ``instance_id``. This function itself does not raise on a normal DB error
+    path (the caller — ``step()`` — additionally wraps the call in a
+    try/except so a sweep failure can never crash a heartbeat tick).
+    """
+    from datetime import datetime, timedelta, timezone
+
+    cutoff = (
+        datetime.now(timezone.utc) - timedelta(seconds=max(0.0, backoff_seconds))
+    ).isoformat()
+
+    requeued = 0
+    rejected_ids: list[str] = []
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            """SELECT * FROM tasks
+               WHERE instance_id = ? AND estado = 'diferida'
+                 AND (updated_en IS NULL OR updated_en <= ?)""",
+            (instance_id, cutoff),
+        ) as cur:
+            rows = [dict(row) for row in await cur.fetchall()]
+
+        now = _now()
+        for row in rows:
+            params = _loads(row.get("params"), {})
+            if not isinstance(params, dict):
+                params = {}
+            retries = int(params.get("_retries") or 0)
+            if retries >= max(0, max_retries):
+                await db.execute(
+                    "UPDATE tasks SET estado = 'rechazada', updated_en = ? "
+                    "WHERE instance_id = ? AND id = ?",
+                    (now, instance_id, row["id"]),
+                )
+                rejected_ids.append(row["id"])
+            else:
+                params["_retries"] = retries + 1
+                await db.execute(
+                    "UPDATE tasks SET estado = 'pendiente', params = ?, updated_en = ? "
+                    "WHERE instance_id = ? AND id = ?",
+                    (_dumps(params), now, instance_id, row["id"]),
+                )
+                requeued += 1
+        await db.commit()
+
+    return {"requeued": requeued, "rejected_ids": rejected_ids}
 
 
 # ── jobs ──────────────────────────────────────────────────────────────────────

@@ -30,7 +30,7 @@ import asyncio
 import contextlib
 import json as _json
 import re
-import shutil
+import shutil  # noqa: F401 - re-exported so callers/tests can monkeypatch
 import time
 from pathlib import Path
 from typing import Optional
@@ -146,74 +146,12 @@ def _enabled(config) -> bool:
     return bool(getattr(config, "telegram_poll_enabled", False)) and telegram.is_configured(config)
 
 
-# Provider names that are backed by a local CLI binary — skipped from the chain
-# when that binary is not installed (``shutil.which``), so the chain degrades
-# cleanly on a machine that lacks a given subscription CLI. The binary name can be
-# overridden per-provider via a ``<name>_bin`` config attr (e.g. ``opencode_bin``).
-_CLI_PROVIDERS = {"opencode", "claude", "codex"}
-
-
-def _model_for(name: str, config) -> str | None:
-    """The model arg for a chain provider.
-
-    The cloud gateway (``default``) uses the cheap routine model, as before; the
-    CLI subscriptions (claude/codex/opencode) and other providers pass ``None`` so
-    each CLI/provider picks its own model from the owner's subscription/config.
-    """
-    if name == "default":
-        return _secondary_model(config)
-    return None
-
-
-def _fallback_chain(config, primary):
-    """Build the configured chat/think fallback chain as ``[(provider, model), …]``.
-
-    Walks ``config.fallback_providers`` (comma-separated names, default
-    ``"claude,codex,default"``) IN ORDER, resolving each via
-    :func:`lhassa.llm.provider.get_model_provider`. This keeps the owner on their
-    CLI subscriptions (``opencode → claude → codex``) before paying for the cloud
-    gateway (``default``). Each entry is:
-
-    - **skipped if it is the same kind as the primary** (``name == primary.name``) —
-      don't retry e.g. opencode→opencode;
-    - **skipped if it is a CLI provider whose binary is not installed**
-      (``shutil.which``), so the chain degrades cleanly on a machine missing that CLI;
-    - **skipped if it cannot be resolved** (unknown/raising factory).
-
-    Never raises — a bad config or a failed resolve yields a shorter chain. This is
-    the seam tests patch to assert the chain order / skipping behaviour.
-    """
-    chain: list[tuple] = []
-    try:
-        names = [
-            n.strip()
-            for n in (getattr(config, "fallback_providers", "") or "").split(",")
-            if n.strip()
-        ]
-    except Exception:
-        return chain
-
-    from lhassa.llm.provider import get_model_provider
-
-    primary_name = getattr(primary, "name", "")
-    seen: set[str] = set()
-    for name in names:
-        if name in seen:
-            continue
-        seen.add(name)
-        if name == primary_name:
-            continue  # don't retry the same kind as the primary
-        if name in _CLI_PROVIDERS:
-            binary = (getattr(config, f"{name}_bin", "") or "") or name
-            if shutil.which(binary) is None:
-                continue  # CLI not installed → skip, degrade cleanly
-        try:
-            provider = get_model_provider(config, name=name)
-        except Exception:
-            continue
-        if provider is not None:
-            chain.append((provider, _model_for(name, config)))
-    return chain
+# The fallback CHAIN builder now lives in ``lhassa.llm.router`` (the interface
+# layer) so both this shell (Telegram) and the spine (``core/step.py``'s judgment
+# path) can walk the SAME "owner's CLI subscriptions before cloud" chain on a
+# ProviderNotConfigured/BudgetExceeded. Kept as a thin, same-signature re-export
+# so existing imports/tests of ``_fallback_chain`` here are unaffected.
+from lhassa.llm.router import fallback_chain as _fallback_chain  # noqa: E402
 
 
 def _secondary_model(config):
