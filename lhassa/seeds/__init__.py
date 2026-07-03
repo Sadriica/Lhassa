@@ -124,3 +124,4 @@ def apply_all(config: "Optional[Config]" = None) -> dict:
 # ``@register_seed`` decorators. New built-in seeds add a line here; external seeds
 # need no edit at all (they self-register when their plugin module is imported).
 from lhassa.seeds import cv as _cv  # noqa: E402,F401  (self-registers "cv")
+from lhassa.seeds import digest as _digest  # noqa: E402,F401  (self-registers "digest")

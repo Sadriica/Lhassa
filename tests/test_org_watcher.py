@@ -334,3 +334,60 @@ def test_run_forever_disabled_is_a_noop(monkeypatch):
     monkeypatch.setattr(watcher.asyncio, "run", boom)
     rc = watcher.run_forever(_cfg(monitor_enabled=False))
     assert rc == 0
+
+
+# ── Etapa 2 — Approve/Deny inline keyboard on new-approval alerts ─────────────
+
+
+@pytest.mark.asyncio
+async def test_react_attaches_approval_keyboard_on_new_approvals(tmp_path, monkeypatch):
+    db = await _init_db(tmp_path, monkeypatch)
+    ap_id = await db.add_approval("inst_personal", "task", {"accion": "run_command"})
+
+    calls: list[dict] = []
+
+    async def fake_notify(text, *, level="info", config=None, **kwargs):
+        calls.append({"text": text, "level": level, "kwargs": kwargs})
+        return True
+
+    import lhassa.notify.dispatch as dispatch
+
+    monkeypatch.setattr(dispatch, "notify", fake_notify)
+
+    important = [
+        {"kind": "approvals_new", "level": "warn", "summary": "1 new pending approval(s) (total 1)"}
+    ]
+    await watcher.react(important, department="interns", config=_cfg())
+
+    assert len(calls) == 1
+    keyboard = calls[0]["kwargs"].get("reply_markup")
+    assert keyboard is not None
+    flat_data = [
+        button["callback_data"]
+        for row in keyboard["inline_keyboard"]
+        for button in row
+    ]
+    assert f"approve:{ap_id}" in flat_data
+    assert f"deny:{ap_id}" in flat_data
+
+
+@pytest.mark.asyncio
+async def test_react_no_keyboard_when_no_pending_approvals(tmp_path, monkeypatch):
+    await _init_db(tmp_path, monkeypatch)
+
+    calls: list[dict] = []
+
+    async def fake_notify(text, *, level="info", config=None, **kwargs):
+        calls.append(kwargs)
+        return True
+
+    import lhassa.notify.dispatch as dispatch
+
+    monkeypatch.setattr(dispatch, "notify", fake_notify)
+
+    # A failures event (not approvals) never attaches a keyboard.
+    important = [{"kind": "failures_new", "level": "alert", "summary": "1 new failure(s) (total 1)"}]
+    await watcher.react(important, department="interns", config=_cfg())
+
+    assert len(calls) == 1
+    assert "reply_markup" not in calls[0]

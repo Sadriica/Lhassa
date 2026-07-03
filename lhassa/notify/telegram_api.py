@@ -31,6 +31,7 @@ _GET_FILE_URL = "https://api.telegram.org/bot{token}/getFile"
 _FILE_URL = "https://api.telegram.org/file/bot{token}/{file_path}"
 _SEND_DOCUMENT_URL = "https://api.telegram.org/bot{token}/sendDocument"
 _SET_COMMANDS_URL = "https://api.telegram.org/bot{token}/setMyCommands"
+_ANSWER_CALLBACK_URL = "https://api.telegram.org/bot{token}/answerCallbackQuery"
 
 # A file transfer can take longer than a text message.
 _TIMEOUT = 60.0
@@ -215,3 +216,39 @@ async def set_my_commands(commands, *, config=None) -> bool:
         return False
 
     return _response_ok(response, "setMyCommands")
+
+
+async def answer_callback_query(
+    callback_query_id: str, *, text: str = "", config=None
+) -> bool:
+    """Acknowledge an inline-keyboard tap via ``answerCallbackQuery``.
+
+    Clears the button's client-side loading spinner. ``text`` (optional) is shown as
+    a brief toast on the tapping client. Credential-gated (no token/chat id → no
+    network, ``False``) and defensive; it never raises.
+    """
+    if config is None:
+        from lhassa.config import Config
+
+        config = Config()
+
+    token, chat_id = _credentials(config)
+    if not token or not chat_id:
+        return False
+    if not callback_query_id:
+        return False
+
+    payload: dict = {"callback_query_id": callback_query_id}
+    if text:
+        payload["text"] = text[:200]
+
+    try:
+        async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+            response = await client.post(
+                _ANSWER_CALLBACK_URL.format(token=token), json=payload
+            )
+    except Exception as exc:  # transport error — never propagate
+        logger.warning(f"Telegram answerCallbackQuery failed (transport): {exc}")
+        return False
+
+    return _response_ok(response, "answerCallbackQuery")

@@ -22,8 +22,12 @@ from loguru import logger
 from lhassa.notify.channels import active_channels
 
 
-async def notify(text: str, *, level: str = "info", config=None) -> bool:
+async def notify(text: str, *, level: str = "info", config=None, **kwargs) -> bool:
     """Fan ``text`` out to every configured notification channel.
+
+    ``**kwargs`` carries channel-specific extras (e.g. Telegram's ``parse_mode`` /
+    ``reply_markup``, an inline keyboard) straight through to each channel's
+    ``send``; a channel with no use for them (log, desktop) simply ignores them.
 
     Returns ``True`` if at least one channel delivered the message, ``False`` if
     none did (nothing configured, or every channel declined/failed). Fully
@@ -38,7 +42,7 @@ async def notify(text: str, *, level: str = "info", config=None) -> bool:
     delivered = False
     for channel in active_channels(config):
         try:
-            if await channel.send(text, level=level, config=config):
+            if await channel.send(text, level=level, config=config, **kwargs):
                 delivered = True
         except Exception as exc:  # a channel must never break the dispatcher
             name = getattr(channel, "name", "?")

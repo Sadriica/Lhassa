@@ -95,11 +95,19 @@ KEYSTONE_FILES = ("registry.py", "plugins.py")
 #     ``config`` is itself leaf infrastructure (pure configuration, not a feature
 #     module), so the plugin loader reading ``Config`` does not break the keystone
 #     rule. Whitelisted precisely so any *feature* import from a keystone still trips.
+#   health/checks.py -> lhassa.notify.dispatch:
+#     Etapa 2 unifies outbound alerts: ``health/checks.py``'s ``_notify`` fans a
+#     check result out over EVERY configured notify channel (desktop is then just
+#     one channel among Telegram/log/…) instead of hard-coding a desktop-only
+#     ``notify-send`` call. ``health`` is an adapter and ``notify`` is a shell, so
+#     this is a deliberate, precisely-keyed edge (the import is lazy, inside the
+#     function body) rather than a general adapter -> shell coupling.
 ALLOWED_EXCEPTIONS: frozenset[tuple[str, str]] = frozenset(
     {
         ("tools/monitor.py", "lhassa.voice.notifier"),
         ("tools/handlers/agents.py", "lhassa.voice.notifier"),
         ("plugins.py", "lhassa.config"),
+        ("health/checks.py", "lhassa.notify.dispatch"),
     }
 )
 
