@@ -333,6 +333,14 @@ class _FakeProc:
     def kill(self):
         pass
 
+    async def communicate(self):
+        """Allow OpenCodeProvider._run to call communicate() without crashing.
+
+        Returns empty output so the provider raises ProviderNotConfigured and
+        the judgment path degrades gracefully to a deferred episode.
+        """
+        return b"", b""
+
 
 @pytest.mark.asyncio
 async def test_step_delegate_launches_job_and_records_episode(tmp_path, monkeypatch):

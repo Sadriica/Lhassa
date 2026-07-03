@@ -544,6 +544,22 @@ class Config:
         "LHASSA_JUDGMENT_DISPATCH", "1"
     ).lower() in ("1", "true", "yes")
 
+    # ── Phase 4 — watchlist senses ────────────────────────────────────────────
+    # Comma-separated absolute paths of git repos to watch for new commits.
+    # Empty = no repo watching. Each path is checked via ``git rev-parse HEAD``
+    # (subprocess, timeout 5 s, never raises). Missing or non-repo paths are
+    # skipped silently.
+    watch_repos: str = os.getenv("LHASSA_WATCH_REPOS", "")
+
+    # JSON file of inbound Telegram message rules (loaded by the Telegram poller).
+    # Schema: [{"pattern": "<regex>", "accion": "<str>", "params": {}}]
+    # An inbound owner message matching a pattern mints the action via dispatch.mint_task
+    # BEFORE the normal command/brain fallback. Missing or malformed file → off.
+    watch_rules_file: str = os.getenv(
+        "LHASSA_WATCH_RULES_FILE",
+        str(Path.home() / ".lhassa" / "watch_rules.json"),
+    )
+
     # ── Tool guardrails ───────────────────────────────────────────────────────
     # If true, reject obviously destructive shell commands unless explicitly
     # opted out via LHASSA_ALLOW_DESTRUCTIVE_SHELL=1.

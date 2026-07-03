@@ -288,6 +288,54 @@ async def step(
                 estado = "diferida"
             await db.set_task_state(instance_id, trigger.task_id, estado)
 
+            # Recurrence: when a recurring task completes, mint the next occurrence
+            # immediately. The next due_at = max(now, old_due + interval) so a
+            # long downtime never queues a backlog of overdue beats.
+            if estado == "hecha" and trigger.recurrence:
+                try:
+                    _interval = float(trigger.recurrence)
+                    from datetime import datetime, timezone, timedelta
+                    now_dt = datetime.now(timezone.utc)
+                    if trigger.due_at:
+                        try:
+                            old_due = datetime.fromisoformat(
+                                trigger.due_at.replace("Z", "+00:00")
+                            )
+                        except (ValueError, AttributeError):
+                            old_due = now_dt
+                    else:
+                        old_due = now_dt
+                    next_due = max(now_dt, old_due + timedelta(seconds=_interval))
+                    next_due_iso = next_due.isoformat()
+                    from lhassa.security.trust import Origin, TrustLevel
+                    origin = Origin(
+                        trust=TrustLevel(trigger.origen_trust),
+                        actor_id=trigger.origen_actor,
+                    )
+                    _params = dict(trigger.params or {})
+                    # Preserve the judgment flag for recurring judgment tasks.
+                    if trigger.judgment:
+                        _params["_judgment"] = True
+                    from lhassa.core import dispatch
+                    await dispatch.mint_task(
+                        instance_id,
+                        trigger.action,
+                        objetivo=trigger.objetivo or "",
+                        params=_params,
+                        origin=origin,
+                        due_at=next_due_iso,
+                        recurrence=trigger.recurrence,
+                        judgment=trigger.judgment,
+                    )
+                except Exception as exc:
+                    # Recurrence minting must never crash step().
+                    from loguru import logger
+                    logger.warning(
+                        "step: recurrence mint failed for task {}: {}",
+                        trigger.task_id,
+                        exc,
+                    )
+
     summary = {
         "triggers": len(triggers),
         "actions": n_actions,
