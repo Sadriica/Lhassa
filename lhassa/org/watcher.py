@@ -69,9 +69,12 @@ _BACKOFF_CAP = 60.0
 
 # Loop state kept at module level so a series of ``once=True`` pokes chains snapshots
 # and de-dupes across calls exactly as the long-running loop would.
-#   prev            — the previous snapshot (``None`` until the first tick baselines)
-#   last_alert_fp   — fingerprint of the last important set we alerted on (de-dupe)
-_STATE: dict = {"prev": None, "last_alert_fp": None}
+#   prev             — the previous snapshot (``None`` until the first tick baselines)
+#   last_alert_fp    — fingerprint of the last important set we alerted on (de-dupe)
+#   delegated_fps     — fingerprints of monitor delegations already minted as
+#                       org_run tasks, so a STANDING finding is not re-minted
+#                       every tick (mirrors ``last_alert_fp``'s de-dupe spirit).
+_STATE: dict = {"prev": None, "last_alert_fp": None, "delegated_fps": set()}
 
 
 def _live_enabled() -> bool:
@@ -246,6 +249,61 @@ def _summarize(events: list[dict]) -> str:
     return "; ".join(str(e.get("summary") or e.get("kind")) for e in events)
 
 
+# ── monitor findings become work (Etapa 3 — findings become work) ─────────────────
+
+
+async def _delegate_findings(
+    report: dict, *, department: str, instance_id: str
+) -> list[str]:
+    """Turn each delegation in a monitor ``report`` into a minted ``org_run`` task.
+
+    De-duped by a ``(department, fix)`` fingerprint kept in
+    ``_STATE["delegated_fps"]`` so a STANDING finding (the same risk surfacing
+    every tick) is minted exactly ONCE, not on every reaction. Minting itself is
+    $0 (``mint_task`` only writes a task row); the org_run action actually spends
+    anything only at its own next-tick execution, offline unless
+    ``LHASSA_ORG_LIVE``. Never raises — a minting failure is skipped, not fatal.
+    Returns short notes (``"minted org_run→<dept>: <fix>"``) for the caller to
+    fold into the Telegram alert text.
+    """
+    notes: list[str] = []
+    delegations = report.get("delegations") or []
+    if not delegations:
+        return notes
+
+    from lhassa.core import dispatch as _dispatch
+    from lhassa.security.trust import Origin, TrustLevel
+
+    minted_fps: set = set(_STATE.get("delegated_fps") or set())
+    for item in delegations:
+        if not isinstance(item, dict):
+            continue
+        dept = str(item.get("department") or "").strip() or department
+        fix = str(item.get("fix") or "").strip()
+        if not fix:
+            continue
+        fp = f"{dept}:{fix}"
+        if fp in minted_fps:
+            continue
+        try:
+            origin = Origin(trust=TrustLevel.INTERNO, actor_id="monitor")
+            task_id, _estado = await _dispatch.mint_task(
+                instance_id,
+                "org_run",
+                objetivo=fix[:200],
+                params={"goal": fix, "department": dept},
+                origin=origin,
+            )
+            if task_id:
+                minted_fps.add(fp)
+                notes.append(f"minted org_run→{dept}: {fix[:80]}")
+        except Exception as exc:
+            logger.debug("monitor watcher: could not mint delegation for {}: {}", dept, exc)
+
+    _STATE["delegated_fps"] = minted_fps
+    return notes
+
+
 # ── the reaction (episode always; notify + think only when warranted) ─────────────
 
 
@@ -265,6 +323,12 @@ async def react(events: list[dict], *, department: str, config: Optional[Config]
       * **Think** — only when ``monitor_think`` AND ``LHASSA_ORG_LIVE`` are both on
         is :func:`monitor_pass` called for a richer analysis (the sole token spend;
         OFF by default). Its failure never breaks the reaction.
+      * **Delegate** — when ``monitor_delegate`` is on, each delegation in the
+        monitor's report (the OFFLINE, deterministic one by default — still $0;
+        a richer live one if ``think`` also ran above) is minted as an
+        ``org_run`` task, de-duped by fingerprint so a standing condition mints
+        once, not every tick. Minted findings are folded into the Telegram alert
+        text alongside the important events.
 
     Never raises. Returns a small summary dict (for tests / a manual poke).
     """
@@ -286,11 +350,31 @@ async def react(events: list[dict], *, department: str, config: Optional[Config]
         )
         await ep.append()
 
+    # 1.5) Delegate — findings become work. Reuses whatever report monitor_pass
+    # already produced for "think" (live) below when available; otherwise pulls
+    # the OFFLINE report fresh — deterministic, $0, no extra model call.
+    delegate_notes: list[str] = []
+    live_report: Optional[dict] = None
+    if important and getattr(config, "monitor_think", False) and _live_enabled():
+        with contextlib.suppress(Exception):
+            live_report = await monitor_pass(department=department, config=config)
+
+    if getattr(config, "monitor_delegate", False):
+        with contextlib.suppress(Exception):
+            report = live_report if live_report is not None else await monitor_pass(
+                department=department, config=config
+            )
+            delegate_notes = await _delegate_findings(
+                report, department=department, instance_id=instance_id
+            )
+
     # 2) Notify — important only, de-duped against the last alerted fingerprint.
     if important:
         fp = _fingerprint(important)
         if getattr(config, "monitor_notify", True) and fp != _STATE.get("last_alert_fp"):
             message = f"monitor · {department}: {_summarize(important)}"
+            if delegate_notes:
+                message += " | " + "; ".join(delegate_notes)
             level = "error" if any(e.get("level") == "alert" for e in important) else "warning"
             with contextlib.suppress(Exception):
                 # Lazy import: keep the module's import graph shell-agnostic.
@@ -302,15 +386,11 @@ async def react(events: list[dict], *, department: str, config: Optional[Config]
         # Condition no longer present → forget it so a recurrence alerts afresh.
         _STATE["last_alert_fp"] = None
 
-    # 3) Think — optional, gated, the only token spend; OFF by default.
-    if important and getattr(config, "monitor_think", False) and _live_enabled():
-        with contextlib.suppress(Exception):
-            await monitor_pass(department=department, config=config)
-
     return {
         "events": len(events),
         "important": len(important),
         "notified": notified,
+        "delegated": len(delegate_notes),
     }
 
 

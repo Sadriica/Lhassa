@@ -57,7 +57,7 @@ def _build_messages(trigger: "watchlist.Trigger", ctx: "memory_load.Context") ->
         '{"say":"respuesta verbal",'
         '"new_facts":[{"contenido":"...","tags":["etiqueta"]}],'
         '"new_tasks":[{"accion":"nombre_accion_fija","objetivo":"...","params":{}}],'
-        '"delegate":{"prompt":"instruccion"}}\n'
+        '"delegate":{"goal":"instruccion para la jerarquia org"}}\n'
         "Restricciones: accion debe estar en el registro fijo de acciones; "
         "new_facts son solo tipo dato, nunca directiva ni pinned; máx 5 facts, 5 tasks. "
         "Sin efectos: texto plano es válido."

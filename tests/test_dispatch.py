@@ -370,16 +370,69 @@ async def test_dispatch_disabled_no_writes(tmp_path, monkeypatch):
     assert await db.load_pending_tasks("inst_test") == []
 
 
-# ── Delegate key ─────────────────────────────────────────────────────────────
+# ── Delegate key (Etapa 3 — real delegation) ──────────────────────────────────
+
+def _ensure_org_run_registered():
+    """org_run is an actionpack action; register it so mint_task accepts it."""
+    from lhassa import actionpack
+    actionpack.register_all()
+
 
 @pytest.mark.asyncio
-async def test_dispatch_delegate_recorded_not_wired(tmp_path, monkeypatch):
-    """delegate key is parsed and recorded in the summary (not yet executed)."""
+async def test_dispatch_delegate_mints_org_run_task(tmp_path, monkeypatch):
+    """A single delegate dict mints ONE org_run task (goal from 'prompt')."""
+    _ensure_org_run_registered()
     raw = json.dumps({"delegate": {"prompt": "add a new endpoint"}})
     summary, db = await _run_dispatch(raw, tmp_path=tmp_path, monkeypatch=monkeypatch)
-    assert "delegate requested (not yet wired)" in summary
-    # No tasks are minted — delegate is not the same as a new_task.
+    assert "1 delegate" in summary
+
+    tasks = await db.load_pending_tasks("inst_test")
+    assert len(tasks) == 1
+    t = tasks[0]
+    assert t["accion"] == "org_run"
+    assert t["params"]["goal"] == "add a new endpoint"
+    assert t["origen_actor"] == "judgment"
+
+
+@pytest.mark.asyncio
+async def test_dispatch_delegate_list_capped_at_three(tmp_path, monkeypatch):
+    """A list of delegate requests is minted up to _MAX_DELEGATES (3)."""
+    _ensure_org_run_registered()
+    raw = json.dumps({
+        "delegate": [{"goal": f"goal {i}"} for i in range(5)]
+    })
+    summary, db = await _run_dispatch(raw, tmp_path=tmp_path, monkeypatch=monkeypatch)
+    assert "3 delegates" in summary
+    tasks = await db.load_pending_tasks("inst_test")
+    assert len(tasks) == 3
+    assert all(t["accion"] == "org_run" for t in tasks)
+
+
+@pytest.mark.asyncio
+async def test_dispatch_delegate_missing_goal_mints_nothing(tmp_path, monkeypatch):
+    """A delegate object with no goal/prompt mints nothing and never crashes."""
+    _ensure_org_run_registered()
+    raw = json.dumps({"delegate": {"department": "optimization"}})
+    summary, db = await _run_dispatch(raw, tmp_path=tmp_path, monkeypatch=monkeypatch)
+    assert "delegate" not in summary
     assert await db.load_pending_tasks("inst_test") == []
+
+
+@pytest.mark.asyncio
+async def test_dispatch_delegate_department_and_high_risk_carried_in_params(
+    tmp_path, monkeypatch
+):
+    """department + high_risk flow through to the minted task's params."""
+    _ensure_org_run_registered()
+    raw = json.dumps({
+        "delegate": {"goal": "wire the funds", "department": "finance", "high_risk": True}
+    })
+    summary, db = await _run_dispatch(raw, tmp_path=tmp_path, monkeypatch=monkeypatch)
+    # org_run itself isn't in always_approve_actions, so this still mints pendiente.
+    tasks = await db.load_pending_tasks("inst_test")
+    assert len(tasks) == 1
+    assert tasks[0]["params"]["department"] == "finance"
+    assert tasks[0]["params"]["high_risk"] is True
 
 
 # ── apply() never raises ──────────────────────────────────────────────────────

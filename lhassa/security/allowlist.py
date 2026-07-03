@@ -164,6 +164,18 @@ def build_allowlist(repos: "set[str] | str | None" = None) -> dict[str, ActionSp
             min_trust=TrustLevel.INTERNO,
             requires_approval=False,
         ),
+        # ── Etapa 3 — real delegation into the org hierarchy ─────────────────
+        # ``requires_approval`` stays False here: org_run's OWN high-risk gate
+        # lives in params (see actionpack._org.org_run / org.coordinator.run_goal)
+        # — a per-params flag, not a blanket per-action one. A high-risk goal
+        # parks its own multi-person approval inside the org layer and refuses
+        # to self-approve; this allowlist entry only governs whether org_run may
+        # be minted at all.
+        "org_run": ActionSpec(
+            objetivos=WILDCARD,
+            min_trust=TrustLevel.INTERNO,
+            requires_approval=False,
+        ),
     }
 
 

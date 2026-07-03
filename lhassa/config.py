@@ -545,6 +545,11 @@ class Config:
     # Optionally spend a token on a richer live "think" per reaction — the ONLY
     # place the watcher can cost anything. OFF by default; also needs LHASSA_ORG_LIVE.
     monitor_think: bool = os.getenv("LHASSA_MONITOR_THINK", "0") not in ("0", "false", "")
+    # When on, react() turns each delegation from the monitor's report (offline or
+    # live) into a minted org_run task — findings become work. Uses the offline,
+    # deterministic report by default (still $0); de-duped by fingerprint so a
+    # standing condition is not re-minted every tick. OFF by default.
+    monitor_delegate: bool = os.getenv("LHASSA_MONITOR_DELEGATE", "0") not in ("0", "false", "")
 
     # ── Phase 2 — judgment dispatch (close the think-loop) ────────────────────
     # When on (default), the judgment branch parses the model's JSON reply and

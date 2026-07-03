@@ -12,9 +12,11 @@ Design principles:
     only as trusted as the trigger that caused the judgment. MUNDO begets MUNDO.
   - Only actions in the ACTIONS registry may be minted (see SECURITY INVARIANT
     comment in the task-minting loop). This is the key termination guarantee.
-  - A ``delegate`` key is parsed and recorded but NOT yet wired to an executor;
-    Phase 6 adds the handler. The parsed representation is complete now so
-    Phase 6 only needs to add a handler, not change the parsing.
+  - A ``delegate`` key mints a task with accion="org_run" through the SAME
+    mint_task security path as new_tasks — dispatch.py never imports org (core is
+    spine, org is a shell; see tests/test_architecture.py). The org_run action
+    itself (a shell-layer actionpack module) lazily imports
+    org.coordinator.run_goal at the NEXT tick, offline/$0 unless LHASSA_ORG_LIVE.
   - ``say`` is the model's verbal answer; it goes into the dispatch summary so
     step.py can include it in the episode resultado. A notify surface arrives in
     Phase 3 as a mintable action.
@@ -39,9 +41,11 @@ from lhassa.security.trust import Origin, TrustLevel, degrade
 # Per-judgment write caps (each judgment may produce at most this many rows).
 _MAX_FACTS = 5
 _MAX_TASKS = 5
+_MAX_DELEGATES = 3  # mirrors _MAX_TASKS's spirit — a small, bounded write cap
 _FACT_CONTENT_MAX = 500   # characters; truncate, do not reject
 _TAG_MAX_LEN = 50          # characters per tag
 _TAGS_MAX_COUNT = 5        # tags per fact
+_GOAL_OBJETIVO_MAX = 200   # characters; the objetivo stored on a minted org_run task
 
 # The actor id stamped on every task minted by the judgment path.
 _JUDGMENT_ACTOR = "judgment"
@@ -230,8 +234,14 @@ async def apply(
           "say":       "verbal answer for the episode",
           "new_facts": [{"contenido": "...", "tags": ["tag"]}],
           "new_tasks": [{"accion": "registered_action", "objetivo": "...", "params": {}}],
-          "delegate":  {"prompt": "instruction for a coding harness"}
+          "delegate":  {"goal": "instruction for the org hierarchy", "department": "..."}
         }
+
+    ``delegate`` may also be a LIST of such objects (up to ``_MAX_DELEGATES``); a
+    single dict is treated as a one-item list. Each item mints a task with
+    accion="org_run" (goal from "goal" or the legacy "prompt" key; "department" is
+    an optional hint; "high_risk" requests the org layer's own multi-person
+    approval). See the "delegate" section below.
 
     Security invariants enforced:
       - ``tipo`` is FORCED to ``"dato"``; a model may never write a directiva
@@ -382,12 +392,50 @@ async def _apply_inner(
         parts.append(f"skipped: unknown accion {accion!r}")
 
     # ── delegate ──────────────────────────────────────────────────────────────
-    # Parsed and recorded now; the actual executor is wired in Phase 6.
-    # The parsed representation (a dict with at minimum "prompt") is complete
-    # here so Phase 6 only needs to add a handler, not change this parsing.
-    delegate = payload.get("delegate")
-    if delegate and isinstance(delegate, dict):
-        parts.append("delegate requested (not yet wired)")
+    # A well-formed delegate request mints a TASK (accion="org_run"), NOT an
+    # inline execution — dispatch.py stays spine-only (no org import). The task
+    # runs through the SAME mint_task security path as new_tasks (signing +
+    # approval frontier + DB write); the org_run action (a shell) resolves it at
+    # the next tick. Accepts a single dict or a list of dicts (bounded).
+    delegate_raw = payload.get("delegate")
+    if isinstance(delegate_raw, dict):
+        delegate_items: list = [delegate_raw]
+    elif isinstance(delegate_raw, list):
+        delegate_items = delegate_raw
+    else:
+        delegate_items = []
+
+    n_delegates = 0
+    for item in delegate_items[:_MAX_DELEGATES]:
+        if not isinstance(item, dict):
+            continue
+        goal = str(item.get("goal") or item.get("prompt") or "").strip()
+        if not goal:
+            continue
+
+        delegate_params: dict = {"goal": goal}
+        department = item.get("department")
+        if isinstance(department, str) and department.strip():
+            delegate_params["department"] = department.strip()
+        if item.get("high_risk"):
+            delegate_params["high_risk"] = True
+
+        # "org_run" is registered by actionpack at process start (same invariant
+        # as every other action new_tasks mints) — see actionpack/_org.py.
+        task_id, estado = await mint_task(
+            instance_id,
+            "org_run",
+            objetivo=goal[:_GOAL_OBJETIVO_MAX],
+            params=delegate_params,
+            origin=task_origin,
+        )
+        if task_id:
+            n_delegates += 1
+
+    if n_delegates:
+        parts.append(
+            f"{n_delegates} delegate{'s' if n_delegates != 1 else ''} minted"
+        )
 
     if not parts:
         return "dispatch: none"

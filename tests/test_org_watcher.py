@@ -25,9 +25,11 @@ def _reset_state():
     """Reset the module-level loop/de-dupe state around every test."""
     watcher._STATE["prev"] = None
     watcher._STATE["last_alert_fp"] = None
+    watcher._STATE["delegated_fps"] = set()
     yield
     watcher._STATE["prev"] = None
     watcher._STATE["last_alert_fp"] = None
+    watcher._STATE["delegated_fps"] = set()
 
 
 def _cfg(**kw):
@@ -36,6 +38,7 @@ def _cfg(**kw):
         monitor_department="interns",
         monitor_notify=True,
         monitor_think=False,
+        monitor_delegate=False,
         monitor_enabled=True,
         monitor_idle_interval=300.0,
         monitor_active_interval=15.0,
@@ -222,6 +225,102 @@ async def test_react_think_off_by_default_never_calls_monitor_pass(tmp_path, mon
     # think requested but LHASSA_ORG_LIVE off → still no token spend.
     await watcher.react(important, department="interns", config=_cfg(monitor_think=True))
     assert called["n"] == 0
+
+
+# ── monitor delegation: findings become work (Etapa 3) ─────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_react_delegate_off_by_default_mints_nothing(tmp_path, monkeypatch):
+    await _init_db(tmp_path, monkeypatch)
+
+    async def fake_notify(*a, **k):
+        return True
+
+    import lhassa.notify.dispatch as dispatch
+    monkeypatch.setattr(dispatch, "notify", fake_notify)
+
+    called = {"n": 0}
+
+    async def fake_pass(**k):
+        called["n"] += 1
+        return {"delegations": [{"department": "optimization", "fix": "do x"}]}
+
+    monkeypatch.setattr(watcher, "monitor_pass", fake_pass)
+
+    important = [{"kind": "failures_new", "level": "alert", "summary": "1 new failure(s)"}]
+    await watcher.react(important, department="interns", config=_cfg())
+    assert called["n"] == 0  # monitor_delegate is off by default
+
+
+@pytest.mark.asyncio
+async def test_react_delegate_mints_org_run_task_and_dedupes(tmp_path, monkeypatch):
+    from lhassa import actionpack
+    actionpack.register_all()  # org_run must be registered for mint_task to accept it
+
+    db = await _init_db(tmp_path, monkeypatch)
+
+    async def fake_notify(*a, **k):
+        return True
+
+    import lhassa.notify.dispatch as dispatch
+    monkeypatch.setattr(dispatch, "notify", fake_notify)
+
+    async def fake_pass(**k):
+        return {
+            "delegations": [
+                {"department": "optimization", "fix": "investigate the slow query"}
+            ]
+        }
+
+    monkeypatch.setattr(watcher, "monitor_pass", fake_pass)
+
+    important = [{"kind": "failures_new", "level": "alert", "summary": "1 new failure(s)"}]
+
+    r1 = await watcher.react(important, department="interns", config=_cfg(monitor_delegate=True))
+    assert r1["delegated"] == 1
+
+    tasks = await db.load_pending_tasks("inst_personal")
+    org_run_tasks = [t for t in tasks if t["accion"] == "org_run"]
+    assert len(org_run_tasks) == 1
+    assert org_run_tasks[0]["params"]["goal"] == "investigate the slow query"
+    assert org_run_tasks[0]["params"]["department"] == "optimization"
+    assert org_run_tasks[0]["origen_actor"] == "monitor"
+
+    # A STANDING finding (same department/fix) is not re-minted on the next react().
+    r2 = await watcher.react(important, department="interns", config=_cfg(monitor_delegate=True))
+    assert r2["delegated"] == 0
+    tasks_after = await db.load_pending_tasks("inst_personal")
+    assert len([t for t in tasks_after if t["accion"] == "org_run"]) == 1
+
+
+@pytest.mark.asyncio
+async def test_react_delegate_notes_folded_into_alert_text(tmp_path, monkeypatch):
+    from lhassa import actionpack
+    actionpack.register_all()  # org_run must be registered for mint_task to accept it
+
+    await _init_db(tmp_path, monkeypatch)
+
+    calls = []
+
+    async def fake_notify(text, *, level="info", config=None):
+        calls.append(text)
+        return True
+
+    import lhassa.notify.dispatch as dispatch
+    monkeypatch.setattr(dispatch, "notify", fake_notify)
+
+    async def fake_pass(**k):
+        return {"delegations": [{"department": "optimization", "fix": "speed it up"}]}
+
+    monkeypatch.setattr(watcher, "monitor_pass", fake_pass)
+
+    important = [{"kind": "failures_new", "level": "alert", "summary": "1 new failure(s)"}]
+    await watcher.react(important, department="interns", config=_cfg(monitor_delegate=True))
+
+    assert len(calls) == 1
+    assert "org_run" in calls[0]
+    assert "optimization" in calls[0]
 
 
 # ── watch_loop: adaptive cadence + never-crash ────────────────────────────────────
