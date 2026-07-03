@@ -103,5 +103,5 @@ async def get_projections():
         },
         # Short budget: this is a defensive extra on a dashboard auto-load — degrade
         # fast rather than block the panel on a slow ccusage/npx cold-start.
-        "ccusage": await read_ccusage(timeout=3.0),
+        "ccusage": await read_ccusage(timeout=3.0, allow_npx=False),
     }

@@ -139,7 +139,7 @@ async def test_read_ccusage_bad_json_is_unavailable(monkeypatch):
 async def test_ccusage_endpoint_defensive(monkeypatch):
     from lhassa.api import server
 
-    async def fake_read(timeout=None):
+    async def fake_read(timeout=None, allow_npx=True):
         return {"available": False, "by_harness": {}, "total_cost_usd": 0.0, "source": "ccusage"}
 
     monkeypatch.setattr("lhassa.llm.ccusage.read_ccusage", fake_read)

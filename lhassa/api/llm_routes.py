@@ -103,4 +103,4 @@ async def get_llm_ccusage():
 
     # Bounded budget so the dashboard's ccusage panel degrades fast instead of
     # blocking on a slow ccusage/npx cold-start (the read is total-budget capped).
-    return await read_ccusage(timeout=3.0)
+    return await read_ccusage(timeout=3.0, allow_npx=False)
