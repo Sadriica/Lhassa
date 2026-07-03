@@ -375,8 +375,12 @@ def fleet_cmd(
 # ── registration ─────────────────────────────────────────────────────────────────
 
 def register(app: "typer.Typer") -> None:
-    """Attach the power subcommands to the main Typer app."""
-    app.command("tools")(tools_cmd)
+    """Attach the power subcommands to the main Typer app.
+
+    ``tools`` is intentionally NOT registered here: it is now the ``tools`` Typer
+    GROUP in :mod:`lhassa.cli.tools_cmds` (list + ``propose``), which reuses
+    ``tools_cmd`` for its bare/``--json`` form — see that module's callback.
+    """
     app.command("approvals")(approvals_cmd)
     app.command("approve")(approve_cmd)
     app.command("deny")(deny_cmd)

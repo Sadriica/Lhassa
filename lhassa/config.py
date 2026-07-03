@@ -630,6 +630,14 @@ class Config:
     # create or modify files inside this directory tree.
     file_write_root: str = os.getenv("LHASSA_FILE_WRITE_ROOT", "")
 
+    # ── Self-improvement — repeated-think detector (§2.8, visible self-improvement) ──
+    # How many times a (despertar_por, accion) pattern must repeat within the
+    # detection window before agents.repetition.detect_repetition proposes minting
+    # a deterministic action to replace it.
+    repetition_threshold: int = _safe_int(
+        os.getenv("LHASSA_REPETITION_THRESHOLD", "5"), 5
+    )
+
     def validate(self):
         """
         Check all active configuration at startup. Raises RuntimeError with a
