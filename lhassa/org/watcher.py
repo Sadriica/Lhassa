@@ -374,6 +374,9 @@ def run_forever(config: Optional[Config] = None) -> int:
     cleanly (return 0) without touching signals or the network — the systemd service
     is how the watcher is opted in. Otherwise it runs :func:`watch_loop` forever.
     """
+    from lhassa import actionpack
+    actionpack.register_all()
+
     config = _resolve_config(config)
     if not getattr(config, "monitor_enabled", False):
         logger.info(

@@ -33,3 +33,9 @@ def quiet_logging() -> None:
     if level in ("OFF", "NONE", "SILENT"):
         return
     logger.add(sys.stderr, level=level, format="<dim>{level: <7}</dim> {message}")
+
+    # Wire actionpack so all 15 deterministic actions are available for any CLI
+    # path that mints or runs tasks. Lazy import so this module stays cheap at
+    # import time; the actual registration happens on the first boot() call.
+    from lhassa import actionpack  # noqa: PLC0415
+    actionpack.register_all()

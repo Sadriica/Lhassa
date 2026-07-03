@@ -85,6 +85,9 @@ async def _run_all(config: Config):
     background services that are cancelled cleanly when the voice pipeline exits.
     Saves session memory before returning so everything runs in the same event loop.
     """
+    from lhassa import actionpack
+    actionpack.register_all()
+
     await init_db()
     state.load_audit_events()
     config.validate()  # Check provider key is present before starting pipeline

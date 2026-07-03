@@ -18,6 +18,9 @@ from lhassa.config import Config
 async def _main() -> None:
     config = Config()
 
+    from lhassa import actionpack
+    actionpack.register_all()
+
     # Initialize both data stores (the conversational memory DB and the brain
     # "grande"); both resolve under HOME=/data → the mounted volume.
     from lhassa.memory.store import init_db as init_memory_db

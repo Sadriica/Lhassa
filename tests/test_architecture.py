@@ -34,7 +34,7 @@ from typing import Iterator
 # The forbidden directions encode "inner layers must not reach out to shells",
 # the keystone-leaf rule, and the model-vs-harness swap-axis independence.
 
-SHELLS = {"cli", "api", "voice", "notify", "org", "dashboard"}
+SHELLS = {"cli", "api", "voice", "notify", "org", "dashboard", "actionpack"}
 
 
 @dataclass(frozen=True)

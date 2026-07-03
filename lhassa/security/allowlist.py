@@ -60,13 +60,102 @@ def _config_repos() -> "set[str] | str":
 def build_allowlist(repos: "set[str] | str | None" = None) -> dict[str, ActionSpec]:
     """Build the action policy table. ``repos`` overrides the ``sync_repo`` targets.
 
-    Phase-0 has exactly one entry: ``sync_repo`` (the first typed task, §2.5).
+    Phase-0 entry: ``sync_repo`` (the first typed task, §2.5).
+    Phase-3 entries: the 15 actionpack actions.
+
+    Policy principles:
+    - Most actions: INTERNO trust, no approval, wildcard objetivos.
+    - ``run_command``: INTERNO trust but ``requires_approval=True`` (high-risk;
+      executes arbitrary shell code even if sandboxed).
+    - ``tracking_postulaciones``: INTERNO trust, wildcard objetivos (Phase 0).
     """
     if repos is None:
         repos = _config_repos()
     return {
+        # ── Phase 0 ───────────────────────────────────────────────────────────
         "sync_repo": ActionSpec(
             objetivos=repos,
+            min_trust=TrustLevel.INTERNO,
+            requires_approval=False,
+        ),
+        "tracking_postulaciones": ActionSpec(
+            objetivos=WILDCARD,
+            min_trust=TrustLevel.INTERNO,
+            requires_approval=False,
+        ),
+        # ── Phase 3 — actionpack ──────────────────────────────────────────────
+        "notify": ActionSpec(
+            objetivos=WILDCARD,
+            min_trust=TrustLevel.INTERNO,
+            requires_approval=False,
+        ),
+        "add_task": ActionSpec(
+            objetivos=WILDCARD,
+            min_trust=TrustLevel.INTERNO,
+            requires_approval=False,
+        ),
+        "add_fact": ActionSpec(
+            objetivos=WILDCARD,
+            min_trust=TrustLevel.INTERNO,
+            requires_approval=False,
+        ),
+        "web_fetch": ActionSpec(
+            objetivos=WILDCARD,
+            min_trust=TrustLevel.INTERNO,
+            requires_approval=False,
+        ),
+        "run_command": ActionSpec(
+            objetivos=WILDCARD,
+            min_trust=TrustLevel.INTERNO,
+            requires_approval=True,   # high-risk: execute arbitrary shell code
+        ),
+        "compile_cv": ActionSpec(
+            objetivos=WILDCARD,
+            min_trust=TrustLevel.INTERNO,
+            requires_approval=False,
+        ),
+        "backup_memory": ActionSpec(
+            objetivos=WILDCARD,
+            min_trust=TrustLevel.INTERNO,
+            requires_approval=False,
+        ),
+        "check_health": ActionSpec(
+            objetivos=WILDCARD,
+            min_trust=TrustLevel.INTERNO,
+            requires_approval=False,
+        ),
+        "system_snapshot": ActionSpec(
+            objetivos=WILDCARD,
+            min_trust=TrustLevel.INTERNO,
+            requires_approval=False,
+        ),
+        "git_status_repos": ActionSpec(
+            objetivos=WILDCARD,
+            min_trust=TrustLevel.INTERNO,
+            requires_approval=False,
+        ),
+        "consolidate_memory": ActionSpec(
+            objetivos=WILDCARD,
+            min_trust=TrustLevel.INTERNO,
+            requires_approval=False,
+        ),
+        "set_task_state": ActionSpec(
+            objetivos=WILDCARD,
+            min_trust=TrustLevel.INTERNO,
+            requires_approval=False,
+        ),
+        "power_mode": ActionSpec(
+            objetivos=WILDCARD,
+            min_trust=TrustLevel.INTERNO,
+            requires_approval=False,
+        ),
+        "list_approvals": ActionSpec(
+            objetivos=WILDCARD,
+            min_trust=TrustLevel.INTERNO,
+            requires_approval=False,
+        ),
+        "ping_url": ActionSpec(
+            objetivos=WILDCARD,
             min_trust=TrustLevel.INTERNO,
             requires_approval=False,
         ),
