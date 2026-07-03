@@ -52,6 +52,11 @@ Precise, intentional edges that are whitelisted in the test (keyed on the exact
 - `plugins.py` → `lhassa.config` — `config` is itself leaf infrastructure (pure
   configuration, not a feature module), so the plugin loader reading `Config`
   does not break the keystone rule.
+- `health/checks.py` → `lhassa.notify.dispatch` — Etapa 2 unifies outbound alerts:
+  `health/checks.py`'s `_notify` fans a check result out over every configured
+  notify channel (desktop is then just one channel among Telegram/log/…) instead
+  of hard-coding a desktop-only `notify-send` call. The import is lazy, inside the
+  function body.
 
 ## How to evolve the rules
 

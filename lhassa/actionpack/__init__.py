@@ -36,7 +36,7 @@ def register_all() -> None:
     from lhassa.core.actions import _REGISTRY, register_action
 
     # Import sub-modules — this defines the functions without side-effects.
-    from lhassa.actionpack import _brain, _llm, _memory, _net, _system  # noqa: F401
+    from lhassa.actionpack import _brain, _digest, _llm, _memory, _net, _system  # noqa: F401
 
     # Defensive guard: skip any action that is already in the registry.
     # This makes register_all() safe even if _REGISTERED is reset externally
@@ -71,3 +71,6 @@ def register_all() -> None:
 
     # ── LLM spend visibility ───────────────────────────────────────────────────
     _reg("check_spend", _llm.check_spend)
+
+    # ── Digest (Etapa 2 — operative day via Telegram) ─────────────────────────
+    _reg("send_digest", _digest.send_digest)
