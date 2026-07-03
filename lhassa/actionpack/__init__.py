@@ -36,7 +36,16 @@ def register_all() -> None:
     from lhassa.core.actions import _REGISTRY, register_action
 
     # Import sub-modules — this defines the functions without side-effects.
-    from lhassa.actionpack import _brain, _digest, _llm, _memory, _net, _org, _system  # noqa: F401
+    from lhassa.actionpack import (  # noqa: F401
+        _brain,
+        _digest,
+        _llm,
+        _memory,
+        _net,
+        _org,
+        _selfimprove,
+        _system,
+    )
 
     # Defensive guard: skip any action that is already in the registry.
     # This makes register_all() safe even if _REGISTERED is reset externally
@@ -83,3 +92,7 @@ def register_all() -> None:
     # why this lives here rather than a direct import in core/watchlist.py.
     from lhassa.org import inbox_sense
     inbox_sense.register()
+
+    # ── Self-improvement (§2.8, Etapa 4) ──────────────────────────────────────
+    _reg("detect_repetition", _selfimprove.detect_repetition)
+    _reg("review_tools", _selfimprove.review_tools)

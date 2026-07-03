@@ -125,3 +125,4 @@ def apply_all(config: "Optional[Config]" = None) -> dict:
 # need no edit at all (they self-register when their plugin module is imported).
 from lhassa.seeds import cv as _cv  # noqa: E402,F401  (self-registers "cv")
 from lhassa.seeds import digest as _digest  # noqa: E402,F401  (self-registers "digest")
+from lhassa.seeds import maintenance as _maintenance  # noqa: E402,F401  (self-registers "maintenance")

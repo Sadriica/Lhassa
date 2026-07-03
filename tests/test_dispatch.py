@@ -241,6 +241,43 @@ async def test_dispatch_facts_procedencia_carries_episode_id(tmp_path, monkeypat
     assert f.procedencia == "judgment:ep-unique-xyz"
 
 
+@pytest.mark.asyncio
+async def test_dispatch_facts_dedup_against_existing(tmp_path, monkeypatch):
+    """A new_facts entry whose contenido already exists (case-insensitive) is skipped."""
+    await _init(tmp_path, monkeypatch)
+    from lhassa.memory import facts
+    await facts.add_fact("inst_test", "dato", "Le gusta el chocolate", procedencia="seed")
+
+    raw = json.dumps({"new_facts": [
+        {"contenido": "le gusta el chocolate", "tags": []},  # dupe, different case
+        {"contenido": "nuevo hecho distinto", "tags": []},
+    ]})
+    summary, _db = await _run_dispatch(raw, tmp_path=tmp_path, monkeypatch=monkeypatch)
+
+    assert "1 fact" in summary
+    assert "1 dupe fact" in summary
+    loaded = await facts.load_facts("inst_test")
+    # The pre-seeded fact + exactly one new fact — the dupe was never written.
+    assert len(loaded) == 2
+    contenidos = {f.contenido for f in loaded}
+    assert "nuevo hecho distinto" in contenidos
+
+
+@pytest.mark.asyncio
+async def test_dispatch_facts_dedup_within_same_payload(tmp_path, monkeypatch):
+    """Two identical entries in the SAME payload only write one fact."""
+    raw = json.dumps({"new_facts": [
+        {"contenido": "hecho repetido", "tags": []},
+        {"contenido": "HECHO REPETIDO", "tags": []},
+    ]})
+    summary, _db = await _run_dispatch(raw, tmp_path=tmp_path, monkeypatch=monkeypatch)
+
+    assert "1 fact" in summary
+    assert "1 dupe fact" in summary
+    from lhassa.memory import facts
+    assert len(await facts.load_facts("inst_test")) == 1
+
+
 # ── Tasks ─────────────────────────────────────────────────────────────────────
 
 @pytest.mark.asyncio
