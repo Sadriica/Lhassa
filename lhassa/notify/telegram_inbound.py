@@ -20,8 +20,9 @@ Same discipline as the rest of :mod:`lhassa.notify`:
 - **never raises** — a bad/malformed update is logged and skipped; a single error
   can never kill the poll loop.
 
-Run standalone with ``python -m lhassa.notify.telegram_inbound``. It is **not**
-wired into ``main.py`` — that is a later step.
+Run standalone with ``python -m lhassa.notify.telegram_inbound`` (the
+``lhassa-telegram`` systemd unit runs exactly that); it is deliberately a
+separate process from ``main.py``.
 """
 
 from __future__ import annotations

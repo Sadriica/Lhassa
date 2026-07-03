@@ -7,9 +7,10 @@ Two axes:
   2. ``pick_model`` — a cheap model for routine judgment, a smart model for hard
      judgment.
 
-``decide(trigger, ctx)`` turns a watchlist trigger into a ``Decision``. Phase 2
-only produces ``kind="think"`` (run a ModelProvider directly); the ``"delegate"``
-branch — handing agentic code work to a harness — is Phase 4 (see the TODO).
+``decide(trigger, ctx)`` turns a watchlist trigger into a ``Decision`` —
+``kind="think"`` (run a ModelProvider directly) or ``kind="delegate"`` (hand
+agentic code work to a harness via ``pick_harness``; ``core/step.py:_delegate``
+launches it fire-and-forget).
 
 ``cascade`` runs the cheap model first and escalates to the smart model once if a
 caller-supplied ``verify`` rejects the answer. The outcome is logged so the router

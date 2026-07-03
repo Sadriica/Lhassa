@@ -43,8 +43,10 @@ tested, but were never wired into the hot path. Four stages implemented in paral
 
 1333 tests green, lint clean, architecture guard intact. Known gaps left on purpose:
 `bump_tool_usage` still has no real execution seam (no self-written tool executes yet);
-coordinator fan-out is single-level per hop; legacy `memory/store.py`/`session.py` still
-orphaned (cleanup candidate).
+coordinator fan-out is single-level per hop. CORRECTION to the audit: legacy
+`memory/store.py`/`session.py` is NOT orphaned — it still powers `/api/scheduled`,
+`/api/memory` reads, `scheduler.py` reminders, the voice pipeline and the schedule
+tool handlers; retiring it needs a real migration onto the grande, not a deletion.
 
 ## 2026-07-02 — Follow-up: kill the api/misc accumulator + make the ccusage dashboard read fast & real
 
