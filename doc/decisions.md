@@ -5,6 +5,32 @@ build. The source of truth for the architecture is `doc/lhassa-brief.md` (a
 living doc — correct it after each phase per §4). This file records the choices
 made along the way. Newest first.
 
+## 2026-07-02 — Follow-up: kill the api/misc accumulator + make the ccusage dashboard read fast & real
+
+Two small, behavior-preserving finishes to the refactor pass, both surfaced by a second review
++ live smoke (the automated tests + e2e mock these paths, so only a real `curl` caught them).
+
+- **No more `misc` accumulator.** Finishing the server.py split had left an `api/misc_routes.py`
+  (464 lines) bundling 7 unrelated singletons. Split into `activity_routes` (agents/scheduled/
+  audit), `reports_routes` (reports/projections), `fleet_routes` (fleet), and `overview_routes`
+  (`/api/overview` + the `build_overview` aggregate + the 11 `_overview_*` helpers); `misc_routes`
+  deleted; server.py's `build_overview` re-export repointed to `overview_routes`; the overview
+  Config-module-namespace test seam preserved. 1071 tests unchanged, all moved routes smoke-200
+  live. `server.py` is now a clean integrator with per-domain routers and no catch-all. (`81bd465`)
+
+- **ccusage: from a 20-30s dashboard hang to real data in ~3.7s.** A live smoke found `/api/
+  projections` hanging ~20-30s: `read_ccusage` applied its timeout PER candidate command and tried
+  a slow `npx ccusage@latest` cold-start, and — the real culprit — ccusage was **fetching model
+  pricing over the network on every run**. Fixes, in layers: (1) `read_ccusage` timeout is now a
+  TOTAL budget (a deadline across candidates), never ~2× (`3af13da`); (2) an `allow_npx=False` the
+  dashboard auto-load callers pass, so a missing binary degrades in ~5ms instead of a cold npx
+  download (`a311ec8`); (3) the ccusage commands run **`--offline`** (cached pricing), which drops
+  a full run from 20s+ to ~3.7s (`a51bda3`). The `ccusage` binary is installed **user-level**
+  (`npm install -g --prefix ~/.local ccusage` → `~/.local/bin`, on the app service's PATH); with
+  it present the dashboard shows genuine cross-harness spend (`available: true`, real
+  `total_cost_usd`), and stays instant-degrade when absent. Lesson logged: **live smoke earns its
+  keep** — the test/e2e mocks never exercised the real CLI.
+
 ## 2026-07-02 — Reviewer-driven refactor & reproducibility pass: split the giants, seed registry, e2e net
 
 A hygiene arc (no new features): make the codebase reproducible on a fresh machine, shrink the
