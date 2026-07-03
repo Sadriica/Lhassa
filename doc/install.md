@@ -16,6 +16,7 @@ Install these before running the installer:
 | `node` + `npm` | Build the React/Vite dashboard (`npm ci && npm run build`). | Yes (for the dashboard) |
 | `docker` | The containerized path + the installer's build/smoke test. | Only without `--no-docker` |
 | `tectonic` | LaTeX engine that compiles a tailored CV `.tex` into a PDF. Without it the CV bridge sends the raw `.tex`. | Optional |
+| `ccusage` | Cross-harness LLM-spend CLI for the dashboard cost panels. Install user-level: `npm install -g --prefix ~/.local ccusage`. Without it those panels show "unavailable" (the read is run `--offline` + budget-capped so it never hangs). | Optional |
 
 The subscription CLIs (`claude` / `codex` / `opencode`) are optional and need **no
 API key**. The preflight checks `python3`/`uv`/`docker` and fails early if missing.

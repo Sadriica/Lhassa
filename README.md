@@ -31,6 +31,7 @@ System dependencies (install these first):
 - **`node` + `npm`** — build the React/Vite dashboard (`npm ci && npm run build`). Required for the dashboard.
 - **`docker`** — only for the containerized path / the installer smoke test (skip with `--no-docker`).
 - **`tectonic`** *(optional)* — the LaTeX engine that compiles a tailored CV `.tex` into a PDF. Without it, the CV bridge falls back to sending the raw `.tex`. See the CV pipeline below.
+- **`ccusage`** *(optional)* — cross-harness LLM-spend CLI for the dashboard's cost panels. Install user-level with `npm install -g --prefix ~/.local ccusage`. Without it, those panels show "unavailable" (the read runs `--offline` and is budget-capped, so it never blocks the dashboard).
 
 The subscription CLIs (`claude` / `codex` / `opencode`) are optional and need **no API key** — install whichever you use.
 
