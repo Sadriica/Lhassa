@@ -98,3 +98,38 @@ async def consolidate_memory(params: dict) -> str:
 
     except Exception as exc:
         return f"consolidate_memory: error: {exc}"
+
+
+async def distill_memory(params: dict) -> str:
+    """Extract durable facts from recent episodes via the cheap model.
+
+    This is the ONE action in the memory actionpack that may spend tokens.
+    Calls ``memory.consolidate.distill_episodes`` to distill the last
+    ``since_hours`` of episodes into at most 10 novel dato facts.
+
+    params:
+        instance_id  — defaults to Config.instance_id.
+        since_hours  — hours of episode history to consider (default 24).
+
+    Never raises.
+    """
+    try:
+        from lhassa.memory import consolidate as _consolidate
+
+        instance_id = params.get("instance_id") or Config.instance_id
+        since_hours_raw = params.get("since_hours")
+        since_hours: float = 24.0
+        if since_hours_raw is not None:
+            try:
+                since_hours = float(since_hours_raw)
+            except (TypeError, ValueError):
+                return "distill_memory: 'since_hours' must be a number"
+
+        result = await _consolidate.distill_episodes(
+            instance_id,
+            since_hours=since_hours,
+        )
+        return f"distill_memory: {result}"
+
+    except Exception as exc:
+        return f"distill_memory: error: {exc}"

@@ -198,6 +198,7 @@ async def _semantic_layer(
         return []
     embedder = get_embedder(config)
     qvec = embedder.embed([query])[0]
+    embedder_name = getattr(embedder, "name", "")
     by_id = {f.id: f for f in await load_facts(instance_id)}
 
     scored: list[tuple[float, str]] = []
@@ -205,8 +206,13 @@ async def _semantic_layer(
         fid = row["fact_id"]
         if fid in exclude_ids or fid not in by_id:
             continue
+        # Only compare against rows stamped with the same model — vectors from
+        # different embedders/models must never be cosine-compared.
+        row_model = row.get("model") or ""
+        if row_model != embedder_name:
+            continue
         vec = row.get("vector") or []
-        if len(vec) != len(qvec):  # different embedder dim — skip, don't crash
+        if len(vec) != len(qvec):  # different dim — skip, don't crash
             continue
         sim = cosine(qvec, vec)
         if sim > 0.0:

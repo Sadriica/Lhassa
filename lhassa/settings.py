@@ -272,7 +272,37 @@ EDITABLE: list[dict] = [
         "type": "bool",
         "label": "Memory layer 4 (semantic retrieval)",
         "group": "Memory",
-        "default": False,
+        "default": True,
+        "restart": RESTART_APP,
+    },
+    {
+        "key": "embeddings_url",
+        "attr": "embeddings_url",
+        "env_var": "LHASSA_EMBEDDINGS_URL",
+        "type": "str",
+        "label": "Embeddings endpoint URL",
+        "help": (
+            "OpenAI-compatible embeddings endpoint (e.g. http://localhost:11434 "
+            "for Ollama). Any connection or HTTP failure falls back silently to "
+            "the offline hashing embedder — memory loading never crashes."
+        ),
+        "group": "Memory",
+        "default": "http://localhost:11434",
+        "restart": RESTART_APP,
+    },
+    {
+        "key": "embeddings_model",
+        "attr": "embeddings_model",
+        "env_var": "LHASSA_EMBEDDINGS_MODEL",
+        "type": "str",
+        "label": "Embeddings model",
+        "help": (
+            "Model name for the embeddings endpoint (e.g. 'nomic-embed-text'). "
+            "Must match what the endpoint serves. Changing the model invalidates "
+            "existing stored vectors — run 'lhassa memory reindex' after switching."
+        ),
+        "group": "Memory",
+        "default": "nomic-embed-text",
         "restart": RESTART_APP,
     },
     # ── Surfaces ─────────────────────────────────────────────────────────────────

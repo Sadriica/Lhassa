@@ -58,6 +58,7 @@ def register_all() -> None:
     _reg("add_fact", _memory.add_fact)
     _reg("backup_memory", _memory.backup_memory)
     _reg("consolidate_memory", _memory.consolidate_memory)
+    _reg("distill_memory", _memory.distill_memory)
 
     # ── Brain / cross-cutting ─────────────────────────────────────────────────
     _reg("notify", _brain.notify)

@@ -410,9 +410,19 @@ class Config:
     # the active query, after pinned/recent/tags. ``embedding_model`` names an
     # embedding model on the local/cloud provider; empty → a deterministic offline
     # fallback embedder (hashing) so the layer works with no model configured.
-    memory_layer4_enabled: bool = os.getenv("LHASSA_MEMORY_LAYER4", "0") not in ("0", "false", "")
+    memory_layer4_enabled: bool = os.getenv("LHASSA_MEMORY_LAYER4", "1") not in ("0", "false", "")
     embedding_model: str = os.getenv("LHASSA_EMBEDDING_MODEL", "")
     memory_semantic_topk: int = int(os.getenv("LHASSA_MEMORY_SEMANTIC_TOPK", "5"))
+
+    # Phase 5 — dedicated embeddings endpoint (separate from the LLM endpoint).
+    # Points to an OpenAI-compatible /v1/embeddings endpoint; defaults to a local
+    # Ollama instance. Any connection/HTTP failure degrades silently to the offline
+    # HashingEmbedder — memory loading never crashes.
+    embeddings_url: str = os.getenv("LHASSA_EMBEDDINGS_URL", "http://localhost:11434")
+    embeddings_model: str = os.getenv("LHASSA_EMBEDDINGS_MODEL", "nomic-embed-text")
+    # API key for hosted embedding endpoints (Ollama is keyless; set for cloud).
+    # NEVER write this to settings.env — it stays in .env (secret).
+    embeddings_api_key: str = os.getenv("LHASSA_EMBEDDINGS_API_KEY", "")
 
     # ── Phase 6 — Telegram notifications (optional, token-gated) ──────────────
     # Polished Telegram channel for alerts/reports. Both must be set to enable it;
