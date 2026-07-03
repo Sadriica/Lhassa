@@ -164,6 +164,20 @@ def build_allowlist(repos: "set[str] | str | None" = None) -> dict[str, ActionSp
             min_trust=TrustLevel.INTERNO,
             requires_approval=False,
         ),
+        # ── Self-improvement (§2.8, Etapa 4 — visible self-improvement) ──────────
+        # Both are deterministic detection/gate passes; neither calls an LLM.
+        # detect_repetition only PARKS an approval (mint_action) — it never
+        # mints/executes anything itself, so no HITL gate is needed here.
+        "detect_repetition": ActionSpec(
+            objetivos=WILDCARD,
+            min_trust=TrustLevel.INTERNO,
+            requires_approval=False,
+        ),
+        "review_tools": ActionSpec(
+            objetivos=WILDCARD,
+            min_trust=TrustLevel.INTERNO,
+            requires_approval=False,
+        ),
     }
 
 
