@@ -101,6 +101,6 @@ async def get_llm_ccusage():
     tool is absent or errors — never blocks the dashboard."""
     from lhassa.llm.ccusage import read_ccusage
 
-    # Bounded budget so the dashboard's ccusage panel degrades fast instead of
-    # blocking on a slow ccusage/npx cold-start (the read is total-budget capped).
-    return await read_ccusage(timeout=3.0, allow_npx=False)
+    # Bounded budget: enough for the ~3-4s offline ccusage read (real data), but never
+    # the slow npx cold-start — degrade fast when the binary is absent.
+    return await read_ccusage(timeout=6.0, allow_npx=False)

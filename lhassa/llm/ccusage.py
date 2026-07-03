@@ -18,11 +18,12 @@ from __future__ import annotations
 import asyncio
 import json
 
-# Try the installed binary first, then the npx fallback. ``--json`` makes ccusage
-# emit machine-readable output instead of its default table.
+# Try the installed binary first, then the npx fallback. ``--json`` = machine-readable;
+# ``--offline`` uses cached pricing instead of fetching it over the network per run (that
+# network fetch made a full run take 20s+ — offline drops it to ~3-4s).
 _CCUSAGE_COMMANDS: list[list[str]] = [
-    ["ccusage", "--json"],
-    ["npx", "ccusage@latest", "--json"],
+    ["ccusage", "--offline", "--json"],
+    ["npx", "ccusage@latest", "--offline", "--json"],
 ]
 
 _EMPTY = {
