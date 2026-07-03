@@ -1,8 +1,8 @@
 """
-actionpack — the built-in set of 15 deterministic actions (Phase 3).
+actionpack — the built-in set of deterministic actions (Phase 3; org_run Etapa 3).
 
-Shell-layer package: composes notify/, health/, memory/, cv/, security/, core/.
-Nothing in core/ or other inner layers may import from here.
+Shell-layer package: composes notify/, health/, memory/, cv/, security/, core/,
+org/. Nothing in core/ or other inner layers may import from here.
 
 Public surface
 --------------
@@ -36,7 +36,7 @@ def register_all() -> None:
     from lhassa.core.actions import _REGISTRY, register_action
 
     # Import sub-modules — this defines the functions without side-effects.
-    from lhassa.actionpack import _brain, _memory, _net, _system  # noqa: F401
+    from lhassa.actionpack import _brain, _memory, _net, _org, _system  # noqa: F401
 
     # Defensive guard: skip any action that is already in the registry.
     # This makes register_all() safe even if _REGISTERED is reset externally
@@ -68,3 +68,12 @@ def register_all() -> None:
     _reg("check_health", _brain.check_health)
     _reg("git_status_repos", _brain.git_status_repos)
     _reg("compile_cv", _brain.compile_cv)
+
+    # ── Org — real delegation into the hierarchy (Etapa 3) ────────────────────
+    _reg("org_run", _org.org_run)
+
+    # Drain THIS instance's org inbox on every tick (enqueue → heartbeat closes
+    # the loop). Registers a watchlist check-func; see org/inbox_sense.py for
+    # why this lives here rather than a direct import in core/watchlist.py.
+    from lhassa.org import inbox_sense
+    inbox_sense.register()

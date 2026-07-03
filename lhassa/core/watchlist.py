@@ -288,6 +288,30 @@ _CHECKS: list[Callable[[str, list[Trigger], bool], Awaitable[None]]] = [
     _from_health,
 ]
 
+# Extensible seam: a SHELL that wants its own $0 sense registers a check-func
+# here at import time (``register_check``) instead of core reaching UP to import
+# it. This is the inversion that keeps core/watchlist.py spine-only: the org
+# layer's inbox sense (``org.inbox_sense``) is the first user — core never
+# imports ``lhassa.org`` (spine ↛ shell is enforced by
+# tests/test_architecture.py), the shell registers itself instead. Checked after
+# the built-ins so a plugin sense never shadows the deterministic core sources.
+_EXTRA_CHECKS: list[Callable[[str, list[Trigger], bool], Awaitable[None]]] = []
+
+
+def register_check(
+    fn: Callable[[str, list[Trigger], bool], Awaitable[None]],
+) -> Callable[[str, list[Trigger], bool], Awaitable[None]]:
+    """Register an additional watchlist check-func — the drop-in seam for shells.
+
+    Usable as a direct call or a decorator; returns ``fn`` unchanged either way.
+    A registered check must obey the same contract as the built-ins in this
+    module: ZERO tokens, defensive (:func:`check` already wraps every call in a
+    ``try/except``, but a well-behaved check-func should not rely on that), and
+    ``peek``-aware (skip state writes when ``peek=True``).
+    """
+    _EXTRA_CHECKS.append(fn)
+    return fn
+
 
 async def check(
     instance_id: Optional[str] = None,
@@ -304,7 +328,7 @@ async def check(
     """
     instance_id = instance_id or Config.instance_id
     triggers: list[Trigger] = []
-    for check_fn in _CHECKS:
+    for check_fn in _CHECKS + _EXTRA_CHECKS:
         try:
             await check_fn(instance_id, triggers, peek)
         except Exception as exc:
