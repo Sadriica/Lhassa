@@ -4,6 +4,7 @@ from lhassa.memory.embeddings import (
     Embedder,
     HashingEmbedder,
     OpenAICompatEmbedder,
+    RemoteEmbedder,
     cosine,
     get_embedder,
 )
@@ -85,13 +86,21 @@ def test_get_embedder_defaults_to_hashing_offline():
     assert isinstance(get_embedder(_Cfg), HashingEmbedder)
 
 
-def test_get_embedder_unreachable_model_degrades_to_hashing():
+def test_get_embedder_returns_remote_embedder_when_model_set():
+    """get_embedder returns RemoteEmbedder when a model is configured; the per-call
+    fallback happens inside embed(), not inside get_embedder."""
     class Cfg:
-        embedding_model = "text-embedding-3-small"
-        # An unroutable local URL — the reachability probe fails fast.
-        local_model_url = "http://127.0.0.1:1/v1"
+        embeddings_model = "text-embedding-3-small"
+        embeddings_url = "http://127.0.0.1:1"  # guaranteed unreachable
+        embeddings_api_key = ""
+        embedding_model = ""
+        local_model_url = ""
 
-    assert isinstance(get_embedder(Cfg), HashingEmbedder)
+    emb = get_embedder(Cfg)
+    assert isinstance(emb, RemoteEmbedder)
+    # embed() falls back to hashing output when the endpoint is unreachable.
+    result = emb.embed(["texto"])
+    assert result == HashingEmbedder().embed(["texto"])
 
 
 def test_openai_compat_embed_degrades_on_failure():

@@ -133,6 +133,13 @@ _COMPANY_RES = (
     re.compile(r"(?:^|\s)@\s*(?P<name>[^\n]+)"),
 )
 
+# Deterministic remember command: "remember: X", "recuerda: X", "recordá: X".
+# Handled BEFORE the watch-rules hook so it is $0 (no LLM, no task mint).
+_REMEMBER_RE = re.compile(
+    r'^(remember|recuerda|record[áa])[,:]?\s+(.+)',
+    re.IGNORECASE | re.DOTALL,
+)
+
 
 def _enabled(config) -> bool:
     """True only when polling is switched on AND credentials are present."""
@@ -435,6 +442,32 @@ async def _answer(text: str, *, config, chat_id: str = "") -> None:
     command_name, _ = commands.parse(stripped)
     if command_name == "cvnewbase":
         _arm_base(chat_id)
+
+    # Deterministic "remember" shortcut — $0, no LLM, no task.
+    # Handled before watch-rules so it short-circuits cleanly.
+    if not stripped.startswith("/"):
+        m = _REMEMBER_RE.match(stripped)
+        if m:
+            text_to_remember = m.group(2).strip()[:500]
+            try:
+                from lhassa.core import db as _db_remember
+                from lhassa.memory.facts import add_fact as _add_fact_remember
+                _instance_id = getattr(config, "instance_id", None) or "inst_personal"
+                await _db_remember.init_db()
+                _fact = await _add_fact_remember(
+                    _instance_id,
+                    tipo="dato",
+                    contenido=text_to_remember,
+                    procedencia="telegram-remember",
+                    confianza=0.95,
+                    tags=["telegram"],
+                )
+                await telegram.send(f"Remembered: {_fact.id}", config=config)
+            except Exception as _exc:
+                logger.warning(f"Telegram inbound: remember failed: {_exc}")
+                with contextlib.suppress(Exception):
+                    await telegram.send("Failed to remember that.", config=config)
+            return
 
     # Watch-rule matching: check rules BEFORE the command/brain fallback. A match
     # mints a task and confirms with the task id, then returns (does not fall through).

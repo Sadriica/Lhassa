@@ -4,9 +4,10 @@ Pluggable, offline-capable embedders for memory layer 4 (semantic retrieval).
 Layer 4 was deferred since Phase 1; this is its minimal, dependency-free core.
 The default :class:`HashingEmbedder` is pure-stdlib and DETERMINISTIC (same text →
 same vector), so the whole semantic layer works and is testable with zero config
-and no network. :class:`OpenAICompatEmbedder` is an optional upgrade that hits an
-OpenAI-compatible ``/embeddings`` endpoint (local model first, else cloud); it
-NEVER crashes memory loading — any failure degrades to the hashing embedder.
+and no network. :class:`RemoteEmbedder` is an optional upgrade that hits an
+OpenAI-compatible ``/v1/embeddings`` endpoint (local Ollama first, else cloud);
+it NEVER crashes memory loading — any failure degrades silently to the hashing
+embedder. The fallback warning is logged at most ONCE per process.
 
 No numpy: cosine and the vectors are plain Python ``list[float]`` / ``math``.
 """
@@ -16,6 +17,8 @@ import math
 import re
 from typing import Protocol, runtime_checkable
 
+from loguru import logger
+
 from lhassa.config import Config
 
 # Default dimensionality of the offline hashing embedder. Small enough to be
@@ -23,6 +26,10 @@ from lhassa.config import Config
 _HASH_DIM = 256
 
 _TOKEN_RE = re.compile(r"[\wáéíóúñü]+", re.UNICODE)
+
+# Module-level flag: log the fallback warning at most once per process so the
+# logs are not spammed on every fact write when Ollama is not running.
+_warned_fallback = False
 
 
 @runtime_checkable
@@ -66,7 +73,7 @@ class HashingEmbedder:
     ``cosine`` of two identical strings is ``≈ 1.0``.
     """
 
-    name = "hashing"
+    name = "hashing-v1"
 
     def __init__(self, dim: int = _HASH_DIM):
         self.dim = dim
@@ -88,17 +95,73 @@ class HashingEmbedder:
         return _l2_normalize(vec)
 
 
-class OpenAICompatEmbedder:
-    """Optional embedder hitting an OpenAI-compatible ``/embeddings`` endpoint.
+class RemoteEmbedder:
+    """OpenAI-compatible remote embedder with ``HashingEmbedder`` fallback.
 
-    Used only when ``config.embedding_model`` is non-empty. The base URL is the
-    local model URL when configured (data never leaves the machine), else the
-    cloud endpoint. Any network/parse failure degrades to a :class:`HashingEmbedder`
-    so memory loading never crashes.
+    Resolution is PER CALL: each ``embed()`` attempts the configured endpoint
+    (POST ``{base_url}/v1/embeddings``, timeout 5 s) and falls back silently to
+    :class:`HashingEmbedder` on any failure (connection error, HTTP error,
+    timeout, bad payload). The fallback warning is logged at most ONCE per
+    process via the module-level ``_warned_fallback`` flag.
+
+    ``name`` reflects the ACTUAL backend used in the last ``embed()`` call:
+    the configured model name on success, or ``HashingEmbedder.name`` on
+    fallback. Stamping stored vectors with this post-call name guarantees that
+    vectors from different backends are never compared against each other in the
+    semantic layer.
     """
 
-    # Cloud default base URL (OpenAI-compatible). [SUPUESTO]: not exercised
-    # offline; the local URL is preferred whenever ``local_model_url`` is set.
+    def __init__(self, model: str, base_url: str, *, api_key: str = ""):
+        self._remote_name = model
+        self.name = model  # updated after each embed() call
+        self.model = model
+        self.base_url = base_url.rstrip("/")
+        self.api_key = api_key
+        self._fallback = HashingEmbedder()
+
+    def embed(self, texts: list[str]) -> list[list[float]]:
+        global _warned_fallback
+        try:
+            result = self._embed_remote(texts)
+            self.name = self._remote_name  # remote succeeded
+            return result
+        except Exception as exc:
+            if not _warned_fallback:
+                _warned_fallback = True
+                logger.warning(
+                    f"RemoteEmbedder: falling back to HashingEmbedder "
+                    f"(will not warn again this process): {exc}"
+                )
+            self.name = self._fallback.name  # reflect actual backend
+            return self._fallback.embed(texts)
+
+    def _embed_remote(self, texts: list[str]) -> list[list[float]]:
+        import httpx
+
+        headers = {"Content-Type": "application/json"}
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
+        resp = httpx.post(
+            f"{self.base_url}/v1/embeddings",
+            json={"model": self.model, "input": texts},
+            headers=headers,
+            timeout=5.0,
+        )
+        resp.raise_for_status()
+        data = resp.json()["data"]
+        # Preserve request order via the returned ``index``.
+        ordered = sorted(data, key=lambda d: d.get("index", 0))
+        return [list(map(float, d["embedding"])) for d in ordered]
+
+
+class OpenAICompatEmbedder:
+    """Backward-compatible alias for code that pre-dates RemoteEmbedder.
+
+    New code should use :class:`RemoteEmbedder` or :func:`get_embedder`.
+    This class is kept so existing tests and plugins that import it by name
+    continue to work without changes.
+    """
+
     _CLOUD_BASE = "https://api.openai.com/v1"
 
     def __init__(self, model: str, base_url: str, *, api_key: str = "", timeout: float = 10.0):
@@ -113,7 +176,6 @@ class OpenAICompatEmbedder:
         try:
             return self._embed_remote(texts)
         except Exception:
-            # NEVER crash memory loading — fall back to the offline embedder.
             return self._fallback.embed(texts)
 
     def _embed_remote(self, texts: list[str]) -> list[list[float]]:
@@ -130,7 +192,6 @@ class OpenAICompatEmbedder:
         )
         resp.raise_for_status()
         data = resp.json()["data"]
-        # Preserve request order via the returned ``index``.
         ordered = sorted(data, key=lambda d: d.get("index", 0))
         return [list(map(float, d["embedding"])) for d in ordered]
 
@@ -145,20 +206,57 @@ class OpenAICompatEmbedder:
             return False
 
 
-def get_embedder(config=Config) -> Embedder:
+def get_embedder(config=Config) -> "Embedder":
     """Return the best available embedder for ``config``.
 
-    :class:`OpenAICompatEmbedder` when ``embedding_model`` is set and the endpoint
-    is reachable; otherwise the always-available offline :class:`HashingEmbedder`.
+    Resolution (per call, not at import):
+    1. If ``config.embeddings_model`` is set, return a :class:`RemoteEmbedder`
+       pointing at ``config.embeddings_url``. The remote is tried on each
+       ``embed()`` call; any failure silently falls back to
+       :class:`HashingEmbedder` inside the instance.
+    2. If ``config.embedding_model`` is set (legacy knob), same as above but
+       using ``config.local_model_url`` as the base URL.
+    3. Otherwise return the always-available offline :class:`HashingEmbedder`.
     """
-    model = getattr(config, "embedding_model", "") or ""
-    if not model:
-        return HashingEmbedder()
-    base_url = getattr(config, "local_model_url", "") or OpenAICompatEmbedder._CLOUD_BASE
-    candidate = OpenAICompatEmbedder(model, base_url)
-    if candidate.reachable():
-        return candidate
+    # New dedicated knobs (Phase 5).
+    model = getattr(config, "embeddings_model", "") or ""
+    if model:
+        base_url = getattr(config, "embeddings_url", "") or "http://localhost:11434"
+        api_key = getattr(config, "embeddings_api_key", "") or ""
+        return RemoteEmbedder(model, base_url, api_key=api_key)
+
+    # Legacy knob (Phase 6 — kept for backward compatibility).
+    legacy_model = getattr(config, "embedding_model", "") or ""
+    if legacy_model:
+        legacy_url = getattr(config, "local_model_url", "") or OpenAICompatEmbedder._CLOUD_BASE
+        api_key = getattr(config, "embeddings_api_key", "") or ""
+        return RemoteEmbedder(legacy_model, legacy_url, api_key=api_key)
+
     return HashingEmbedder()
+
+
+async def reindex(instance_id: str, config=None) -> int:
+    """Re-embed ALL facts for ``instance_id`` with the current embedder.
+
+    Unlike :func:`lhassa.memory.load.index_facts` (which skips already-indexed
+    facts), ``reindex`` overwrites every stored vector and model stamp. Use this
+    after switching the embedder model so all stored vectors become consistent
+    with the current backend.
+
+    Returns the number of facts re-embedded.
+    """
+    from lhassa.core import db
+    from lhassa.memory.facts import load_facts
+
+    config = config or Config
+    facts = await load_facts(instance_id)
+    if not facts:
+        return 0
+    embedder = get_embedder(config)
+    vectors = embedder.embed([f.contenido for f in facts])
+    for fact, vec in zip(facts, vectors):
+        await db.upsert_fact_embedding(instance_id, fact.id, vec, model=embedder.name)
+    return len(facts)
 
 
 def cosine(a: list[float], b: list[float]) -> float:

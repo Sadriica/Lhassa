@@ -309,6 +309,13 @@ async def init_db() -> None:
         if not await _has_column(db, "jobs", "acked"):
             await db.execute("ALTER TABLE jobs ADD COLUMN acked INTEGER DEFAULT 0")
 
+        # ── Phase 5 migration: fact_embeddings.model (embedder stamp) ────────
+        # The column is in the CREATE TABLE above (new DBs have it), but a DB
+        # created before the stamp existed lacks it — add it idempotently so
+        # semantic queries can filter rows by the embedder that produced them.
+        if not await _has_column(db, "fact_embeddings", "model"):
+            await db.execute("ALTER TABLE fact_embeddings ADD COLUMN model TEXT")
+
         # watch_state — generic key/value store for watchlist dedup hashes.
         # Each sense writes its last-seen state here so a persistent condition
         # fires ONCE per transition rather than on every 2-minute beat.

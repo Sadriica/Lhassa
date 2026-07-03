@@ -109,6 +109,15 @@ async def add_fact(
             "actualizado_en": fact.actualizado_en,
         }
     )
+    # Embed on write — best-effort; any embedder failure NEVER breaks the fact write.
+    # The fact is already committed to the DB; embedding is a best-effort bonus.
+    try:
+        from lhassa.memory.embeddings import get_embedder
+        embedder = get_embedder(Config)
+        vecs = embedder.embed([fact.contenido])
+        await db.upsert_fact_embedding(instance_id, fact.id, vecs[0], model=embedder.name)
+    except Exception:
+        pass  # embedding failure is silent — the fact was already written
     return fact
 
 

@@ -139,6 +139,11 @@ def build_allowlist(repos: "set[str] | str | None" = None) -> dict[str, ActionSp
             min_trust=TrustLevel.INTERNO,
             requires_approval=False,
         ),
+        "distill_memory": ActionSpec(
+            objetivos=WILDCARD,
+            min_trust=TrustLevel.INTERNO,
+            requires_approval=False,
+        ),
         "set_task_state": ActionSpec(
             objetivos=WILDCARD,
             min_trust=TrustLevel.INTERNO,

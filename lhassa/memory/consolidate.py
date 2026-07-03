@@ -32,6 +32,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
+from datetime import datetime, timezone
 from typing import Any
 
 from loguru import logger
@@ -91,6 +93,44 @@ def _extract_json(text: str) -> dict:
     except (ValueError, TypeError):
         return {}
     return parsed if isinstance(parsed, dict) else {}
+
+
+def _extract_json_array(text: str) -> list:
+    """Extract the first JSON array from text. Returns ``[]`` on any failure.
+
+    Handles bare JSON arrays, fenced ```json ... ``` blocks, and arrays embedded
+    in surrounding prose. Copied here (not imported from ``core.dispatch``) to
+    avoid a circular import: ``memory`` → ``core`` → ``memory.facts``.
+    """
+    if not text:
+        return []
+    try:
+        parsed = json.loads(text)
+        if isinstance(parsed, list):
+            return parsed
+    except (ValueError, TypeError):
+        pass
+    # Fenced code block.
+    fenced = re.search(r"```(?:json)?\s*(\[[\s\S]*?\])\s*```", text)
+    if fenced:
+        try:
+            parsed = json.loads(fenced.group(1))
+            if isinstance(parsed, list):
+                return parsed
+        except (ValueError, TypeError):
+            pass
+    # Embedded array: slice from first [ to last ].
+    start = text.find("[")
+    end = text.rfind("]")
+    if start == -1 or end == -1 or end < start:
+        return []
+    try:
+        parsed = json.loads(text[start : end + 1])
+        if isinstance(parsed, list):
+            return parsed
+    except (ValueError, TypeError):
+        pass
+    return []
 
 
 async def _cheap_complete(
@@ -332,3 +372,137 @@ async def consolidate_semantic(
         "contradictions": contradictions,
         "cost_usd": cost,
     }
+
+
+async def distill_episodes(
+    instance_id: str | None = None,
+    *,
+    since_hours: float = 24,
+    provider: "ModelProvider | None" = None,
+    model: "str | None" = None,
+    completion_fn: Any = None,
+    config: Any = Config,
+) -> str:
+    """Extract durable facts from recent episodes via the cheap model.
+
+    Loads the last ``since_hours`` of episodes (cap 50), asks the CHEAP model
+    for at most 10 novel, durable facts about the owner or system, and writes
+    them as ``dato`` facts (confianza=0.6, procedencia="distill:<ISO-date>").
+    Skips facts whose exact ``contenido`` already exists in the grande
+    (case-insensitive). Tags distilled facts with ``["distilled"]``.
+
+    Returns a short summary string. Degrades gracefully — never raises:
+    - ``BudgetExceeded`` → ``"distill deferred: budget exceeded"``
+    - ``ProviderNotConfigured`` → ``"distill deferred: provider not configured"``
+    - Malformed JSON reply → no writes, returns a note string.
+
+    NOTE: This is the ONE function in the memory layer that may spend tokens.
+    """
+    from lhassa.llm.gateway import BudgetExceeded
+    from lhassa.llm.provider import ProviderNotConfigured
+
+    instance_id = _resolve_instance(instance_id, config)
+
+    try:
+        provider_obj, model_str = _resolve_provider_model(provider, model, config)
+    except (BudgetExceeded, ProviderNotConfigured) as exc:
+        return f"distill deferred: {exc}"
+    except Exception as exc:
+        logger.debug(f"distill_episodes: provider setup failed: {exc}")
+        return f"distill deferred: {exc}"
+
+    try:
+        from lhassa.core import db as _core_db
+
+        all_episodes = await _core_db.load_recent_episodes(instance_id, 50)
+        cutoff_ts = datetime.now(timezone.utc).timestamp() - since_hours * 3600
+
+        episodes: list[dict] = []
+        for ep in all_episodes:
+            ts_str = ep.get("creado_en") or ""
+            if ts_str:
+                try:
+                    ts = datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
+                    if ts.timestamp() >= cutoff_ts:
+                        episodes.append(ep)
+                except Exception:
+                    episodes.append(ep)  # unparseable timestamp → include
+            else:
+                episodes.append(ep)
+
+        if not episodes:
+            return "distill: no recent episodes"
+
+        lines: list[str] = []
+        for ep in episodes[:50]:
+            resultado = (ep.get("resultado") or "")[:200]
+            accion = ep.get("accion") or ""
+            despertar = ep.get("despertar_por") or ""
+            snippet = f"[{despertar}:{accion}] {resultado}".strip()[:200]
+            lines.append(f"- {snippet}")
+
+        prompt = (
+            "Below are recent system episodes. Extract at most 10 SHORT, NOVEL, "
+            "DURABLE facts about the owner or system worth remembering long-term. "
+            "Focus on preferences, habits, goals, recurring patterns, or notable "
+            "system state. Return ONLY a JSON array of strings (one fact per "
+            'string), or [] when nothing qualifies. Example: ["Prefers dark mode"]'
+            "\n\nEpisodes:\n" + "\n".join(lines)
+        )
+
+        completion = await _cheap_complete(
+            [{"role": "user", "content": prompt}],
+            provider=provider_obj,
+            model=model_str,
+            completion_fn=completion_fn,
+        )
+
+        facts_list = _extract_json_array(completion.text)
+        if not isinstance(facts_list, list):
+            logger.debug(
+                f"distill_episodes: model returned non-array: {completion.text[:100]}"
+            )
+            return "distill: model returned non-array"
+
+        # Load existing contenidos for deduplication (case-insensitive exact match).
+        existing_facts = await facts_mod.load_facts(instance_id)
+        existing_lower: set[str] = {f.contenido.strip().casefold() for f in existing_facts}
+
+        iso_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        written = 0
+        for item in facts_list[:10]:
+            if not isinstance(item, str):
+                continue
+            text = item.strip()[:500]
+            if not text:
+                continue
+            if text.casefold() in existing_lower:
+                continue  # skip exact duplicate
+            await facts_mod.add_fact(
+                instance_id,
+                "dato",
+                text,
+                confianza=0.6,
+                procedencia=f"distill:{iso_date}",
+                tags=["distilled"],
+            )
+            existing_lower.add(text.casefold())
+            written += 1
+
+        cost = float(completion.cost_usd or 0.0)
+        logger.info(
+            f"distill_episodes: wrote={written} cost_usd={cost:.6f} "
+            f"episodes={len(episodes)}"
+        )
+        return (
+            f"distill: wrote {written} facts from {len(episodes)} episodes "
+            f"(cost_usd={cost:.6f})"
+        )
+
+    except BudgetExceeded as exc:
+        return f"distill deferred: budget exceeded: {exc}"
+    except ProviderNotConfigured as exc:
+        return f"distill deferred: provider not configured: {exc}"
+    except Exception as exc:
+        logger.debug(f"distill_episodes: unexpected error: {exc}")
+        return f"distill: error: {exc}"
