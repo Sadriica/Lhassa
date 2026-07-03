@@ -1,4 +1,4 @@
-import { Handle, Position } from '@xyflow/react'
+import { Handle, NodeResizer, Position } from '@xyflow/react'
 import { NODE_W } from './layout'
 
 // Custom node renderers for the org FLOW canvas: the department-group box (a
@@ -9,13 +9,15 @@ import { NODE_W } from './layout'
 
 // A non-interactive, rounded, tinted rectangle with an uppercase tracked label.
 export function DeptGroupNode({ data }) {
-  const { department, color, width, height } = data
+  const { department, color } = data
   return (
     <div
       title={`Drag to move the ${department} department`}
       style={{
-        width,
-        height,
+        width: '100%',
+        height: '100%',
+        minWidth: 220,
+        minHeight: 140,
         boxSizing: 'border-box',
         position: 'relative',
         border: `1px solid rgba(${color},0.32)`,
@@ -26,6 +28,19 @@ export function DeptGroupNode({ data }) {
         cursor: 'grab',
       }}
     >
+      <NodeResizer
+        minWidth={220}
+        minHeight={140}
+        onResizeEnd={(_event, params) => data.onResizeEnd?.(department, params)}
+        lineStyle={{ borderColor: `rgba(${color},0.55)` }}
+        handleStyle={{
+          width: 9,
+          height: 9,
+          borderRadius: 3,
+          border: `1px solid rgba(${color},0.8)`,
+          background: 'var(--lh-surface)',
+        }}
+      />
       <span
         style={{
           position: 'absolute',
@@ -39,6 +54,10 @@ export function DeptGroupNode({ data }) {
           letterSpacing: '0.16em',
           textTransform: 'uppercase',
           color: `rgba(${color},0.92)`,
+          maxWidth: 'calc(100% - 32px)',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
         }}
       >
         {/* grip glyph → discoverable "you can drag this box" affordance */}
@@ -89,6 +108,7 @@ export function BrainFlowNode({ data }) {
     <div
       style={{
         width: NODE_W,
+        maxWidth: NODE_W,
         background: isAdmin
           ? 'rgba(217,165,33,0.12)'
           : 'var(--lh-surface)',
@@ -97,6 +117,7 @@ export function BrainFlowNode({ data }) {
         padding: '0.6rem 0.7rem',
         boxShadow: glow,
         cursor: 'pointer',
+        overflow: 'hidden',
       }}
     >
       {/* target (top): a connection ends here → this node becomes the new parent */}
@@ -105,8 +126,8 @@ export function BrainFlowNode({ data }) {
         position={Position.Top}
         style={{ background: 'var(--lh-accent)', width: 8, height: 8, border: 'none' }}
       />
-      <div className="flex items-center gap-1.5 flex-wrap">
-        <span className="lh-mono" style={{ fontSize: 13, fontWeight: 600, color: 'var(--lh-text)' }}>
+      <div className="flex items-center gap-1.5 flex-wrap" style={{ minWidth: 0 }}>
+        <span className="lh-mono" style={{ fontSize: 13, fontWeight: 600, color: 'var(--lh-text)', minWidth: 0, maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {node.id}
         </span>
         {isAdmin && (
@@ -149,11 +170,15 @@ export function BrainFlowNode({ data }) {
       </div>
 
       <div style={{ fontSize: 11, marginTop: 2, color: 'var(--lh-text-muted)' }}>
-        {node.role || 'department'}
+        <span style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {node.role || 'department'}
+        </span>
       </div>
 
       <div style={{ fontSize: 10, marginTop: 2, color: 'var(--lh-text-faint)' }}>
-        {node.parent ? `reports to ${node.parent}` : 'root · commands everyone'}
+        <span style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {node.parent ? `reports to ${node.parent}` : 'root · commands everyone'}
+        </span>
       </div>
 
       {(node.skills?.length > 0 || limitKeys.length > 0) && (

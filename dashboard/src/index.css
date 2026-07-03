@@ -263,6 +263,7 @@ html, body {
     display: flex;
     align-items: center;
     justify-content: space-between;
+    flex-wrap: wrap;
     gap: 0.75rem;
     padding-bottom: 0.75rem;
     margin-bottom: 1rem;
@@ -306,14 +307,21 @@ html, body {
   .lh-tag {
     display: inline-flex;
     align-items: center;
+    gap: 0.3rem;
+    max-width: 100%;
     font-family: var(--lh-font-mono);
     font-size: 0.6875rem;
+    line-height: 1.25;
     padding: 0.125rem 0.5rem;
     border-radius: 999px;
     border: 1px solid var(--lh-border-strong);
     background: var(--lh-surface-3);
     color: var(--lh-text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
+  .lh-tag .lh-dot { margin-right: 0.05rem; }
   .lh-tag-accent {
     border-color: rgba(217, 165, 33, 0.38);
     background: var(--lh-accent-dim);
@@ -337,12 +345,17 @@ html, body {
     display: inline-flex;
     align-items: center;
     gap: 0.45rem;
+    max-width: 100%;
     font-size: 0.75rem;
+    line-height: 1.25;
     padding: 0.26rem 0.62rem;
     border-radius: 999px;
     border: 1px solid var(--lh-border);
     background: var(--lh-surface-2);
     color: var(--lh-text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   /* Status dots — solid matte, no colored glow */
   .lh-dot { width: 7px; height: 7px; border-radius: 999px; background: var(--lh-text-faint); flex-shrink: 0; }
@@ -355,15 +368,20 @@ html, body {
   .lh-btn {
     display: inline-flex;
     align-items: center;
+    justify-content: center;
     gap: 0.4rem;
+    min-height: 32px;
+    max-width: 100%;
     font-size: 0.75rem;
     font-weight: 500;
+    line-height: 1.15;
     padding: 0.42rem 0.8rem;
     border-radius: var(--lh-radius-sm);
     border: 1px solid var(--lh-border-strong);
     background: var(--lh-surface-2);
     color: var(--lh-text);
     cursor: pointer;
+    white-space: nowrap;
     transition: background 0.14s ease, border-color 0.14s ease, color 0.14s ease, transform 0.06s ease;
   }
   .lh-btn:hover { background: var(--lh-surface-3); border-color: var(--lh-border-strong); }
@@ -515,6 +533,7 @@ html, body {
     border-radius: var(--lh-radius-sm);
     border: 1px solid var(--lh-border);
     background: var(--lh-surface-2);
+    min-width: 0;
   }
   .lh-nav-stat-label {
     font-size: 0.6rem;
@@ -529,6 +548,7 @@ html, body {
     font-size: 1.05rem;
     font-weight: 500;
     color: var(--lh-text);
+    overflow-wrap: anywhere;
   }
 
   /* A thin rule — gold tipped with red (the duotone divider) */
@@ -750,6 +770,10 @@ html, body {
   .lh-cmdk-input::placeholder { color: var(--lh-text-faint); }
   .lh-cmdk-kbd {
     flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 2.15rem;
     font-family: var(--lh-font-mono);
     font-size: 0.625rem;
     padding: 0.1rem 0.35rem;
@@ -804,10 +828,11 @@ html, body {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 0.5rem;
+    gap: 0.75rem;
     width: 100%;
     margin-top: 0.35rem;
-    padding: 0.5rem 0.6rem 0.5rem 0.75rem;
+    min-height: 42px;
+    padding: 0.55rem 0.65rem 0.55rem 0.8rem;
     border-radius: var(--lh-radius-sm);
     border: 1px solid var(--lh-border);
     background: var(--lh-surface-2);
@@ -816,6 +841,12 @@ html, body {
     letter-spacing: 0.04em;
     cursor: pointer;
     transition: color 0.14s ease, border-color 0.14s ease, background 0.14s ease;
+  }
+  .lh-cmdk-hint > span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   .lh-cmdk-hint:hover { color: var(--lh-text-muted); border-color: var(--lh-border-strong); background: var(--lh-surface-3); }
 }

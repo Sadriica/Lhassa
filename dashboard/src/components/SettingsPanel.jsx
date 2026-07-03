@@ -17,6 +17,130 @@ const RESTART_LABEL = {
 
 // The group that carries the dangerous toggles (kill-switch) — tinted red.
 const DANGER_GROUP = 'Budget & Safety'
+const ADVANCED_KEYS = new Set([
+  'opencode_model',
+  'model_cheap',
+  'model_smart',
+  'router_mode',
+  'org_departments',
+])
+
+const GROUP_META = {
+  Heartbeat: {
+    label: 'Autonomy loop',
+    help: 'How routine checks think, which fallbacks they use, and whether the heartbeat can keep working.',
+  },
+  Models: {
+    label: 'Engines',
+    help: 'Primary chat, routine reasoning and hard reasoning choices. Exact provider/model ids are advanced details.',
+  },
+  'Budget & Safety': {
+    label: 'Actions & safety',
+    help: 'Cost limits, hard stops and privacy controls.',
+  },
+  Memory: {
+    label: 'Memory',
+    help: 'What Lhassa can retrieve, learn and carry between sessions.',
+  },
+  Surfaces: {
+    label: 'Surfaces & notifications',
+    help: 'Voice, Telegram and notification channels.',
+  },
+  Org: {
+    label: 'Organization defaults',
+    help: 'Defaults used when deriving org charts and departments.',
+  },
+}
+
+const SETTING_LABELS = {
+  heartbeat_provider: 'Autonomy engine',
+  opencode_model: 'Routine local-CLI preset',
+  fallback_providers: 'Fallback order',
+  llm_provider: 'Primary interaction engine',
+  model: 'Primary model preset',
+  model_cheap: 'Routine reasoning model',
+  model_smart: 'Hard reasoning model',
+  router_mode: 'Routing policy',
+  llm_kill_switch: 'Stop all model calls',
+  llm_daily_token_budget: 'Daily output-token budget',
+  pseudonymize_remote: 'Pseudonymize before remote engines',
+  memory_layer4_enabled: 'Semantic memory retrieval',
+  voice_enabled: 'Voice surface',
+  telegram_poll_enabled: 'Telegram inbound polling',
+  notify_channels: 'Notification channels',
+  org_departments: 'Default departments',
+}
+
+const SETTING_HELP = {
+  heartbeat_provider: 'Choose how scheduled autonomy checks think. Auto keeps the choice flexible and prefers local/free routes before cloud.',
+  fallback_providers: 'Ordered backup engines used when the primary routine engine fails. Keep at least one option.',
+  llm_provider: 'Engine for direct interaction surfaces such as CLI chat, voice and agent prompts. This can be local, CLI-backed or cloud-backed.',
+  model: 'This is the dashboard control for LHASSA_MODEL. Leave it on engine default to let the selected primary engine choose its default model, or select/type an exact model id to pin it.',
+  model_cheap: 'Advanced: exact model or preset for routine low-cost reasoning. Leave unset to inherit the primary model.',
+  model_smart: 'Advanced: exact model or preset for harder reasoning. Leave unset to inherit the primary model.',
+  opencode_model: 'Advanced: exact preset for one local CLI routine path. This is intentionally hidden in basic mode.',
+}
+
+const OPTION_LABELS = {
+  auto: 'Auto',
+  local: 'Local endpoint',
+  cloud: 'Cloud gateway',
+  default: 'Default gateway',
+  opencode: 'Local CLI: OpenCode',
+  claude: 'Local CLI: Claude Code',
+  codex: 'Local CLI: Codex',
+  groq: 'Cloud/API: Groq',
+  anthropic: 'Cloud/API: Anthropic',
+  openai: 'Cloud/API: OpenAI',
+  openrouter: 'Cloud/API: OpenRouter',
+  cerebras: 'Cloud/API: Cerebras',
+  ollama: 'Local server: Ollama',
+  rules: 'Rules-based routing',
+  off: 'Routing off',
+}
+
+function labelForSetting(setting) {
+  return SETTING_LABELS[setting.key] || setting.label
+}
+
+function helpForSetting(setting) {
+  return SETTING_HELP[setting.key] || setting.help || ''
+}
+
+function labelForOption(value, advanced) {
+  if (advanced) return value
+  return OPTION_LABELS[value] || value
+}
+
+function engineLabel(value, advanced = false) {
+  const text = String(value || '').trim()
+  if (!text) return 'selected engine'
+  return labelForOption(text, advanced)
+}
+
+function isDefaultLike(value) {
+  const text = String(value ?? '').trim()
+  return !text || (text.startsWith('(') && text.endsWith(')'))
+}
+
+function fmtDefault(setting, advanced) {
+  if (setting.secret) return null
+  if (!advanced) return setting.overridden ? 'customized' : 'default'
+  return `default ${String(setting.default)}`
+}
+
+function rowWarning(setting) {
+  if (setting.key === 'llm_kill_switch' && setting.value) {
+    return 'Model calls are stopped. Autonomous reasoning and cloud-backed surfaces will degrade.'
+  }
+  if (setting.key === 'llm_daily_token_budget' && Number(setting.value || 0) === 0) {
+    return 'No daily token ceiling is set. Add a budget if this instance may use paid engines.'
+  }
+  if (setting.key === 'fallback_providers' && !String(setting.value || '').trim()) {
+    return 'No fallback order is configured. A provider failure can stop routine reasoning.'
+  }
+  return ''
+}
 
 // ── a tasteful on-palette toggle ──────────────────────────────────────────────
 function Toggle({ on, disabled, onChange, danger }) {
@@ -105,13 +229,14 @@ const CUSTOM = '__custom__'
 // The owner asked for drop-lists, not free typing — but a custom model id must
 // still be possible. So: a <select> populated from the setting's options (falling
 // back to the available pools) plus a "Custom…" entry that swaps in a text field.
-function ModelCombo({ setting, options, busy, onSave }) {
+function ModelCombo({ setting, options, busy, onSave, advanced, defaultLabel = 'engine default' }) {
   const value = setting.value ?? ''
+  const defaultLike = !setting.overridden || isDefaultLike(value)
   const known = options.includes(value)
   // Custom mode when the current value isn't a known option (and isn't empty),
   // or when the user explicitly picks "Custom…".
-  const [custom, setCustom] = useState(Boolean(value) && !known)
-  const [draft, setDraft] = useState(value)
+  const [custom, setCustom] = useState(Boolean(value) && !defaultLike && !known)
+  const [draft, setDraft] = useState(defaultLike ? '' : value)
 
   if (custom) {
     const dirty = String(draft) !== String(value)
@@ -120,7 +245,7 @@ function ModelCombo({ setting, options, busy, onSave }) {
       <div className="flex items-center gap-1.5">
         <input
           className="lh-input"
-          placeholder="custom model id…"
+          placeholder="exact model id…"
           value={draft}
           disabled={busy}
           onChange={(e) => setDraft(e.target.value)}
@@ -143,23 +268,24 @@ function ModelCombo({ setting, options, busy, onSave }) {
   return (
     <select
       className="lh-select"
-      value={known ? value : ''}
+      value={defaultLike ? '__default__' : known ? value : ''}
       disabled={busy}
       onChange={(e) => {
         if (e.target.value === CUSTOM) { setDraft(value || ''); setCustom(true) }
+        else if (e.target.value === '__default__') onSave(setting.key, '')
         else onSave(setting.key, e.target.value)
       }}
       style={{ maxWidth: 260 }}
     >
-      {!value && <option value="">— default</option>}
-      {options.map((o) => <option key={o} value={o}>{o}</option>)}
+      <option value="__default__">{defaultLabel}</option>
+      {options.map((o) => <option key={o} value={o}>{advanced ? o : `Preset: ${o}`}</option>)}
       <option value={CUSTOM}>Custom…</option>
     </select>
   )
 }
 
 // ── multi-select: checkbox chips for an ordered provider chain (CSV-backed) ──────
-function MultiSelect({ setting, options, busy, onSave }) {
+function MultiSelect({ setting, options, busy, onSave, advanced }) {
   const current = useMemo(
     () => String(setting.value ?? '').split(',').map((s) => s.trim()).filter(Boolean),
     [setting.value],
@@ -186,21 +312,21 @@ function MultiSelect({ setting, options, busy, onSave }) {
               style={{ cursor: busy ? 'not-allowed' : 'pointer' }}
               title={on ? `#${idx + 1} in the chain — click to remove` : 'Click to add to the chain'}
             >
-              {on ? `${idx + 1}· ` : ''}{opt}
+              {on ? `${idx + 1}· ` : ''}{labelForOption(opt, advanced)}
             </button>
           )
         })}
       </div>
       <span className="lh-mono text-[10px]" style={{ color: 'var(--lh-text-faint)' }}>
-        {current.length ? `order: ${current.join(' → ')}` : 'none selected'}
+        {current.length ? `order: ${current.map((v) => labelForOption(v, advanced)).join(' → ')}` : 'none selected'}
       </span>
     </div>
   )
 }
 
 // ── one editable setting row ──────────────────────────────────────────────────
-function SettingRow({ setting, available, status, busy, onSave }) {
-  const { key, type, value, label, options, overridden, secret, restart, allow_custom } = setting
+function SettingRow({ setting, settingsByKey, available, status, busy, onSave, advanced }) {
+  const { key, type, value, options, overridden, secret, restart, allow_custom } = setting
   // Local draft for free-text / numeric controls; committed on blur or Enter.
   const [draft, setDraft] = useState(value ?? '')
 
@@ -227,6 +353,11 @@ function SettingRow({ setting, available, status, busy, onSave }) {
 
   const dirty = String(draft) !== String(value ?? '')
   const commit = () => { if (dirty) onSave(key, draft) }
+  const primaryEngine = settingsByKey?.llm_provider?.value
+  const primaryEngineLabel = engineLabel(primaryEngine, advanced)
+  const modelDefaultLabel = key === 'model'
+    ? `Use ${primaryEngineLabel} default`
+    : 'Use engine default'
 
   // A str field with a known option pool (and a custom escape hatch) → model combo.
   const isModelCombo = type === 'str' && (allow_custom || (Array.isArray(options) && options.length))
@@ -244,7 +375,7 @@ function SettingRow({ setting, available, status, busy, onSave }) {
       />
     )
   } else if (type === 'multi') {
-    control = <MultiSelect setting={setting} options={multiOptions} busy={busy} onSave={onSave} />
+    control = <MultiSelect setting={setting} options={multiOptions} busy={busy} onSave={onSave} advanced={advanced} />
   } else if (type === 'enum') {
     control = (
       <select
@@ -254,7 +385,7 @@ function SettingRow({ setting, available, status, busy, onSave }) {
         onChange={(e) => onSave(key, e.target.value)}
         style={{ maxWidth: 240 }}
       >
-        {enumOptions.map((o) => <option key={o} value={o}>{o}</option>)}
+        {enumOptions.map((o) => <option key={o} value={o}>{labelForOption(o, advanced)}</option>)}
         {!enumOptions.includes(value) && value != null && <option value={value}>{String(value)}</option>}
       </select>
     )
@@ -266,6 +397,8 @@ function SettingRow({ setting, available, status, busy, onSave }) {
         options={modelOptions}
         busy={busy}
         onSave={onSave}
+        advanced={advanced}
+        defaultLabel={modelDefaultLabel}
       />
     )
   } else {
@@ -286,6 +419,10 @@ function SettingRow({ setting, available, status, busy, onSave }) {
 
   const st = status || {}
   const restartLabel = RESTART_LABEL[restart] || 'Applied live'
+  const help = helpForSetting(setting)
+  const warning = rowWarning(setting)
+  const defaultLabel = fmtDefault(setting, advanced)
+  const defaultLike = !overridden || isDefaultLike(value)
 
   return (
     <div className="lh-row">
@@ -299,17 +436,40 @@ function SettingRow({ setting, available, status, busy, onSave }) {
                 style={{ flexShrink: 0 }}
               />
             )}
-            <span className="text-[13px] font-medium" style={{ color: 'var(--lh-text)' }}>{label}</span>
+            <span className="text-[13px] font-medium" style={{ color: 'var(--lh-text)' }}>{labelForSetting(setting)}</span>
           </div>
-          <div className="lh-mono text-[10px] mt-0.5" style={{ color: 'var(--lh-text-faint)' }}>
-            {key}
-            {!secret && (
-              <span> · default {String(setting.default)}</span>
+          <div className="flex items-center gap-1.5 flex-wrap mt-1">
+            {defaultLabel && <span className="lh-tag">{defaultLabel}</span>}
+            {overridden && <span className="lh-tag lh-tag-accent">overridden</span>}
+            <span className="lh-tag">{RESTART_LABEL[restart] || 'Applied live'}</span>
+            {advanced && (
+              <span className="lh-mono text-[10px]" style={{ color: 'var(--lh-text-faint)' }}>{key}</span>
             )}
           </div>
+          {help && (
+            <p className="text-[11px] mt-1.5 max-w-2xl" style={{ color: 'var(--lh-text-muted)' }}>{help}</p>
+          )}
+          {key === 'model' && (
+            <div className="text-[11px] mt-1.5 max-w-2xl" style={{ color: 'var(--lh-accent-text)' }}>
+              Effective choice: {defaultLike
+                ? `${primaryEngineLabel} default -> ${String(value || 'provider decides at runtime')} (LHASSA_MODEL is not pinned)`
+                : `pinned to ${String(value)} for ${primaryEngineLabel}`}.
+            </div>
+          )}
+          {advanced && !secret && (
+            <div className="lh-mono text-[10px] mt-1" style={{ color: 'var(--lh-text-faint)' }}>
+              env {setting.env_var} · current {String(value ?? '')}
+            </div>
+          )}
         </div>
         <div className="flex items-center gap-1.5 shrink-0">{control}</div>
       </div>
+
+      {warning && (
+        <div className="text-[11px] mt-2 lh-row" style={{ color: 'var(--lh-warn)', borderColor: 'rgba(217,165,33,0.35)' }}>
+          {warning}
+        </div>
+      )}
 
       {st.state === 'saving' && (
         <div className="text-[11px] mt-1.5" style={{ color: 'var(--lh-text-faint)' }}>Saving…</div>
@@ -343,6 +503,7 @@ export default function SettingsPanel() {
   const [error, setError] = useState('')
   const [busyKey, setBusyKey] = useState(null)
   const [status, setStatus] = useState({}) // key → { state, error, hint }
+  const [advanced, setAdvanced] = useState(false)
 
   const load = useCallback(async () => {
     try {
@@ -387,7 +548,15 @@ export default function SettingsPanel() {
   const available = data?.available || {}
   const byGroup = useMemo(() => {
     const m = {}
-    for (const s of data?.settings || []) (m[s.group] ||= []).push(s)
+    for (const s of data?.settings || []) {
+      if (!advanced && ADVANCED_KEYS.has(s.key)) continue
+      ;(m[s.group] ||= []).push(s)
+    }
+    return m
+  }, [data, advanced])
+  const settingsByKey = useMemo(() => {
+    const m = {}
+    for (const s of data?.settings || []) m[s.key] = s
     return m
   }, [data])
 
@@ -424,10 +593,32 @@ export default function SettingsPanel() {
               {total} editable {total === 1 ? 'key' : 'keys'} · writes to settings.env
             </span>
           </div>
-          <button type="button" className="lh-btn" onClick={load}>Refresh</button>
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              className="lh-btn"
+              onClick={() => setAdvanced((v) => !v)}
+              style={advanced ? { borderColor: 'var(--lh-gold-deep)', color: 'var(--lh-accent-text)' } : undefined}
+              aria-pressed={advanced}
+            >
+              {advanced ? 'Advanced on' : 'Advanced'}
+            </button>
+            <button type="button" className="lh-btn" onClick={load}>Refresh</button>
+          </div>
         </div>
         <p className="text-[11px] mt-2" style={{ color: 'var(--lh-text-faint)' }}>
-          Changes apply live; some surfaces need a restart to take full effect — each row says which.
+          Basic mode shows operational choices. Advanced mode exposes exact keys, model presets,
+          defaults and environment variables for precise administration.
+        </p>
+      </div>
+
+      <div className="lh-card" style={{ borderColor: 'rgba(217,165,33,0.22)' }}>
+        <div className="lh-eyebrow">Configuration model</div>
+        <p className="text-xs mt-2 max-w-3xl" style={{ color: 'var(--lh-text-muted)' }}>
+          Prefer <strong style={{ color: 'var(--lh-text)' }}>Auto</strong> for routine work, configure
+          local endpoints or local CLIs when available, and keep cloud-specific model ids in Advanced.
+          Lhassa should be able to swap engines without the dashboard becoming tied to one service.
+          Empty model fields mean “inherit the selected engine default”; customized fields pin an exact id.
         </p>
       </div>
 
@@ -435,6 +626,7 @@ export default function SettingsPanel() {
         const items = byGroup[group] || []
         if (!items.length) return null
         const danger = group === DANGER_GROUP
+        const meta = GROUP_META[group] || { label: group, help: '' }
         return (
           <div
             key={group}
@@ -442,8 +634,14 @@ export default function SettingsPanel() {
             style={danger ? { borderColor: 'rgba(162,62,52,0.30)' } : undefined}
           >
             <div className="lh-card-head">
-              <div className="flex items-center gap-2">
-                <span className="lh-eyebrow" style={danger ? { color: 'var(--lh-red-soft)' } : undefined}>{group}</span>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="lh-eyebrow" style={danger ? { color: 'var(--lh-red-soft)' } : undefined}>{meta.label}</span>
+                  {advanced && <span className="lh-tag">{group}</span>}
+                </div>
+                {meta.help && (
+                  <p className="text-[11px] mt-1" style={{ color: 'var(--lh-text-faint)' }}>{meta.help}</p>
+                )}
                 {danger && (
                   <span className="lh-tag" style={{ borderColor: 'rgba(162,62,52,0.45)', color: 'var(--lh-red-soft)' }}>
                     handle with care
@@ -459,10 +657,12 @@ export default function SettingsPanel() {
                 <SettingRow
                   key={`${s.key}:${String(s.value)}`}
                   setting={s}
+                  settingsByKey={settingsByKey}
                   available={available}
                   status={status[s.key]}
                   busy={busyKey === s.key}
                   onSave={save}
+                  advanced={advanced}
                 />
               ))}
             </div>

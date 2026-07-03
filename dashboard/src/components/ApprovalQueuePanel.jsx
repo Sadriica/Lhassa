@@ -59,7 +59,7 @@ export default function ApprovalQueuePanel() {
     <div className="lh-card">
       <div className="flex items-center justify-between mb-3">
         <h2 className="lh-card-title">
-          Approval queue
+          Decisions queue
         </h2>
         <span className="text-xs" style={{ color: 'var(--lh-text-muted)' }}>{approvals.length} pending</span>
       </div>
@@ -67,7 +67,7 @@ export default function ApprovalQueuePanel() {
       {loading ? (
         <p className="text-xs" style={{ color: 'var(--lh-text-faint)' }}>Loading…</p>
       ) : approvals.length === 0 ? (
-        <p className="text-xs" style={{ color: 'var(--lh-text-faint)' }}>Nothing awaiting approval.</p>
+        <p className="text-xs" style={{ color: 'var(--lh-text-faint)' }}>No decisions waiting for approval.</p>
       ) : (
         <ul className="space-y-2">
           {approvals.map(a => {

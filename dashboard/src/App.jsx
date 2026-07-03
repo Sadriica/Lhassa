@@ -1,5 +1,8 @@
 import { useState, useCallback } from 'react'
 import OverviewPanel from './components/OverviewPanel'
+import InboxPanel from './components/InboxPanel'
+import WatchlistPanel from './components/WatchlistPanel'
+import CapabilitiesPanel from './components/CapabilitiesPanel'
 import BrainsPanel from './components/BrainsPanel'
 import SkillsPanel from './components/SkillsPanel'
 import AgentsPanel from './components/AgentsPanel'
@@ -58,6 +61,18 @@ export default function App() {
       >
         {section === 'overview' && (
           <ErrorBoundary><OverviewPanel /></ErrorBoundary>
+        )}
+
+        {section === 'inbox' && (
+          <ErrorBoundary><InboxPanel /></ErrorBoundary>
+        )}
+
+        {section === 'watchlist' && (
+          <ErrorBoundary><WatchlistPanel /></ErrorBoundary>
+        )}
+
+        {section === 'capabilities' && (
+          <ErrorBoundary><CapabilitiesPanel /></ErrorBoundary>
         )}
 
         {section === 'brains' && (
