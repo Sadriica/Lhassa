@@ -6,7 +6,8 @@ Mirrors the ``github_token`` discipline (§ the token-gated GitHub-remote hooks)
 touching the network. On any HTTP/transport error it logs and returns ``False`` —
 it never raises, so a notification failure can never break a caller.
 
-This is the adapter only. Wiring it into the heartbeat loop is a later step.
+This is the adapter only; callers reach it through ``notify.dispatch.notify()``
+(the watcher, actions, the scheduled digest).
 """
 
 from __future__ import annotations
