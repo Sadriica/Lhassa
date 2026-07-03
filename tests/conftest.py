@@ -105,6 +105,19 @@ def tmp_db(tmp_path, monkeypatch):
     return db_path
 
 
+@pytest.fixture(autouse=True)
+def _isolate_brain_db(tmp_path, monkeypatch):
+    """Never let a test touch the real ~/.lhassa/brain.db.
+
+    Every test gets a throwaway core DB by default; tests that care about the
+    path still monkeypatch ``lhassa.core.db.DB_PATH`` themselves and simply
+    override this. Guards against a WIP/unpatched test writing Episodes into
+    the developer's live brain (it happened — see decisions.md 2026-07-03).
+    """
+    import lhassa.core.db as _core_db
+    monkeypatch.setattr(_core_db, "DB_PATH", tmp_path / "conftest_brain.db")
+
+
 @pytest.fixture
 def clean_env(monkeypatch):
     """Remove all LHASSA_* and provider keys from the environment."""
