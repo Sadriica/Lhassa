@@ -208,7 +208,11 @@ def test_arbitrary_depth_node_lookup():
 import pytest_asyncio  # noqa: E402,F401
 
 from lhassa.org import messaging  # noqa: E402
-from lhassa.org.coordinator import route_in_topology, run_goal  # noqa: E402
+from lhassa.org.coordinator import (  # noqa: E402
+    route_in_topology,
+    route_scores_in_topology,
+    run_goal,
+)
 from lhassa.org.messaging import MessageKind  # noqa: E402
 
 INST = "inst_personal"
@@ -344,3 +348,103 @@ async def test_high_risk_self_approval_rejected_in_tree(tmp_path, monkeypatch):
     )
     assert ran["n"] == 1
     assert out["leaf"] == "dept:finance"
+
+
+# ── fan-out + synthesis (Etapa 3 — real delegation) ──────────────────────────────
+
+
+def test_route_scores_exposes_the_whole_ranking():
+    t = _three_level()
+    scores = route_scores_in_topology(t, "general", "optimize the slow latency")
+    ids = [child.id for child, _score in scores]
+    assert ids[0] == "ops"  # the winner is first
+    assert set(ids) == {"ops", "biz"}
+
+
+@pytest.mark.asyncio
+async def test_single_winner_stays_single_route_no_synthesis(tmp_path, monkeypatch):
+    """A clear single winner is unaffected: same shape/cost as before fan-out."""
+    await _init(tmp_path, monkeypatch)
+    t = _three_level()
+
+    out = await run_goal(
+        "optimize the slow latency", by_actor="owner", topology=t,
+        instance_id=INST, executor=lambda goal, *, department: {"summary": "ok"},
+    )
+    assert "multi" not in out
+    assert out["leaf"] == "dept:optimization"
+    assert isinstance(out["department"], str)
+
+
+@pytest.mark.asyncio
+async def test_tied_departments_fan_out_and_synthesize_offline(tmp_path, monkeypatch):
+    """A goal that ties two departments fans out to both and merges offline, $0."""
+    await _init(tmp_path, monkeypatch)
+    monkeypatch.delenv("LHASSA_ORG_LIVE", raising=False)
+    t = _three_level()
+
+    seen = []
+
+    def executor(goal, *, department):
+        seen.append(department)
+        return {"summary": f"handled by {department}"}
+
+    # "optimize" ties ops (optimization) and "budget" ties biz (finance) — 1-1 tie.
+    out = await run_goal(
+        "optimize the budget", by_actor="owner", topology=t,
+        instance_id=INST, executor=executor,
+    )
+
+    assert out["multi"] is True
+    assert set(seen) == {"optimization", "finance"}
+    assert set(out["department"]) == {"optimization", "finance"}
+    assert len(out["branches"]) == 2
+    assert "Synthesis for:" in out["result"]
+    assert "optimization" in out["result"] and "finance" in out["result"]
+
+    db = await _init(tmp_path, monkeypatch)
+    eps = await db.load_recent_episodes(INST)
+    assert any("synthesis" in (e.get("decision") or "") for e in eps)
+
+
+@pytest.mark.asyncio
+async def test_explicit_multi_forces_fan_out_without_a_tie(tmp_path, monkeypatch):
+    """params={"multi": True} fans out even with a clear single winner."""
+    await _init(tmp_path, monkeypatch)
+    t = _three_level()
+
+    def executor(goal, *, department):
+        return {"summary": f"handled by {department}"}
+
+    out = await run_goal(
+        "optimize the slow latency", by_actor="owner", topology=t,
+        instance_id=INST, executor=executor, params={"multi": True},
+    )
+    assert out["multi"] is True
+    assert len(out["branches"]) == 2  # both ops and biz — capped at 2 children here
+
+
+@pytest.mark.asyncio
+async def test_fan_out_live_synthesis_calls_brain_executor(tmp_path, monkeypatch):
+    """Under LHASSA_ORG_LIVE, synthesis is ONE extra think via brain_executor."""
+    await _init(tmp_path, monkeypatch)
+    monkeypatch.setenv("LHASSA_ORG_LIVE", "1")
+    t = _three_level()
+
+    calls = []
+
+    async def fake_brain_executor(prompt, *, department, instance_id=None, config=None):
+        calls.append((prompt, department))
+        return {"summary": "merged live answer"}
+
+    import lhassa.org.coordinator as coordinator_mod
+    monkeypatch.setattr(coordinator_mod, "brain_executor", fake_brain_executor)
+
+    out = await run_goal(
+        "optimize the budget", by_actor="owner", topology=t,
+        instance_id=INST, executor=lambda goal, *, department: {"summary": department},
+    )
+    assert out["multi"] is True
+    assert out["result"] == "merged live answer"
+    assert len(calls) == 1
+    assert calls[0][1] == coordinator_mod.GENERAL_IDENTITY
