@@ -389,6 +389,22 @@ In debug mode, every STT frame is printed to the terminal:
 
 ---
 
+## Brain knobs (reflexes, spend, digest, delegation, self-improvement)
+
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `LHASSA_AUTO_SYNC_REPOS` | No | *(empty)* | Comma-separated repo paths the `repo_changed` reflex auto-syncs (`sync_repo`) instead of spending a judgment. |
+| `LHASSA_CONTEXT_TOKEN_BUDGET_MINIMAL` | No | `600` | Context budget for `minimal`-tier thinks (the policy layer picks the tier per trigger). |
+| `LHASSA_BUDGET_SOFT_PCT` | No | `0.8` | Fraction of the daily token budget past which the router refuses the smart model and prefers $0 providers. |
+| `LHASSA_DEFERRED_RETRY_BACKOFF` / `LHASSA_DEFERRED_MAX_RETRIES` | No | backoff / `3` | Deferred-task re-queue sweep: retry window (seconds) and cap (then `rechazada`). |
+| `LHASSA_DIGEST_HOUR_MORNING` / `LHASSA_DIGEST_HOUR_EVENING` | No | `8` / `21` | Local hours the `digest` seed schedules the daily $0 Telegram digest at. |
+| `LHASSA_MONITOR_DELEGATE` | No | `0` | When on, the watcher converts monitor findings into minted `org_run` tasks (fingerprint-deduped). |
+| `LHASSA_REPETITION_THRESHOLD` | No | `5` | Occurrences (with real cost) before `detect_repetition` proposes minting a deterministic action. |
+
+See `lhassa config list` for the live view — these are also editable at runtime via the settings service where marked `EDITABLE`.
+
+---
+
 ## Full .env Example
 
 ```dotenv

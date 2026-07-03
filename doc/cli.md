@@ -50,6 +50,7 @@ lhassa code "refactor the parser" --cli codex
 | `report` | Cost/usage summary for a window (gateway ledger + optional ccusage) | `lhassa report --days 7 --json` |
 | `memory <query>` | Search durable facts (substring or tag match) | `lhassa memory temperatura --json` |
 | `tools` | List the self-written tools and their gate/usage state | `lhassa tools` |
+| `tools propose <name>` | Have the routine model author a candidate tool, run it through quarantine + the gates, and park a graduation approval on a full pass | `lhassa tools propose clean_downloads --desc "sort ~/Downloads by type"` |
 | `fleet` | Known machines with their last check-in and desired state | `lhassa fleet` |
 | `version` | Version, Python runtime, and a few key toggles | `lhassa version` |
 

@@ -60,10 +60,22 @@ feature module. See `doc/architecture-layers.md`.
 ## The do-and-sleep loop
 
 - `core/step.py` — one deterministic tick: zero-token **watchlist** check →
-  fixed **action** (from `core/actions.py`) → a structured **episode**. The `else`
-  (judgment) branch is the think path: load memory context → `llm/router.py`
-  picks a provider/model → `provider.complete(...)`. `BudgetExceeded` /
-  `ProviderNotConfigured` **degrade to a deferred episode, never crash**.
+  fixed **action** (from `core/actions.py`) → a structured **episode**. Before any
+  model is touched, `core/policy.py` (the **REFLEXES** registry, same pattern as
+  ACTIONS) inspects the trigger's *content* and returns a `PolicyDecision`:
+  `action` (run a fixed action, $0), `skip` (auto-triage, episode logged, $0) or
+  `think` with a `context_tier` (`minimal` ≈600tk / `full` ≈2000tk) + `hard` flag.
+  Built-in reflexes: clean finished jobs skip, `repo_changed` auto-runs `sync_repo`
+  for `LHASSA_AUTO_SYNC_REPOS`, health `warn` just notifies. The judgment branch
+  loads tiered memory context (now fed `query` + `active_tags` so the tag/semantic
+  layers actually fire) → `llm/router.py` picks a provider/model →
+  `provider.complete(...)`. On `ProviderNotConfigured`/`BudgetExceeded` it walks
+  `router.fallback_chain()` ($0 subscription CLIs first) before **degrading to a
+  deferred episode, never crashing**; deferred tasks are re-queued with backoff by
+  `db.sweep_deferred_tasks()` each tick (max `LHASSA_DEFERRED_MAX_RETRIES`, then
+  `rechazada`). Spend is a live signal: past `LHASSA_BUDGET_SOFT_PCT` (0.8) the
+  router refuses the smart model and prefers $0 providers; `gateway.spend_summary()`
+  / the `check_spend` action expose it to the brain itself.
 - `core/heartbeat.py` + `scripts/systemd/lhassa-heartbeat.{service,timer}` — each
   beat is a fresh process that re-reads `.env` and runs one `step()`. Routine beats
   are deterministic and cost **$0**. `make install-heartbeat` enables the timer.
@@ -94,9 +106,13 @@ feature module. See `doc/architecture-layers.md`.
 `get`/`get_or_none`/`NotRegistered`; duplicate-protection; `as_mapping` live view).
 Every swap point adopts it: providers (`PROVIDERS`), harnesses (`ADAPTERS`),
 verifiers (`VERIFIERS`), specialists (`SPECIALISTS`), channels (`CHANNELS`),
-commands (`COMMANDS`), actions (`core/actions.ACTIONS`), **seeds** (`seeds.SEEDS` —
-`@register_seed`, a drop-in preset that bootstraps an env; e.g. the `cv` seed rebuilds the
-interns department + the CV work-flow; `lhassa seed list|apply <name>|apply-all`), org departments.
+commands (`COMMANDS`), actions (`core/actions.ACTIONS`), watchlist senses
+(`core/watchlist.register_check` — how `org/inbox_sense.py` plugs in without core
+importing org), **seeds** (`seeds.SEEDS` — `@register_seed`, a drop-in preset that
+bootstraps an env; `cv` rebuilds the interns department + the CV work-flow, `digest`
+schedules the 08:00/21:00 daily digests, `maintenance` schedules `distill_memory` +
+`detect_repetition` daily and `review_tools` weekly; `lhassa seed
+list|apply <name>|apply-all`), org departments.
 `plugins.py:load_plugins(config)` imports every module under `plugins_dir` **and**
 every `lhassa.plugins` entry point — self-registration with **no core edit**;
 idempotent, never raises. To add a provider/channel/command/verifier/specialist/
@@ -113,9 +129,9 @@ capabilities` (alias `doctor`) shows everything wired and on/off.
   `consolidate` (never evicts pinned/directivas); `regenerate` from the grande.
   `memory/backup.py` does WAL-safe online backup/restore/verify.
 - **Layer 4** (`memory/embeddings.py` + `memory/load.py`) — semantic facts via a
-  pluggable `Embedder` (`HashingEmbedder` offline default). Off by default
-  (`LHASSA_MEMORY_LAYER4=1`); it has the lowest priority so it truncates first and
-  never touches the identity core.
+  pluggable `Embedder` (`HashingEmbedder` offline default, `RemoteEmbedder` for a
+  real local endpoint). On by default (`LHASSA_MEMORY_LAYER4`); it has the lowest
+  priority so it truncates first and never touches the identity core.
 - `memory/consolidate.py` — semantic consolidation via the cheap model (only the
   chica). `memory/store.py`/`session.py` is the legacy voice-session store.
 
@@ -129,6 +145,15 @@ capabilities` (alias `doctor`) shows everything wired and on/off.
   (`unshare`/`firejail`/`bwrap`), no-network, scrubbed env, `killpg` on timeout.
   Self-written tools graduate only through the four gates (`agents/gates.py`:
   segura → correcta → mejor → retiro), deny-by-default.
+- **Self-improvement loop** (Etapa 4) — `agents/repetition.py` ($0 SQL over
+  episodes) finds repeated costly thinks and the `detect_repetition` action parks a
+  `mint_action` approval + notifies (deduped via `watch_state`). `agents/author.py`
+  has the routine model write a candidate tool+test → `versioning.create_candidate`
+  → `gates.promote` (quarantine + verifiers) → a `tool_graduation` approval; CLI
+  `lhassa tools propose <name> --desc "..."`. `POST /api/tools/{n}/graduate`
+  refuses (409) tools that didn't pass the gates. `review_tools` applies
+  `should_retire`/`retire`. Authored code never executes outside quarantine before
+  graduating.
 - **Allowlist** (`security/allowlist.py`) — deny-by-default action allowlist;
   signed `Task` + `TrustLevel`/`Origin` (degrade = min, never promote) via Ed25519
   (`security/signing.py`).
@@ -143,10 +168,19 @@ capabilities` (alias `doctor`) shows everything wired and on/off.
 (`@register_channel`); `TelegramChannel` / `DesktopChannel` / `LogChannel`.
 `notify/dispatch.py:notify()` fans out over `active_channels(config)` (from
 `LHASSA_NOTIFY_CHANNELS`). `notify/commands.py` — `COMMANDS` registry
-(`@register_command`): `/start`, `/help`, `/status` (all LLM-free). Inbound
-Telegram (`notify/telegram_inbound.py`, getUpdates poller, honors only the
-configured chat) dispatches a slash command before falling back to a tool-less
-brain think over the routine fallback chain (`opencode → claude → codex → cloud`).
+(`@register_command`): `/start`, `/help`, `/status`, `/approvals`, `/approve <id>`,
+`/deny <id>` (resolve via `security.approval`), `/watch <pattern> -> <accion>` /
+`/watches` / `/unwatch <i>` (author watch rules from chat), `/goal <text>
+[--every …]` (mints a recurring judgment task) — all LLM-free. Inbound Telegram
+(`notify/telegram_inbound.py`, getUpdates poller, honors only the configured chat)
+also handles `callback_query` (inline Approve/Deny buttons on watcher alerts, via
+`reply_markup`/`parse_mode` support in `notify/telegram.py`), then dispatches a
+slash command before falling back to a tool-less brain think over the routine
+fallback chain (`opencode → claude → codex → cloud`). `notify/digest.py` builds a
+deterministic $0 digest (signals + spend + approvals + episodes); the `send_digest`
+action + the `digest` seed schedule it at `LHASSA_DIGEST_HOUR_{MORNING,EVENING}`.
+`health/checks.py` notifies through this channel registry too (documented layer
+exception).
 
 ## The org layer (Phase 7)
 
@@ -165,7 +199,16 @@ cross-department isolation; `org/commons.py` is a read-only shared row (only
 chart (who commands whom). `org/templates.py` — use-case presets built **under
 Lhassa** (`code-review`, `bug-investigation`, `refactor-migration`,
 `incident-response`, the multi-level `software-factory`); `lhassa org
-templates|apply`. `org/relationships.py` — a typed **overlay** graph (separate file,
+templates|apply`. **Real delegation (Etapa 3):** a judgment reply's `delegate` key
+mints an `org_run` task (cap 3) through the `mint_task` security path;
+`actionpack/_org.py:org_run` lazily runs `coordinator.run_goal` (offline/$0 unless
+`LHASSA_ORG_LIVE`); the coordinator fans out to the top-3 departments on a routing
+tie or explicit `params={"multi": True}` and synthesizes (deterministic offline
+merge; one extra think live); `org/inbox_sense.py` registers a watchlist sense so
+each tick drains this instance's `org_messages` inbox (enqueue → heartbeat closes
+the loop); with `LHASSA_MONITOR_DELEGATE=1` the watcher converts monitor findings
+into minted `org_run` tasks (fingerprint-deduped). `org/relationships.py` — a typed
+**overlay** graph (separate file,
 `~/.lhassa/relationships.json`, `LHASSA_ORG_RELATIONSHIPS_FILE`) layered on the
 command tree: closed edge kinds `reads` / `notifies` / `reviews` (directed A→B) +
 `collaborates` (symmetric, stored canonically); `permits(from, to, kind)` is the pure
