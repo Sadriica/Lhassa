@@ -28,6 +28,7 @@ locally and cheaply.
 
 from __future__ import annotations
 
+import re
 from typing import Optional, Tuple
 
 from loguru import logger
@@ -310,3 +311,245 @@ async def _cmd_status(args: str, *, config=None) -> str:
     except Exception as exc:
         logger.warning(f"commands: /status failed: {exc}")
         return "Status is unavailable right now."
+
+
+# ── Etapa 2 — approve/deny from chat ──────────────────────────────────────────
+
+
+@register_command("approvals")
+async def _cmd_approvals(args: str, *, config=None) -> str:
+    """List pending approvals — LLM-free, reuses ``security.approval.pending``."""
+    try:
+        cfg = _config(config)
+        instance_id = getattr(cfg, "instance_id", None) or "inst_personal"
+        from lhassa.core import db as _db
+        from lhassa.security import approval as _approval
+
+        await _db.init_db()
+        rows = await _approval.pending(instance_id)
+        if not rows:
+            return "No pending approvals."
+
+        lines = ["Pending approvals:"]
+        for row in rows[:10]:
+            payload = row.get("payload") or {}
+            accion = payload.get("accion", "") if isinstance(payload, dict) else ""
+            label = f"{row.get('tipo', '?')}:{accion}" if accion else row.get("tipo", "?")
+            lines.append(f"{row.get('id', '?')} — {label}")
+        if len(rows) > 10:
+            lines.append(f"…+{len(rows) - 10} more")
+        lines.append("Use /approve <id> or /deny <id>.")
+        return "\n".join(lines)
+    except Exception as exc:
+        logger.warning(f"commands: /approvals failed: {exc}")
+        return "Could not load pending approvals right now."
+
+
+async def _resolve_from_chat(args: str, *, config, approved: bool) -> str:
+    """Shared body for ``/approve`` and ``/deny`` — resolves one approval by id.
+
+    Mirrors what ``api/approval_routes.py``'s POST endpoint does
+    (``security.approval.resolve``), attributed to the ``"telegram"`` actor.
+    """
+    verb = "approve" if approved else "deny"
+    ap_id = (args or "").strip().split()[0] if (args or "").strip() else ""
+    if not ap_id:
+        return f"Usage: /{verb} <id> — see /approvals for pending ids."
+    try:
+        cfg = _config(config)
+        instance_id = getattr(cfg, "instance_id", None) or "inst_personal"
+        from lhassa.core import db as _db
+        from lhassa.security import approval as _approval
+
+        await _db.init_db()
+        existing = await _db.get_approval(instance_id, ap_id)
+        if existing is None:
+            return f"No pending approval with id {ap_id!r}."
+        await _approval.resolve(
+            instance_id, ap_id, approved=approved, by_actor="telegram"
+        )
+        return f"Approval {ap_id} {'approved' if approved else 'denied'}."
+    except Exception as exc:
+        logger.warning(f"commands: /{verb} {ap_id} failed: {exc}")
+        return f"Could not resolve approval {ap_id}."
+
+
+@register_command("approve")
+async def _cmd_approve(args: str, *, config=None) -> str:
+    """``/approve <id>`` — approve a pending action from chat."""
+    return await _resolve_from_chat(args, config=config, approved=True)
+
+
+@register_command("deny")
+async def _cmd_deny(args: str, *, config=None) -> str:
+    """``/deny <id>`` — deny a pending action from chat."""
+    return await _resolve_from_chat(args, config=config, approved=False)
+
+
+# ── Etapa 2 — goal/watch capture from chat ────────────────────────────────────
+
+# "<pattern> -> <accion>" — the arrow-syntax watch rule.
+_WATCH_ARROW_RE = re.compile(r"^\s*(.+?)\s*->\s*(.+?)\s*$")
+
+# "--every daily|hourly" flag on /goal (defaults to daily when absent).
+_GOAL_EVERY_RE = re.compile(r"--every\s+(daily|hourly)\b", re.IGNORECASE)
+_GOAL_CADENCE_SECONDS = {"hourly": 3600, "daily": 86400}
+
+
+async def _known_actions(config) -> set:
+    """The full set of registered fixed-action names (core actions + actionpack).
+
+    Ensures the actionpack is registered first (idempotent, $0) so a freshly
+    started process still recognises actionpack action names in ``/watch``.
+    """
+    try:
+        from lhassa import actionpack
+
+        actionpack.register_all()
+    except Exception as exc:
+        logger.debug(f"commands: actionpack.register_all failed: {exc}")
+    from lhassa.core.actions import ACTIONS
+
+    return set(ACTIONS.keys())
+
+
+@register_command("watch")
+async def _cmd_watch(args: str, *, config=None) -> str:
+    """``/watch <pattern> -> <accion>`` — add a message-pattern watch rule.
+
+    ``accion`` must be a registered fixed action or the literal ``"judgment"``
+    (any action, the brain thinks about it later). ``pattern`` must compile as a
+    regex. On success the rule is appended to the same JSON file the Telegram
+    poller reads (:mod:`lhassa.notify.telegram_inbound`); on any validation
+    failure NOTHING is written and a clear reason is returned.
+    """
+    m = _WATCH_ARROW_RE.match(args or "")
+    if not m:
+        return "Usage: /watch <pattern> -> <accion>"
+    pattern_src, accion = m.group(1).strip(), m.group(2).strip()
+    if not pattern_src or not accion:
+        return "Usage: /watch <pattern> -> <accion>"
+
+    try:
+        re.compile(pattern_src)
+    except re.error as exc:
+        return f"Invalid regex {pattern_src!r}: {exc}"
+
+    cfg = _config(config)
+    if accion != "judgment":
+        known = await _known_actions(cfg)
+        if accion not in known:
+            return (
+                f"Unknown accion {accion!r}. Must be a registered action or "
+                "'judgment'."
+            )
+
+    try:
+        from lhassa.notify import telegram_inbound as _ti
+
+        rules = _ti._load_raw_watch_rules(cfg)
+        rules.append({"pattern": pattern_src, "accion": accion, "params": {}})
+        if not _ti.save_watch_rules(cfg, rules):
+            return "Could not save the watch rule (no watch_rules_file configured?)."
+        return f"Watch added (#{len(rules) - 1}): /{pattern_src}/ -> {accion}"
+    except Exception as exc:
+        logger.warning(f"commands: /watch failed: {exc}")
+        return "Could not add that watch rule."
+
+
+@register_command("watches")
+async def _cmd_watches(args: str, *, config=None) -> str:
+    """``/watches`` — list configured watch rules with their index."""
+    try:
+        cfg = _config(config)
+        from lhassa.notify import telegram_inbound as _ti
+
+        rules = _ti._load_raw_watch_rules(cfg)
+        if not rules:
+            return "No watch rules configured."
+        lines = ["Watch rules:"]
+        for i, rule in enumerate(rules):
+            lines.append(f"{i}: /{rule.get('pattern', '')}/ -> {rule.get('accion', '')}")
+        return "\n".join(lines)
+    except Exception as exc:
+        logger.warning(f"commands: /watches failed: {exc}")
+        return "Could not list watch rules right now."
+
+
+@register_command("unwatch")
+async def _cmd_unwatch(args: str, *, config=None) -> str:
+    """``/unwatch <index>`` — remove a watch rule by its ``/watches`` index."""
+    idx_raw = (args or "").strip()
+    if not idx_raw.lstrip("-").isdigit():
+        return "Usage: /unwatch <index> — see /watches for indices."
+    idx = int(idx_raw)
+
+    try:
+        cfg = _config(config)
+        from lhassa.notify import telegram_inbound as _ti
+
+        rules = _ti._load_raw_watch_rules(cfg)
+        if idx < 0 or idx >= len(rules):
+            return f"No watch rule at index {idx}. See /watches."
+        removed = rules.pop(idx)
+        if not _ti.save_watch_rules(cfg, rules):
+            return "Could not save after removing that rule."
+        return (
+            f"Removed watch rule {idx}: "
+            f"/{removed.get('pattern', '')}/ -> {removed.get('accion', '')}"
+        )
+    except Exception as exc:
+        logger.warning(f"commands: /unwatch failed: {exc}")
+        return "Could not remove that watch rule."
+
+
+@register_command("goal")
+async def _cmd_goal(args: str, *, config=None) -> str:
+    """``/goal <text> [--every daily|hourly]`` — schedule a recurring judgment task.
+
+    Mints a recurring ``judgment=True`` task (``core.dispatch.mint_task``) with
+    HUMANO-origin trust and actor ``"telegram"``. The task is picked up and REASONED
+    about by the brain on its own schedule (a real, later token spend) — minting it
+    here is $0; only that later think costs anything.
+    """
+    text = args or ""
+    cadence = "daily"
+    m = _GOAL_EVERY_RE.search(text)
+    if m:
+        cadence = m.group(1).lower()
+        text = _GOAL_EVERY_RE.sub("", text).strip()
+    text = text.strip()
+    if not text:
+        return "Usage: /goal <text> [--every daily|hourly]"
+
+    try:
+        from datetime import datetime, timezone
+
+        from lhassa.core import db as _db
+        from lhassa.core.dispatch import mint_task
+        from lhassa.security.trust import Origin, TrustLevel
+
+        cfg = _config(config)
+        instance_id = getattr(cfg, "instance_id", None) or "inst_personal"
+        await _db.init_db()
+
+        origin = Origin(trust=TrustLevel.HUMANO, actor_id="telegram")
+        due_at = datetime.now(timezone.utc).isoformat()
+        interval = _GOAL_CADENCE_SECONDS[cadence]
+        task_id, estado = await mint_task(
+            instance_id,
+            "goal",
+            objetivo=text,
+            params={},
+            origin=origin,
+            due_at=due_at,
+            recurrence=str(interval),
+            judgment=True,
+        )
+    except Exception as exc:
+        logger.warning(f"commands: /goal failed: {exc}")
+        return "Sorry, I couldn't schedule that goal."
+
+    if not task_id:
+        return f"Could not schedule goal: {estado}"
+    return f"Goal scheduled ({cadence}): {text} [task {task_id}]"

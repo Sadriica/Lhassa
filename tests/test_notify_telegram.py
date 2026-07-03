@@ -74,6 +74,32 @@ def test_http_error_returns_false(monkeypatch):
     assert asyncio.run(telegram.send("hi", config=cfg)) is False
 
 
+def test_send_omits_parse_mode_and_reply_markup_when_absent(monkeypatch):
+    _FakeClient.last = None
+    monkeypatch.setattr(telegram.httpx, "AsyncClient", _FakeClient)
+
+    cfg = SimpleNamespace(telegram_bot_token="TOKEN", telegram_chat_id="123")
+    assert asyncio.run(telegram.send("hello", config=cfg)) is True
+    assert _FakeClient.last["json"] == {"chat_id": "123", "text": "hello"}
+    assert "parse_mode" not in _FakeClient.last["json"]
+    assert "reply_markup" not in _FakeClient.last["json"]
+
+
+def test_send_includes_parse_mode_and_reply_markup_when_present(monkeypatch):
+    _FakeClient.last = None
+    monkeypatch.setattr(telegram.httpx, "AsyncClient", _FakeClient)
+
+    keyboard = {"inline_keyboard": [[{"text": "Approve", "callback_data": "approve:ap_1"}]]}
+    cfg = SimpleNamespace(telegram_bot_token="TOKEN", telegram_chat_id="123")
+    ok = asyncio.run(
+        telegram.send("hi <b>bold</b>", config=cfg, parse_mode="HTML", reply_markup=keyboard)
+    )
+    assert ok is True
+    payload = _FakeClient.last["json"]
+    assert payload["parse_mode"] == "HTML"
+    assert payload["reply_markup"] == keyboard
+
+
 def test_transport_error_returns_false(monkeypatch):
     class _RaisingClient(_FakeClient):
         async def post(self, url, json=None):

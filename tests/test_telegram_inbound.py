@@ -533,3 +533,156 @@ def test_chain_walks_cli_subscriptions_before_cloud(monkeypatch):
     assert sent == ["cloud answer"]  # cloud answered only after both CLIs failed
     assert order == ["claude", "codex", "default"]  # chain resolved in order
     assert len(claude.calls) == 1 and len(codex.calls) == 1 and len(cloud.calls) == 1
+
+
+# ── callback_query handling (inline Approve/Deny buttons) ──────────────────────
+
+
+async def _init_approval_db(tmp_path, monkeypatch):
+    import lhassa.core.db as db
+
+    monkeypatch.setattr(db, "DB_PATH", tmp_path / "brain.db")
+    await db.init_db()
+    return db
+
+
+def _patch_answer_callback(monkeypatch):
+    calls = []
+
+    async def _fake_answer(callback_query_id, *, text="", config=None):
+        calls.append({"id": callback_query_id, "text": text})
+        return True
+
+    from lhassa.notify import telegram_api
+
+    monkeypatch.setattr(telegram_api, "answer_callback_query", _fake_answer)
+    return calls
+
+
+def test_callback_query_approve_resolves_and_acks(tmp_path, monkeypatch):
+    db = asyncio.run(_init_approval_db(tmp_path, monkeypatch))
+    ap_id = asyncio.run(db.add_approval("inst_personal", "task", {"accion": "run_command"}))
+
+    payload = {
+        "ok": True,
+        "result": [
+            {
+                "update_id": 200,
+                "callback_query": {
+                    "id": "cbq_1",
+                    "data": f"approve:{ap_id}",
+                    "message": {"chat": {"id": 123}},
+                },
+            }
+        ],
+    }
+    monkeypatch.setattr(telegram_inbound.httpx, "AsyncClient", _client_returning(payload))
+    ack_calls = _patch_answer_callback(monkeypatch)
+    sent = _patch_send(monkeypatch)
+
+    new_offset = asyncio.run(
+        telegram_inbound.poll_once(_cfg(instance_id="inst_personal"), offset=None)
+    )
+
+    assert new_offset == 201
+    assert len(ack_calls) == 1 and ack_calls[0]["id"] == "cbq_1"
+    assert "Approved" in ack_calls[0]["text"]
+    assert any("Approved" in s for s in sent)
+    remaining = asyncio.run(db.load_pending_approvals("inst_personal"))
+    assert remaining == []
+
+
+def test_callback_query_deny_resolves_and_acks(tmp_path, monkeypatch):
+    db = asyncio.run(_init_approval_db(tmp_path, monkeypatch))
+    ap_id = asyncio.run(db.add_approval("inst_personal", "task", {"accion": "run_command"}))
+
+    payload = {
+        "ok": True,
+        "result": [
+            {
+                "update_id": 201,
+                "callback_query": {
+                    "id": "cbq_2",
+                    "data": f"deny:{ap_id}",
+                    "message": {"chat": {"id": 123}},
+                },
+            }
+        ],
+    }
+    monkeypatch.setattr(telegram_inbound.httpx, "AsyncClient", _client_returning(payload))
+    ack_calls = _patch_answer_callback(monkeypatch)
+    _patch_send(monkeypatch)
+
+    asyncio.run(telegram_inbound.poll_once(_cfg(instance_id="inst_personal"), offset=None))
+
+    assert "Denied" in ack_calls[0]["text"]
+    remaining = asyncio.run(db.load_pending_approvals("inst_personal"))
+    assert remaining == []
+
+
+def test_callback_query_from_foreign_chat_is_ignored_but_acked(tmp_path, monkeypatch):
+    db = asyncio.run(_init_approval_db(tmp_path, monkeypatch))
+    ap_id = asyncio.run(db.add_approval("inst_personal", "task", {"accion": "run_command"}))
+
+    payload = {
+        "ok": True,
+        "result": [
+            {
+                "update_id": 202,
+                "callback_query": {
+                    "id": "cbq_3",
+                    "data": f"approve:{ap_id}",
+                    "message": {"chat": {"id": 999}},  # not the owner chat
+                },
+            }
+        ],
+    }
+    monkeypatch.setattr(telegram_inbound.httpx, "AsyncClient", _client_returning(payload))
+    ack_calls = _patch_answer_callback(monkeypatch)
+
+    asyncio.run(telegram_inbound.poll_once(_cfg(instance_id="inst_personal"), offset=None))
+
+    # Acked (so the tapper's spinner clears) but NOT resolved.
+    assert len(ack_calls) == 1
+    remaining = asyncio.run(db.load_pending_approvals("inst_personal"))
+    assert len(remaining) == 1
+
+
+def test_callback_query_malformed_data_never_crashes(tmp_path, monkeypatch):
+    asyncio.run(_init_approval_db(tmp_path, monkeypatch))
+
+    payload = {
+        "ok": True,
+        "result": [
+            {
+                "update_id": 203,
+                "callback_query": {
+                    "id": "cbq_4",
+                    "data": "not-a-recognised-format",
+                    "message": {"chat": {"id": 123}},
+                },
+            }
+        ],
+    }
+    monkeypatch.setattr(telegram_inbound.httpx, "AsyncClient", _client_returning(payload))
+    ack_calls = _patch_answer_callback(monkeypatch)
+
+    new_offset = asyncio.run(
+        telegram_inbound.poll_once(_cfg(instance_id="inst_personal"), offset=None)
+    )
+    assert new_offset == 204  # offset still advances
+    assert len(ack_calls) == 1  # still acked, just with an "unrecognised" note
+
+
+def test_callback_query_missing_fields_does_not_raise(monkeypatch):
+    """A totally empty/garbage callback_query must never crash the poll loop."""
+    payload = {
+        "ok": True,
+        "result": [{"update_id": 204, "callback_query": {}}],
+    }
+    monkeypatch.setattr(telegram_inbound.httpx, "AsyncClient", _client_returning(payload))
+
+    new_offset = asyncio.run(
+        telegram_inbound.poll_once(_cfg(instance_id="inst_personal"), offset=None)
+    )
+    assert new_offset == 205

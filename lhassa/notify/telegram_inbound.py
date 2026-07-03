@@ -332,12 +332,15 @@ async def _brain_reply(text: str, *, config) -> str:
 # ── Watch rules (message-pattern task minting) ───────────────────────────────
 
 
-def _load_watch_rules(config) -> list[dict]:
-    """Load ``~/.lhassa/watch_rules.json`` (or configured path). Never raises.
+def _load_raw_watch_rules(config) -> list[dict]:
+    """Load the RAW watch-rules JSON (pattern as a string, not yet compiled).
 
-    Returns a list of validated rule dicts: {pattern: re.Pattern, accion: str,
-    params: dict}. Missing/malformed file → empty list (feature silently off).
-    Invalid regex entries are skipped.
+    This is the single source of truth for the on-disk shape
+    (``[{"pattern": "<regex>", "accion": "<str>", "params": {}}]``); both the
+    read-only matching path below (:func:`_load_watch_rules`) and the
+    ``/watch`` / ``/watches`` / ``/unwatch`` chat commands (:mod:`lhassa.notify.
+    commands`) read and write through this pair so there is exactly one format.
+    Never raises: a missing/malformed file degrades to ``[]``.
     """
     path_raw = getattr(config, "watch_rules_file", "") or ""
     if not path_raw:
@@ -361,15 +364,55 @@ def _load_watch_rules(config) -> list[dict]:
         accion = str(entry.get("accion") or "").strip()
         if not pattern_src or not accion:
             continue
-        try:
-            pattern = re.compile(pattern_src, re.IGNORECASE)
-        except re.error:
-            logger.debug(f"Telegram inbound: skipping invalid rule regex {pattern_src!r}")
-            continue
         params = entry.get("params") or {}
         if not isinstance(params, dict):
             params = {}
-        rules.append({"pattern": pattern, "accion": accion, "params": dict(params)})
+        rules.append({"pattern": pattern_src, "accion": accion, "params": dict(params)})
+    return rules
+
+
+def save_watch_rules(config, rules: list[dict]) -> bool:
+    """Persist RAW watch rules (the ``_load_raw_watch_rules`` shape) to disk.
+
+    Creates parent directories as needed. Returns whether the write succeeded;
+    never raises (a write failure is logged and swallowed — the caller reports it
+    to the chat as a friendly failure, not a crash).
+    """
+    path_raw = getattr(config, "watch_rules_file", "") or ""
+    if not path_raw:
+        return False
+    import pathlib as _pathlib
+
+    try:
+        path = _pathlib.Path(path_raw)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(_json.dumps(rules, indent=2), encoding="utf-8")
+        return True
+    except OSError as exc:
+        logger.warning(f"Telegram inbound: could not save watch rules: {exc}")
+        return False
+
+
+def _load_watch_rules(config) -> list[dict]:
+    """Load watch rules with COMPILED patterns, ready for matching. Never raises.
+
+    Returns a list of validated rule dicts: {pattern: re.Pattern, accion: str,
+    params: dict}. Missing/malformed file → empty list (feature silently off).
+    Invalid regex entries are skipped (an entry written by ``/watch`` was already
+    validated at write time, but a hand-edited file might not be).
+    """
+    rules: list[dict] = []
+    for entry in _load_raw_watch_rules(config):
+        try:
+            pattern = re.compile(entry["pattern"], re.IGNORECASE)
+        except re.error:
+            logger.debug(
+                f"Telegram inbound: skipping invalid rule regex {entry['pattern']!r}"
+            )
+            continue
+        rules.append(
+            {"pattern": pattern, "accion": entry["accion"], "params": dict(entry["params"])}
+        )
     return rules
 
 
@@ -405,6 +448,83 @@ async def _try_mint_rule_task(text: str, rules: list[dict], *, config) -> Option
     except Exception as exc:
         logger.debug(f"Telegram inbound: rule task mint failed: {exc}")
     return None
+
+
+# "approve:<id>" / "deny:<id>" — the inline-keyboard callback-data encoding used by
+# the monitor watcher's Approve/Deny buttons (see lhassa.org.watcher._approval_keyboard).
+_CALLBACK_RE = re.compile(r"^(approve|deny):(.+)$")
+
+
+async def _handle_callback_query(
+    callback_query: dict, *, config, allowed_chat: str
+) -> None:
+    """Handle an inline-keyboard tap (Approve/Deny on a monitor alert). Never raises.
+
+    Parses the ``"approve:<id>"`` / ``"deny:<id>"`` callback data, resolves the
+    approval through the same path as the ``/approve`` / ``/deny`` chat commands
+    (:mod:`lhassa.notify.commands`), and ALWAYS answers the callback query
+    (``answerCallbackQuery``) so the button's client-side loading spinner clears —
+    even on a malformed payload or an unauthorized tap. A bad/malformed
+    ``callback_query`` is logged and swallowed; it never crashes the poll loop.
+    """
+    callback_id = str(callback_query.get("id") or "") if isinstance(callback_query, dict) else ""
+    try:
+        from lhassa.notify import telegram_api
+
+        message = callback_query.get("message") or {}
+        chat_id = (
+            str((message.get("chat") or {}).get("id", "")).strip()
+            if isinstance(message, dict)
+            else ""
+        )
+        data = str(callback_query.get("data") or "")
+
+        if chat_id and chat_id != allowed_chat:
+            # Security: honor a tap from nobody but the owner's chat.
+            logger.info(f"Telegram inbound: ignoring callback from chat {chat_id!r}")
+            if callback_id:
+                await telegram_api.answer_callback_query(callback_id, config=config)
+            return
+
+        m = _CALLBACK_RE.match(data)
+        if not m:
+            logger.debug(f"Telegram inbound: unrecognised callback data {data!r}")
+            if callback_id:
+                await telegram_api.answer_callback_query(
+                    callback_id, text="Unrecognised action.", config=config
+                )
+            return
+
+        action, ap_id = m.group(1), m.group(2)
+        approved = action == "approve"
+
+        from lhassa.core import db as _db
+        from lhassa.security import approval as _approval
+
+        instance_id = getattr(config, "instance_id", None) or "inst_personal"
+        await _db.init_db()
+        existing = await _db.get_approval(instance_id, ap_id)
+        if existing is None:
+            ack_text = f"No pending approval {ap_id}."
+        else:
+            await _approval.resolve(
+                instance_id, ap_id, approved=approved, by_actor="telegram"
+            )
+            ack_text = f"{'Approved' if approved else 'Denied'} {ap_id}."
+
+        if callback_id:
+            await telegram_api.answer_callback_query(
+                callback_id, text=ack_text, config=config
+            )
+        with contextlib.suppress(Exception):
+            await telegram.send(ack_text, config=config)
+    except Exception as exc:  # a malformed callback_query must never crash the poller
+        logger.warning(f"Telegram inbound: callback_query handling failed: {exc}")
+        with contextlib.suppress(Exception):
+            if callback_id:
+                from lhassa.notify import telegram_api as _tapi
+
+                await _tapi.answer_callback_query(callback_id, config=config)
 
 
 async def _answer(text: str, *, config, chat_id: str = "") -> None:
@@ -767,6 +887,12 @@ async def poll_once(config=None, *, offset=None):
             update_id = update.get("update_id")
             if isinstance(update_id, int):
                 new_offset = update_id + 1
+
+            # An inline-keyboard button tap (Approve/Deny on a monitor alert).
+            callback_query = update.get("callback_query")
+            if isinstance(callback_query, dict):
+                await _handle_callback_query(callback_query, config=config, allowed_chat=allowed_chat)
+                continue
 
             message = update.get("message") or update.get("edited_message")
             if not isinstance(message, dict):

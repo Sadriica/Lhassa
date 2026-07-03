@@ -570,6 +570,13 @@ class Config:
         str(Path.home() / ".lhassa" / "watch_rules.json"),
     )
 
+    # ── Etapa 2 — scheduled operative digest (the "digest" seed) ─────────────
+    # Local hours (0-23) the twice-daily "send_digest" task is scheduled for by
+    # the ``digest`` seed (``lhassa seed apply digest``). Two knobs rather than one
+    # CSV so each is independently overridable without a parsing helper.
+    digest_hour_morning: int = _safe_int(os.getenv("LHASSA_DIGEST_HOUR_MORNING", "8"), 8)
+    digest_hour_evening: int = _safe_int(os.getenv("LHASSA_DIGEST_HOUR_EVENING", "21"), 21)
+
     # ── Tool guardrails ───────────────────────────────────────────────────────
     # If true, reject obviously destructive shell commands unless explicitly
     # opted out via LHASSA_ALLOW_DESTRUCTIVE_SHELL=1.

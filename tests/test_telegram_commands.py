@@ -203,3 +203,171 @@ def test_routine_provider_model_modes(cfg_over, expected_provider, expected_mode
     label, model = commands._routine_provider_model(_cfg(**cfg_over))
     assert label == expected_provider
     assert model == expected_model
+
+
+# ── /approvals, /approve, /deny ────────────────────────────────────────────────
+
+
+async def _init_db(tmp_path, monkeypatch):
+    import lhassa.core.db as db
+
+    monkeypatch.setattr(db, "DB_PATH", tmp_path / "brain.db")
+    await db.init_db()
+    return db
+
+
+def test_approvals_lists_pending(tmp_path, monkeypatch):
+    db = asyncio.run(_init_db(tmp_path, monkeypatch))
+    ap_id = asyncio.run(
+        db.add_approval("inst_personal", "task", {"accion": "run_command"})
+    )
+    reply = asyncio.run(commands.dispatch("/approvals", config=_cfg(instance_id="inst_personal")))
+    assert ap_id in reply
+    assert "run_command" in reply
+
+
+def test_approvals_empty_queue(tmp_path, monkeypatch):
+    asyncio.run(_init_db(tmp_path, monkeypatch))
+    reply = asyncio.run(
+        commands.dispatch("/approvals", config=_cfg(instance_id="inst_never_used_xyz"))
+    )
+    assert "No pending approvals." in reply
+
+
+def test_approve_resolves_pending_approval(tmp_path, monkeypatch):
+    db = asyncio.run(_init_db(tmp_path, monkeypatch))
+    ap_id = asyncio.run(
+        db.add_approval("inst_personal", "task", {"accion": "run_command"})
+    )
+    reply = asyncio.run(
+        commands.dispatch(f"/approve {ap_id}", config=_cfg(instance_id="inst_personal"))
+    )
+    assert "approved" in reply
+    remaining = asyncio.run(db.load_pending_approvals("inst_personal"))
+    assert remaining == []
+
+
+def test_deny_resolves_pending_approval(tmp_path, monkeypatch):
+    db = asyncio.run(_init_db(tmp_path, monkeypatch))
+    ap_id = asyncio.run(
+        db.add_approval("inst_personal", "task", {"accion": "run_command"})
+    )
+    reply = asyncio.run(
+        commands.dispatch(f"/deny {ap_id}", config=_cfg(instance_id="inst_personal"))
+    )
+    assert "denied" in reply
+    remaining = asyncio.run(db.load_pending_approvals("inst_personal"))
+    assert remaining == []
+
+
+def test_approve_unknown_id_reports_clearly(tmp_path, monkeypatch):
+    asyncio.run(_init_db(tmp_path, monkeypatch))
+    reply = asyncio.run(
+        commands.dispatch("/approve ap_missing", config=_cfg(instance_id="inst_personal"))
+    )
+    assert "No pending approval" in reply
+
+
+def test_approve_requires_id():
+    reply = asyncio.run(commands.dispatch("/approve", config=_cfg()))
+    assert "Usage" in reply
+
+
+# ── /watch, /watches, /unwatch ─────────────────────────────────────────────────
+
+
+def _watch_cfg(tmp_path, **over):
+    return _cfg(watch_rules_file=str(tmp_path / "watch_rules.json"), **over)
+
+
+def test_watch_add_list_remove_roundtrip(tmp_path):
+    cfg = _watch_cfg(tmp_path)
+
+    added = asyncio.run(commands.dispatch("/watch backup .* -> backup_memory", config=cfg))
+    assert "Watch added" in added
+    assert "backup_memory" in added
+
+    listed = asyncio.run(commands.dispatch("/watches", config=cfg))
+    assert "backup_memory" in listed
+    assert listed.startswith("Watch rules:")
+
+    removed = asyncio.run(commands.dispatch("/unwatch 0", config=cfg))
+    assert "Removed watch rule 0" in removed
+
+    empty = asyncio.run(commands.dispatch("/watches", config=cfg))
+    assert "No watch rules configured." in empty
+
+
+def test_watch_rejects_invalid_regex_and_writes_nothing(tmp_path):
+    cfg = _watch_cfg(tmp_path)
+    reply = asyncio.run(commands.dispatch("/watch [unterminated -> backup_memory", config=cfg))
+    assert "Invalid regex" in reply
+
+    from lhassa.notify import telegram_inbound as _ti
+
+    assert _ti._load_raw_watch_rules(cfg) == []
+
+
+def test_watch_rejects_unknown_accion(tmp_path):
+    cfg = _watch_cfg(tmp_path)
+    reply = asyncio.run(commands.dispatch("/watch hello -> not_a_real_action", config=cfg))
+    assert "Unknown accion" in reply
+
+    from lhassa.notify import telegram_inbound as _ti
+
+    assert _ti._load_raw_watch_rules(cfg) == []
+
+
+def test_watch_accepts_judgment_accion(tmp_path):
+    cfg = _watch_cfg(tmp_path)
+    reply = asyncio.run(commands.dispatch("/watch urgent -> judgment", config=cfg))
+    assert "Watch added" in reply
+    assert "judgment" in reply
+
+
+def test_watch_bad_syntax_usage_hint(tmp_path):
+    cfg = _watch_cfg(tmp_path)
+    reply = asyncio.run(commands.dispatch("/watch no arrow here", config=cfg))
+    assert "Usage" in reply
+
+
+def test_unwatch_out_of_range(tmp_path):
+    cfg = _watch_cfg(tmp_path)
+    reply = asyncio.run(commands.dispatch("/unwatch 5", config=cfg))
+    assert "No watch rule at index 5" in reply
+
+
+# ── /goal ────────────────────────────────────────────────────────────────────
+
+
+def test_goal_schedules_recurring_judgment_task(tmp_path, monkeypatch):
+    db = asyncio.run(_init_db(tmp_path, monkeypatch))
+    reply = asyncio.run(
+        commands.dispatch(
+            "/goal watch my inbox for invoices --every hourly",
+            config=_cfg(instance_id="inst_personal"),
+        )
+    )
+    assert "Goal scheduled (hourly)" in reply
+    assert "watch my inbox for invoices" in reply
+
+    tasks = asyncio.run(db.list_tasks("inst_personal", estado="pendiente"))
+    assert len(tasks) == 1
+    assert tasks[0]["accion"] == "goal"
+    assert tasks[0]["recurrence"] == "3600"
+    assert tasks[0]["params"].get("_judgment") is True
+
+
+def test_goal_defaults_to_daily_cadence(tmp_path, monkeypatch):
+    db = asyncio.run(_init_db(tmp_path, monkeypatch))
+    reply = asyncio.run(
+        commands.dispatch("/goal keep an eye on the CV pipeline", config=_cfg(instance_id="inst_personal"))
+    )
+    assert "Goal scheduled (daily)" in reply
+    tasks = asyncio.run(db.list_tasks("inst_personal", estado="pendiente"))
+    assert tasks[0]["recurrence"] == "86400"
+
+
+def test_goal_requires_text():
+    reply = asyncio.run(commands.dispatch("/goal", config=_cfg()))
+    assert "Usage" in reply

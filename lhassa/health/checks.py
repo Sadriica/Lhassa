@@ -371,12 +371,18 @@ def _default_out_dir() -> Path:
 
 
 def _notify(result: dict) -> bool:
-    """Fire ``notify-send`` for a single result; no-op if the binary is absent.
+    """Fan a single check result out over the configured notify channels.
 
-    Returns ``True`` if a notification was actually sent.
+    Routes through :func:`lhassa.notify.dispatch.notify` (a lazy import — ``health``
+    is an adapter and ``notify`` is a shell, an intentional, precisely whitelisted
+    edge; see ``ALLOWED_EXCEPTIONS`` in ``tests/test_architecture.py``) so the alert
+    fans out over whatever ``LHASSA_NOTIFY_CHANNELS`` configures (desktop is then
+    just one channel among Telegram/log/…), rather than hard-coding a desktop-only
+    ``notify-send`` call. ``notify()`` is itself synchronous-callable-from-sync here
+    via ``asyncio.run`` since this collector is a plain sync function; never raises.
+
+    Returns ``True`` if at least one channel delivered the alert.
     """
-    if not shutil.which("notify-send"):
-        return False
     suggestion = ""
     if result["name"] == "disk":
         suggestion = "Maybe clear some space when you get a chance."
@@ -385,16 +391,16 @@ def _notify(result: dict) -> bool:
     elif result["name"] == "mem_pressure":
         suggestion = "Closing a few heavy apps should ease it."
     body = format_alert(result["summary"], level=result["level"], suggestion=suggestion)
+    level = "error" if result["level"] == "alert" else "warning"
+
     try:
-        urgency = "critical" if result["level"] == "alert" else "normal"
-        subprocess.run(
-            ["notify-send", "-u", urgency, "Lhassa", body],
-            capture_output=True,
-            timeout=10,
-        )
-        return True
-    except (OSError, subprocess.SubprocessError) as exc:
-        logger.debug("notify-send failed: {}", exc)
+        import asyncio
+
+        from lhassa.notify.dispatch import notify
+
+        return asyncio.run(notify(body, level=level))
+    except Exception as exc:  # a notification failure must never break a health run
+        logger.debug("health notify failed: {}", exc)
         return False
 
 
