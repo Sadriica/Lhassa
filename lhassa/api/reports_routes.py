@@ -101,5 +101,7 @@ async def get_projections():
             "projected_today_cost_usd": projected_today,
             "projected_month_cost_usd": round(projected_today * 30, 6),
         },
-        "ccusage": await read_ccusage(),
+        # Short budget: this is a defensive extra on a dashboard auto-load — degrade
+        # fast rather than block the panel on a slow ccusage/npx cold-start.
+        "ccusage": await read_ccusage(timeout=3.0),
     }
