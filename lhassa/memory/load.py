@@ -17,7 +17,8 @@ layer first (``priority=["pinned","recent","tags","semantic"]``): semantic goes
 before tags, tags before recent, and the identity core (directives + pinned facts)
 is never dropped.
 
-Token counting is a cheap, deterministic estimate (~4 chars/token). The semantic
+Token counting is a deterministic estimate — exact via tiktoken when installed,
+else a ~3 chars/token safety heuristic (see :func:`estimate_tokens`). The semantic
 layer (4) is built but default OFF, so the default behavior is byte-for-byte the
 pinned/recent/tags load.
 """
@@ -34,11 +35,44 @@ from lhassa.persona import load_identity
 PRIORITY = ["pinned", "recent", "tags", "semantic"]
 
 
+# Lazy, cached tiktoken probe: attempted at most once per process. When tiktoken
+# is installed we use its real ``cl100k_base`` encoding; otherwise we keep a
+# dependency-free char heuristic. Never a hard dependency (see pyproject "tokens"
+# extra).
+_TIKTOKEN_TRIED = False
+_TIKTOKEN_ENC = None
+
+
+def _get_tiktoken_encoding():
+    """Return a cached tiktoken cl100k_base encoding, or None if unavailable."""
+    global _TIKTOKEN_TRIED, _TIKTOKEN_ENC
+    if _TIKTOKEN_TRIED:
+        return _TIKTOKEN_ENC
+    _TIKTOKEN_TRIED = True
+    try:
+        import tiktoken
+
+        _TIKTOKEN_ENC = tiktoken.get_encoding("cl100k_base")
+    except Exception:
+        _TIKTOKEN_ENC = None
+    return _TIKTOKEN_ENC
+
+
 def estimate_tokens(text: str) -> int:
-    """Cheap deterministic token estimate: ~4 chars per token. No model."""
+    """Deterministic token estimate — exact via tiktoken when installed, else a
+    safety char heuristic (~3 chars/token; mixed Spanish/English + code packs
+    denser than 4 chars/token, so 3 keeps the budget from over-counting headroom).
+    No network, never raises.
+    """
     if not text:
         return 0
-    return (len(text) + 3) // 4
+    enc = _get_tiktoken_encoding()
+    if enc is not None:
+        try:
+            return len(enc.encode(text))
+        except Exception:
+            pass
+    return (len(text) + 2) // 3
 
 
 def _render_fact(fact: Fact) -> str:

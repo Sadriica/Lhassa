@@ -191,10 +191,19 @@ def pick_model(provider: ModelProvider, *, hard: bool, config: "Config") -> str:
     """
     if getattr(provider, "is_local", False):
         return (getattr(config, "local_model", "") or "") or config.model
-    # opencode serves one configured model (free-tier beat). The name proxies
-    # through the pseudonymizing wrapper too, so this catches the wrapped case.
-    if getattr(provider, "name", "") == "opencode":
+    # CLI-SUBSCRIPTION providers run their OWN subscription model, NOT the API
+    # ``model_cheap``/``model_smart`` (which are Groq/OpenAI ids the CLI never uses
+    # — the source of the "provider=claude model=llama-…" ledger lie). Report the
+    # configured model for that CLI, else a truthful ``<cli>-cli`` marker meaning
+    # "the CLI picks its own model". These names also proxy through the
+    # pseudonymizing wrapper, so a wrapped provider is caught too.
+    name = getattr(provider, "name", "")
+    if name == "opencode":
         return (getattr(config, "opencode_model", "") or "") or config.model
+    if name == "claude":
+        return (getattr(config, "claude_model", "") or "").strip() or "claude-cli"
+    if name == "codex":
+        return (getattr(config, "codex_model", "") or "").strip() or "codex-cli"
     if getattr(config, "router_mode", "rules") == "off":
         return config.model
     return config.model_smart if hard else config.model_cheap

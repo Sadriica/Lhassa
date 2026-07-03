@@ -21,7 +21,7 @@ import hashlib
 import json
 import os
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Awaitable, Callable, Optional
 
@@ -52,8 +52,10 @@ def _env_flag(name: str, default: bool = False) -> bool:
 
 # Pricing in USD per 1M tokens, as (input_rate, output_rate). Matched by
 # substring against the model id, so dated suffixes (…-20251101) still resolve.
-# Anything not listed — local / groq / cerebras / openrouter / ollama / mini —
-# costs 0 by default. Editable: add a row to price a new model.
+# Metered APIs (Anthropic, Groq) carry real list prices. Subscription CLIs
+# (claude / codex / opencode) and local/ollama stay at 0.0 BY DESIGN — they have
+# no marginal cash cost per call. Editable: add a row, or LHASSA_PRICING_JSON to
+# override/extend without a code edit. Anything unlisted costs 0.
 PRICING: dict[str, tuple[float, float]] = {
     "claude-opus-4-8": (5.0, 25.0),
     "claude-opus-4-7": (5.0, 25.0),
@@ -61,7 +63,49 @@ PRICING: dict[str, tuple[float, float]] = {
     "claude-sonnet-4-6": (3.0, 15.0),
     "claude-haiku-4-5": (1.0, 5.0),
     "claude-fable-5": (10.0, 50.0),
+    # Groq list prices (metered API).
+    "llama-3.3-70b-versatile": (0.59, 0.79),
+    "llama-3.1-8b-instant": (0.05, 0.08),
 }
+
+
+def _parse_pricing_json(raw: str) -> dict[str, tuple[float, float]]:
+    """Parse LHASSA_PRICING_JSON into {model_id.lower(): (in_rate, out_rate)}.
+
+    Shape: a JSON object ``{"model-name": [input_per_1M, output_per_1M]}``. Any
+    malformed JSON, non-object payload, or bad row is logged and skipped — this
+    never raises, so a typo can never crash the gateway.
+    """
+    raw = (raw or "").strip()
+    if not raw:
+        return {}
+    try:
+        data = json.loads(raw)
+    except Exception as exc:
+        logger.warning(f"LHASSA_PRICING_JSON: ignoring malformed JSON ({exc})")
+        return {}
+    if not isinstance(data, dict):
+        logger.warning(
+            "LHASSA_PRICING_JSON: expected a JSON object {model: [in, out]}; ignoring"
+        )
+        return {}
+    out: dict[str, tuple[float, float]] = {}
+    for model, rates in data.items():
+        if not isinstance(model, str) or not model.strip():
+            continue
+        if isinstance(rates, (list, tuple)) and len(rates) == 2:
+            try:
+                out[model.strip().lower()] = (float(rates[0]), float(rates[1]))
+            except (TypeError, ValueError):
+                logger.warning(f"LHASSA_PRICING_JSON: bad rates for {model!r}; skipping")
+    return out
+
+
+def _merged_pricing(raw: str) -> dict[str, tuple[float, float]]:
+    """Built-in PRICING with the LHASSA_PRICING_JSON overrides merged OVER it."""
+    merged = dict(PRICING)
+    merged.update(_parse_pricing_json(raw))
+    return merged
 
 # A completion backend: given the resolved call, return (text, input, output).
 # The default implementation talks to the real provider; tests inject a fake.
@@ -141,9 +185,14 @@ def price_for(model: str) -> tuple[float, float]:
     return (0.0, 0.0)
 
 
+def _now() -> datetime:
+    """Current UTC instant. A seam so cache TTL tests can freeze time."""
+    return datetime.now(timezone.utc)
+
+
 def _today() -> str:
     """Current UTC calendar day as YYYY-MM-DD — the budget bucket key."""
-    return datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    return _now().strftime("%Y-%m-%d")
 
 
 def _cache_key(
@@ -210,10 +259,17 @@ class LedgerGateway:
         *,
         limits_path: str | Path | None = None,
         kill_switch: bool | None = None,
+        pricing_json: str | None = None,
     ):
         self.db_path = Path(db_path) if db_path else DEFAULT_DB_PATH
         self.limits_path = Path(limits_path) if limits_path else DEFAULT_LIMITS_PATH
         self._initialized = False
+        # Effective pricing table: built-in PRICING with the LHASSA_PRICING_JSON
+        # overrides merged over it at init (explicit arg wins over the env var).
+        raw = os.getenv("LHASSA_PRICING_JSON", "") if pricing_json is None else pricing_json
+        self._pricing = _merged_pricing(raw)
+        # Last UTC day the expired-cache purge ran (opportunistic, once per day).
+        self._last_purge_day: str | None = None
         # Runtime daily-budget override (None → defer to config.llm_daily_token_budget).
         self._budget_override: int | None = None
         # Kill-switch: explicit arg wins, else the LHASSA_KILL_SWITCH boot default.
@@ -281,6 +337,25 @@ class LedgerGateway:
             return self._budget_override
         return config.llm_daily_token_budget
 
+    # ── Pricing (built-in table + LHASSA_PRICING_JSON overrides) ────────────────
+
+    def price_for(self, model: str) -> tuple[float, float]:
+        """(input_rate, output_rate) per 1M tokens for a model id, or (0, 0).
+
+        Uses this instance's effective table (built-in + LHASSA_PRICING_JSON), so
+        an owner-supplied price applies without any code change.
+        """
+        model_id = (model or "").lower()
+        for needle, rates in self._pricing.items():
+            if needle in model_id:
+                return rates
+        return (0.0, 0.0)
+
+    def _estimate_cost(self, model: str, input_tokens: int, output_tokens: int) -> float:
+        """Estimated USD for a call from this instance's effective pricing table."""
+        in_rate, out_rate = self.price_for(model)
+        return (input_tokens * in_rate + output_tokens * out_rate) / 1_000_000
+
     # ── Schema ────────────────────────────────────────────────────────────────
 
     async def _ensure_db(self) -> None:
@@ -346,13 +421,28 @@ class LedgerGateway:
 
     # ── Cache ─────────────────────────────────────────────────────────────────
 
-    async def _cache_get(self, key: str) -> Optional[str]:
+    async def _cache_get(self, key: str, ttl_days: int = 0) -> Optional[str]:
+        """Return a cached answer, or None on a miss OR an entry past ``ttl_days``.
+
+        ``ttl_days<=0`` disables expiry (the entry never goes stale). A stored
+        ``created_at`` that cannot be parsed is treated as fresh, so a bad row
+        never silently drops a valid cache entry.
+        """
         async with aiosqlite.connect(self.db_path) as db:
             async with db.execute(
-                "SELECT response_text FROM cache WHERE key=?", (key,)
+                "SELECT response_text, created_at FROM cache WHERE key=?", (key,)
             ) as cur:
                 row = await cur.fetchone()
-        return row[0] if row else None
+        if not row:
+            return None
+        if ttl_days and ttl_days > 0:
+            try:
+                created = datetime.fromisoformat(row[1])
+                if _now() - created > timedelta(days=ttl_days):
+                    return None
+            except (TypeError, ValueError):
+                pass
+        return row[0]
 
     async def _cache_put(self, key: str, provider: str, model: str, text: str) -> None:
         async with aiosqlite.connect(self.db_path) as db:
@@ -364,9 +454,29 @@ class LedgerGateway:
                     response_text = excluded.response_text,
                     created_at = excluded.created_at
                 """,
-                (key, provider, model, text, datetime.now(timezone.utc).isoformat()),
+                (key, provider, model, text, _now().isoformat()),
             )
             await db.commit()
+
+    async def _maybe_purge_cache(self, ttl_days: int) -> None:
+        """Once per UTC day, delete cache rows older than ``ttl_days``. Never raises.
+
+        A cheap opportunistic sweep so an expired-but-never-re-requested prompt does
+        not accumulate forever. No-op when expiry is disabled (``ttl_days<=0``).
+        """
+        if not ttl_days or ttl_days <= 0:
+            return
+        today = _today()
+        if self._last_purge_day == today:
+            return
+        self._last_purge_day = today
+        cutoff = (_now() - timedelta(days=ttl_days)).isoformat()
+        try:
+            async with aiosqlite.connect(self.db_path) as db:
+                await db.execute("DELETE FROM cache WHERE created_at < ?", (cutoff,))
+                await db.commit()
+        except Exception:
+            pass
 
     # ── Ledger ────────────────────────────────────────────────────────────────
 
@@ -564,9 +674,11 @@ class LedgerGateway:
         provider = _resolve_provider(config)
         key = _cache_key(provider, model, messages, max_tokens, temperature, system)
 
-        # ── Cache ──────────────────────────────────────────────────────────────
+        # ── Cache (TTL-bounded; expired entries are misses + purged daily) ──────
         if config.llm_cache_enabled:
-            cached = await self._cache_get(key)
+            ttl_days = getattr(config, "llm_cache_ttl_days", 0) or 0
+            await self._maybe_purge_cache(ttl_days)
+            cached = await self._cache_get(key, ttl_days)
             if cached is not None:
                 state.metrics["llm_cache_hits"] += 1
                 result = CompletionResult(
@@ -604,7 +716,7 @@ class LedgerGateway:
                 provider, model, messages, max_tokens, temperature, system
             )
 
-        cost = estimate_cost(model, input_tokens, output_tokens)
+        cost = self._estimate_cost(model, input_tokens, output_tokens)
 
         # ── Ledger: mirror into live metrics, persist a row ───────────────────
         state.metrics["llm_calls"] += 1
@@ -691,7 +803,9 @@ class LedgerGateway:
 
         # ── Cache (only no-tool turns are ever stored → a hit is always tool-free) ─
         if config.llm_cache_enabled:
-            cached = await self._cache_get(key)
+            ttl_days = getattr(config, "llm_cache_ttl_days", 0) or 0
+            await self._maybe_purge_cache(ttl_days)
+            cached = await self._cache_get(key, ttl_days)
             if cached is not None:
                 state.metrics["llm_cache_hits"] += 1
                 try:
@@ -746,7 +860,7 @@ class LedgerGateway:
             )
 
         tool_calls = tool_calls or []
-        cost = estimate_cost(model, input_tokens, output_tokens)
+        cost = self._estimate_cost(model, input_tokens, output_tokens)
 
         # ── Ledger: mirror into live metrics, persist a row ───────────────────
         state.metrics["llm_calls"] += 1

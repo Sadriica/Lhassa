@@ -51,6 +51,12 @@ dev = [
     "pytest-asyncio>=0.23.0",
     "ruff>=0.4.0",
 ]
+# Optional: exact token counting for the memory budget. estimate_tokens() uses
+# tiktoken's cl100k_base when present and falls back to a char heuristic otherwise,
+# so this is never required — install with `uv sync --extra tokens` to enable it.
+tokens = [
+    "tiktoken>=0.7.0",
+]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
