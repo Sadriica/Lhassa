@@ -32,6 +32,8 @@ class Trigger:
     ``params``       — action parameters.
     ``task_id``      — the originating task id, when the trigger came from a task.
     ``origen_actor`` — QUIÉN originated it (§2.6 hook for roles), if known.
+    ``origen_trust`` — trust level of the originating task (0=MUNDO/1=INTERNO/2=HUMANO).
+                       Carried through to dispatch so minted tasks degrade by contagion.
     """
 
     kind: str
@@ -40,6 +42,7 @@ class Trigger:
     params: dict = field(default_factory=dict)
     task_id: Optional[str] = None
     origen_actor: Optional[str] = None
+    origen_trust: int = 1  # default INTERNO
 
     def maps_to_fixed_action(self) -> bool:
         """True iff ``action`` is in the closed deterministic set (no LLM needed)."""
@@ -59,6 +62,7 @@ async def _from_pending_tasks(instance_id: str, out: list[Trigger]) -> None:
                 params=task.get("params", {}) or {},
                 task_id=task.get("id"),
                 origen_actor=task.get("origen_actor"),
+                origen_trust=int(task.get("origen_trust") or 1),
             )
         )
 

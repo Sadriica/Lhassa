@@ -25,7 +25,7 @@ from typing import Optional
 
 from lhassa.agents import verify as verify_agent
 from lhassa.config import Config
-from lhassa.core import actions, db, watchlist
+from lhassa.core import actions, db, dispatch, watchlist
 from lhassa.core.episode import Episode
 from lhassa.harness import runner
 from lhassa.harness.adapter import get_adapter
@@ -37,16 +37,30 @@ from lhassa.memory import load as memory_load
 # Marker for an episode that needed judgment but could not run the model.
 DEFERRED_DECISION = "deferred: needs judgment"
 
-# Cap on the judgment answer — a wake-for-criteria is short, not a long job.
-_JUDGMENT_MAX_TOKENS = 512
+# Cap on the judgment answer — raised from 512 to 768 to accommodate JSON dispatch
+# payloads (new_facts / new_tasks objects add meaningful token overhead).
+_JUDGMENT_MAX_TOKENS = 768
 
 
 def _build_messages(trigger: "watchlist.Trigger", ctx: "memory_load.Context") -> list[dict]:
-    """Render the trigger + loaded context into a single user message."""
+    """Render the trigger + loaded context into a single user message.
+
+    The instruction asks the model to optionally reply with a JSON dispatch
+    payload alongside (or instead of) prose. Plain text is always acceptable.
+    """
     objetivo = f" sobre {trigger.objetivo!r}" if trigger.objetivo else ""
     body = (
         f"Disparador: {trigger.kind}:{trigger.action}{objetivo}.\n"
-        "Decide qué hacer y responde de forma concisa."
+        "Decide qué hacer y responde de forma concisa.\n\n"
+        "Para despachar efectos, incluye un objeto JSON en tu respuesta "
+        "(texto antes/después es válido). Esquema, todas las claves opcionales:\n"
+        '{"say":"respuesta verbal",'
+        '"new_facts":[{"contenido":"...","tags":["etiqueta"]}],'
+        '"new_tasks":[{"accion":"nombre_accion_fija","objetivo":"...","params":{}}],'
+        '"delegate":{"prompt":"instruccion"}}\n'
+        "Restricciones: accion debe estar en el registro fijo de acciones; "
+        "new_facts son solo tipo dato, nunca directiva ni pinned; máx 5 facts, 5 tasks. "
+        "Sin efectos: texto plano es válido."
     )
     return [{"role": "user", "content": body}]
 
@@ -115,10 +129,24 @@ async def _judge(
                 **opts,
             )
 
+        # Close the loop: parse the model's reply for structured effects (facts +
+        # tasks) and apply them through the security machinery. Verifiers already
+        # inspected result.text above (raw, unmodified). dispatch.apply() NEVER
+        # raises; a meaningful summary is appended to the episode resultado only
+        # when something was actually dispatched (avoids resultado clutter).
+        dispatch_summary = await dispatch.apply(
+            result.text, trigger, ep,
+            instance_id=instance_id, config=config,
+        )
+        dispatch_note = (
+            f" | {dispatch_summary}"
+            if dispatch_summary.startswith("dispatched:")
+            else ""
+        )
         ep.finish(
             decision=decision_note,
             accion=trigger.action,
-            resultado=result.text,
+            resultado=result.text + dispatch_note,
             costo_usd=result.cost_usd,
         )
         return True

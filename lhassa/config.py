@@ -536,6 +536,14 @@ class Config:
     # place the watcher can cost anything. OFF by default; also needs LHASSA_ORG_LIVE.
     monitor_think: bool = os.getenv("LHASSA_MONITOR_THINK", "0") not in ("0", "false", "")
 
+    # ── Phase 2 — judgment dispatch (close the think-loop) ────────────────────
+    # When on (default), the judgment branch parses the model's JSON reply and
+    # writes facts + mints tasks through the security machinery. Set to 0 to
+    # disable (today's behavior: log the answer, do nothing else).
+    judgment_dispatch_enabled: bool = os.getenv(
+        "LHASSA_JUDGMENT_DISPATCH", "1"
+    ).lower() in ("1", "true", "yes")
+
     # ── Tool guardrails ───────────────────────────────────────────────────────
     # If true, reject obviously destructive shell commands unless explicitly
     # opted out via LHASSA_ALLOW_DESTRUCTIVE_SHELL=1.
