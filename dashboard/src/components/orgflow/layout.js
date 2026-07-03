@@ -5,9 +5,9 @@
 
 // ── layout: a tidy top-down layered tree ──────────────────────────────────────
 export const NODE_W = 210
-export const H_GAP = 36
-export const V_GAP = 116
-export const ROW_H = 150 // generous vertical step (nodes vary in height)
+export const H_GAP = 170
+export const V_GAP = 170
+export const ROW_H = 236 // generous vertical step (nodes vary in height)
 
 export function computeLayout(topology) {
   const nodes = topology?.nodes || []
@@ -69,9 +69,9 @@ export function computeLayout(topology) {
 // swallowed by the box), we fall back to a per-node tint + a colored department
 // chip so it's still identifiable without an ugly overlapping rectangle. The admin
 // and any department-less brains (coordinators) are never grouped.
-export const NODE_H_EST = 132 // generous node-height estimate for bbox math
-export const DEPT_PAD = 26
-export const DEPT_LABEL_H = 16
+export const NODE_H_EST = 136 // generous node-height estimate for bbox math
+export const DEPT_PAD = 34
+export const DEPT_LABEL_H = 24
 // Muted, warm, on-palette tints — red (162,62,52) stays reserved for the sovereign.
 export const DEPT_COLORS = [
   '217,165,33', // gold
@@ -89,26 +89,76 @@ export const DEPT_COLORS = [
 // re-parent path is untouched). Offsets persist here, keyed by department name, so an
 // arrangement survives reloads/Refresh. Departments with no saved offset auto-layout.
 export const LAYOUT_KEY = 'lh-org-layout'
-export function loadOffsets() {
-  try {
-    if (typeof localStorage === 'undefined') return {}
-    const raw = localStorage.getItem(LAYOUT_KEY)
-    if (!raw) return {}
-    const o = JSON.parse(raw)
-    if (!o || typeof o !== 'object') return {}
-    // keep only well-formed {dx,dy} numeric entries
-    const clean = {}
-    for (const [k, v] of Object.entries(o)) {
-      if (v && Number.isFinite(v.dx) && Number.isFinite(v.dy)) clean[k] = { dx: v.dx, dy: v.dy }
+function cleanDeptLayout(raw) {
+  const clean = {}
+  for (const [k, v] of Object.entries(raw || {})) {
+    if (!v || typeof v !== 'object') continue
+    const row = {}
+    if (Number.isFinite(v.dx) && Number.isFinite(v.dy)) {
+      row.dx = v.dx
+      row.dy = v.dy
     }
-    return clean
-  } catch { return {} }
+    if (Number.isFinite(v.width) && Number.isFinite(v.height)) {
+      row.width = v.width
+      row.height = v.height
+    }
+    if (Object.keys(row).length) clean[k] = row
+  }
+  return clean
 }
-export function saveOffsets(o) {
+
+function cleanNodeLayout(raw) {
+  const clean = {}
+  for (const [k, v] of Object.entries(raw || {})) {
+    if (v && Number.isFinite(v.dx) && Number.isFinite(v.dy)) clean[k] = { dx: v.dx, dy: v.dy }
+  }
+  return clean
+}
+
+function cleanViewport(raw) {
+  if (!raw || !Number.isFinite(raw.x) || !Number.isFinite(raw.y) || !Number.isFinite(raw.zoom)) return null
+  return { x: raw.x, y: raw.y, zoom: raw.zoom }
+}
+
+export function loadOrgLayout() {
+  try {
+    if (typeof localStorage === 'undefined') return { departments: {}, nodes: {}, viewport: null }
+    const raw = localStorage.getItem(LAYOUT_KEY)
+    if (!raw) return { departments: {}, nodes: {}, viewport: null }
+    const o = JSON.parse(raw)
+    if (!o || typeof o !== 'object') return { departments: {}, nodes: {}, viewport: null }
+
+    // Back-compat: the old format was { deptName: { dx, dy } }.
+    if (!('departments' in o) && !('nodes' in o) && !('viewport' in o)) {
+      return { departments: cleanDeptLayout(o), nodes: {}, viewport: null }
+    }
+
+    return {
+      departments: cleanDeptLayout(o.departments),
+      nodes: cleanNodeLayout(o.nodes),
+      viewport: cleanViewport(o.viewport),
+    }
+  } catch { return { departments: {}, nodes: {}, viewport: null } }
+}
+
+export function saveOrgLayout(layout) {
   try {
     if (typeof localStorage === 'undefined') return
-    localStorage.setItem(LAYOUT_KEY, JSON.stringify(o))
+    localStorage.setItem(LAYOUT_KEY, JSON.stringify({
+      departments: cleanDeptLayout(layout?.departments),
+      nodes: cleanNodeLayout(layout?.nodes),
+      viewport: cleanViewport(layout?.viewport),
+    }))
   } catch { /* storage unavailable — arrangement just won't persist */ }
+}
+
+export function loadOffsets() {
+  return loadOrgLayout().departments
+}
+
+export function saveOffsets(o) {
+  const current = loadOrgLayout()
+  saveOrgLayout({ ...current, departments: o || {} })
 }
 
 export function computeDeptGroups(topology, pos) {
@@ -158,8 +208,8 @@ export function computeDeptGroups(topology, pos) {
     // A clean box → it's a draggable layout handle; its members move with it.
     ids.forEach((id) => { nodeDept[id] = d })
 
-    const width = (maxX - minX) + DEPT_PAD * 2
-    const height = (maxY - minY) + DEPT_PAD * 2 + DEPT_LABEL_H
+    const width = Math.max(260, (maxX - minX) + DEPT_PAD * 2)
+    const height = Math.max(170, (maxY - minY) + DEPT_PAD * 2 + DEPT_LABEL_H)
     groupNodes.push({
       id: `__deptgroup__:${d}`,
       type: 'deptGroup',

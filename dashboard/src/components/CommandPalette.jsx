@@ -14,10 +14,13 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 
 // Quick actions — each just jumps to a section for now. `to` matches a section id.
 const QUICK_ACTIONS = [
-  { id: 'action:new-flow', label: 'New flow', hint: 'Flows', to: 'flows' },
-  { id: 'action:new-brain', label: 'New brain', hint: 'Brains', to: 'brains' },
+  { id: 'action:open-inbox', label: 'Review attention queue', hint: 'Inbox', to: 'inbox' },
+  { id: 'action:open-watchlist', label: 'Check watchers', hint: 'Watchlist', to: 'watchlist' },
+  { id: 'action:open-capabilities', label: 'Check available actions', hint: 'Capabilities', to: 'capabilities' },
   { id: 'action:run-task', label: 'Run a task', hint: 'Run', to: 'run' },
-  { id: 'action:open-settings', label: 'Open settings', hint: 'Settings', to: 'settings' },
+  { id: 'action:new-flow', label: 'Create automation flow', hint: 'Flows', to: 'flows' },
+  { id: 'action:new-brain', label: 'Create brain', hint: 'Brains', to: 'brains' },
+  { id: 'action:open-settings', label: 'Configure system', hint: 'Settings', to: 'settings' },
 ]
 
 function isTypingTarget(el) {
@@ -39,7 +42,7 @@ export default function CommandPalette({ sections = [], onNavigate }) {
     const jumps = sections.map((s) => ({
       id: `jump:${s.id}`,
       label: `Go to ${s.label}`,
-      hint: 'Section',
+      hint: s.group || 'Section',
       to: s.id,
     }))
     return [...jumps, ...QUICK_ACTIONS]

@@ -14,7 +14,10 @@ on the Vite dev server and proxies the API + WebSocket to that same backend.
 
 The sidebar (`src/App.jsx`) is a set of command surfaces, one visible at a time:
 
-- **Overview** — status + snapshot of the brain (`OverviewPanel`)
+- **Overview** — command-center home: attention count, watch pulse, running work, spend, health and quick actions (`OverviewPanel`)
+- **Inbox** — one queue for approvals, running work, audit signals and important activity (`InboxPanel`)
+- **Watchlist** — what Lhassa is watching now: scheduled senses, due work, heartbeat and running jobs (`WatchlistPanel`)
+- **Capabilities** — read-only map of available local CLIs, skills, self-written tools, guardrails and active delegations (`CapabilitiesPanel`)
 - **Brains** — the org topology (Flow / Tree / Templates + the relationship overlay); the React-Flow canvas is `OrgFlow`
 - **Skills** — the 3-layer skill catalog (`SkillsPanel`)
 - **Flows** — the n8n-style work-flow editor (`WorkflowsPanel` → the `WorkflowEditor` canvas)
@@ -73,16 +76,16 @@ rebuild is what ships UI changes.
 
 From the panels and the backend surface documented in the repo-root `CLAUDE.md`:
 
-- `/api/overview`, `/api/status`, `/api/metrics`
+- `/api/overview`, `/api/status`, `/api/metrics` — command-center aggregate, runtime status and metrics
 - `/api/org/*` (topology, brains, route, templates, relationships + `/kinds`)
 - `/api/flows`, `/api/flows/{id}`, `/api/flows/{id}/run`
 - `/api/skills/*`
 - `/api/code` (+ `/clis`, `/runs`) — the agentic local-CLI door
 - `/api/config` (GET / PATCH) — the settings service
-- `/api/approvals`
+- `/api/approvals` — approval queue (also rendered inside Inbox)
 - `/api/reports`, `/api/projections`, `/api/llm/{ledger,limits,ccusage}`
 - `/api/fleet`
-- `/api/activity`, `/api/audit`, `/api/scheduled`, `/api/tools` (+ graduate), `/api/memory/*`, `/api/agents`
+- `/api/activity`, `/api/audit`, `/api/scheduled`, `/api/tools` (+ graduate), `/api/memory/*`, `/api/agents` — Inbox, Watchlist, Capabilities and Activity source data
 - `/ws` — the live event stream
 
 ## Lint
@@ -115,6 +118,12 @@ the Playwright browsers once with `npx playwright install` before the first run.
 - **`src/components/`** — the panels listed under *Sections* above, plus `StatusBar`,
   `OrgTree`, `TemplatesPicker`, `ErrorBoundary`, and the shared `flowNodeKinds.js` /
   `relationshipKinds.js` helpers.
+- **`InboxPanel` + `WatchlistPanel` + `CapabilitiesPanel`** — intentionally thin
+  operational panels over the current APIs. They are the UI landing zone for the
+  persistent event/inbox, real watch-item backend, and unified capability registry
+  when those arrive; until then they compose `/api/overview`, `/api/audit`,
+  `/api/scheduled`, `/api/tools`, `/api/skills`, `/api/code/clis`, and approval/code
+  routes.
 - **`CommandPalette`** — a ⌘K launcher (opened via the sidebar hint or the
   `lh-cmdk-open` window event) that navigates between sections.
 - **`ToastHost` + `src/lib/toast.js`** — the single, dependency-free action-feedback

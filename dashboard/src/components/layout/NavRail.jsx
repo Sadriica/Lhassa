@@ -8,6 +8,9 @@ const Icon = ({ d, fill }) => (
 )
 const ICONS = {
   overview:  'M4 13h7V4H4v9Z M13 20h7v-9h-7v9Z M13 4v5h7V4h-7Z M4 20h7v-5H4v5Z',
+  inbox:     'M4 5h16v10l-3 4H7l-3-4V5Z M8 9h8 M8 13h5',
+  watchlist: 'M12 8v5l3 2 M21 12a9 9 0 1 1-3-6.7 M18 3v5h-5',
+  capabilities: 'M4 7h6 M14 7h6 M8 5v4 M16 5v4 M4 17h6 M14 17h6 M8 15v4 M16 15v4 M12 12h.01',
   brains:    'M12 3a4 4 0 0 0-4 4 3 3 0 0 0-1 5.8V17a3 3 0 0 0 5 2 3 3 0 0 0 5-2v-4.2A3 3 0 0 0 16 7a4 4 0 0 0-4-4Z',
   skills:    'M12 2 4 6v6c0 5 3.5 8 8 10 4.5-2 8-5 8-10V6l-8-4Z',
   flows:     'M5 6a2 2 0 1 1 0-4 2 2 0 0 1 0 4Z M19 13a2 2 0 1 1 0-4 2 2 0 0 1 0 4Z M5 22a2 2 0 1 1 0-4 2 2 0 0 1 0 4Z M7 5h6a4 4 0 0 1 4 4 M7 20h4a4 4 0 0 0 4-4v-2',
@@ -33,6 +36,12 @@ const ICONS = {
  *   onClose    : () => void       — close the drawer.
  */
 export default function NavRail({ sections, section, onNavigate, navOpen, onClose }) {
+  const groups = sections.reduce((acc, item) => {
+    const group = item.group || 'Other'
+    ;(acc[group] ||= []).push(item)
+    return acc
+  }, {})
+
   return (
     <nav className={`lh-nav lg:w-64 lg:shrink-0 ${navOpen ? 'open' : ''}`}>
       <div className="lh-sidebar lh-nav-panel lg:sticky lg:top-4 p-2 rounded-[10px]">
@@ -60,18 +69,33 @@ export default function NavRail({ sections, section, onNavigate, navOpen, onClos
           </button>
         </div>
 
-        <div className="flex flex-col gap-1">
-          {sections.map((s) => (
-            <button
-              key={s.id}
-              type="button"
-              onClick={() => onNavigate(s.id)}
-              className={`lh-nav-item ${section === s.id ? 'active' : ''}`}
-              aria-current={section === s.id ? 'page' : undefined}
-            >
-              <Icon d={ICONS[s.id]} />
-              <span>{s.label}</span>
-            </button>
+        <div className="flex flex-col gap-2">
+          {Object.entries(groups).map(([group, items]) => (
+            <div key={group} className="space-y-1">
+              <div
+                className="lh-mono uppercase"
+                style={{
+                  color: 'var(--lh-text-faint)',
+                  fontSize: 10,
+                  letterSpacing: '0.08em',
+                  padding: '0.35rem 0.55rem 0.1rem',
+                }}
+              >
+                {group}
+              </div>
+              {items.map((s) => (
+                <button
+                  key={s.id}
+                  type="button"
+                  onClick={() => onNavigate(s.id)}
+                  className={`lh-nav-item ${section === s.id ? 'active' : ''}`}
+                  aria-current={section === s.id ? 'page' : undefined}
+                >
+                  <Icon d={ICONS[s.id] || ICONS.overview} />
+                  <span>{s.label}</span>
+                </button>
+              ))}
+            </div>
           ))}
         </div>
 

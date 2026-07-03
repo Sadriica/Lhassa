@@ -1,5 +1,21 @@
 import { useEffect, useState } from 'react'
 
+const ENGINE_LABELS = {
+  claude: 'Claude CLI',
+  codex: 'Codex CLI',
+  opencode: 'OpenCode CLI',
+  ollama: 'Ollama local',
+  groq: 'Groq API',
+  anthropic: 'Anthropic API',
+  openai: 'OpenAI API',
+  openrouter: 'OpenRouter API',
+  cerebras: 'Cerebras API',
+}
+
+function engineLabel(provider) {
+  return ENGINE_LABELS[provider] || provider || 'engine'
+}
+
 // The slim top bar: Lhassa wordmark + a provider/health status pill (pulled from
 // the existing /api/health) + live voice and WebSocket pills. A quiet, flat chrome
 // strip — matte, a hairline bottom divider, mono for the machine-y bits, a small
@@ -57,14 +73,13 @@ export default function StatusBar({ connected, voiceActive }) {
 
       <div className="flex items-center gap-2 flex-wrap justify-end">
         {health && (
-          <span className="lh-pill" title="LLM provider / model">
+          <span
+            className="lh-pill"
+            title="Primary interaction engine from /api/health. Model details live in Settings."
+          >
             <span className="lh-dot lh-dot-accent" />
-            <span className="lh-mono">{health.llm_provider || 'provider'}</span>
-            {health.model && (
-              <span className="lh-mono" style={{ color: 'var(--lh-text-faint)' }}>
-                · {health.model}
-              </span>
-            )}
+            <span style={{ color: 'var(--lh-text-faint)' }}>Interaction</span>
+            <span className="lh-mono">{engineLabel(health.llm_provider)}</span>
           </span>
         )}
 

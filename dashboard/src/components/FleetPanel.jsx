@@ -32,7 +32,7 @@ export default function FleetPanel() {
     <div className="lh-card">
       <div className="flex items-center justify-between mb-3">
         <h2 className="lh-card-title">
-          Fleet
+          System readiness
         </h2>
         <span className="text-xs" style={{ color: 'var(--lh-text-muted)' }}>{machines.length} machines</span>
       </div>

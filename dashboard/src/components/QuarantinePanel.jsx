@@ -71,15 +71,15 @@ export default function QuarantinePanel() {
     <div className="lh-card">
       <div className="flex items-center justify-between mb-3">
         <h2 className="lh-card-title">
-          Quarantine room
+          Actions registry
         </h2>
-        <span className="text-xs" style={{ color: 'var(--lh-text-muted)' }}>{tools.length} tools</span>
+        <span className="text-xs" style={{ color: 'var(--lh-text-muted)' }}>{tools.length} actions</span>
       </div>
 
       {loading ? (
         <p className="text-xs" style={{ color: 'var(--lh-text-faint)' }}>Loading…</p>
       ) : tools.length === 0 ? (
-        <p className="text-xs" style={{ color: 'var(--lh-text-faint)' }}>No self-written tools yet.</p>
+        <p className="text-xs" style={{ color: 'var(--lh-text-faint)' }}>No deterministic actions registered yet.</p>
       ) : (
         <ul className="space-y-2">
           {tools.map(t => {

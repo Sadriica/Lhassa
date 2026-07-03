@@ -76,7 +76,18 @@ function FlowInner({ topology, selectedId, routePath, relationships, kindMeta, o
   // Draggable department boxes: per-department {dx,dy} offset (seeded from localStorage),
   // the drag handlers that move box + members as a unit + persist on drop, Reset, and
   // the refit tick Reset bumps so the graph re-frames after offsets clear.
-  const { deptOffsets, refitTick, onNodeDrag, onNodeDragStop, resetLayout, hasOffsets } = useDeptDrag({
+  const {
+    deptLayouts,
+    nodeOffsets,
+    initialViewport,
+    refitTick,
+    onNodeDrag,
+    onNodeDragStop,
+    onDeptResizeEnd,
+    onViewportSave,
+    resetLayout,
+    hasOffsets,
+  } = useDeptDrag({
     groupNodes, layout, nodeDept, setRfNodes,
   })
 
@@ -106,14 +117,18 @@ function FlowInner({ topology, selectedId, routePath, relationships, kindMeta, o
     // Apply the manual department offset to a base position, if the node/box is in
     // a boxed (draggable) department that the user has moved.
     const withOffset = (base, dept) => {
-      const off = dept ? deptOffsets[dept] : null
+      const off = dept ? deptLayouts[dept] : null
       return off ? { x: base.x + off.dx, y: base.y + off.dy } : base
     }
 
     const brainNodes = nodes.map((n) => ({
       id: n.id,
       type: 'brain',
-      position: withOffset(layout[n.id] || { x: 0, y: 0 }, nodeDept[n.id]),
+      position: (() => {
+        const base = withOffset(layout[n.id] || { x: 0, y: 0 }, nodeDept[n.id])
+        const off = nodeOffsets[n.id] || { dx: 0, dy: 0 }
+        return { x: base.x + off.dx, y: base.y + off.dy }
+      })(),
       zIndex: 1, // above the department group boxes
       data: {
         node: n,
@@ -131,12 +146,25 @@ function FlowInner({ topology, selectedId, routePath, relationships, kindMeta, o
     // Department boxes carry their own offset too, so box + members stay aligned.
     const offsetGroupNodes = groupNodes.map((g) => ({
       ...g,
+      width: deptLayouts[g.data.department]?.width || g.width,
+      height: deptLayouts[g.data.department]?.height || g.height,
       position: withOffset(g.position, g.data.department),
+      data: {
+        ...g.data,
+        width: deptLayouts[g.data.department]?.width || g.data.width,
+        height: deptLayouts[g.data.department]?.height || g.data.height,
+        onResizeEnd: onDeptResizeEnd,
+      },
+      style: {
+        ...(g.style || {}),
+        width: deptLayouts[g.data.department]?.width || g.width,
+        height: deptLayouts[g.data.department]?.height || g.height,
+      },
     }))
 
     // Group boxes first so they paint behind the brains they enclose.
     setRfNodes([...offsetGroupNodes, ...brainNodes])
-  }, [topology, selectedId, routePath, routeSet, admin, layout, groupNodes, deptStyle, nodeDept, deptOffsets, setRfNodes])
+  }, [topology, selectedId, routePath, routeSet, admin, layout, groupNodes, deptStyle, nodeDept, deptLayouts, nodeOffsets, onDeptResizeEnd, setRfNodes])
 
   // #7 — keep freshly-created/refreshed nodes on screen. A signature of the node-id
   // SET (not positions) so this fires only when brains are added/removed, not on a
@@ -163,14 +191,14 @@ function FlowInner({ topology, selectedId, routePath, relationships, kindMeta, o
         const cx = target.position.x + w / 2 + (dockPx / 2) / zoom
         const cy = target.position.y + h / 2
         rf.setCenter(cx, cy, { zoom, duration: 350 })
-      } else {
-        rf.fitView({ padding: 0.2, duration: 350 })
+      } else if (!initialViewport || refitTick > 0) {
+        rf.fitView({ padding: 0.34, duration: 350, minZoom: 0.42, maxZoom: 1 })
       }
     })
     return () => cancelAnimationFrame(raf)
     // refitTick: bumped by Reset layout so the graph re-frames after offsets clear.
     // Manual drag offsets deliberately do NOT re-fit (they'd fight the drag).
-  }, [nodeIdSig, selectedId, rf, refitTick])
+  }, [nodeIdSig, selectedId, rf, refitTick, initialViewport])
 
   // (Re)build EDGES: the solid command spine (parent→child, gold on a route) PLUS the
   // typed relationship overlay (dashed/animated, per-kind color + label), filtered by
@@ -269,7 +297,10 @@ function FlowInner({ topology, selectedId, routePath, relationships, kindMeta, o
       className="lh-flow-canvas"
       style={{
         // Fluid, viewport-driven height: never cramped, never absurdly tall.
-        height: 'clamp(440px, 72vh, 880px)',
+        height: 'clamp(560px, 82vh, 980px)',
+        minHeight: 420,
+        maxHeight: '92vh',
+        resize: 'vertical',
         border: '1px solid var(--lh-border)',
         borderRadius: 'var(--lh-radius)',
         overflow: 'hidden',
@@ -290,8 +321,10 @@ function FlowInner({ topology, selectedId, routePath, relationships, kindMeta, o
         onNodeContextMenu={onNodeContextMenu}
         onPaneContextMenu={onPaneContextMenu}
         fitView
-        fitViewOptions={{ padding: 0.2 }}
-        minZoom={0.2}
+        fitViewOptions={{ padding: 0.34, minZoom: 0.42, maxZoom: 1 }}
+        defaultViewport={initialViewport}
+        onMoveEnd={(_event, viewport) => onViewportSave(viewport)}
+        minZoom={0.42}
         maxZoom={1.75}
         proOptions={{ hideAttribution: true }}
         colorMode="dark"
@@ -329,7 +362,7 @@ function FlowInner({ topology, selectedId, routePath, relationships, kindMeta, o
                 letterSpacing: '0.04em',
               }}
             >
-              Drag a department box to arrange
+              Drag or resize a department box
             </span>
           )}
         </Panel>
