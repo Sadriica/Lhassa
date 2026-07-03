@@ -113,10 +113,17 @@ def parse_ccusage(data, source: str = "ccusage") -> dict:
 async def read_ccusage(timeout: float = 15.0) -> dict:
     """Run ``ccusage --json`` (or the npx fallback) and return a normalized summary.
 
-    Fully defensive: a missing binary, a non-zero exit, a timeout, or malformed
-    output all yield ``{"available": False, ...}``. This function never raises.
+    ``timeout`` is a TOTAL budget shared across the candidate commands (a deadline),
+    so trying the binary then the ``npx`` fallback can never exceed it — otherwise a
+    slow ``npx`` cold-start could block a caller for ~2× the timeout. Fully defensive:
+    a missing binary, a non-zero exit, a timeout, or malformed output all yield
+    ``{"available": False, ...}``. This function never raises.
     """
+    deadline = asyncio.get_event_loop().time() + max(0.0, timeout)
     for argv in _CCUSAGE_COMMANDS:
+        remaining = deadline - asyncio.get_event_loop().time()
+        if remaining <= 0:
+            break  # budget spent — degrade rather than block on the next candidate
         try:
             proc = await asyncio.create_subprocess_exec(
                 *argv,
@@ -129,7 +136,7 @@ async def read_ccusage(timeout: float = 15.0) -> dict:
             continue
 
         try:
-            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=remaining)
         except (asyncio.TimeoutError, Exception):
             try:
                 proc.kill()
