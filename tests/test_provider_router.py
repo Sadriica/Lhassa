@@ -298,6 +298,87 @@ async def test_codex_provider_empty_output_raises():
         await prov.complete([{"role": "user", "content": "hi"}])
 
 
+# ── Attribution (Defect 1): CLI providers report their ACTUAL model ───────────
+
+
+async def test_claude_provider_reports_actual_model_from_json():
+    """The Completion carries the model the CLI actually ran (parsed from JSON)."""
+    out = json.dumps(
+        {"type": "result", "result": "hi", "model": "claude-sonnet-4-6"}
+    ).encode()
+    prov = ClaudeCodeProvider(FakeConfig(), runner=_runner(0, out))
+    c = await prov.complete([{"role": "user", "content": "hi"}])
+    assert c.model == "claude-sonnet-4-6"
+
+
+async def test_claude_provider_reports_cli_marker_when_model_absent():
+    out = json.dumps({"type": "result", "result": "hi"}).encode()
+    prov = ClaudeCodeProvider(FakeConfig(), runner=_runner(0, out))
+    c = await prov.complete([{"role": "user", "content": "hi"}])
+    # No API model name is invented — a truthful "claude-cli" marker instead.
+    assert c.model == "claude-cli"
+
+
+async def test_claude_provider_drops_cli_marker_and_never_forwards_it():
+    captured = {}
+    out = json.dumps({"type": "result", "result": "ok"}).encode()
+    prov = ClaudeCodeProvider(FakeConfig(), runner=_capturing_runner(captured, stdout=out))
+    # The router marker must NOT reach --model (it would 404) → CLI picks its own.
+    await prov.complete([{"role": "user", "content": "hi"}], model="claude-cli")
+    assert "--model" not in captured["argv"]
+
+
+async def test_codex_provider_reports_actual_model_from_json():
+    lines = [
+        {"type": "session.created", "model": "gpt-5-codex"},
+        {"type": "item.completed", "item": {"type": "agent_message", "text": "pong"}},
+    ]
+    out = ("\n".join(json.dumps(line) for line in lines)).encode()
+    prov = CodexProvider(FakeConfig(), runner=_runner(0, out))
+    c = await prov.complete([{"role": "user", "content": "hi"}])
+    assert c.model == "gpt-5-codex"
+
+
+async def test_codex_provider_drops_cli_marker_and_never_forwards_it():
+    captured = {}
+    out = json.dumps(
+        {"type": "item.completed", "item": {"type": "agent_message", "text": "ok"}}
+    ).encode()
+    prov = CodexProvider(FakeConfig(), runner=_capturing_runner(captured, stdout=out))
+    await prov.complete([{"role": "user", "content": "hi"}], model="codex-cli")
+    assert "-m" not in captured["argv"]
+
+
+def test_pick_model_cli_provider_never_claims_api_model():
+    # The bug: a claude/codex CLI provider paired with the config's groq model.
+    cfg = FakeConfig(model_cheap="llama-3.3-70b-versatile",
+                     model_smart="llama-3.3-70b-versatile")
+    assert router.pick_model(FakeProvider(name="claude"), hard=False, config=cfg) == "claude-cli"
+    assert router.pick_model(FakeProvider(name="codex"), hard=True, config=cfg) == "codex-cli"
+
+
+def test_pick_model_cli_provider_honors_configured_model():
+    cfg = FakeConfig()
+    cfg.claude_model = "claude-opus-4-8"
+    cfg.codex_model = "gpt-5-codex"
+    assert router.pick_model(FakeProvider(name="claude"), hard=False, config=cfg) == "claude-opus-4-8"
+    assert router.pick_model(FakeProvider(name="codex"), hard=False, config=cfg) == "gpt-5-codex"
+
+
+def test_decide_claude_reason_is_truthful(monkeypatch):
+    """decide() routed to the claude CLI must not claim the config's groq model."""
+    def fake_gmp(config, name=None):
+        return FakeProvider(name=name or "default")
+
+    monkeypatch.setattr(router, "get_model_provider", fake_gmp)
+    cfg = FakeConfig(model_cheap="llama-3.3-70b-versatile")
+    cfg.heartbeat_provider = "claude"
+    d = router.decide(FakeTrigger(), None, config=cfg)
+    assert d.provider.name == "claude"
+    assert "model=claude-cli" in d.reason
+    assert "llama-3.3-70b-versatile" not in d.reason  # no attribution lie
+
+
 # ── keystone registry: introspection + drop-in seam ──────────────────────────
 
 

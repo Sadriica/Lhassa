@@ -612,14 +612,34 @@ async def _spawn_cli(argv: list[str], timeout: float) -> tuple[int | None, bytes
     return proc.returncode, stdout, stderr
 
 
-def _parse_claude_json(stdout: str) -> tuple[str, float, int, int]:
+def _model_from_obj(obj: dict) -> str | None:
+    """Best-effort ACTUAL model id from a CLI result object. Defensive.
+
+    Looks at a flat ``model`` string first, then the single key of a
+    ``modelUsage``/``model_usage`` map (claude reports usage keyed by model id).
+    Returns None when nothing plausible is present.
+    """
+    m = obj.get("model")
+    if isinstance(m, str) and m.strip():
+        return m.strip()
+    for key in ("modelUsage", "model_usage"):
+        mu = obj.get(key)
+        if isinstance(mu, dict) and mu:
+            first = next(iter(mu))
+            if isinstance(first, str) and first.strip():
+                return first.strip()
+    return None
+
+
+def _parse_claude_json(stdout: str) -> tuple[str, float, int, int, str | None]:
     """Parse ``claude --print --output-format json`` stdout.
 
     Verified live: a single JSON object ``{"type":"result","result":"<text>",
     "is_error":false,"total_cost_usd":N,"usage":{"input_tokens":N,
     "output_tokens":M}}``. Defensive: if the body is not that object (e.g. plain
     ``text`` output), the cleaned raw stdout is used as the text and cost/usage are
-    zero. Returns ``(text, cost_usd, input_tokens, output_tokens)``.
+    zero. Returns ``(text, cost_usd, input_tokens, output_tokens, model|None)``
+    where ``model`` is the ACTUAL model the CLI reported, if parseable.
     """
     obj: Any = None
     try:
@@ -638,12 +658,12 @@ def _parse_claude_json(stdout: str) -> tuple[str, float, int, int]:
         usage = obj.get("usage") if isinstance(obj.get("usage"), dict) else {}
         in_tok = _int(usage.get("input_tokens") or usage.get("prompt_tokens") or 0)
         out_tok = _int(usage.get("output_tokens") or usage.get("completion_tokens") or 0)
-        return text, cost, in_tok, out_tok
+        return text, cost, in_tok, out_tok, _model_from_obj(obj)
     # Non-JSON (text mode / banner) — fall back to the cleaned raw stdout.
-    return _clean_stdout(stdout), 0.0, 0, 0
+    return _clean_stdout(stdout), 0.0, 0, 0, None
 
 
-def _parse_codex_jsonl(stdout: str) -> tuple[str, float, int, int]:
+def _parse_codex_jsonl(stdout: str) -> tuple[str, float, int, int, str | None]:
     """Parse ``codex exec --json`` stdout (JSONL events).
 
     Verified live: the assistant text arrives in
@@ -651,17 +671,22 @@ def _parse_codex_jsonl(stdout: str) -> tuple[str, float, int, int]:
     events and usage in ``{"type":"turn.completed","usage":{"input_tokens":N,
     "output_tokens":M}}`` (codex reports no cost → 0.0). Non-JSON lines (e.g. a
     "Reading additional input…" banner) are skipped. If nothing parses as JSON the
-    cleaned raw stdout is used. Returns ``(text, cost_usd, input_tokens, output_tokens)``.
+    cleaned raw stdout is used. Returns
+    ``(text, cost_usd, input_tokens, output_tokens, model|None)`` where ``model``
+    is the ACTUAL model id if any event reports one.
     """
     texts: list[str] = []
     cost = 0.0
     in_tok = out_tok = 0
     parsed_any = False
+    model: str | None = None
 
     for obj in _iter_json_events(stdout):
         if not isinstance(obj, dict):
             continue
         parsed_any = True
+        if model is None:
+            model = _model_from_obj(obj)
         item = obj.get("item")
         if isinstance(item, dict) and item.get("type") == "agent_message":
             t = item.get("text")
@@ -687,7 +712,7 @@ def _parse_codex_jsonl(stdout: str) -> tuple[str, float, int, int]:
         text = _clean_stdout(stdout)
     else:
         text = ""
-    return text, cost, in_tok, out_tok
+    return text, cost, in_tok, out_tok, model
 
 
 class ClaudeCodeProvider:
@@ -727,7 +752,9 @@ class ClaudeCodeProvider:
         # the configured ``claude_model``, else None ⇒ the CLI's own subscription model.
         claude_model = (getattr(self._config, "claude_model", "") or "").strip() or None
         ml = str(model).lower() if model else ""
-        if not ml.startswith(("claude", "opus", "sonnet", "haiku")):
+        # ``claude-cli`` is the router's marker for "the CLI's own model" — never a
+        # real model id, so it must NOT be forwarded as --model (would 404).
+        if ml == "claude-cli" or not ml.startswith(("claude", "opus", "sonnet", "haiku")):
             model = claude_model
         prompt = _flatten_messages(messages, opts.get("system"))
         argv = [binary, "--print", "--output-format", "json"]
@@ -754,13 +781,16 @@ class ClaudeCodeProvider:
             detail = (stderr or stdout).strip()[:300]
             raise ProviderNotConfigured(f"claude unavailable: exit {returncode}: {detail}")
 
-        text, cost, in_tok, out_tok = _parse_claude_json(stdout)
+        text, cost, in_tok, out_tok, ran_model = _parse_claude_json(stdout)
         if not text.strip():
             raise ProviderNotConfigured("claude unavailable: empty output")
 
         return Completion(
+            # Report the ACTUAL model the CLI ran (parsed from its JSON), else the
+            # forwarded model, else a truthful ``claude-cli`` marker — never a
+            # foreign API model name the CLI never used.
             text=text,
-            model=model or "claude",
+            model=ran_model or model or "claude-cli",
             input_tokens=in_tok,
             output_tokens=out_tok,
             cost_usd=cost,
@@ -796,6 +826,10 @@ class CodexProvider:
         self, messages: list[dict], *, model: str | None = None, max_tokens: int = 1024, **opts
     ) -> Completion:
         binary = (getattr(self._config, "codex_bin", "") or "") or "codex"
+        # ``codex-cli`` is the router's marker for "the CLI's own model" — not a real
+        # model id, so drop it (forwarding it as -m would fail) and let the CLI pick.
+        if model == "codex-cli":
+            model = None
         model = model or (getattr(self._config, "codex_model", "") or "") or None
         prompt = _flatten_messages(messages, opts.get("system"))
         # ``-s read-only`` keeps a chat turn from touching the filesystem;
@@ -828,13 +862,15 @@ class CodexProvider:
             detail = (stderr or stdout).strip()[:300]
             raise ProviderNotConfigured(f"codex unavailable: exit {returncode}: {detail}")
 
-        text, cost, in_tok, out_tok = _parse_codex_jsonl(stdout)
+        text, cost, in_tok, out_tok, ran_model = _parse_codex_jsonl(stdout)
         if not text.strip():
             raise ProviderNotConfigured("codex unavailable: empty output")
 
         return Completion(
+            # ACTUAL model the CLI reported, else the forwarded model, else a
+            # truthful ``codex-cli`` marker — never a foreign API model name.
             text=text,
-            model=model or "codex",
+            model=ran_model or model or "codex-cli",
             input_tokens=in_tok,
             output_tokens=out_tok,
             cost_usd=cost,

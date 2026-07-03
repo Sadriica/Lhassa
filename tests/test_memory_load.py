@@ -156,3 +156,43 @@ async def test_context_to_prompt_and_estimate(tmp_path, monkeypatch):
     assert "Directivas" in prompt
     assert "un dato fijado" in prompt
     assert ctx.token_estimate > 0
+
+
+# ── estimate_tokens (tiktoken optional, deterministic, never raises) ──────────
+
+
+def test_estimate_tokens_heuristic_without_tiktoken(monkeypatch):
+    from lhassa.memory import load as load_mod
+
+    monkeypatch.setattr(load_mod, "_get_tiktoken_encoding", lambda: None)
+    assert load_mod.estimate_tokens("") == 0
+    # ~3 chars/token safety margin (denser than the old 4 chars/token).
+    assert load_mod.estimate_tokens("abcdef") == (6 + 2) // 3      # 2
+    assert load_mod.estimate_tokens("a" * 9) == 3
+
+
+def test_estimate_tokens_uses_tiktoken_when_available(monkeypatch):
+    from lhassa.memory import load as load_mod
+
+    class FakeEnc:
+        def encode(self, text):
+            return list(text.split())  # one "token" per whitespace word
+
+    monkeypatch.setattr(load_mod, "_get_tiktoken_encoding", lambda: FakeEnc())
+    assert load_mod.estimate_tokens("one two three") == 3
+    assert load_mod.estimate_tokens("") == 0  # empty short-circuits before encode
+
+
+def test_estimate_tokens_degrades_on_tiktoken_import_failure(monkeypatch):
+    import sys
+
+    from lhassa.memory import load as load_mod
+
+    # Force a fresh probe whose `import tiktoken` fails (sys.modules[...] = None).
+    monkeypatch.setattr(load_mod, "_TIKTOKEN_TRIED", False)
+    monkeypatch.setattr(load_mod, "_TIKTOKEN_ENC", None)
+    monkeypatch.setitem(sys.modules, "tiktoken", None)
+
+    assert load_mod._get_tiktoken_encoding() is None
+    # Falls back to the char heuristic, deterministically, without raising.
+    assert load_mod.estimate_tokens("abcdef") == 2

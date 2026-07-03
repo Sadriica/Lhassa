@@ -272,6 +272,17 @@ class Config:
     llm_cache_enabled: bool = os.getenv("LHASSA_LLM_CACHE", "1").lower() in (
         "1", "true", "yes",
     )
+    # Cache time-to-live in days: a stored answer older than this is treated as a
+    # miss (the cloud is hit again) and expired rows are opportunistically purged.
+    # Default 7; 0 = never expire (the old unbounded behaviour).
+    llm_cache_ttl_days: int = _safe_int(
+        os.getenv("LHASSA_LLM_CACHE_TTL_DAYS", "7"), 7
+    )
+    # Extra/override model pricing merged OVER the built-in gateway table at init —
+    # a JSON object {"model-name": [input_per_1M, output_per_1M]} so the owner can
+    # price any model without a code edit. Empty = built-in table only. Malformed
+    # JSON is logged and ignored (never crashes).
+    pricing_json: str = os.getenv("LHASSA_PRICING_JSON", "")
     # Kill-switch — a hard manual stop, independent of the daily token budget.
     # When on, the gateway refuses every cloud-LLM call before it reaches a
     # provider. Default off; flip it at runtime from the dashboard. This is the

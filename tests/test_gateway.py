@@ -110,9 +110,16 @@ def test_price_for_known_anthropic_model():
     assert price_for("claude-fable-5") == (10.0, 50.0)
 
 
+def test_price_for_known_groq_models():
+    # Metered Groq APIs carry real list prices (no longer priced at 0).
+    assert price_for("llama-3.3-70b-versatile") == (0.59, 0.79)
+    assert price_for("llama-3.1-8b-instant") == (0.05, 0.08)
+
+
 def test_price_for_unknown_model_is_zero():
-    assert price_for("llama-3.3-70b-versatile") == (0.0, 0.0)
+    # Subscription CLIs / local / unlisted models stay at 0 by design.
     assert price_for("gpt-4o-mini") == (0.0, 0.0)
+    assert price_for("ollama/llama3.2") == (0.0, 0.0)
     assert price_for("") == (0.0, 0.0)
 
 
@@ -167,6 +174,59 @@ async def test_cache_key_varies_with_params(gw, metrics_guard):
     # Different max_tokens → different key → live call, not a hit.
     await gw.complete(MESSAGES, config=cfg, max_tokens=200, completion_fn=fake)
     assert calls["n"] == 2
+
+
+# ── Cache TTL ─────────────────────────────────────────────────────────────────
+
+
+async def test_cache_ttl_expires_old_entries(gw, metrics_guard, monkeypatch):
+    """An entry older than the TTL is a miss (the model runs again) and is purged."""
+    from datetime import datetime, timedelta, timezone
+
+    import lhassa.llm.gateway as gwmod
+
+    cfg = FakeConfig()
+    cfg.llm_cache_ttl_days = 7
+    fake, calls = make_fake_completion(text="answer")
+
+    # Day 0: prime the cache.
+    t0 = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    monkeypatch.setattr(gwmod, "_now", lambda: t0)
+    await gw.complete(MESSAGES, config=cfg, completion_fn=fake)
+    assert calls["n"] == 1
+
+    # Same instant: served from cache (fresh).
+    second = await gw.complete(MESSAGES, config=cfg, completion_fn=fake)
+    assert second.cache_hit is True
+    assert calls["n"] == 1
+
+    # 10 days later (> 7-day TTL): expired → live call again.
+    monkeypatch.setattr(gwmod, "_now", lambda: t0 + timedelta(days=10))
+    third = await gw.complete(MESSAGES, config=cfg, completion_fn=fake)
+    assert third.cache_hit is False
+    assert calls["n"] == 2
+
+
+async def test_cache_ttl_zero_never_expires(gw, metrics_guard, monkeypatch):
+    """TTL=0 keeps the old unbounded behaviour: an ancient entry still hits."""
+    from datetime import datetime, timedelta, timezone
+
+    import lhassa.llm.gateway as gwmod
+
+    cfg = FakeConfig()
+    cfg.llm_cache_ttl_days = 0
+    fake, calls = make_fake_completion(text="answer")
+
+    t0 = datetime(2020, 1, 1, tzinfo=timezone.utc)
+    monkeypatch.setattr(gwmod, "_now", lambda: t0)
+    await gw.complete(MESSAGES, config=cfg, completion_fn=fake)
+    assert calls["n"] == 1
+
+    # Years later, still a hit (no expiry).
+    monkeypatch.setattr(gwmod, "_now", lambda: t0 + timedelta(days=3650))
+    hit = await gw.complete(MESSAGES, config=cfg, completion_fn=fake)
+    assert hit.cache_hit is True
+    assert calls["n"] == 1
 
 
 # ── Budget ──────────────────────────────────────────────────────────────────
@@ -246,7 +306,8 @@ async def test_ledger_persists_rows(gw, metrics_guard):
 
 
 async def test_unknown_model_costs_zero_in_ledger(gw, metrics_guard):
-    cfg = FakeConfig(llm_provider="groq", model="llama-3.3-70b-versatile",
+    # A model with no price row (unlisted) costs 0 in the ledger.
+    cfg = FakeConfig(llm_provider="groq", model="gpt-4o-mini",
                      llm_cache_enabled=False)
     fake, _ = make_fake_completion(input_tokens=500, output_tokens=500)
 
@@ -256,6 +317,64 @@ async def test_unknown_model_costs_zero_in_ledger(gw, metrics_guard):
 
     rows = await gw.ledger_rows()
     assert rows[-1]["cost_usd"] == 0.0
+
+
+async def test_groq_model_priced_in_ledger(gw, metrics_guard):
+    """A metered Groq model is costed from the built-in table (not 0)."""
+    cfg = FakeConfig(llm_provider="groq", model="llama-3.3-70b-versatile",
+                     llm_cache_enabled=False)
+    fake, _ = make_fake_completion(input_tokens=1_000_000, output_tokens=1_000_000)
+
+    result = await gw.complete(MESSAGES, config=cfg, completion_fn=fake)
+    # 1M in @ $0.59 + 1M out @ $0.79 per 1M = $1.38
+    assert result.cost_usd == pytest.approx(0.59 + 0.79)
+    rows = await gw.ledger_rows()
+    assert rows[-1]["cost_usd"] == pytest.approx(1.38)
+
+
+# ── Pricing overrides (LHASSA_PRICING_JSON) ──────────────────────────────────
+
+
+def test_merged_pricing_override_and_new_model():
+    from lhassa.llm.gateway import _merged_pricing
+
+    merged = _merged_pricing('{"my-model": [1.0, 2.0], "llama-3.1-8b-instant": [9.0, 9.0]}')
+    # A brand-new model is priced from the JSON.
+    assert merged["my-model"] == (1.0, 2.0)
+    # An override wins OVER the built-in row for the same model.
+    assert merged["llama-3.1-8b-instant"] == (9.0, 9.0)
+    # Untouched built-ins survive.
+    assert merged["claude-opus-4-8"] == (5.0, 25.0)
+
+
+def test_merged_pricing_malformed_json_is_ignored():
+    from lhassa.llm.gateway import PRICING, _merged_pricing
+
+    # Malformed JSON / wrong shapes / bad rows are ignored, never raise.
+    assert _merged_pricing("{not valid json") == PRICING
+    assert _merged_pricing('["a", "b"]') == PRICING  # not an object
+    assert _merged_pricing('{"m": "notalist"}') == PRICING
+    assert _merged_pricing('{"m": [1]}') == PRICING  # wrong arity
+    assert _merged_pricing('{"m": ["x", "y"]}') == PRICING  # non-numeric rates
+    assert _merged_pricing("") == PRICING
+    assert _merged_pricing("   ") == PRICING
+
+
+async def test_gateway_applies_pricing_json_override(tmp_path, metrics_guard):
+    """A gateway built with pricing_json costs an otherwise-unpriced model."""
+    gw = LedgerGateway(
+        db_path=tmp_path / "gw.db",
+        pricing_json='{"gpt-4o-mini": [2.0, 4.0]}',
+    )
+    cfg = FakeConfig(llm_provider="openai", model="gpt-4o-mini",
+                     llm_cache_enabled=False)
+    fake, _ = make_fake_completion(input_tokens=1_000_000, output_tokens=1_000_000)
+
+    result = await gw.complete(MESSAGES, config=cfg, completion_fn=fake)
+    assert result.cost_usd == pytest.approx(2.0 + 4.0)
+    # The module-level default gateway (no override) still prices it at 0.
+    from lhassa.llm.gateway import estimate_cost
+    assert estimate_cost("gpt-4o-mini", 1_000_000, 1_000_000) == 0.0
 
 
 async def test_openai_provider_resolution(gw, metrics_guard):
