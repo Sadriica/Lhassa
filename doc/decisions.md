@@ -5,6 +5,47 @@ build. The source of truth for the architecture is `doc/lhassa-brief.md` (a
 living doc — correct it after each phase per §4). This file records the choices
 made along the way. Newest first.
 
+## 2026-07-03 — Intelligence pass: deterministic-first brain across four fronts (Etapas 1-4)
+
+Full-brain study (6 parallel subagent audits: core loop, LLM/cost, memory, org/flows,
+Telegram, self-improvement) found the recurring pattern: the pieces existed, individually
+tested, but were never wired into the hot path. Four stages implemented in parallel
+(1 in-tree + 3 isolated worktrees), merged in order:
+
+- **Etapa 1 — reflexes + spend judgment** (`4ee142b`): `core/policy.py`, a deterministic
+  REFLEXES registry between watchlist and judgment (job_review auto-triage, repo_changed →
+  sync_repo for `LHASSA_AUTO_SYNC_REPOS`, health warn → notify; default think/minimal).
+  Tiered context in `_judge` (minimal=600tk/full=2000tk; `query` + `active_tags` finally fed
+  so tag/semantic layers fire). Deferred tasks now retry with backoff (`sweep_deferred_tasks`,
+  max 3 then rechazada). `fallback_chain` moved to `llm/router.py` and walked by the heartbeat
+  on ProviderNotConfigured/BudgetExceeded ($0 CLI subs first). `gateway.spend_summary()` +
+  soft budget pct (default 0.8) downgrade away from the smart model; `check_spend` action.
+- **Etapa 2 — operative day via Telegram** (`f207fc8`): deterministic $0 digest
+  (`notify/digest.py` + `send_digest` action + `digest` seed at 08:00/21:00);
+  parse_mode/inline keyboards in the Telegram channel; `/approvals` `/approve` `/deny`
+  commands + callback-button approvals on watcher alerts; `/watch` `/watches` `/unwatch`
+  `/goal` author watch rules and recurring goals from chat; health notifications routed
+  through the channel registry (one precise new layer exception, documented).
+- **Etapa 3 — real delegation** (`7ce6379`): the judgment `delegate` key now mints `org_run`
+  tasks through the mint_task security path (cap 3); `org_run` action lazily runs
+  `run_goal` (offline/$0 unless LHASSA_ORG_LIVE); monitor findings become minted work under
+  `LHASSA_MONITOR_DELEGATE` (fingerprint-deduped); coordinator fans out to top-3 departments
+  on ties/explicit multi with offline deterministic synthesis (live = one extra think);
+  org inbox drained via a new extensible watchlist sense (`watchlist.register_check` +
+  `org/inbox_sense.py` — core stays org-unaware, no new layer exception).
+- **Etapa 4 — visible self-improvement** (`98eb55b`): `agents/repetition.py` ($0 SQL
+  detector of repeated costly thinks → parks a `mint_action` approval + notifies, deduped
+  via watch_state); `agents/author.py` (routine-model tool authoring →
+  `create_candidate` → gates → `tool_graduation` approval; `lhassa tools propose`);
+  `/api/tools/{n}/graduate` now refuses ungated tools (409); `review_tools` action applies
+  should_retire/retire; `new_facts` dispatch dedup; `maintenance` seed (distill_memory +
+  detect_repetition daily, review_tools weekly).
+
+1333 tests green, lint clean, architecture guard intact. Known gaps left on purpose:
+`bump_tool_usage` still has no real execution seam (no self-written tool executes yet);
+coordinator fan-out is single-level per hop; legacy `memory/store.py`/`session.py` still
+orphaned (cleanup candidate).
+
 ## 2026-07-02 — Follow-up: kill the api/misc accumulator + make the ccusage dashboard read fast & real
 
 Two small, behavior-preserving finishes to the refactor pass, both surfaced by a second review
