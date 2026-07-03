@@ -36,7 +36,13 @@ def register_all() -> None:
     from lhassa.core.actions import _REGISTRY, register_action
 
     # Import sub-modules — this defines the functions without side-effects.
-    from lhassa.actionpack import _brain, _memory, _net, _system  # noqa: F401
+    from lhassa.actionpack import (  # noqa: F401
+        _brain,
+        _memory,
+        _net,
+        _selfimprove,
+        _system,
+    )
 
     # Defensive guard: skip any action that is already in the registry.
     # This makes register_all() safe even if _REGISTERED is reset externally
@@ -68,3 +74,7 @@ def register_all() -> None:
     _reg("check_health", _brain.check_health)
     _reg("git_status_repos", _brain.git_status_repos)
     _reg("compile_cv", _brain.compile_cv)
+
+    # ── Self-improvement (§2.8, Etapa 4) ──────────────────────────────────────
+    _reg("detect_repetition", _selfimprove.detect_repetition)
+    _reg("review_tools", _selfimprove.review_tools)

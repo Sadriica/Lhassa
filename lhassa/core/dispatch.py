@@ -294,7 +294,19 @@ async def _apply_inner(
     if not isinstance(facts_raw, list):
         facts_raw = []
 
+    # Memory hygiene: skip an exact (casefolded) content duplicate against what
+    # is already in the grande — the same dedup discipline as
+    # memory.consolidate.distill_episodes. Loaded once, lazily (only when there
+    # is at least one candidate fact), and updated as new facts are written so
+    # two duplicates in the SAME payload don't both slip through.
+    existing_lower: Optional[set] = None
+    if facts_raw:
+        existing_lower = {
+            f.contenido.strip().casefold() for f in await _facts.load_facts(instance_id)
+        }
+
     n_facts = 0
+    n_skipped_dupe = 0
     for item in facts_raw[:_MAX_FACTS]:
         if not isinstance(item, dict):
             continue
@@ -303,6 +315,9 @@ async def _apply_inner(
             continue
         # Truncate overlong content rather than rejecting it.
         contenido = contenido[:_FACT_CONTENT_MAX]
+        if existing_lower is not None and contenido.casefold() in existing_lower:
+            n_skipped_dupe += 1
+            continue
         tags = clean_tags(item.get("tags"))
         # SECURITY: tipo is FORCED to "dato". A model may NEVER write a
         # "directiva" or a pinned fact — those shape identity and standing
@@ -316,10 +331,14 @@ async def _apply_inner(
             procedencia=f"judgment:{episode.id}",
             confianza=0.7,
         )
+        if existing_lower is not None:
+            existing_lower.add(contenido.casefold())
         n_facts += 1
 
     if n_facts:
         parts.append(f"{n_facts} fact{'s' if n_facts != 1 else ''}")
+    if n_skipped_dupe:
+        parts.append(f"{n_skipped_dupe} dupe fact{'s' if n_skipped_dupe != 1 else ''} skipped")
 
     # ── new_tasks ─────────────────────────────────────────────────────────────
     tasks_raw = payload.get("new_tasks") or []
