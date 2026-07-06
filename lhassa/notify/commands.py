@@ -232,18 +232,73 @@ async def _cmd_start(args: str, *, config=None) -> str:
     )
 
 
+# One-line description for each built-in command, grouped for /help. A command
+# registered by a plugin but missing here still appears — see _cmd_help's final
+# "also available" line — so a drop-in command can never vanish from /help.
+_HELP_GROUPS: list[Tuple[str, list[str]]] = [
+    ("Chat & memory", ["recall", "memory"]),
+    ("Decisions", ["approvals", "approve", "deny"]),
+    ("Watch & goals", ["watch", "watches", "unwatch", "goal"]),
+    ("CV", ["cvnewbase", "cvbase"]),
+    ("System", ["status", "report", "capabilities", "tools", "skills"]),
+]
+
+DESCRIPTIONS: dict[str, str] = {
+    "start": "Introduce myself.",
+    "help": "This catalog.",
+    "recall": "<text> — search past episodes.",
+    "memory": "<query> — search durable facts.",
+    "approvals": "List what's waiting on your decision.",
+    "approve": "<id> — approve a pending action.",
+    "deny": "<id> — deny a pending action.",
+    "watch": "<pattern> -> <accion> — add a watch rule.",
+    "watches": "List configured watch rules.",
+    "unwatch": "<index> — remove a watch rule.",
+    "goal": "<text> [--every daily|hourly] — schedule a recurring think.",
+    "cvnewbase": "Arm a base-CV replacement.",
+    "cvbase": "Show the base CV on file.",
+    "status": "Provider, health and today's spend.",
+    "report": "[days] — spend summary (default 7d).",
+    "capabilities": "What I have wired and what's on.",
+    "tools": "The tools I've written myself, and their state.",
+    "skills": "The skills installed on me.",
+}
+
+
 @register_command("help")
 async def _cmd_help(args: str, *, config=None) -> str:
-    """List what Lhassa can do; the command list stays in sync via COMMANDS.names()."""
+    """A grouped catalog of every command, kept in sync with COMMANDS at runtime.
+
+    Renders :data:`_HELP_GROUPS` with their :data:`DESCRIPTIONS`; any command
+    registered (by core or a plugin) but absent from both still shows up on a
+    trailing line, so a drop-in command can never vanish from /help.
+    """
     try:
-        cmd_list = ", ".join("/" + n for n in COMMANDS.names()) or "(none)"
-        return (
-            "I'm Lhassa. Here's what I can do:\n"
-            "- Ask me anything in plain language and I'll answer it through my "
-            "brain.\n"
-            f"- Commands: {cmd_list}\n"
-            "I think locally and cheaply, so chatting with me is light on cost."
-        )
+        registered = set(COMMANDS.names())
+        lines = [
+            "I'm Lhassa. Talk to me in plain words and I'll answer through my "
+            "brain — a live-web question gets researched and I'll reply again "
+            "once I have it.",
+            "",
+            "Here is what my commands do:",
+        ]
+        seen: set = set()
+        for title, names in _HELP_GROUPS:
+            present = [n for n in names if n in registered]
+            if not present:
+                continue
+            lines.append("")
+            lines.append(f"{title}:")
+            for n in present:
+                seen.add(n)
+                lines.append(f"  /{n} — {DESCRIPTIONS.get(n, '')}".rstrip())
+        extra = sorted(n for n in registered if n not in seen)
+        if extra:
+            lines.append("")
+            lines.append("Also available: " + ", ".join("/" + n for n in extra))
+        lines.append("")
+        lines.append("I think locally and cheaply, so chatting with me is light on cost.")
+        return "\n".join(lines)
     except Exception as exc:
         logger.warning(f"commands: /help failed: {exc}")
         return "I'm Lhassa. Send me a message and I'll answer, or try /start."
@@ -616,3 +671,242 @@ async def _cmd_goal(args: str, *, config=None) -> str:
     if not task_id:
         return f"Could not schedule goal: {estado}"
     return f"Goal scheduled ({cadence}): {text} [task {task_id}]"
+
+
+# ── CLI parity batch — report / memory / capabilities / tools / skills ───────
+
+
+async def _ledger_window_cost(config, days: int) -> Optional[Tuple[float, float]]:
+    """(today_cost_usd, window_cost_usd) from the gateway ledger, or ``None``.
+
+    Reads the ledger DB directly (same override as :func:`_today_spend`) so this
+    stays LLM-free and testable against a temp DB — never constructs a provider.
+    """
+    try:
+        from datetime import datetime, timedelta, timezone
+        from pathlib import Path
+
+        from lhassa._vendor import aiosqlite
+
+        override = getattr(config, "llm_gateway_db_path", None)
+        path = Path(override) if override else Path.home() / ".lhassa" / "llm_gateway.db"
+        if not path.exists():
+            return None
+
+        now = datetime.now(timezone.utc)
+        today = now.strftime("%Y-%m-%d")
+        cutoff = (now - timedelta(days=max(days, 0))).isoformat()
+        async with aiosqlite.connect(path) as db:
+            async with db.execute(
+                "SELECT COALESCE(SUM(cost_usd), 0) FROM ledger WHERE ts LIKE ?",
+                (today + "%",),
+            ) as cur:
+                today_row = await cur.fetchone()
+            async with db.execute(
+                "SELECT COALESCE(SUM(cost_usd), 0), COUNT(*) FROM ledger WHERE ts >= ?",
+                (cutoff,),
+            ) as cur:
+                window_row = await cur.fetchone()
+        today_cost = float(today_row[0]) if today_row else 0.0
+        window_cost = float(window_row[0]) if window_row else 0.0
+        return today_cost, window_cost
+    except Exception as exc:
+        logger.debug(f"commands: /report ledger read failed: {exc}")
+        return None
+
+
+@register_command("report")
+async def _cmd_report(args: str, *, config=None) -> str:
+    """``/report [days]`` — spend summary: today + a trailing window (default 7d).
+
+    Reads the gateway ledger directly, LLM-free. No ledger yet → a plain "$0 so
+    far" line rather than an error.
+    """
+    days_raw = (args or "").strip()
+    days = 7
+    if days_raw:
+        try:
+            days = max(int(days_raw), 1)
+        except ValueError:
+            return "Usage: /report [days] — a whole number of days, default 7."
+
+    cfg = _config(config)
+    result = await _ledger_window_cost(cfg, days)
+    if result is None:
+        return f"Spend today: $0.0000\nLast {days}d: $0.0000 (no ledger yet)."
+    today_cost, window_cost = result
+    return f"Spend today: ${today_cost:.4f}\nLast {days}d: ${window_cost:.4f}"
+
+
+@register_command("memory")
+async def _cmd_memory(args: str, *, config=None) -> str:
+    """``/memory <query>`` — search durable facts (substring/tag), LLM-free.
+
+    Mirrors ``lhassa memory``'s search (:mod:`lhassa.memory.facts`): a query
+    matches a fact's content or any of its tags. Shows up to 5 matches: tipo, a
+    short snippet, and confianza. No args → a usage hint.
+    """
+    query = (args or "").strip()
+    if not query:
+        return "Usage: /memory <query> — searches durable facts by text or tag."
+    try:
+        cfg = _config(config)
+        instance_id = getattr(cfg, "instance_id", None) or "inst_personal"
+        from lhassa.memory import facts
+
+        resolved = facts.resolve(await facts.load_facts(instance_id))
+        q = query.lower()
+        matches = [
+            f
+            for f in resolved
+            if q in f.contenido.lower() or any(q in t.lower() for t in f.tags)
+        ]
+        if not matches:
+            return f"No facts match {query!r}."
+        lines = [f"Facts matching {query!r} ({len(matches)}):"]
+        for f in matches[:5]:
+            snippet = f.contenido.replace("\n", " ").strip()
+            if len(snippet) > 100:
+                snippet = snippet[:97] + "…"
+            lines.append(f"- [{f.tipo}] {snippet} (conf {f.confianza:.2f})")
+        if len(matches) > 5:
+            lines.append(f"…+{len(matches) - 5} more")
+        return "\n".join(lines)
+    except Exception as exc:
+        logger.warning(f"commands: /memory {query!r} failed: {exc}")
+        return "Could not search my memory right now."
+
+
+@register_command("capabilities")
+async def _cmd_capabilities(args: str, *, config=None) -> str:
+    """``/capabilities`` — a compact, LLM-free wired/on-off summary.
+
+    A phone-sized subset of ``lhassa capabilities`` (:mod:`lhassa.cli.capabilities`):
+    providers wired, channels active, org shape, and the monitor/voice/org-live
+    toggles. Reads config + registries only — never constructs a provider.
+    """
+    try:
+        cfg = _config(config)
+        lines = ["Capabilities:"]
+
+        try:
+            from lhassa.llm.provider import PROVIDERS
+
+            lines.append(f"Providers: {', '.join(PROVIDERS.names()) or '(none)'}")
+        except Exception:
+            pass
+
+        try:
+            from lhassa.notify.channels import active_channels
+
+            active = [c.name for c in active_channels(cfg)]
+            lines.append(f"Channels active: {', '.join(active) or '(none)'}")
+        except Exception:
+            pass
+
+        try:
+            from lhassa.org.topology import load_topology
+
+            topology = load_topology(cfg)
+            shape = (
+                "standalone (1 brain)"
+                if topology.is_standalone()
+                else f"{len(topology.nodes())}-brain org"
+            )
+            lines.append(f"Org: {shape}")
+        except Exception:
+            lines.append("Org: unavailable")
+
+        try:
+            from lhassa.org.coordinator import is_live
+
+            org_live = is_live()
+        except Exception:
+            org_live = False
+        monitor_on = bool(getattr(cfg, "monitor_enabled", False))
+        voice_on = bool(getattr(cfg, "voice_enabled", False))
+        lines.append(
+            f"Org live: {_flag(org_live)} · Monitor: {_flag(monitor_on)} · "
+            f"Voice: {_flag(voice_on)}"
+        )
+        return "\n".join(lines)
+    except Exception as exc:
+        logger.warning(f"commands: /capabilities failed: {exc}")
+        return "Could not read my capabilities right now."
+
+
+def _flag(value: bool) -> str:
+    return "on" if value else "off"
+
+
+@register_command("tools")
+async def _cmd_tools(args: str, *, config=None) -> str:
+    """``/tools`` — the self-written tools and their gate/usage state, LLM-free.
+
+    Reads the same ``tools`` table :func:`lhassa.cli.commands.tools_cmd` renders
+    (:func:`lhassa.core.db.list_tools`): name, dominio, estado, and usos/fallos.
+    """
+    try:
+        cfg = _config(config)
+        instance_id = getattr(cfg, "instance_id", None) or "inst_personal"
+        from lhassa.core import db as _db
+
+        await _db.init_db()
+        rows = await _db.list_tools(instance_id)
+        if not rows:
+            return "No self-written tools yet."
+        lines = [f"Tools ({len(rows)}):"]
+        for r in rows[:10]:
+            name = r.get("nombre") or "?"
+            estado = r.get("estado") or "—"
+            dominio = r.get("dominio") or "—"
+            usos = r.get("usos") or 0
+            fallos = r.get("fallos") or 0
+            lines.append(f"- {name} [{dominio}] {estado} · {usos} uses, {fallos} fails")
+        if len(rows) > 10:
+            lines.append(f"…+{len(rows) - 10} more")
+        return "\n".join(lines)
+    except Exception as exc:
+        logger.warning(f"commands: /tools failed: {exc}")
+        return "Could not list my tools right now."
+
+
+@register_command("skills")
+async def _cmd_skills(args: str, *, config=None) -> str:
+    """``/skills`` — installed skills, LLM-free.
+
+    Reads :class:`lhassa.skills.store.SkillStore` (list) and, where cheap,
+    :func:`lhassa.skills.curator.get_usage` for the pinned/state flag per skill.
+    """
+    try:
+        cfg = _config(config)
+        from lhassa.skills.store import SkillStore
+
+        skills = SkillStore(cfg).list_skills()
+        if not skills:
+            return "No skills installed."
+
+        try:
+            from lhassa.skills import curator
+
+            usage = curator.get_usage(cfg)
+        except Exception:
+            usage = {}
+
+        lines = [f"Skills ({len(skills)}):"]
+        for s in skills[:10]:
+            name = s.name or "?"
+            desc = (s.description or "").strip()
+            if len(desc) > 60:
+                desc = desc[:57] + "…"
+            entry = usage.get(name) or {}
+            pinned = " (pinned)" if entry.get("pinned") else ""
+            state = entry.get("state")
+            state_str = f" [{state}]" if state and state != "active" else ""
+            lines.append(f"- {name}{pinned}{state_str}{f' — {desc}' if desc else ''}")
+        if len(skills) > 10:
+            lines.append(f"…+{len(skills) - 10} more")
+        return "\n".join(lines)
+    except Exception as exc:
+        logger.warning(f"commands: /skills failed: {exc}")
+        return "Could not list my skills right now."

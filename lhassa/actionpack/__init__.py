@@ -44,6 +44,7 @@ def register_all() -> None:
         _memory,
         _net,
         _org,
+        _research,
         _script,
         _selfimprove,
         _system,
@@ -104,3 +105,6 @@ def register_all() -> None:
 
     # ── PTC — Programmatic Tool Calling (script-over-RPC in quarantine) ────────
     _reg("run_script", _script.run_script)
+
+    # ── Research bridge (Telegram [[research: …]] → live web results) ──────────
+    _reg("research_reply", _research.research_reply)

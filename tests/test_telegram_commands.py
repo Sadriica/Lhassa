@@ -371,3 +371,181 @@ def test_goal_defaults_to_daily_cadence(tmp_path, monkeypatch):
 def test_goal_requires_text():
     reply = asyncio.run(commands.dispatch("/goal", config=_cfg()))
     assert "Usage" in reply
+
+
+# ── /help renders every registered command + never drops an unlisted one ─────
+
+
+def test_help_covers_every_registered_command_name():
+    reply = asyncio.run(commands.dispatch("/help", config=_cfg()))
+    for name in commands.COMMANDS.names():
+        assert f"/{name}" in reply, f"/help is missing /{name}"
+
+
+def test_help_shows_unlisted_command_via_fallback_line():
+    async def _temp(args, *, config=None):
+        return "ok"
+
+    commands.register_command("zzzunlisted", _temp)
+    try:
+        reply = asyncio.run(commands.dispatch("/help", config=_cfg()))
+        assert "Also available" in reply
+        assert "/zzzunlisted" in reply
+    finally:
+        commands.COMMANDS.unregister("zzzunlisted")
+
+
+# ── /report ────────────────────────────────────────────────────────────────────
+
+
+def test_report_no_ledger_reports_zero(tmp_path):
+    cfg = _cfg(llm_gateway_db_path=str(tmp_path / "absent.db"))
+    reply = asyncio.run(commands.dispatch("/report", config=cfg))
+    assert "Spend today: $0.0000" in reply
+    assert "Last 7d: $0.0000" in reply
+
+
+def test_report_reads_ledger_window(tmp_path):
+    import sqlite3
+    from datetime import datetime, timezone
+
+    db_path = tmp_path / "llm_gateway.db"
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    conn = sqlite3.connect(db_path)
+    conn.execute(
+        "CREATE TABLE ledger (id INTEGER PRIMARY KEY, ts TEXT, provider TEXT, "
+        "model TEXT, input_tokens INT, output_tokens INT, cost_usd REAL, cache_hit INT)"
+    )
+    conn.executemany(
+        "INSERT INTO ledger(ts, provider, model, input_tokens, output_tokens, "
+        "cost_usd, cache_hit) VALUES(?,?,?,?,?,?,?)",
+        [
+            (f"{today}T01:00:00+00:00", "opencode", "m", 1, 1, 0.01, 0),
+            (f"{today}T02:00:00+00:00", "opencode", "m", 1, 1, 0.02, 0),
+            ("2020-01-01T00:00:00+00:00", "opencode", "m", 1, 1, 9.99, 0),
+        ],
+    )
+    conn.commit()
+    conn.close()
+
+    cfg = _cfg(llm_gateway_db_path=str(db_path))
+    reply = asyncio.run(commands.dispatch("/report 3", config=cfg))
+    assert "Spend today: $0.0300" in reply
+    assert "Last 3d: $0.0300" in reply  # old-day row excluded
+
+
+def test_report_bad_days_arg_usage_hint():
+    reply = asyncio.run(commands.dispatch("/report soon", config=_cfg()))
+    assert "Usage" in reply
+
+
+# ── /memory ────────────────────────────────────────────────────────────────────
+
+
+def test_memory_finds_fact_by_content(tmp_path, monkeypatch):
+    asyncio.run(_init_db(tmp_path, monkeypatch))
+    from lhassa.memory import facts
+
+    asyncio.run(
+        facts.add_fact(
+            "inst_personal", "dato", "The owner prefers dark roast coffee.", tags=["prefs"]
+        )
+    )
+    reply = asyncio.run(
+        commands.dispatch("/memory dark roast", config=_cfg(instance_id="inst_personal"))
+    )
+    assert "dark roast" in reply
+    assert "dato" in reply
+
+
+def test_memory_finds_fact_by_tag(tmp_path, monkeypatch):
+    asyncio.run(_init_db(tmp_path, monkeypatch))
+    from lhassa.memory import facts
+
+    asyncio.run(
+        facts.add_fact("inst_personal", "dato", "Something unrelated.", tags=["standing"])
+    )
+    reply = asyncio.run(
+        commands.dispatch("/memory standing", config=_cfg(instance_id="inst_personal"))
+    )
+    assert "Something unrelated" in reply
+
+
+def test_memory_no_match(tmp_path, monkeypatch):
+    asyncio.run(_init_db(tmp_path, monkeypatch))
+    reply = asyncio.run(
+        commands.dispatch("/memory zzznomatch", config=_cfg(instance_id="inst_personal"))
+    )
+    assert "No facts match" in reply
+
+
+def test_memory_requires_query():
+    reply = asyncio.run(commands.dispatch("/memory", config=_cfg()))
+    assert "Usage" in reply
+
+
+# ── /capabilities ──────────────────────────────────────────────────────────────
+
+
+def test_capabilities_reports_wired_and_toggles():
+    reply = asyncio.run(commands.dispatch("/capabilities", config=_cfg()))
+    assert "Providers:" in reply
+    assert "Channels active:" in reply
+    assert "Org:" in reply
+    assert "Monitor:" in reply
+    assert "Voice:" in reply
+
+
+def test_capabilities_never_raises_on_degraded_config(monkeypatch):
+    import lhassa.llm.provider as provider_mod
+
+    monkeypatch.setattr(provider_mod, "PROVIDERS", None, raising=False)
+    reply = asyncio.run(commands.dispatch("/capabilities", config=_cfg()))
+    assert isinstance(reply, str) and reply
+
+
+# ── /tools ─────────────────────────────────────────────────────────────────────
+
+
+def test_tools_lists_self_written_tools(tmp_path, monkeypatch):
+    db = asyncio.run(_init_db(tmp_path, monkeypatch))
+    asyncio.run(
+        db.upsert_tool(
+            "inst_personal", "fetch_weather", dominio="utility", estado="cuarentena"
+        )
+    )
+    reply = asyncio.run(
+        commands.dispatch("/tools", config=_cfg(instance_id="inst_personal"))
+    )
+    assert "fetch_weather" in reply
+    assert "cuarentena" in reply
+
+
+def test_tools_empty_reports_none(tmp_path, monkeypatch):
+    asyncio.run(_init_db(tmp_path, monkeypatch))
+    reply = asyncio.run(
+        commands.dispatch("/tools", config=_cfg(instance_id="inst_personal"))
+    )
+    assert "No self-written tools yet." in reply
+
+
+# ── /skills ────────────────────────────────────────────────────────────────────
+
+
+def test_skills_lists_installed_skills(tmp_path):
+    from lhassa.skills.skillmd import Skill
+    from lhassa.skills.store import SkillStore
+
+    cfg = _cfg(skills_dir=str(tmp_path / "skills"))
+    store = SkillStore(cfg)
+    store.create(Skill(name="research", description="Gather and cross-check sources."))
+
+    reply = asyncio.run(commands.dispatch("/skills", config=cfg))
+    assert "research" in reply
+    assert "Gather and cross-check sources" in reply
+
+
+def test_skills_empty_reports_none(tmp_path):
+    cfg = _cfg(skills_dir=str(tmp_path / "empty_skills"))
+    reply = asyncio.run(commands.dispatch("/skills", config=cfg))
+    assert "No skills installed." in reply
