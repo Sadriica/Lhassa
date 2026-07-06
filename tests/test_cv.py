@@ -217,3 +217,52 @@ def test_contact_gate_passes_with_no_base(cv_dir):
 
     v = verify("anything", spec={"type": "contact_preserved"}, context={})
     assert v.passed  # nothing to enforce
+
+
+# ── restore_contact — deterministic contact preservation ──────────────────────────
+
+
+def test_restore_contact_swaps_all_altered_occurrences(cv_dir):
+    import re as _re
+
+    base = r"\href{mailto:owner@real.com}{owner@real.com} \\ +57 300 111 2222"
+    tailored = (
+        r"\documentclass{article}\begin{document}"
+        r"\href{mailto:wrong@fake.com}{wrong@fake.com} \\ +57 316 999 8888"
+        r"\end{document}"
+    )
+    out = cv.restore_contact(tailored, base)
+    assert "owner@real.com" in out
+    assert "wrong@fake.com" not in out  # BOTH occurrences (mailto + display) swapped
+    assert "3001112222" in _re.sub(r"\D", "", out)
+    assert "3169998888" not in _re.sub(r"\D", "", out)
+
+
+def test_restore_contact_leaves_a_faithful_output_untouched(cv_dir):
+    base = r"owner@real.com +57 300 111 2222"
+    good = r"\documentclass{article}\begin{document}owner@real.com +57 300 111 2222\end{document}"
+    assert cv.restore_contact(good, base) == good
+
+
+def test_restore_contact_appends_when_contact_dropped(cv_dir):
+    base = r"owner@real.com"
+    dropped = r"\documentclass{article}\begin{document}no contact here\end{document}"
+    out = cv.restore_contact(dropped, base)
+    assert "owner@real.com" in out  # presence guaranteed via the comment marker
+    assert out.rstrip().endswith(r"\end{document}")
+
+
+def test_restore_contact_degrades_without_base(cv_dir):
+    tailored = r"\begin{document}anything@else.com\end{document}"
+    assert cv.restore_contact(tailored, "") == tailored
+    assert cv.restore_contact(tailored, None) == tailored
+
+
+def test_restored_output_passes_the_contact_gate(cv_dir):
+    from lhassa.agents.verify import verify
+
+    base = r"owner@real.com +57 300 111 2222"
+    tailored = r"\begin{document}impostor@x.com +57 316 000 0000\end{document}"
+    out = cv.restore_contact(tailored, base)
+    v = verify(out, spec={"type": "contact_preserved"}, context={"base_cv": base})
+    assert v.passed
