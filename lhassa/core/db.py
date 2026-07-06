@@ -471,6 +471,29 @@ async def init_db() -> None:
             ON run_steps(instance_id, kind, entity_id)
         """)
 
+        # artifacts — durable, append-only record of a delivered WORK PRODUCT (a CV
+        # .tex + .pdf, a report, …). "Lhassa is the sender of record" (§org, the
+        # hierarchy is the philosophy): whatever a leaf produces is registered here
+        # BEFORE it is handed up the chain, so the audit trail always has something
+        # concrete to point at (``episode_id`` links back to the hop that delivered
+        # it). Append-only: a re-delivery is a NEW row, never an update.
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS artifacts (
+                id                 TEXT PRIMARY KEY,
+                instance_id        TEXT NOT NULL,
+                kind               TEXT NOT NULL,
+                paths              TEXT,
+                metadata           TEXT,
+                origin_department  TEXT,
+                episode_id         TEXT,
+                creado_en          TEXT NOT NULL
+            )
+        """)
+        await db.execute("""
+            CREATE INDEX IF NOT EXISTS artifacts_by_instance
+            ON artifacts(instance_id, creado_en)
+        """)
+
         await db.commit()
 
 
@@ -1425,6 +1448,84 @@ async def list_postulaciones(
         db.row_factory = aiosqlite.Row
         async with db.execute(sql, args) as cur:
             return [dict(row) for row in await cur.fetchall()]
+
+
+# ── artifacts (append-only work products — "Lhassa is the sender of record") ────
+
+async def insert_artifact(row: dict) -> str:
+    """Insert one artifact row into the grande. Returns the artifact id.
+
+    ``row`` carries every column (id, instance_id, kind, paths, metadata,
+    origin_department, episode_id, creado_en); ``paths``/``metadata`` may be a
+    pre-encoded JSON string or a raw list/dict (encoded here). Append-only: this
+    never overwrites an existing artifact. Scoped to ``instance_id``.
+    """
+    paths = row.get("paths")
+    paths_json = paths if isinstance(paths, str) else _dumps(list(paths or []))
+    metadata = row.get("metadata")
+    metadata_json = (
+        metadata if isinstance(metadata, str) else json.dumps(metadata or {}, ensure_ascii=False)
+    )
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            """INSERT INTO artifacts(
+                   id, instance_id, kind, paths, metadata,
+                   origin_department, episode_id, creado_en)
+               VALUES(?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                row["id"],
+                row["instance_id"],
+                row["kind"],
+                paths_json,
+                metadata_json,
+                row.get("origin_department", ""),
+                row.get("episode_id"),
+                row["creado_en"],
+            ),
+        )
+        await db.commit()
+    return row["id"]
+
+
+async def get_artifact(instance_id: str, artifact_id: str) -> Optional[dict]:
+    """Return one artifact row (paths/metadata decoded), or ``None`` if absent.
+
+    Scoped to ``instance_id`` (isolation from day one).
+    """
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            "SELECT * FROM artifacts WHERE instance_id = ? AND id = ?",
+            (instance_id, artifact_id),
+        ) as cur:
+            row = await cur.fetchone()
+    if row is None:
+        return None
+    out = dict(row)
+    out["paths"] = _loads(out.get("paths"), [])
+    out["metadata"] = _loads(out.get("metadata"), {})
+    return out
+
+
+async def list_artifacts(instance_id: str, *, limit: int = 50) -> list[dict]:
+    """Return artifacts for ``instance_id`` (newest first, cap ``limit``).
+
+    ``paths``/``metadata`` decoded. Always scoped to ``instance_id``.
+    """
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            """SELECT * FROM artifacts
+               WHERE instance_id = ?
+               ORDER BY creado_en DESC, rowid DESC
+               LIMIT ?""",
+            (instance_id, limit),
+        ) as cur:
+            rows = [dict(row) for row in await cur.fetchall()]
+    for row in rows:
+        row["paths"] = _loads(row.get("paths"), [])
+        row["metadata"] = _loads(row.get("metadata"), {})
+    return rows
 
 
 # ── tools (self-written tools + their gate metrics — §2.8) ──────────────────────
