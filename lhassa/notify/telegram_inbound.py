@@ -212,10 +212,32 @@ async def _brain_reply(text: str, *, config) -> str:
         # cloud gateway (default). opencode boots a fresh runtime per call and flakes
         # under the long-running poller, so the chain backs it up — the owner always
         # gets an answer. The chain is the mockable ``_fallback_chain`` seam.
+        #
+        # ``telegram_provider`` pins the CHAT door's own provider (e.g. "default" —
+        # the fast API gateway) without touching the heartbeat seat that flows and
+        # hard work think with; empty/"auto" keeps the router's routine decision.
         attempts: list[tuple] = []
-        if decision.provider is not None:
-            attempts.append((decision.provider, decision.model))
-        attempts.extend(_fallback_chain(config, decision.provider))
+        pinned = (getattr(config, "telegram_provider", "") or "").strip().lower()
+        primary = decision.provider
+        if pinned and pinned != "auto":
+            try:
+                from lhassa.llm.provider import get_model_provider
+
+                primary = get_model_provider(config, name=pinned)
+            except Exception as exc:  # a bad pin degrades to the routine decision
+                logger.warning(
+                    f"Telegram inbound: telegram_provider {pinned!r} unresolvable "
+                    f"({exc}) — using the routine decision."
+                )
+                primary = decision.provider
+        if primary is not None:
+            model = (
+                decision.model
+                if primary is decision.provider
+                else router.pick_model(primary, hard=False, config=config)
+            )
+            attempts.append((primary, model))
+        attempts.extend(_fallback_chain(config, primary))
         if not attempts:
             raise ProviderNotConfigured("router resolved no provider for telegram turn")
 

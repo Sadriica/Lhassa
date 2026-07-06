@@ -40,7 +40,7 @@ from loguru import logger
 
 from lhassa.config import Config
 from lhassa.llm import router
-from lhassa.llm.provider import Completion, ModelProvider, get_model_provider
+from lhassa.llm.provider import Completion, ModelProvider
 from lhassa.memory import chica, facts as facts_mod
 from lhassa.memory.facts import Fact
 
@@ -60,13 +60,17 @@ def _resolve_instance(instance_id: str | None, config: Any) -> str:
 def _resolve_provider_model(
     provider: ModelProvider | None, model: str | None, config: Any
 ) -> tuple[ModelProvider, str]:
-    """Pick the CHEAP model on the chosen provider (default: the gateway provider).
+    """Pick the CHEAP model on the ROUTINE provider (the heartbeat seat).
 
-    ``model`` overrides the router; otherwise ``router.pick_model(hard=False)``
-    selects the cheap routine model. This is the single place the "cheap only"
-    rule is enforced.
+    The provider comes from ``router.pick_provider(hard=False)`` — the same
+    resolution every routine/heartbeat think uses — so ``heartbeat_provider``
+    (local / opencode / claude / codex / cloud) steers consolidation too, instead
+    of hardwiring the API gateway. ``model`` overrides the router; otherwise
+    ``router.pick_model(hard=False)`` selects the cheap routine model (for a CLI
+    provider that is its own-subscription marker, e.g. ``claude-cli``). This is
+    the single place the "cheap only" rule is enforced.
     """
-    provider = provider or get_model_provider(config)
+    provider = provider or router.pick_provider(sensitive=False, hard=False, config=config)
     model = model or router.pick_model(provider, hard=False, config=config)
     return provider, model
 

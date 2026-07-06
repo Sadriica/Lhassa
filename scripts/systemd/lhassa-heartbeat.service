@@ -17,3 +17,6 @@ After=graphical-session.target
 Type=oneshot
 WorkingDirectory=%h/Code/lhassa
 ExecStart=%h/Code/lhassa/scripts/lhassa-heartbeat
+# subscription CLIs (claude lives in ~/.local/bin) — the default user-service PATH
+# lacks it, and the routine think path (distill, judgment) shells those CLIs.
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin:/usr/local/sbin:/usr/sbin

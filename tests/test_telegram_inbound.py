@@ -319,6 +319,63 @@ def test_brain_falls_back_to_cloud_when_routine_provider_flakes(monkeypatch):
     assert len(cloud.calls) == 1
 
 
+def test_brain_reply_pins_the_telegram_chat_provider(monkeypatch):
+    # telegram_provider="default" answers the CHAT with the pinned (fast) provider
+    # instead of the router's routine decision — the heartbeat seat is untouched.
+    import lhassa.llm.provider as provider_mod
+    import lhassa.llm.router as router_mod
+
+    payload = {
+        "ok": True,
+        "result": [
+            {"update_id": 80, "message": {"chat": {"id": 123}, "text": "hola"}}
+        ],
+    }
+    monkeypatch.setattr(
+        telegram_inbound.httpx, "AsyncClient", _client_returning(payload)
+    )
+    routine = _patch_brain(monkeypatch, reply="routine says hi")
+    sent = _patch_send(monkeypatch)
+
+    pinned = _FakeProvider(reply="gateway says hi")
+    pinned.name = "default"
+    monkeypatch.setattr(
+        provider_mod, "get_model_provider", lambda config, name=None: pinned
+    )
+    monkeypatch.setattr(
+        router_mod, "pick_model", lambda p, *, hard, config: "cheap-model"
+    )
+    monkeypatch.setattr(telegram_inbound, "_fallback_chain", lambda config, primary: [])
+
+    cfg = _cfg(telegram_provider="default")
+    assert asyncio.run(telegram_inbound.poll_once(cfg, offset=None)) == 81
+    assert sent == ["gateway says hi"]
+    assert routine.calls == []  # the routine decision's provider never ran
+    assert pinned.calls and pinned.calls[0]["model"] == "cheap-model"
+
+
+def test_brain_reply_auto_keeps_the_routine_decision(monkeypatch):
+    # telegram_provider="auto" (or empty) → the router's routine decision answers,
+    # exactly as before the knob existed.
+    payload = {
+        "ok": True,
+        "result": [
+            {"update_id": 90, "message": {"chat": {"id": 123}, "text": "hola"}}
+        ],
+    }
+    monkeypatch.setattr(
+        telegram_inbound.httpx, "AsyncClient", _client_returning(payload)
+    )
+    routine = _patch_brain(monkeypatch, reply="routine says hi")
+    sent = _patch_send(monkeypatch)
+    monkeypatch.setattr(telegram_inbound, "_fallback_chain", lambda config, primary: [])
+
+    cfg = _cfg(telegram_provider="auto")
+    assert asyncio.run(telegram_inbound.poll_once(cfg, offset=None)) == 91
+    assert sent == ["routine says hi"]
+    assert len(routine.calls) == 1
+
+
 def test_poll_once_command_replies_without_brain(monkeypatch):
     # A slash command is answered locally by the command registry — the tool-less
     # brain think (provider.complete) must NOT run.

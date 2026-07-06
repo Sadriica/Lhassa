@@ -27,6 +27,9 @@ Environment=LHASSA_ORG_LIVE=1
 Environment=LHASSA_HEARTBEAT_PROVIDER=claude
 Environment=LHASSA_CLAUDE_MODEL=claude-sonnet-4-6
 Environment=LHASSA_CLI_TIMEOUT=400
+# subscription CLIs (claude lives in ~/.local/bin) — the default user-service PATH
+# lacks it, and without it the fallback chain silently skips the claude provider.
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin:/usr/local/sbin:/usr/sbin
 
 [Install]
 WantedBy=default.target
