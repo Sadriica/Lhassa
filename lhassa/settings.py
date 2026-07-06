@@ -387,6 +387,21 @@ EDITABLE: list[dict] = [
         "restart": RESTART_TELEGRAM,
     },
     {
+        "key": "telegram_history_turns",
+        "attr": "telegram_history_turns",
+        "env_var": "LHASSA_TELEGRAM_HISTORY_TURNS",
+        "type": "int",
+        "label": "Telegram chat history (turns kept)",
+        "help": (
+            "How many user+assistant PAIRS of a Telegram chat are kept in the "
+            "rolling in-memory history and threaded into the next brain think. "
+            "History is process-memory only — restarting the poller clears it."
+        ),
+        "group": "Surfaces",
+        "default": 8,
+        "restart": RESTART_TELEGRAM,
+    },
+    {
         "key": "telegram_provider",
         "attr": "telegram_provider",
         "env_var": "LHASSA_TELEGRAM_PROVIDER",

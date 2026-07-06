@@ -59,10 +59,13 @@ def _build_messages(trigger: "watchlist.Trigger", ctx: "memory_load.Context") ->
         '{"say":"respuesta verbal",'
         '"new_facts":[{"contenido":"...","tags":["etiqueta"]}],'
         '"new_tasks":[{"accion":"nombre_accion_fija","objetivo":"...","params":{}}],'
-        '"delegate":{"goal":"instruccion para la jerarquia org"}}\n'
+        '"delegate":{"goal":"instruccion para la jerarquia org"},'
+        '"script":"codigo python que llama lhassa_actions"}\n'
         "Restricciones: accion debe estar en el registro fijo de acciones; "
         "new_facts son solo tipo dato, nunca directiva ni pinned; máx 5 facts, 5 tasks. "
-        "Sin efectos: texto plano es válido."
+        "script: SOLO para cadenas de ≥3 acciones deterministas del registro — se "
+        "convierte en una tarea run_script que un humano aprueba antes de correr; "
+        "máx 1 por respuesta. Sin efectos: texto plano es válido."
     )
     return [{"role": "user", "content": body}]
 

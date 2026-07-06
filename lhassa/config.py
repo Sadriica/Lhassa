@@ -477,6 +477,27 @@ class Config:
     # fallback chain still backs a failing pick, so a bad value degrades, never breaks.
     telegram_provider: str = os.getenv("LHASSA_TELEGRAM_PROVIDER", "")
 
+    # ── Chat memory (rolling per-chat conversation history) ──────────────────
+    # How many user+assistant PAIRS of a Telegram chat are kept in the in-memory
+    # rolling history and threaded back into the next brain think as ``messages``
+    # (the deque itself effectively caps at 2x this many entries). Restarting the
+    # poller clears history (it is process-memory only, never persisted to disk).
+    telegram_history_turns: int = _safe_int(
+        os.getenv("LHASSA_TELEGRAM_HISTORY_TURNS", "8"), 8
+    )
+    # A history entry older than this many seconds is dropped on read (not
+    # necessarily evicted eagerly) — an old conversation never leaks into a new one.
+    telegram_history_ttl: float = _safe_float(
+        os.getenv("LHASSA_TELEGRAM_HISTORY_TTL", "7200"), 7200.0
+    )
+    # Every this many user turns, the chat system prompt gets one extra line
+    # nudging the model to mark a durable fact it learned about the owner with
+    # ``[[remember: ...]]`` (see notify/telegram_inbound.py). Not every turn, so
+    # the nudge doesn't dominate the instruction set.
+    chat_memory_nudge_turns: int = _safe_int(
+        os.getenv("LHASSA_CHAT_MEMORY_NUDGE_TURNS", "6"), 6
+    )
+
     # ── Phase 6 — heartbeat via opencode (no local model server needed) ───────
     # The owner has the opencode CLI (no Zen), so the routine/heartbeat thinking can
     # run through opencode instead of a local model server. ``OpenCodeProvider`` shells
