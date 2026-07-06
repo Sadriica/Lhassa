@@ -16,9 +16,11 @@ from lhassa.api import flow_routes
 @pytest.fixture
 def client(tmp_path, monkeypatch):
     import lhassa.config as config_mod
+    import lhassa.core.db as db
 
     monkeypatch.delenv("LHASSA_ORG_LIVE", raising=False)
     monkeypatch.setattr(config_mod.Config, "flows_file", str(tmp_path / "flows.json"))
+    monkeypatch.setattr(db, "DB_PATH", tmp_path / "brain.db")
     # A temp topology so a task node's auto-routing has something to route over.
     topo = tmp_path / "org.json"
     topo.write_text(
@@ -105,6 +107,10 @@ def test_get_missing_is_404(client):
 
 
 def test_run_endpoint_offline(client):
+    import asyncio
+    import lhassa.config as config_mod
+    import lhassa.core.db as db
+
     client.post("/api/flows", json=_sample())
     r = client.post("/api/flows/f1/run", json={"inputs": {"summary": "seed"}})
     assert r.status_code == 200, r.text
@@ -116,6 +122,16 @@ def test_run_endpoint_offline(client):
     # offline org stub ran (no live model)
     task = next(s for s in rec["steps"] if s["kind"] == "task")
     assert "[offline]" in task["result"]["summary"]
+    assert rec["id"]
+    assert rec["duration_ms"] >= 0
+    assert all("duration_ms" in s for s in rec["steps"])
+
+    runs = asyncio.run(db.list_runs(config_mod.Config.instance_id, kind="flow", entity_id="f1"))
+    assert len(runs) == 1
+    assert runs[0]["id"] == rec["id"]
+    steps = asyncio.run(db.list_run_steps(config_mod.Config.instance_id, rec["id"]))
+    assert [s["kind"] for s in steps] == ["trigger", "task", "output"]
+    assert steps[1]["entity_id"] == "optimization"
 
 
 def test_run_missing_flow_is_404(client):

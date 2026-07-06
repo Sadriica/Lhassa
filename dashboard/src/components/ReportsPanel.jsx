@@ -39,6 +39,7 @@ export default function ReportsPanel() {
   }, [load])
 
   const recent = reports?.recent || []
+  const reportTotal = Number(reports?.total ?? reports?.count ?? 0)
   const today = proj?.today
   const projection = proj?.projection
 
@@ -48,7 +49,9 @@ export default function ReportsPanel() {
         <h2 className="lh-card-title">
           Reports & projections
         </h2>
-        <span className="text-xs" style={{ color: 'var(--lh-text-muted)' }}>{reports?.count ?? 0} episodes</span>
+        <span className="text-xs" style={{ color: 'var(--lh-text-muted)' }}>
+          latest {reports?.count ?? 0} of {reportTotal} episodes
+        </span>
       </div>
 
       {loading ? (

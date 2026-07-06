@@ -19,7 +19,7 @@ function summarize(kind, config) {
 
 // ── custom node: one styled box per kind, handles per kind ──────────────────────
 export function FlowCanvasNode({ data, selected }) {
-  const { kind, label, config } = data
+  const { kind, label, config, stats } = data
   const m = kindMeta(kind)
   const rgb = m.rgb
   return (
@@ -63,6 +63,13 @@ export function FlowCanvasNode({ data, selected }) {
       <div style={{ fontSize: 10, marginTop: 1, color: 'var(--lh-text-faint)' }}>
         {summarize(kind, config)}
       </div>
+      {stats && stats.runs > 0 && (
+        <div className="flex gap-1 flex-wrap" style={{ marginTop: 6 }}>
+          <span className="lh-tag" style={{ fontSize: 8 }}>{stats.runs} runs</span>
+          <span className="lh-tag" style={{ fontSize: 8 }}>{stats.failures ? `${stats.failures} fail` : 'ok'}</span>
+          {stats.avgDuration && <span className="lh-tag" style={{ fontSize: 8 }}>{stats.avgDuration}</span>}
+        </div>
+      )}
       {m.hasSource && (
         <Handle
           type="source"

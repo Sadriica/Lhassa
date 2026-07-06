@@ -6,7 +6,7 @@ import { toast } from '../lib/toast'
 //
 //   GET /api/overview → {
 //     brains, skills, approvals:{pending,items[]}, cost, health, tools, errors,
-//     activity:{recent[]},
+//     activity:{recent[], total, last_24h, recent_limit, window},
 //     now_running:[{id,name,cli,task,status,started_at}],   // agentic runs in flight
 //     pulse:{last_beat, mode:'online'|'offline', alive},    // do-and-sleep pulse
 //     flows:{count, last_status}, runs_today:{done,stopped,failed},
@@ -268,6 +268,9 @@ export default function OverviewPanel() {
     [grouped, importantOnly],
   )
   const importantCount = useMemo(() => grouped.filter((g) => g.important).length, [grouped])
+  const activityTotal = Number(data?.activity?.total ?? grouped.length)
+  const activityWindowCount = Number(data?.activity?.last_24h ?? grouped.length)
+  const recentLimit = Number(data?.activity?.recent_limit ?? grouped.length)
 
   if (loading) {
     return (
@@ -562,12 +565,12 @@ export default function OverviewPanel() {
           pct={Math.min(100, Math.max(8, Number(runsToday.done + runsToday.stopped + runsToday.failed || 0) * 14))}
         />
         <StatCard
-          label="Activity"
+          label="Activity 24h"
           hash="activity"
-          value={fmtInt(importantCount)}
-          sub={`${grouped.length} logged rows`}
+          value={fmtInt(activityWindowCount)}
+          sub={`${fmtInt(activityTotal)} total · latest ${Math.min(recentLimit || grouped.length, grouped.length)} shown`}
           accent={importantCount ? 'var(--lh-accent-text)' : undefined}
-          pct={Math.min(100, Math.max(8, Number(grouped.length || 0) * 8))}
+          pct={Math.min(100, Math.max(8, Number(activityWindowCount || 0) * 8))}
         />
       </div>
 
@@ -631,7 +634,7 @@ export default function OverviewPanel() {
           <div className="flex items-center gap-2">
             <span className="lh-eyebrow">Decision log</span>
             <span className="lh-mono text-[10px]" style={{ color: 'var(--lh-text-faint)' }}>
-              {importantCount} important · {grouped.length} rows
+              {importantCount} important · latest {grouped.length} of {fmtInt(activityTotal)}
             </span>
           </div>
           <div className="flex items-center gap-1">

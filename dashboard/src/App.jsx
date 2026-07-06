@@ -14,9 +14,11 @@ import MemoryPanel from './components/MemoryPanel'
 import HistoryPanel from './components/HistoryPanel'
 import ScheduledPanel from './components/ScheduledPanel'
 import AuditPanel from './components/AuditPanel'
+import RecentEpisodesPanel from './components/RecentEpisodesPanel'
 import ApprovalQueuePanel from './components/ApprovalQueuePanel'
 import QuarantinePanel from './components/QuarantinePanel'
 import ReportsPanel from './components/ReportsPanel'
+import ExecutionAnalyticsPanel from './components/ExecutionAnalyticsPanel'
 import FleetPanel from './components/FleetPanel'
 import HealthPanel from './components/HealthPanel'
 import SettingsPanel from './components/SettingsPanel'
@@ -100,11 +102,14 @@ export default function App() {
         )}
 
         {section === 'reports' && (
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-            <ErrorBoundary><ReportsPanel /></ErrorBoundary>
-            <div className="space-y-4">
-              <ErrorBoundary><AIUsagePanel metrics={metrics} /></ErrorBoundary>
-              <ErrorBoundary><MetricsPanel metrics={metrics} /></ErrorBoundary>
+          <div className="space-y-4">
+            <ErrorBoundary><ExecutionAnalyticsPanel /></ErrorBoundary>
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+              <ErrorBoundary><ReportsPanel /></ErrorBoundary>
+              <div className="space-y-4">
+                <ErrorBoundary><AIUsagePanel metrics={metrics} /></ErrorBoundary>
+                <ErrorBoundary><MetricsPanel metrics={metrics} /></ErrorBoundary>
+              </div>
             </div>
           </div>
         )}
@@ -120,6 +125,7 @@ export default function App() {
           <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
             <div className="xl:col-span-2 space-y-4">
               <ErrorBoundary><AgentsPanel agents={agentList} /></ErrorBoundary>
+              <ErrorBoundary><RecentEpisodesPanel /></ErrorBoundary>
               <ErrorBoundary><HistoryPanel /></ErrorBoundary>
             </div>
             <div className="space-y-4">

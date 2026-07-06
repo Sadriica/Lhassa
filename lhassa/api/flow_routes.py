@@ -22,7 +22,10 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import APIRouter, Body, HTTPException
+from loguru import logger
 
+import lhassa.config as lhassa_config
+from lhassa.core import db
 from lhassa.flows.model import Flow, FlowValidationError
 from lhassa.flows.store import FlowStore
 from lhassa.org.delegate import delegate_flow
@@ -130,4 +133,77 @@ async def run_flow_endpoint(flow_id: str, body: dict | None = Body(default=None)
         # Convenience: a bare {"input": "<text>"} seeds the {input} placeholder.
         inputs = {"summary": body_dict.get("input")}
     company = body_dict.get("company")
-    return await delegate_flow(flow, inputs=inputs, company=company)
+    record = await delegate_flow(flow, inputs=inputs, company=company)
+    await _persist_flow_run(record, trigger=_trigger_from_inputs(inputs))
+    return record
+
+
+def _trigger_from_inputs(inputs: dict | None) -> str:
+    if isinstance(inputs, dict) and inputs.get("trigger"):
+        return str(inputs.get("trigger"))
+    return "manual"
+
+
+def _short(value, limit: int = 240) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        text = value
+    elif isinstance(value, dict):
+        text = str(value.get("summary") or value.get("output") or value)
+    else:
+        text = str(value)
+    text = " ".join(text.split())
+    return text[:limit]
+
+
+async def _persist_flow_run(record: dict, *, trigger: str = "manual") -> None:
+    """Persist the flow run for analytics, best-effort and never blocking."""
+    if not isinstance(record, dict):
+        return
+    try:
+        await db.init_db()
+        instance_id = lhassa_config.Config.instance_id
+        run_id = record.get("id") or record.get("run_id")
+        if not run_id:
+            return
+        await db.record_run({
+            "id": run_id,
+            "instance_id": instance_id,
+            "kind": "flow",
+            "entity_id": record.get("flow_id"),
+            "status": record.get("status") or "completed",
+            "trigger": trigger,
+            "summary": _short(record.get("output")),
+            "started_at": record.get("started_at"),
+            "finished_at": record.get("finished_at"),
+            "duration_ms": record.get("duration_ms") or 0,
+            "cost_usd": record.get("cost_usd") or 0.0,
+            "raw": record,
+        })
+        for idx, step in enumerate(record.get("steps") or []):
+            if not isinstance(step, dict):
+                continue
+            kind = step.get("kind") or ""
+            entity_id = step.get("brain") if kind == "task" else step.get("node")
+            result = step.get("result")
+            await db.record_run_step({
+                "instance_id": instance_id,
+                "run_id": run_id,
+                "idx": idx,
+                "kind": kind,
+                "entity_id": entity_id,
+                "status": step.get("status") or ("completed" if step.get("ok", True) else "failed"),
+                "started_at": step.get("started_at"),
+                "finished_at": step.get("finished_at"),
+                "duration_ms": step.get("duration_ms") or 0,
+                "cost_usd": step.get("cost_usd") or (
+                    result.get("cost_usd") if isinstance(result, dict) else 0.0
+                ),
+                "input_summary": _short(step.get("inputs") or step.get("goal")),
+                "output_summary": _short(result or step.get("output") or step.get("payload")),
+                "error": step.get("error"),
+                "raw": step,
+            })
+    except Exception as exc:
+        logger.debug("flows: analytics persistence skipped: {}", exc)

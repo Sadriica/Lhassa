@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ReactFlow,
   ReactFlowProvider,
@@ -15,6 +15,7 @@ import {
 import '@xyflow/react/dist/style.css'
 import { KINDS, kindMeta, freshNodeId } from './flowNodeKinds'
 import { toast } from '../lib/toast'
+import { fmtDuration, fmtPct } from '../lib/format'
 import { computeLayout, computeDisconnected } from './workflow/layout'
 import { pickAutoSource, describeWhen, edgeStyle } from './workflow/wiring'
 import { FlowCanvasNode } from './workflow/nodes'
@@ -42,13 +43,13 @@ const nodeTypes = { flowNode: FlowCanvasNode }
 // Build the initial React Flow node/edge arrays from a flow dict (with a computed
 // layout). Done once at mount — EditorInner is keyed by flow.id so a different flow
 // remounts fresh; no synchronous setState-in-effect hydration needed.
-function initialGraph(flow) {
+function initialGraph(flow, nodeStats = {}) {
   const pos = computeLayout(flow.nodes || [], flow.edges || [])
   const nodes = (flow.nodes || []).map((n) => ({
     id: n.id,
     type: 'flowNode',
     position: pos[n.id] || { x: 0, y: 0 },
-    data: { id: n.id, kind: n.kind, label: n.label || '', config: n.config || {} },
+    data: { id: n.id, kind: n.kind, label: n.label || '', config: n.config || {}, stats: nodeStats[n.id] },
   }))
   const edges = (flow.edges || []).map((e, i) => ({
     id: `e${i}-${e.from_node}-${e.to_node}`,
@@ -63,8 +64,88 @@ function initialGraph(flow) {
 }
 
 // ── the canvas + side rail ──────────────────────────────────────────────────────
-function EditorInner({ flow, skills, brains, isNew, onSave, onRun, onClose }) {
-  const initial = useMemo(() => initialGraph(flow), [flow])
+function nodeLabel(step) {
+  return step.node || step.entity_id || 'step'
+}
+
+function stepStatus(step) {
+  return step.status || (step.ok === false ? 'failed' : 'completed')
+}
+
+function buildNodeStats(flowRuns = []) {
+  const byNode = {}
+  for (const run of flowRuns) {
+    const steps = run.raw?.steps || []
+    for (const step of steps) {
+      const node = step.node
+      if (!node) continue
+      const bucket = byNode[node] || { runs: 0, failures: 0, durationMs: 0 }
+      bucket.runs += 1
+      bucket.durationMs += Number(step.duration_ms || 0)
+      if (stepStatus(step) !== 'completed') bucket.failures += 1
+      byNode[node] = bucket
+    }
+  }
+  for (const [node, stats] of Object.entries(byNode)) {
+    stats.avgDuration = stats.durationMs ? fmtDuration(stats.durationMs / stats.runs) : ''
+    byNode[node] = stats
+  }
+  return byNode
+}
+
+function EditorStats({ stats }) {
+  if (!stats) return null
+  return (
+    <div className="flex gap-1.5 flex-wrap">
+      <span className="lh-tag">{stats.runs || 0} runs</span>
+      <span className="lh-tag">{fmtPct(stats.success_rate)} success</span>
+      <span className="lh-tag">avg {fmtDuration(stats.avg_duration_ms)}</span>
+      {stats.last_status && <span className="lh-tag">last {stats.last_status}</span>}
+    </div>
+  )
+}
+
+function RunHistory({ runs = [] }) {
+  if (runs.length === 0) {
+    return (
+      <div className="lh-row" style={{ color: 'var(--lh-text-faint)' }}>
+        No runs recorded for this flow yet.
+      </div>
+    )
+  }
+  return (
+    <div className="space-y-2 max-h-72 overflow-y-auto">
+      {runs.slice(0, 8).map((item) => (
+        <div key={item.id} className="lh-row" style={{ background: 'var(--lh-surface-2)' }}>
+          <div className="flex items-center justify-between gap-2">
+            <div className="min-w-0">
+              <div className="flex items-center gap-1 flex-wrap">
+                <span className="lh-mono text-[10px]" style={{ color: 'var(--lh-text)' }}>{item.id}</span>
+                <span className="lh-tag">{item.status}</span>
+                <span className="lh-tag">{fmtDuration(item.duration_ms)}</span>
+              </div>
+              <div className="text-[10px] mt-1" style={{ color: 'var(--lh-text-faint)' }}>{item.started_at || '—'}</div>
+            </div>
+            <span className="lh-tag">{(item.raw?.steps || []).length} steps</span>
+          </div>
+          {(item.raw?.steps || []).length > 0 && (
+            <div className="mt-2 flex gap-1 flex-wrap">
+              {(item.raw.steps || []).slice(0, 6).map((step, idx) => (
+                <span key={`${item.id}-${idx}`} className="lh-tag">
+                  {nodeLabel(step)} · {stepStatus(step)}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function EditorInner({ flow, skills, brains, flowStats, flowRuns = [], isNew, onSave, onRun, onClose }) {
+  const nodeStats = useMemo(() => buildNodeStats(flowRuns), [flowRuns])
+  const initial = useMemo(() => initialGraph(flow, nodeStats), [flow, nodeStats])
   const [rfNodes, setRfNodes, onNodesChange] = useNodesState(initial.nodes)
   const [rfEdges, setRfEdges, onEdgesChange] = useEdgesState(initial.edges)
   const [name, setName] = useState(flow.name || '')
@@ -74,10 +155,16 @@ function EditorInner({ flow, skills, brains, isNew, onSave, onRun, onClose }) {
   const [saving, setSaving] = useState(false)
   const [running, setRunning] = useState(false)
   const [run, setRun] = useState(null)
+  const [runInput, setRunInput] = useState('')
+  const [runInputError, setRunInputError] = useState('')
   const wrapperRef = useRef(null)
   const { screenToFlowPosition, fitView } = useReactFlow()
 
   const triggerCount = useMemo(() => rfNodes.filter((n) => n.data.kind === 'trigger').length, [rfNodes])
+
+  useEffect(() => {
+    setRfNodes((nds) => nds.map((n) => ({ ...n, data: { ...n.data, stats: nodeStats[n.id] } })))
+  }, [nodeStats, setRfNodes])
 
   // Nodes that can't be reached from the trigger — surfaced as a non-blocking
   // warning so a visually-"connected" flow can't be saved silently disconnected.
@@ -205,12 +292,23 @@ function EditorInner({ flow, skills, brains, isNew, onSave, onRun, onClose }) {
   }, [onSave, buildFlow, isNew])
 
   const doRun = useCallback(async () => {
+    let inputs = {}
+    if (runInput.trim()) {
+      try {
+        inputs = JSON.parse(runInput)
+        if (!inputs || typeof inputs !== 'object' || Array.isArray(inputs)) throw new Error('object expected')
+        setRunInputError('')
+      } catch {
+        setRunInputError('Run input must be a JSON object.')
+        return
+      }
+    }
     setRunning(true)
     setRun(null)
     // Persist the canvas first so the stored flow matches what the owner sees.
     const saved = await doSave()
     if (!saved.ok) { setRunning(false); return }
-    const res = await onRun(flow.id)
+    const res = await onRun(flow.id, inputs)
     setRunning(false)
     if (res.ok) {
       setRun(res.run)
@@ -218,7 +316,7 @@ function EditorInner({ flow, skills, brains, isNew, onSave, onRun, onClose }) {
     } else {
       toast.error(res.detail || 'Run failed')
     }
-  }, [doSave, onRun, flow.id])
+  }, [doSave, onRun, flow.id, runInput])
 
   const selectedNode = rfNodes.find((n) => n.id === selNode) || null
   const selectedEdge = rfEdges.find((e) => e.id === selEdge) || null
@@ -245,6 +343,7 @@ function EditorInner({ flow, skills, brains, isNew, onSave, onRun, onClose }) {
             onChange={(e) => setDescription(e.target.value)}
           />
           <span className="lh-mono text-[10px]" style={{ color: 'var(--lh-text-faint)' }}>{flow.id}</span>
+          <EditorStats stats={flowStats} />
         </div>
         <div className="flex gap-2 items-center">
           <button type="button" className="lh-btn lh-btn-primary" onClick={doSave} disabled={saving}>
@@ -360,6 +459,21 @@ function EditorInner({ flow, skills, brains, isNew, onSave, onRun, onClose }) {
             </p>
           )}
 
+          <div className="pt-2" style={{ borderTop: '1px solid var(--lh-border)' }}>
+            <div className="lh-label mb-1">run input</div>
+            <textarea
+              className="lh-input lh-mono"
+              rows={4}
+              value={runInput}
+              placeholder='{"summary":"seed input"}'
+              onChange={(e) => { setRunInput(e.target.value); setRunInputError('') }}
+            />
+            {runInputError && <div className="text-[10px] mt-1" style={{ color: 'var(--lh-alert)' }}>{runInputError}</div>}
+            <div className="text-[10px] mt-1" style={{ color: 'var(--lh-text-faint)' }}>
+              Empty input runs with <span className="lh-mono">{'{}'}</span>. JSON is sent as <span className="lh-mono">inputs</span>.
+            </div>
+          </div>
+
           {(run || running) && (
             <div className="pt-2" style={{ borderTop: '1px solid var(--lh-border)' }}>
               {running ? (
@@ -369,6 +483,11 @@ function EditorInner({ flow, skills, brains, isNew, onSave, onRun, onClose }) {
               )}
             </div>
           )}
+
+          <div className="pt-2" style={{ borderTop: '1px solid var(--lh-border)' }}>
+            <div className="lh-label mb-2">run history</div>
+            <RunHistory runs={flowRuns} />
+          </div>
         </div>
       </div>
     </div>

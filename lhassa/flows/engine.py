@@ -48,7 +48,9 @@ A structured run record::
 from __future__ import annotations
 
 import os
+import time
 import uuid
+from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable, Optional
 
 from loguru import logger
@@ -62,6 +64,14 @@ Executor = Callable[..., Awaitable[dict]]
 
 _TRUTHY = {"1", "true", "yes", "on"}
 _MAX_STEPS_FACTOR = 4  # hard cap = nodes * factor + 8, defends against runaway walks
+
+
+def _iso_now() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _elapsed_ms(start: float) -> int:
+    return max(0, int((time.perf_counter() - start) * 1000))
 
 
 def _live_enabled() -> bool:
@@ -387,16 +397,24 @@ async def run_flow(
             base_cv = ""
     resolved_company = resolve_company(company, inputs)
     run_id = uuid.uuid4().hex
+    run_started = _iso_now()
+    run_started_perf = time.perf_counter()
 
     # Validate up front — an invalid graph is a single failed run record, not a crash.
     try:
         flow.validate()
         start = flow.trigger()
     except Exception as exc:
+        finished = _iso_now()
         return {
+            "id": run_id,
             "flow_id": getattr(flow, "id", None),
             "status": "failed",
-            "steps": [{"node": None, "kind": None, "ok": False, "error": str(exc)}],
+            "started_at": run_started,
+            "finished_at": finished,
+            "duration_ms": _elapsed_ms(run_started_perf),
+            "cost_usd": 0.0,
+            "steps": [{"node": None, "kind": None, "ok": False, "status": "failed", "error": str(exc)}],
             "output": None,
         }
 
@@ -415,7 +433,15 @@ async def run_flow(
         visited.add(node_id)
         node = flow.node(node_id)
 
-        step: dict = {"node": node.id, "kind": node.kind.value, "ok": True}
+        step_started = _iso_now()
+        step_started_perf = time.perf_counter()
+        step: dict = {
+            "node": node.id,
+            "kind": node.kind.value,
+            "ok": True,
+            "status": "completed",
+            "started_at": step_started,
+        }
         data_out: Any = data
         passed = True  # only gates can set this False
         try:
@@ -444,11 +470,21 @@ async def run_flow(
                 step["branch"] = True
         except Exception as exc:  # a node error is a failed step; the path stops here
             step["ok"] = False
+            step["status"] = "failed"
             step["error"] = str(exc)
+            step["finished_at"] = _iso_now()
+            step["duration_ms"] = _elapsed_ms(step_started_perf)
             failed = True
             steps.append(step)
             logger.warning("flows: node {} failed: {}", node.id, exc)
             continue
+
+        if node.kind == NodeKind.GATE and step.get("needs_approval"):
+            step["status"] = "needs_approval"
+        step["finished_at"] = _iso_now()
+        step["duration_ms"] = _elapsed_ms(step_started_perf)
+        if node.kind == NodeKind.TASK and isinstance(step.get("result"), dict):
+            step["cost_usd"] = float(step["result"].get("cost_usd") or 0.0)
 
         steps.append(step)
         final_data = data_out
@@ -472,7 +508,18 @@ async def run_flow(
 
     status = "failed" if failed else "completed"
     output = last_output if last_output is not None else _safe(final_data)
-    return {"flow_id": flow.id, "status": status, "steps": steps, "output": output}
+    cost_usd = sum(float(s.get("cost_usd") or 0.0) for s in steps)
+    return {
+        "id": run_id,
+        "flow_id": flow.id,
+        "status": status,
+        "started_at": run_started,
+        "finished_at": _iso_now(),
+        "duration_ms": _elapsed_ms(run_started_perf),
+        "cost_usd": round(cost_usd, 6),
+        "steps": steps,
+        "output": output,
+    }
 
 
 def _edge_ctx(step: dict, data_out: Any) -> dict:

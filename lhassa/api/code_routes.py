@@ -29,6 +29,7 @@ keyed by the returned ``run_id``.
 
 import asyncio
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import APIRouter
@@ -37,6 +38,8 @@ from loguru import logger
 from pydantic import BaseModel
 
 from lhassa.agents import local_cli
+import lhassa.config as lhassa_config
+from lhassa.core import db
 from lhassa.state import AgentRun, state
 
 router = APIRouter()
@@ -95,6 +98,7 @@ async def stop_code(run_id: str) -> dict:
         await local_cli.stop_run(run_id)
         await state.broadcast({"type": "agent_stopped", "run_id": run_id})
         await state.broadcast({"type": "agent_done", "run_id": run_id, "output": run.output})
+        await _persist_agent_run(run)
         return {"ok": True, "run_id": run_id, "stopped": True}
     except Exception as e:  # a stop must never surface as a 500
         logger.error(f"[code] stop failed for run_id={run_id!r}: {e}")
@@ -150,6 +154,7 @@ async def _stream_run(agent, run_id: str, run: AgentRun, task: str) -> None:
         cwd = _agent_cwd()
         result = await agent._invoke(run_id, run, task, cwd)
         state.finish_agent(run_id, result, success=True)
+        await _persist_agent_run(run)
         await state.broadcast({"type": "agent_done", "run_id": run_id, "output": result})
     except asyncio.CancelledError:
         state.finish_agent(run_id, run.output or "(cancelled)", success=False)
@@ -157,6 +162,7 @@ async def _stream_run(agent, run_id: str, run: AgentRun, task: str) -> None:
     except Exception as e:
         logger.error(f"[code/{getattr(agent, 'cli', '?')}] {e}")
         state.finish_agent(run_id, str(e), success=False)
+        await _persist_agent_run(run)
         await state.broadcast({"type": "agent_error", "run_id": run_id, "error": str(e)})
 
 
@@ -169,3 +175,44 @@ def _agent_cwd() -> Path:
         return Path(agent_dir).expanduser() if agent_dir else Path.cwd()
     except Exception:
         return Path.cwd()
+
+
+def _iso_from_ts(value: float | None) -> str | None:
+    if not value:
+        return None
+    return datetime.fromtimestamp(float(value), tz=timezone.utc).isoformat()
+
+
+async def _persist_agent_run(run: AgentRun) -> None:
+    """Persist a completed/stopped CLI run for durable analytics, best-effort."""
+    try:
+        await db.init_db()
+        started = _iso_from_ts(run.started_at)
+        finished = _iso_from_ts(run.finished_at)
+        duration_ms = 0
+        if run.started_at and run.finished_at and run.finished_at >= run.started_at:
+            duration_ms = int((run.finished_at - run.started_at) * 1000)
+        await db.record_run({
+            "id": run.id,
+            "instance_id": lhassa_config.Config.instance_id,
+            "kind": "cli",
+            "entity_id": run.cli or local_cli.detect_ai_cli() or run.name,
+            "status": run.status,
+            "trigger": "manual",
+            "summary": (run.task or "")[:240],
+            "started_at": started,
+            "finished_at": finished,
+            "duration_ms": duration_ms,
+            "raw": {
+                "id": run.id,
+                "name": run.name,
+                "cli": run.cli,
+                "status": run.status,
+                "task": run.task,
+                "output": (run.output or "")[-2000:],
+                "started_at": run.started_at,
+                "finished_at": run.finished_at,
+            },
+        })
+    except Exception as exc:
+        logger.debug("[code] analytics persistence skipped for run_id={!r}: {}", run.id, exc)
