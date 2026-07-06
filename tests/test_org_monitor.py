@@ -93,6 +93,86 @@ async def test_gather_signals_picks_up_episodes_failures_and_approvals(
 
 
 @pytest.mark.asyncio
+async def test_failures_ignore_the_monitors_own_episodes(tmp_path, monkeypatch):
+    """The watcher's own episodes quote failure counts — counting them would have
+    the monitor alerting on its own reflection, forever."""
+    await _init_db(tmp_path, monkeypatch)
+    from lhassa.core.episode import Episode
+    from lhassa.org.monitor import gather_signals
+
+    watch = Episode.begin("monitor", "inst_personal").finish(
+        decision="monitor: watch", resultado="1 event(s): 2 new failure(s) (total 5)"
+    )
+    await watch.append()
+    offline = Episode.begin("monitor", "inst_personal").finish(
+        decision="monitor: offline", resultado="2 risk(s), 2 improvement(s)"
+    )
+    await offline.append()
+
+    signals = gather_signals(_cfg(tmp_path), instance_id="inst_personal")
+    assert len(signals["episodes"]) == 2
+    assert signals["failures"] == []
+
+
+@pytest.mark.asyncio
+async def test_failures_ignore_prose_in_a_completed_think(tmp_path, monkeypatch):
+    """A successful think's resultado is model prose — "error"/"fail" in the TEXT is
+    content, not outcome. A think that failed marks it in the decision itself."""
+    await _init_db(tmp_path, monkeypatch)
+    from lhassa.core.episode import Episode
+    from lhassa.org.monitor import gather_signals
+
+    prose = Episode.begin("org", "inst_personal").finish(
+        decision="think: provider=default model=m",
+        resultado="Rejection risks + fixes: the CV may fail ATS keyword error checks…",
+    )
+    await prose.append()
+    failed = Episode.begin("telegram", "inst_personal").finish(
+        decision="telegram: error", resultado="error: AttributeError: …"
+    )
+    await failed.append()
+
+    signals = gather_signals(_cfg(tmp_path), instance_id="inst_personal")
+    assert len(signals["failures"]) == 1
+    assert signals["failures"][0]["decision"] == "telegram: error"
+
+
+@pytest.mark.asyncio
+async def test_failures_only_count_while_fresh(tmp_path, monkeypatch):
+    """A failure older than monitor_failure_window_h ages OUT of the signal — the
+    alert's "total N" means "N current", not "N ever seen in the window"."""
+    from datetime import datetime, timedelta, timezone
+
+    db = await _init_db(tmp_path, monkeypatch)
+    from lhassa.core.episode import Episode
+    from lhassa.org.monitor import gather_signals
+
+    stale = Episode.begin("org", "inst_personal").finish(
+        decision="org: error", resultado="it errored days ago"
+    )
+    stale.creado_en = (
+        datetime.now(timezone.utc) - timedelta(hours=48)
+    ).isoformat()
+    await stale.append()
+    fresh = Episode.begin("org", "inst_personal").finish(
+        decision="org: error", resultado="it errored just now"
+    )
+    await fresh.append()
+
+    cfg = _cfg(tmp_path)
+    cfg.monitor_failure_window_h = 24.0
+    signals = gather_signals(cfg, instance_id="inst_personal")
+    assert len(signals["failures"]) == 1
+    assert signals["failures"][0]["resultado"] == "it errored just now"
+
+    # window 0 → no age cutoff: both count again
+    cfg.monitor_failure_window_h = 0.0
+    signals = gather_signals(cfg, instance_id="inst_personal")
+    assert len(signals["failures"]) == 2
+    _ = db  # keep the tmp DB alive through the reads
+
+
+@pytest.mark.asyncio
 async def test_gather_signals_reads_health_and_flows(tmp_path, monkeypatch):
     await _init_db(tmp_path, monkeypatch)
     from lhassa.org.monitor import gather_signals
