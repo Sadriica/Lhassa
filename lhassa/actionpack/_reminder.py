@@ -1,8 +1,9 @@
 """The ``send_reminder`` action — delivers a reminder minted by ``schedule_reminder``.
 
-A thin ``(params) -> str`` wrapper over :func:`lhassa.notify.dispatch.notify`, in
-the same shape as ``actionpack/_digest.py``/``actionpack/_brain.py:notify`` — every
-action is a plain callable, never raises, returns a short outcome string.
+A thin ``(params) -> str`` wrapper over :func:`lhassa.org.deliver.deliver` (the
+sender-of-record seam, §org: "the hierarchy is the philosophy, not a feature") — a
+reminder has no owning department (it is Lhassa's own hand, not delegated work), so
+it takes the empty ``origin_department`` root-only hop, same as ``research_reply``.
 
 This is the fixed action side of the reminder path: the voice/CLI/Telegram
 ``schedule_reminder`` tool (``tools/handlers/schedule.py``) mints a
@@ -15,7 +16,7 @@ observable as a normal Episode. See ``doc/scheduler.md``.
 
 from __future__ import annotations
 
-from lhassa.notify.dispatch import notify as _notify
+from lhassa.org.deliver import deliver as _deliver
 
 
 async def send_reminder(params: dict) -> str:
@@ -33,7 +34,9 @@ async def send_reminder(params: dict) -> str:
         if not text:
             return "send_reminder: no text"
 
-        delivered = await _notify(text, level="info")
+        delivered, _artifact_id = await _deliver(
+            text=text, kind="reminder", origin_department=""
+        )
         return "send_reminder: delivered" if delivered else "send_reminder: no channel delivered"
 
     except Exception as exc:

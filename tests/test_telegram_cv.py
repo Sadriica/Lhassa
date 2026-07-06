@@ -793,3 +793,100 @@ def test_reply_falls_back_to_tex_when_compile_fails(monkeypatch, tmp_path):
     assert len(sent_docs) == 1
     assert sent_docs[0]["path"] == str(tex)  # fell back to the raw .tex
     assert "Acme" in sent_docs[0]["caption"]
+
+
+# ── THE flagship migration: the tailored CV travels UP the org chain ──────────
+# (§org: "the hierarchy is the philosophy, not a feature" — a surface-direct send
+# is a design bug). ``_reply_with_cv`` now goes through ``org.deliver.deliver``
+# instead of calling ``telegram_api.send_document`` itself: every brain on the
+# command chain (the owning department, then Lhassa) logs its own ``org-deliver``
+# Episode, and Lhassa is the one that actually sends.
+def test_cv_reply_writes_the_per_brain_delivery_chain(monkeypatch, tmp_path):
+    from lhassa.core import db
+    from lhassa.org import topology as topo_mod
+    from lhassa.org.topology import BrainNode, Topology
+
+    monkeypatch.setattr(db, "DB_PATH", tmp_path / "brain.db")
+    asyncio.run(db.init_db())
+
+    # A minimal seeded topology: lhassa (root admin) -> interns (department leaf).
+    monkeypatch.setattr(
+        topo_mod,
+        "load_topology",
+        lambda config=None: Topology(
+            [
+                BrainNode(id="lhassa", role="administrator"),
+                BrainNode(
+                    id="interns", role="department", department="interns", parent="lhassa"
+                ),
+            ]
+        ),
+    )
+
+    tex = tmp_path / "ab12_acme.tex"
+    tex.write_text("% tailored", encoding="utf-8")
+    monkeypatch.setattr(cv, "compile_pdf", lambda p: None)  # no engine -> send the .tex
+
+    sent_docs = []
+
+    async def _fake_send_document(path, *, caption="", config=None):
+        sent_docs.append({"path": str(path), "caption": caption})
+        return True
+
+    monkeypatch.setattr(telegram_api, "send_document", _fake_send_document)
+
+    record = {
+        "id": "run_xyz789",
+        "status": "completed",
+        "steps": [{"kind": "output", "output": "tex", "path": str(tex)}],
+        "delegation": {"chain": ["lhassa", "interns"], "department": "interns"},
+    }
+
+    asyncio.run(
+        telegram_inbound._reply_with_cv(
+            record,
+            "flow-zvzpry",
+            "Acme",
+            config=_cfg(instance_id="inst_personal"),
+            posting="Backend role @ Acme",
+        )
+    )
+
+    # The final outcome: exactly the same file/caption the owner used to get
+    # directly from ``telegram_api.send_document`` — UX is byte-for-byte identical.
+    assert sent_docs == [{"path": str(tex), "caption": "Tailored CV for Acme."}]
+
+    rows = asyncio.run(db.load_recent_episodes("inst_personal", n=100))
+    rows.reverse()  # oldest first
+    eps = [r for r in rows if r["despertar_por"] == "org-deliver"]
+
+    # One hop for the department that produced it, one for Lhassa's intent to
+    # deliver, and one for the actual send outcome.
+    assert [e["dominio"] for e in eps] == ["interns", "lhassa", "lhassa"]
+    dept_hop, root_intent, root_final = eps
+
+    # The department hop names the file it received and forwards up, plus the
+    # company metadata threaded through from the CV bridge.
+    assert "received from interns" in dept_hop["resultado"]
+    assert "ab12_acme.tex" in dept_hop["resultado"]
+    assert "company=Acme" in dept_hop["resultado"]
+    assert "forwarding ↑ lhassa" in dept_hop["resultado"]
+
+    # Lhassa's own hop names the artifact and its intent to deliver to the owner.
+    assert "artifact" in root_intent["resultado"]
+    assert "ab12_acme.tex" in root_intent["resultado"]
+    assert "delivering" in root_intent["resultado"]
+
+    # The final outcome episode is honest: it happened, and it worked.
+    assert root_final["resultado"] == "delivered: ab12_acme.tex → owner (telegram, ok)"
+
+    # The artifact itself was registered with the CV's metadata.
+    from lhassa.core import artifacts
+
+    artifact_rows = asyncio.run(artifacts.list_artifacts("inst_personal"))
+    assert len(artifact_rows) == 1
+    assert artifact_rows[0]["kind"] == "cv"
+    assert artifact_rows[0]["origin_department"] == "interns"
+    assert artifact_rows[0]["metadata"]["company"] == "Acme"
+    assert artifact_rows[0]["metadata"]["posting"] == "Backend role @ Acme"
+    assert artifact_rows[0]["metadata"]["run_id"] == "run_xyz789"
