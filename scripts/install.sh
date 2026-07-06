@@ -154,8 +154,10 @@ install_services() {
     local u
     for u in "${units[@]}"; do
         if [ -f "$SYSTEMD_SRC/$u" ]; then
-            cp "$SYSTEMD_SRC/$u" "$SYSTEMD_DST/$u"
-            ok "copied $u"
+            # The repo units assume the reference checkout path (%h/Code/lhassa);
+            # template in THIS clone's real location so any checkout path works.
+            sed "s|%h/Code/lhassa|$REPO_ROOT|g" "$SYSTEMD_SRC/$u" > "$SYSTEMD_DST/$u"
+            ok "installed $u (repo path → $REPO_ROOT)"
         else
             warn "unit not found in repo, skipping: $u"
         fi
