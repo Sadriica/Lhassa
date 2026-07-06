@@ -323,13 +323,13 @@ def test_describe_code_run():
                 "accion": "code_run",
                 "task": "fix the failing test in tests/test_x.py",
                 "cli": "claude",
-                "cwd": "/home/w/Code/lhassa",
+                "cwd": "/home/owner/Code/lhassa",
             },
         }
     )
     assert desc["title"] == "Run a coding agent: fix the failing test in tests/test_x.py"
     assert "claude" in desc["detail"]
-    assert "/home/w/Code/lhassa" in desc["detail"]
+    assert "/home/owner/Code/lhassa" in desc["detail"]
     assert "write access" in desc["detail"]
 
 

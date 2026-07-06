@@ -296,7 +296,7 @@ department, e.g. the CV flow → `interns`), walks the command path `lhassa → 
 one **deterministic, $0, never-LLM** `org-delegate` Episode, then runs the flow (lazy import,
 no org↔flows cycle). It NEVER blocks the work — a topology failure degrades to a direct run.
 The hierarchy hops are deterministic on purpose: sovereignty + a full audit trail at no extra
-token cost. The "Impossible-to-reject CV" flow (`flow-zvzpry`) is the live exemplar — driven
+token cost. The "Impossible-to-reject CV" flow (created by the `cv` seed) is the live exemplar — driven
 from Telegram (`/cv <posting>` → tailors the on-disk `cv_largo.tex` → replies with a
 tectonic-compiled PDF), guarded by a `contact_preserved` gate (an objective, LLM-free árbitro
 that fails if the model altered the candidate's email/phone).

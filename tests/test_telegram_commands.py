@@ -652,14 +652,14 @@ def test_org_degrades_on_failure(monkeypatch):
 def test_fleet_lists_known_machines(monkeypatch):
     async def _fake_get_fleet():
         return [
-            {"machine_id": "samos", "last_checkin": "2026-07-01T00:00:00Z", "desired_state": {"mode": "on"}},
+            {"machine_id": "laptop-01", "last_checkin": "2026-07-01T00:00:00Z", "desired_state": {"mode": "on"}},
         ]
 
     import lhassa.api.fleet_routes as fleet_routes
 
     monkeypatch.setattr(fleet_routes, "get_fleet", _fake_get_fleet)
     reply = asyncio.run(commands.dispatch("/fleet", config=_cfg()))
-    assert "samos" in reply
+    assert "laptop-01" in reply
     assert "mode=on" in reply
 
 
