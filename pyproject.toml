@@ -1,6 +1,6 @@
 [project]
 name = "lhassa"
-version = "0.4.0"
+version = "0.8.0"
 description = "Lhassa — a personal do-and-sleep AI brain: a heartbeat loop that orchestrates models and harnesses behind interfaces, with memory, an organizational layer, and CLI / Telegram / dashboard / voice surfaces"
 requires-python = ">=3.13"
 dependencies = [

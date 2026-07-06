@@ -42,26 +42,27 @@ def test_load_base_reads_the_file(cv_dir):
 
 
 # ── export ──────────────────────────────────────────────────────────────────────
-def test_export_writes_to_out_with_id_company_name(cv_dir):
+def test_export_writes_to_a_per_run_folder(cv_dir):
     path = cv.export("hello tex", company="Acme Backend", run_id="run-123")
-    assert path.parent == paths.out_dir()
+    # out/{id}_{company}/{company}.tex — every run's artifacts live together
+    assert path.parent.parent == paths.out_dir()
+    assert path.parent.name.endswith("_acme-backend")
+    assert path.name == "acme-backend.tex"
     assert path.exists()
     assert path.read_text(encoding="utf-8") == "hello tex"
-    # {id}_{company}.tex — a short id, an underscore, the company slug, .tex
-    assert path.name.endswith("_acme-backend.tex")
-    ident = path.name.split("_", 1)[0]
+    ident = path.parent.name.split("_", 1)[0]
     assert 3 <= len(ident) <= 6 and ident.isalnum()
 
 
 def test_export_run_id_makes_the_name_stable(cv_dir):
     a = cv.export("x", company="Acme", run_id="same")
     b = cv.export("y", company="Acme", run_id="same")
-    assert a.name == b.name  # same run id → same id slug (overwritten atomically)
+    assert a == b  # same run id → same folder + name (overwritten atomically)
 
 
 def test_export_untitled_when_no_company(cv_dir):
     path = cv.export("x", company=None)
-    assert path.name.endswith("_untitled.tex")
+    assert path.parent.name.endswith("_untitled") and path.name == "untitled.tex"
 
 
 def test_short_id_is_deterministic_per_seed(cv_dir):
@@ -111,11 +112,11 @@ async def test_engine_offline_run_exports_tex_with_company_override(cv_dir):
     out_step = next(s for s in rec["steps"] if s["kind"] == "output")
     assert out_step["output"] == "tex"
     written = out_step["path"]
-    assert written.endswith("_acme-backend.tex")
+    assert written.endswith("acme-backend.tex")
     from pathlib import Path
 
     p = Path(written)
-    assert p.exists() and p.parent == paths.out_dir()
+    assert p.exists() and p.parent.parent == paths.out_dir()
     assert "tailored tex" in p.read_text(encoding="utf-8")
 
 

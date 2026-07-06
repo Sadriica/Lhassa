@@ -79,14 +79,20 @@ def short_id(seed: Optional[str] = None) -> str:
 
 
 def export(content: str, *, company: Optional[str], run_id: Optional[str] = None) -> Path:
-    """Write ``content`` to ``out/{id}_{slug_company(company)}.tex`` and return the path.
+    """Write ``content`` to ``out/{id}_{company}/{company}.tex`` and return the path.
 
-    The id is derived from ``run_id`` when given (stable per run), else fresh. The
-    write is ATOMIC (temp file in the same directory + ``os.replace``), so an
-    interrupted write never leaves a half-written export.
+    Every run gets its OWN folder (``out/{id}_{slug}/``), so a run's artifacts —
+    the ``.tex`` and the PDF the compiler writes next to it — live together and
+    successive runs never shadow each other's files. The id is derived from
+    ``run_id`` when given (stable per run), else fresh. The write is ATOMIC
+    (temp file in the same directory + ``os.replace``), so an interrupted write
+    never leaves a half-written export.
     """
     ident = short_id(run_id)
-    dest = out_dir() / f"{ident}_{slug_company(company)}.tex"
+    slug = slug_company(company)
+    run_dir = out_dir() / f"{ident}_{slug}"
+    run_dir.mkdir(parents=True, exist_ok=True)
+    dest = run_dir / f"{slug}.tex"
     payload = content if isinstance(content, str) else str(content)
     fd, tmp_name = tempfile.mkstemp(dir=str(dest.parent), prefix=".cv-", suffix=".tmp")
     try:
