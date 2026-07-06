@@ -283,6 +283,35 @@ DESCRIPTIONS: dict[str, str] = {
 }
 
 
+def menu_entries() -> list[tuple[str, str]]:
+    """The bot-menu command list for Telegram's ``setMyCommands`` — one source.
+
+    Built from the SAME registry + descriptions ``/help`` renders, so the menu
+    can never drift from what actually answers: every described command first
+    (curated order), then any registered-but-undescribed command (a plugin's,
+    for example) with a generic line. Telegram constraints applied here:
+    lowercase ``a-z0-9_`` names only, descriptions clamped to 3–256 chars.
+    """
+    entries: list[tuple[str, str]] = []
+    seen: set[str] = set()
+
+    def _desc(text: str) -> str:
+        text = " ".join((text or "").split()) or "A Lhassa command."
+        if len(text) < 3:
+            text = f"{text} — a Lhassa command."
+        return text[:256]
+
+    registered = set(COMMANDS.names())
+    for name, desc in DESCRIPTIONS.items():
+        if name in registered and re.fullmatch(r"[a-z0-9_]{1,32}", name):
+            entries.append((name, _desc(desc)))
+            seen.add(name)
+    for name in sorted(registered - seen):
+        if re.fullmatch(r"[a-z0-9_]{1,32}", name):
+            entries.append((name, "A Lhassa command — /help describes it."))
+    return entries
+
+
 @register_command("help")
 async def _cmd_help(args: str, *, config=None) -> str:
     """A grouped catalog of every command, kept in sync with COMMANDS at runtime.

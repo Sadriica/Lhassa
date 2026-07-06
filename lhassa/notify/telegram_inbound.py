@@ -1261,16 +1261,13 @@ async def run_forever(config=None) -> None:
     with contextlib.suppress(Exception):
         from lhassa.notify import telegram_api
 
-        await telegram_api.set_my_commands(
-            [
-                ("cv", "Tailor your CV to a job posting"),
-                ("cvnewbase", "Replace the base CV with your next upload"),
-                ("cvbase", "Show the base CV on file"),
-                ("status", "Brain status"),
-                ("help", "Help"),
-            ],
-            config=config,
-        )
+        # The menu IS the registry: every registered command (described first,
+        # curated order — commands.menu_entries shares /help's one source), plus
+        # /cv, the bridge command handled ahead of the registry in _answer, so
+        # it is not in COMMANDS but very much answers.
+        menu = [("cv", "Tailor your CV to a job posting")]
+        menu.extend(commands.menu_entries())
+        await telegram_api.set_my_commands(menu, config=config)
 
     offset = None
     backoff = _BACKOFF_START
