@@ -704,3 +704,33 @@ def test_version_degrades_on_failure(monkeypatch):
     monkeypatch.setattr(extra_cmds, "version_info", _boom)
     reply = asyncio.run(commands.dispatch("/version", config=_cfg()))
     assert "couldn't" in reply
+
+
+# ── the bot menu is the registry (setMyCommands source) ───────────────────────────
+
+
+def test_menu_entries_cover_every_registered_command():
+    """The Telegram menu can never drift from the registry: every registered
+    command appears, described ones first, undescribed ones with a fallback."""
+    entries = commands.menu_entries()
+    names = [n for n, _ in entries]
+    assert set(names) >= set(commands.COMMANDS.names())
+    # descriptions satisfy Telegram's constraints
+    import re as _re
+
+    for name, desc in entries:
+        assert _re.fullmatch(r"[a-z0-9_]{1,32}", name)
+        assert 3 <= len(desc) <= 256
+
+
+def test_menu_entries_fallback_for_undescribed(monkeypatch):
+    async def dummy(args, *, config=None):
+        return "ok"
+
+    commands.register_command("zzmenutest", dummy)
+    try:
+        entries = dict(commands.menu_entries())
+        assert "zzmenutest" in entries
+        assert "help" in entries["zzmenutest"]  # the generic fallback line
+    finally:
+        commands.COMMANDS._items.pop("zzmenutest", None)
