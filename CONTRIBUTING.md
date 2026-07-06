@@ -17,6 +17,11 @@ questions and PRs are welcome — small and focused beats large and sweeping.
    monitor, the digest template and routing never call a model. Thinking is
    the exception; guard it behind the router and degrade on failure — a
    heartbeat must never crash on a provider error.
+3b. **The hierarchy is a philosophy, not a feature.** Work flows down the org
+   chart, results and artifacts flow back up through it, and every brain in a
+   chain logs its own hop (deterministic, $0). New capabilities that produce
+   or deliver anything are born on this path — never add a surface-direct
+   send or an unlogged hop.
 4. **Boundaries** ([`doc/boundaries.md`](doc/boundaries.md)): test fixtures use
    invented identities only; seeds are generic presets; nothing personal ever
    enters the tree.
