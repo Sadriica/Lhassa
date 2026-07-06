@@ -30,6 +30,9 @@ Restart=on-failure
 RestartSec=10
 # Opt the watcher in (the module no-ops + exits without this).
 Environment=LHASSA_MONITOR_ENABLED=1
+# subscription CLIs (claude lives in ~/.local/bin) — needed when the live think /
+# delegation path is enabled; harmless otherwise.
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin:/usr/local/sbin:/usr/sbin
 # Optional: uncomment to spend a token on a richer live analysis per reaction.
 # Environment=LHASSA_MONITOR_THINK=1
 # Environment=LHASSA_ORG_LIVE=1
