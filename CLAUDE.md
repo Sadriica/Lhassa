@@ -189,9 +189,13 @@ one-liners; unregistered-in-DESCRIPTIONS commands still surface), `/status`,
 `/approvals`, `/approve <id>`,
 `/deny <id>` (resolve via `security.approval`), `/recall <text>` (FTS5 search over
 the episode log), `/report [days]` (spend), `/memory <query>` (facts search),
-`/capabilities`, `/tools`, `/skills` (the first CLI-parity batch — the standing
+`/capabilities`, `/tools`, `/skills`, `/org`, `/fleet`, `/version` (the CLI-parity
+batches — the standing
 principle is that Telegram grows toward the CLI's capabilities, LLM-free handlers
-over the same underlying seams), `/watch <pattern> -> <accion>` /
+over the same underlying seams), `/code <task>` (parks a `code_run` approval with
+an inline Approve/Deny keyboard; one tap launches the run through the dashboard's
+own `code_routes._stream_run` seam and reports start + completion — remote write
+access NEVER runs without the owner's tap), `/watch <pattern> -> <accion>` /
 `/watches` / `/unwatch <i>` (author watch rules from chat), `/goal <text>
 [--every …]` (mints a recurring judgment task) — all LLM-free. The chat think is
 TOOL-LESS and its instruction says so (it must never claim to search); live-data
@@ -201,7 +205,18 @@ task (same HUMANO/telegram origin as `/goal`; the ack line is appended only afte
 the mint succeeds), and the next heartbeat runs `actionpack/_research.py` — one
 web search (Brave → DuckDuckGo via `tools/search.py`) delivered back over
 Telegram with sources, $0, and the follow-up ALWAYS arrives (a failed search
-degrades to an honest message). Every surface that
+degrades to an honest message) — and it arrives in SECONDS: a no-approval
+chat-minted task runs immediately via `core/dispatch.py:run_task_now` (the
+heartbeat's own runner, early; a failure leaves the task pending so the beat
+retries). The chat REMEMBERS: a rolling per-chat history
+(`LHASSA_TELEGRAM_HISTORY_TURNS` pairs, TTL'd, process-memory only) threads into
+every think, and every `LHASSA_CHAT_MEMORY_NUDGE_TURNS` turns the model may flag
+ONE durable owner fact with `[[remember: …]]` → persisted to the grande as a
+`dato` (procedencia `telegram-chat`, substring-deduped, marker stripped).
+Reminders ride the ONE clock: `schedule_reminder` mints a `send_reminder` task
+(tasks table + heartbeat; `lhassa/scheduler.py` is a deprecation shim, a one-shot
+migration moved legacy rows). `lhassa onboard` (CLI) seeds the owner's founding
+facts; `lhassa memory add` writes one directly. Every surface that
 lists approvals (the `/approvals` command, the dashboard queue/Inbox, the digest)
 renders through `security/approval.py:describe(row)` → `{title, detail}` — one
 deterministic place that knows each payload shape, so the owner sees WHAT they are

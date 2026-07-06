@@ -5,6 +5,38 @@ build. The source of truth for the architecture is `doc/lhassa-brief.md` (a
 living doc — correct it after each phase per §4). This file records the choices
 made along the way. Newest first.
 
+## 2026-07-06 — The brain that knows its owner (Olas 1+2: memory, one clock, remote hands)
+
+Two waves of parallel subagents (one interrupted mid-flight by a session limit and
+finished by hand — the salvage was committed incrementally so nothing was lost twice):
+
+- **The chat remembers** (`1681a5b`): rolling per-chat history threads into every
+  Telegram think (multi-turn conversations keep their thread); every N turns the
+  model may flag ONE durable owner fact with `[[remember: …]]` → a deduped `dato`
+  in the grande. `lhassa onboard` (five questions → pinned datos + directivas) and
+  `lhassa memory add` seed the founding facts. The grande stops being empty.
+- **Instant research** (same commit): a no-approval chat-minted task now runs
+  immediately via `core/dispatch.py:run_task_now` — the heartbeat's runner, early;
+  a failure leaves the task pending so the beat keeps the promise. Research
+  follow-ups arrive in seconds instead of minutes.
+- **The detector proposes only the automatable** (`da20987`): judgments
+  (`responder`, `dept:* think`, any think-decision) are excluded by predicate; a
+  DENIED pattern is never re-proposed (a denial is a human decision); repeated
+  mechanical action chains become `mint_script` proposals carrying a deterministic
+  draft PTC script; the judgment prompt finally advertises the `script` key.
+- **One clock** (`1cbf0ad`): reminders mint `send_reminder` tasks into the tasks
+  table (heartbeat delivers via notify); the legacy 30s poller is a deprecation
+  shim; a one-shot idempotent migration moved pending legacy rows (marked, never
+  deleted); `/api/scheduled` reads the tasks table with the old response shape.
+- **Parity batch 2** (`5f8b413`): `/org`, `/fleet`, `/version` from chat.
+- **Remote hands** (`b38502d`): `/code <task>` parks a `code_run` approval with an
+  inline Approve/Deny keyboard; one tap launches through the dashboard's own
+  `_stream_run` seam (same AgentRun tracking), reports start + completion with the
+  output tail. Write access to the owner's files NEVER runs without the tap.
+
+Live validations: a reminder traveled mint → tasks table → runner → notification;
+the detector's five real denied shapes are pinned as regression fixtures.
+
 ## 2026-07-05 — The narrative: flag, pillars, voice book, bilingual README
 
 Studied how Hermes *tells* its story (one hammered claim, features as promises,
