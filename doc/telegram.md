@@ -56,6 +56,14 @@ a token except `/goal` (which only mints a task — the actual think happens
 later, on the brain's own schedule) and `/cv` (a real model turn, the one
 paid exception).
 
+Beyond the commands detailed below, the CLI-parity set answers from the same
+underlying seams the terminal uses, all LLM-free: `/report [days]` (spend),
+`/memory <query>` (facts search), `/capabilities` (what's wired + on/off),
+`/tools` (self-written tools + gate state), `/skills` (installed skills),
+`/org` (the topology tree), `/fleet` (machines + last check-in), `/version`,
+and `/code <task>` (parks an approval — see "remote hands" below). `/help`
+groups them all with one-liners.
+
 ### `/start`
 Lhassa's first-person introduction (the monk's register):
 
@@ -233,6 +241,43 @@ with a short "I can't reach my model right now." Deferred *tasks* (not chat
 turns — those just answer with the fallback line) are re-queued with backoff
 by `core/db.py:sweep_deferred_tasks()` on the next heartbeat, up to
 `LHASSA_DEFERRED_MAX_RETRIES` before being marked `rechazada`.
+
+### The chat remembers
+
+Each turn carries the conversation: a **rolling per-chat history**
+(`LHASSA_TELEGRAM_HISTORY_TURNS` user+assistant pairs, default 8;
+`LHASSA_TELEGRAM_HISTORY_TTL` seconds, default 2h; per-message capped) threads
+into every think, so multi-turn conversations keep their thread. History is
+process-memory only — restarting the poller clears it; the durable memory
+lives in the grande.
+
+Every `LHASSA_CHAT_MEMORY_NUDGE_TURNS` turns (default 6) the model is invited
+to flag ONE durable fact it learned about the owner with `[[remember: …]]` —
+persisted to the grande as a `dato` (procedencia `telegram-chat`,
+substring-deduped against existing facts) and stripped from the visible
+reply. Combined with `remember:` (explicit) and `lhassa onboard` (the founding
+questionnaire), the brain's personal memory grows from both sides.
+
+### Live questions — the research bridge
+
+The chat turn is tool-less and its instruction says so: the model must never
+claim to be searching. For live-data questions it emits
+`[[research: <query>]]`; the poller mints a `research_reply` task through the
+signed HUMANO path and — since it needs no approval — runs it **immediately**
+via `core/dispatch.py:run_task_now` (the heartbeat's own runner, early). The
+follow-up message with titles, snippets and links arrives in seconds; if the
+immediate run fails, the task stays pending and the next heartbeat keeps the
+promise.
+
+### /code — remote hands, always behind a tap
+
+`/code <task>` parks a `code_run` approval (task, auto-detected CLI, the
+dashboard Run panel's own working directory) and the reply carries an inline
+**Approve/Deny** keyboard. One tap on Approve launches the run through the
+same seam the dashboard uses — you get "Started: run #id (cli)" and, on
+completion, the status with the last ~500 chars of output (30-minute safety
+timeout). Deny acknowledges and launches nothing. Remote write access to your
+files never happens without your explicit tap.
 
 ---
 
