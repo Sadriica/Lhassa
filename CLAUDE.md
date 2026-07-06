@@ -418,6 +418,10 @@ shared by the dashboard and the CLI theme (`cli/theme.py`).
 ## Do not
 
 - Add AI / Claude attribution anywhere (no Co-Authored-By, no "generated with").
+- Commit anything personal (see `doc/boundaries.md`): the repo is the brain,
+  `~/.lhassa/` is the person. Test fixtures use invented identities only
+  (`owner@example.edu`); seeds must be generic presets; real emails/phones/
+  employers/chat ids in the tree are treated like leaked secrets.
 - Reintroduce the "cross-platform voice assistant" framing — Lhassa is a brain.
 - Cross a layer boundary (the architecture guard will fail); prefer fixing the
   layering over adding an exception.

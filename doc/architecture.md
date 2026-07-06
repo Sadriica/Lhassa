@@ -165,7 +165,11 @@ CLI subcommand yet for the first two):
   a gate is verify/approval; a non-passing gate halts the path. Runs are
   offline/stubbed unless `LHASSA_ORG_LIVE`. API: `GET/POST /api/flows`,
   `GET/PUT/PATCH/DELETE /api/flows/{id}`, `POST /api/flows/{id}/run`. The dashboard
-  has a "Flows" editor section (the n8n-style canvas) driving this API.
+  has a "Flows" editor section (the n8n-style canvas) driving this API. The
+  `personal` seed is the canonical example of a stable department with multiple
+  time-specific flows: `personal-morning-briefing` and
+  `personal-evening-briefing` both pin work to the `personal` brain, while their
+  DAG order differs for planning versus review.
 - **Agentic run surface** (`api/code_routes.py` + `agents/local_cli.py`) —
   `POST /api/code {task, cli?}` launches an agentic task through a local CLI
   (`claude` / `codex` / `opencode`, on subscription, no key) and streams it over the

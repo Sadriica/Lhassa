@@ -8,9 +8,14 @@
 
 <p align="center">
   <a href="README.es.md">Español</a> ·
+  <a href="doc/README.md">Docs</a> ·
   <a href="doc/architecture.md">Architecture</a> ·
   <a href="doc/cli.md">CLI reference</a> ·
   <a href="LICENSE">AGPL-3.0</a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/Sadriica/Lhassa/actions/workflows/ci.yml"><img src="https://github.com/Sadriica/Lhassa/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
 </p>
 
 ---
@@ -119,7 +124,8 @@ On a fresh machine, seed the "Impossible-to-reject CV" work-flow with:
 
 ```bash
 lhassa seed list       # list the registered seeds
-lhassa seed apply cv   # recreates the interns department + the CV work-flow
+lhassa seed apply cv       # recreates the interns department + the CV work-flow
+lhassa seed apply personal # creates the personal department + morning/evening flows
 ```
 
 Then drop your real CV at `~/.lhassa/cv/cv_largo.tex` (or set `LHASSA_CV_DIR`).
@@ -202,12 +208,15 @@ Inbound/outbound over the Bot API, credential-gated (no token → no network).
 LLM-free commands: `/start`, `/help` (lists registered commands live), `/status`,
 `/approvals` (each pending decision described in plain words — what it is, how
 old, what approving does), `/approve` / `/deny`, `/recall <text>` (FTS5 search
-over the brain's own past episodes), `/watch`, `/goal`. Free-text messages are
+over the brain's own past episodes), `/watch`, `/goal`, `/today`, `/tomorrow`,
+and `/checkin <text>` for the personal digest thread. Free-text messages are
 answered by a tool-less brain think — the chat door can pin its own fast
 provider (`telegram_provider`) while heavier work stays on the heartbeat seat —
 over the routine **fallback chain** (`opencode → claude → codex → cloud`). The
 twice-daily check-in digest arrives in Lhassa's first-person voice ($0
-deterministic template, optional model re-voicing via `digest_style=persona`).
+deterministic template, optional model re-voicing via `digest_style=persona`);
+with `LHASSA_DIGEST_PERSONAL_CHECKIN=1` it also asks a morning/evening personal
+question and captures your next Telegram reply as a daily check-in.
 
 ### Dashboard
 
@@ -251,7 +260,7 @@ is loaded *after* `.env` (override on) and never holds secrets. The most relevan
 | **Local / fallback chain** | `LHASSA_LOCAL_MODEL_URL`, `LHASSA_LOCAL_MODEL`, `LHASSA_FALLBACK_PROVIDERS` (default `claude,codex,default`) |
 | **Cost / router** | `LHASSA_ROUTER`, `LHASSA_MODEL_CHEAP`, `LHASSA_MODEL_SMART`, `LHASSA_LLM_DAILY_TOKEN_BUDGET`, `LHASSA_KILL_SWITCH` |
 | **Telegram** | `LHASSA_TELEGRAM_BOT_TOKEN`, `LHASSA_TELEGRAM_CHAT_ID`, `LHASSA_TELEGRAM_POLL` |
-| **Digest** | `LHASSA_DIGEST_HOUR_MORNING/EVENING`, `LHASSA_DIGEST_STYLE` (plain/persona), `LHASSA_DIGEST_LANGUAGE` |
+| **Digest** | `LHASSA_DIGEST_HOUR_MORNING/EVENING`, `LHASSA_DIGEST_STYLE` (plain/persona), `LHASSA_DIGEST_LANGUAGE`, `LHASSA_DIGEST_PERSONAL_CHECKIN` |
 | **Memory (layer 4)** | `LHASSA_MEMORY_LAYER4`, `LHASSA_EMBEDDING_MODEL`, `LHASSA_MEMORY_SEMANTIC_TOPK` |
 | **Monitor** | `LHASSA_MONITOR_ENABLED`, `LHASSA_MONITOR_IDLE_INTERVAL`, `LHASSA_MONITOR_FAILURE_WINDOW_H` |
 | **Skills curator** | `LHASSA_SKILL_STALE_DAYS` (30), `LHASSA_SKILL_ARCHIVE_DAYS` (90) |

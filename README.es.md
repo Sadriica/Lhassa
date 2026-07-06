@@ -121,7 +121,8 @@ En una máquina fresca, siembra el work-flow del "CV imposible de rechazar":
 
 ```bash
 lhassa seed list       # lista los seeds registrados
-lhassa seed apply cv   # recrea el departamento interns + el work-flow del CV
+lhassa seed apply cv       # recrea el departamento interns + el work-flow del CV
+lhassa seed apply personal # crea el departamento personal + flows mañana/noche
 ```
 
 Después deja tu CV real en `~/.lhassa/cv/cv_largo.tex` (o define `LHASSA_CV_DIR`).
@@ -163,12 +164,14 @@ completa: [`doc/cli.md`](doc/cli.md).
 
 **Bot de Telegram** — comandos LLM-free (`/status`, `/approvals` con cada decisión
 descrita en palabras — qué es, cuánto lleva, qué hace aprobarla —, `/recall
-<texto>` para buscar en sus episodios pasados, `/watch`, `/goal`); los mensajes
-libres los responde un think sin herramientas — la puerta de chat puede fijar su
-propio proveedor rápido (`telegram_provider`) mientras el trabajo pesado sigue en
-el asiento del heartbeat — sobre la cadena de fallback (`opencode → claude →
-codex → cloud`). El digest de las 8:00/21:00 llega en primera persona (plantilla
-determinista a $0; re-voz opcional con `digest_style=persona`).
+<texto>` para buscar en sus episodios pasados, `/watch`, `/goal`, `/today`,
+`/tomorrow`, `/checkin <texto>`); los mensajes libres los responde un think sin
+herramientas — la puerta de chat puede fijar su propio proveedor rápido
+(`telegram_provider`) mientras el trabajo pesado sigue en el asiento del heartbeat
+— sobre la cadena de fallback (`opencode → claude → codex → cloud`). El digest de
+las 8:00/21:00 llega en primera persona (plantilla determinista a $0; re-voz
+opcional con `digest_style=persona`); con `LHASSA_DIGEST_PERSONAL_CHECKIN=1`
+también pregunta por tu día y guarda tu siguiente respuesta como check-in diario.
 
 **Dashboard** — React/Vite en **:7766** con la identidad Lhasa: Overview, Brains
 (editor de jerarquía + overlay de relaciones), Skills, Run (tareas agénticas en
@@ -193,7 +196,8 @@ carga *después* de `.env`, nunca guarda secretos). La tabla completa de knobs
 (`LHASSA_LLM_PROVIDER`), el asiento del heartbeat (`LHASSA_HEARTBEAT_PROVIDER`),
 el asiento del chat de Telegram (`LHASSA_TELEGRAM_PROVIDER`), presupuesto y
 kill-switch (`LHASSA_LLM_DAILY_TOKEN_BUDGET`, `LHASSA_KILL_SWITCH`), el digest
-(`LHASSA_DIGEST_STYLE`, `LHASSA_DIGEST_LANGUAGE`) y el curator de skills
+(`LHASSA_DIGEST_STYLE`, `LHASSA_DIGEST_LANGUAGE`,
+`LHASSA_DIGEST_PERSONAL_CHECKIN`) y el curator de skills
 (`LHASSA_SKILL_STALE_DAYS`, `LHASSA_SKILL_ARCHIVE_DAYS`). **Con una sola API key
 basta** (se auto-detecta), y los CLIs `claude` / `codex` / `opencode` no
 necesitan ninguna — corren con tu suscripción.
