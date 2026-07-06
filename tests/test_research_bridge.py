@@ -126,9 +126,16 @@ def _patch_search(monkeypatch, results):
             return results.get(query, [])
         return results
 
+    async def fake_news(query, max_results=4):
+        queries.append(f"news:{query}")
+        if isinstance(results, dict):
+            return results.get(f"news:{query}", [])
+        return []
+
     import lhassa.tools.search as search_mod
 
     monkeypatch.setattr(search_mod, "web_search", fake_search)
+    monkeypatch.setattr(search_mod, "news_search", fake_news)
     return queries
 
 
@@ -199,7 +206,7 @@ def test_research_reply_retries_with_a_date_anchor(monkeypatch):
     sent = _patch_send(monkeypatch)
 
     out = asyncio.run(research_reply({"query": "noticias de hoy"}))
-    assert queries == ["noticias de hoy", anchored]
+    assert queries == ["news:noticias de hoy", "noticias de hoy", anchored]
     assert "1 result(s) sent" in out
     assert anchored in sent[0]  # the digest names the query that actually worked
 
@@ -215,3 +222,38 @@ def test_research_reply_found_nothing_says_so_honestly(monkeypatch):
     assert len(sent) == 1
     assert "found nothing useful" in sent[0]
     assert "search backend" not in sent[0]
+
+
+def test_news_intent_routes_to_the_news_vertical_first(monkeypatch):
+    """"noticias de hoy" is answerable because the NEWS vertical answers it —
+    the routing a general search engine does internally."""
+    from lhassa.actionpack._research import research_reply
+
+    queries = _patch_search(
+        monkeypatch,
+        {
+            "news:noticias de hoy": [
+                {"title": "Portada", "body": "…", "url": "https://example.com/n",
+                 "source": "El Tiempo", "date": "2026-07-06"}
+            ]
+        },
+    )
+    sent = _patch_send(monkeypatch)
+
+    out = asyncio.run(research_reply({"query": "noticias de hoy"}))
+    assert queries == ["news:noticias de hoy"]  # the vertical answered; no web fallback
+    assert "1 result(s) sent" in out
+    assert "El Tiempo" in sent[0] and "2026-07-06" in sent[0]
+
+
+def test_non_news_query_never_touches_the_news_vertical(monkeypatch):
+    from lhassa.actionpack._research import research_reply
+
+    queries = _patch_search(
+        monkeypatch,
+        {"python 3.14 release": [{"title": "t", "body": "b", "url": "https://e.com"}]},
+    )
+    _patch_send(monkeypatch)
+
+    asyncio.run(research_reply({"query": "python 3.14 release"}))
+    assert queries == ["python 3.14 release"]
