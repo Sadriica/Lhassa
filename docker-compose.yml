@@ -6,8 +6,10 @@
 #   docker compose build
 #   docker compose up -d            # api + heartbeat
 #   docker compose --profile telegram up -d   # also start the Telegram poller
+#   docker compose --profile monitor up -d    # also start the monitor watcher
 #
-# See doc/deployment.md for the portability caveats (voice, opencode, secrets).
+# See doc/deployment.md for the portability caveats (voice, opencode, secrets)
+# and doc/portability.md for the full laptop→VPS coupling audit.
 
 services:
   # ── Dashboard + REST API + scheduler ──────────────────────────────────────
@@ -72,6 +74,26 @@ services:
     environment:
       LHASSA_RUN: "telegram"
       LHASSA_TELEGRAM_POLL: "1"
+    volumes:
+      - lhassa-data:/data
+    restart: unless-stopped
+    depends_on:
+      - lhassa
+
+  # ── Monitor watcher (optional) ────────────────────────────────────────────
+  # The always-on $0 "ear" (org.watcher). Enable with:
+  #   docker compose --profile monitor up -d
+  # Gated by LHASSA_MONITOR_ENABLED=1 in .env — without it the process logs once
+  # and exits cleanly (same opt-in discipline as the telegram poller), so Compose
+  # will keep restarting it harmlessly until the flag is set.
+  monitor:
+    build: .
+    image: lhassa:dev
+    profiles: ["monitor"]
+    env_file:
+      - .env
+    environment:
+      LHASSA_RUN: "monitor"
     volumes:
       - lhassa-data:/data
     restart: unless-stopped
