@@ -246,7 +246,7 @@ async def _cmd_start(args: str, *, config=None) -> str:
 # registered by a plugin but missing here still appears — see _cmd_help's final
 # "also available" line — so a drop-in command can never vanish from /help.
 _HELP_GROUPS: list[Tuple[str, list[str]]] = [
-    ("Chat & memory", ["recall", "memory", "remind", "checkin", "today", "tomorrow"]),
+    ("Chat & memory", ["ai", "recall", "memory", "remind", "checkin", "today", "tomorrow"]),
     ("Decisions", ["approvals", "approve", "deny"]),
     ("Watch & goals", ["watch", "watches", "unwatch", "goal"]),
     ("CV", ["cvnewbase", "cvbase"]),
@@ -257,6 +257,7 @@ _HELP_GROUPS: list[Tuple[str, list[str]]] = [
 DESCRIPTIONS: dict[str, str] = {
     "start": "Introduce myself.",
     "help": "This catalog.",
+    "ai": "<question> — I search the web AND answer it specifically (not just links).",
     "recall": "<text> — search past episodes.",
     "memory": "<query> — search durable facts.",
     "checkin": "<text> — save a personal morning/evening note.",
@@ -1129,6 +1130,114 @@ async def _cmd_fleet(args: str, *, config=None) -> str:
     except Exception as exc:
         logger.warning(f"commands: /fleet failed: {exc}")
         return _oops("read the fleet")
+
+
+# ── /ai — a raw passthrough to the active provider (the one paid direct door) ──────
+
+
+async def _resolve_chat_provider(cfg):
+    """The (provider, model) attempts for a chat-seat call — pin/router + chain."""
+    from lhassa.llm import router
+    from lhassa.llm.provider import get_model_provider
+    from lhassa.llm.router import fallback_chain
+
+    pinned = (getattr(cfg, "telegram_provider", "") or "").strip().lower()
+    if pinned and pinned != "auto":
+        primary = get_model_provider(cfg, name=pinned)
+    else:
+        primary = router.pick_provider(sensitive=False, hard=False, config=cfg)
+    model = router.pick_model(primary, hard=False, config=cfg)
+    return [(primary, model), *fallback_chain(cfg, primary)]
+
+
+@register_command("ai")
+async def _cmd_ai(args: str, *, config=None) -> str:
+    """``/ai <question>`` — search the live web AND let the model SYNTHESIZE a
+    concrete answer from what it finds.
+
+    The difference from a plain question: free-text chat (tool-less) can only
+    hand back links via the research bridge. ``/ai`` does the search itself,
+    feeds the real results to the active model (with persona + the owner's
+    durable facts as context), and asks it to ANSWER — a specific figure, a
+    direct conclusion — citing the sources it used. It DOES spend one model
+    call (the one paid direct door, like ``/cv``); kept explicit so it never
+    fires on every message. Never raises.
+    """
+    text = (args or "").strip()
+    if not text:
+        return "Ask me to look something up and answer it: /ai how much is a flight from Madrid to Bogotá?"
+    try:
+        from lhassa.llm.gateway import BudgetExceeded
+        from lhassa.llm.provider import ProviderNotConfigured
+        from lhassa.persona import load_identity
+        from lhassa.tools import search as _search
+
+        cfg = _config(config)
+        instance_id = getattr(cfg, "instance_id", None) or "inst_personal"
+
+        # 1) Live search — news vertical for news-intent, else the web.
+        results: list[dict] = []
+        try:
+            if re.search(r"\b(noticias?|news|titulares|headlines?)\b", text, re.IGNORECASE):
+                results = await _search.news_search(text, max_results=6) or []
+            if not results:
+                results = await _search.web_search(text, max_results=6) or []
+        except Exception as exc:
+            logger.debug(f"commands: /ai search failed: {exc}")
+
+        sources = "\n".join(
+            f"- {str(r.get('title') or '')[:100]} — {str(r.get('body') or '')[:200]} "
+            f"({r.get('url') or ''})"
+            for r in results[:6]
+        ) or "(no web results — answer from your own knowledge and say it's not live-sourced)"
+
+        # 2) Persona + durable facts as grounding context.
+        identity = load_identity(instance_id)
+        facts_block = ""
+        try:
+            from lhassa.memory import facts as _facts
+
+            rows = await _facts.load_facts(instance_id, pinned=True)
+            if rows:
+                facts_block = "What you know about your owner:\n" + "\n".join(
+                    f"- {getattr(r, 'contenido', '')}" for r in rows[:8]
+                )
+        except Exception:
+            facts_block = ""
+
+        system = "\n\n".join(
+            p for p in (
+                identity.persona_block,
+                facts_block,
+                "You are given live web results. ANSWER the question directly and "
+                "specifically — a figure, a range, a concrete conclusion — using them; "
+                "cite the source name in-line. If the results don't cover it, say so "
+                "plainly. Be brief, plain, and honest about uncertainty.",
+            ) if p
+        )
+        user = f"Question: {text}\n\nLive web results:\n{sources}"
+
+        # 3) Synthesize through the active chat provider (with the fallback chain).
+        last_exc = None
+        for prov, mdl in await _resolve_chat_provider(cfg):
+            try:
+                out = await prov.complete(
+                    [{"role": "user", "content": user}],
+                    model=mdl, max_tokens=1024, system=system,
+                )
+            except (ProviderNotConfigured, BudgetExceeded) as exc:
+                last_exc = exc
+                continue
+            except Exception as exc:
+                logger.warning(f"commands: /ai provider {getattr(prov,'name','?')!r} failed: {exc}")
+                last_exc = exc
+                continue
+            answer = (out.text or "").strip()
+            return answer or "The model returned nothing."
+        return _oops(f"reach a model for that ({last_exc})")
+    except Exception as exc:
+        logger.warning(f"commands: /ai failed: {exc}")
+        return _oops("look that up and answer it")
 
 
 # ── /remind — a timed reminder in plain words, parsed deterministically ($0) ──────

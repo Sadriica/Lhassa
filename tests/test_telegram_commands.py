@@ -789,3 +789,52 @@ def test_remind_without_time_gives_usage_hint(tmp_path, monkeypatch):
     asyncio.run(_init_db(tmp_path, monkeypatch))
     reply = asyncio.run(commands.dispatch("/remind algo sin hora", config=_cfg()))
     assert "what and when" in reply
+
+
+# ── /ai — search + model synthesis (a specific answer, not links) ──────────────────
+
+
+def test_ai_synthesizes_an_answer_from_search_results(tmp_path, monkeypatch):
+    asyncio.run(_init_db(tmp_path, monkeypatch))
+    seen = {}
+
+    async def fake_web(query, max_results=4):
+        seen["query"] = query
+        return [
+            {"title": "Vuelos MAD-BOG", "body": "desde €520 ida y vuelta", "url": "https://x.com/a"},
+        ]
+
+    import lhassa.tools.search as search_mod
+
+    monkeypatch.setattr(search_mod, "web_search", fake_web)
+    monkeypatch.setattr(search_mod, "news_search", fake_web)
+
+    class _Prov:
+        name = "default"
+
+        async def complete(self, messages, *, model=None, max_tokens=None, system=None):
+            seen["system"] = system
+            seen["user"] = messages[0]["content"]
+            return SimpleNamespace(text="Los vuelos rondan €520 ida y vuelta (fuente: Vuelos MAD-BOG).", cost_usd=0.001)
+
+    import lhassa.llm.provider as provider_mod
+    import lhassa.llm.router as router_mod
+
+    monkeypatch.setattr(provider_mod, "get_model_provider", lambda config, name=None: _Prov())
+    monkeypatch.setattr(router_mod, "pick_provider", lambda *, sensitive, hard, config: _Prov())
+    monkeypatch.setattr(router_mod, "pick_model", lambda p, *, hard, config: "m")
+    monkeypatch.setattr(router_mod, "fallback_chain", lambda cfg, primary: [])
+
+    reply = asyncio.run(
+        commands.dispatch("/ai cuánto vale un vuelo Madrid-Bogotá", config=_cfg(instance_id="inst_personal"))
+    )
+    assert "€520" in reply
+    assert "cuánto vale un vuelo Madrid-Bogotá" in seen["query"]
+    assert "Live web results" in seen["user"]
+    assert "€520" in seen["user"]  # the search results were fed to the model
+
+
+def test_ai_without_question_gives_hint(tmp_path, monkeypatch):
+    asyncio.run(_init_db(tmp_path, monkeypatch))
+    reply = asyncio.run(commands.dispatch("/ai", config=_cfg()))
+    assert "look something up" in reply
