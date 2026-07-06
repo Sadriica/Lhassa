@@ -472,6 +472,97 @@ async def test_dispatch_delegate_department_and_high_risk_carried_in_params(
     assert tasks[0]["params"]["high_risk"] is True
 
 
+# ── script key (PTC sugar for new_tasks: run_script) ──────────────────────────
+
+@pytest.mark.asyncio
+async def test_dispatch_script_mints_run_script_task_awaiting_approval(tmp_path, monkeypatch):
+    """A 'script' key mints exactly ONE run_script task through mint_task,
+    parked for approval (run_script.requires_approval=True in the allowlist)."""
+    raw = json.dumps({"script": "print('hello from ptc')"})
+    summary, db = await _run_dispatch(raw, tmp_path=tmp_path, monkeypatch=monkeypatch)
+    assert "1 script" in summary
+    assert "awaiting approval" in summary
+
+    # Not in the pendiente queue — parked under approval, same as always_approve.
+    assert await db.load_pending_tasks("inst_test") == []
+
+    from lhassa._vendor import aiosqlite
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        async with conn.execute("SELECT * FROM tasks") as cur:
+            rows = [dict(r) for r in await cur.fetchall()]
+    assert len(rows) == 1
+    assert rows[0]["accion"] == "run_script"
+    assert rows[0]["estado"] == "esperando_aprobacion"
+    assert rows[0]["origen_actor"] == "judgment"
+    import json as _json
+    assert _json.loads(rows[0]["params"])["script"] == "print('hello from ptc')"
+
+    from lhassa.security import approval
+    pending = await approval.pending("inst_test")
+    assert len(pending) == 1
+    assert pending[0]["payload"]["accion"] == "run_script"
+
+
+@pytest.mark.asyncio
+async def test_dispatch_script_and_new_tasks_both_handled(tmp_path, monkeypatch):
+    """A reply carrying both 'script' and 'new_tasks' mints both."""
+    raw = json.dumps({
+        "script": "pass",
+        "new_tasks": [{"accion": "sync_repo", "objetivo": "test", "params": {}}],
+    })
+    summary, db = await _run_dispatch(raw, tmp_path=tmp_path, monkeypatch=monkeypatch)
+    assert "1 script" in summary
+    assert "1 task" in summary
+
+    from lhassa._vendor import aiosqlite
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        async with conn.execute("SELECT accion FROM tasks") as cur:
+            rows = [dict(r) for r in await cur.fetchall()]
+    accions = sorted(r["accion"] for r in rows)
+    assert accions == ["run_script", "sync_repo"]
+
+
+@pytest.mark.asyncio
+async def test_dispatch_script_non_string_ignored(tmp_path, monkeypatch):
+    """A non-string 'script' value (e.g. a list) is ignored without error."""
+    raw = json.dumps({"script": ["not", "a", "string"]})
+    summary, db = await _run_dispatch(raw, tmp_path=tmp_path, monkeypatch=monkeypatch)
+    assert "script" not in summary
+    assert await db.load_pending_tasks("inst_test") == []
+
+
+@pytest.mark.asyncio
+async def test_dispatch_script_empty_string_ignored(tmp_path, monkeypatch):
+    """An empty (or whitespace-only) 'script' string mints nothing."""
+    raw = json.dumps({"script": "   "})
+    summary, db = await _run_dispatch(raw, tmp_path=tmp_path, monkeypatch=monkeypatch)
+    assert "script" not in summary
+    assert await db.load_pending_tasks("inst_test") == []
+
+
+@pytest.mark.asyncio
+async def test_dispatch_script_oversized_ignored(tmp_path, monkeypatch):
+    """A 'script' value over the size cap is ignored, never truncated-and-run."""
+    from lhassa.core import dispatch
+    raw = json.dumps({"script": "x" * (dispatch._SCRIPT_MAX_LEN + 1)})
+    summary, db = await _run_dispatch(raw, tmp_path=tmp_path, monkeypatch=monkeypatch)
+    assert "script" not in summary
+    assert await db.load_pending_tasks("inst_test") == []
+
+
+@pytest.mark.asyncio
+async def test_dispatch_script_disabled_by_config_gate(tmp_path, monkeypatch):
+    """When judgment_dispatch_enabled=False, a 'script' key mints nothing."""
+    cfg = _config(enabled=False)
+    raw = json.dumps({"script": "print(1)"})
+    summary, db = await _run_dispatch(
+        raw, tmp_path=tmp_path, monkeypatch=monkeypatch, config=cfg,
+    )
+    assert summary == "dispatch: disabled"
+
+
 # ── apply() never raises ──────────────────────────────────────────────────────
 
 @pytest.mark.asyncio

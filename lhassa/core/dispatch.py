@@ -17,6 +17,11 @@ Design principles:
     spine, org is a shell; see tests/test_architecture.py). The org_run action
     itself (a shell-layer actionpack module) lazily imports
     org.coordinator.run_goal at the NEXT tick, offline/$0 unless LHASSA_ORG_LIVE.
+  - A ``script`` key is pure sugar for ``new_tasks: [{"accion": "run_script",
+    "params": {"script": ...}}]`` — it mints through the IDENTICAL mint_task
+    path, so ``run_script``'s own ``requires_approval=True`` (see
+    ``security.allowlist``) always parks a human approval ticket before the
+    script runs; there is no bespoke execution path here.
   - ``say`` is the model's verbal answer; it goes into the dispatch summary so
     step.py can include it in the episode resultado. A notify surface arrives in
     Phase 3 as a mintable action.
@@ -30,6 +35,8 @@ import json
 import re
 from typing import Any, Optional
 
+from loguru import logger
+
 from lhassa.core import actions as _actions
 from lhassa.core import db as _db
 from lhassa.core.task import Task
@@ -42,6 +49,8 @@ from lhassa.security.trust import Origin, TrustLevel, degrade
 _MAX_FACTS = 5
 _MAX_TASKS = 5
 _MAX_DELEGATES = 3  # mirrors _MAX_TASKS's spirit — a small, bounded write cap
+_MAX_SCRIPTS = 1  # a judgment reply may request at most ONE PTC script
+_SCRIPT_MAX_LEN = 20_000  # characters; an oversized "script" value is ignored
 _FACT_CONTENT_MAX = 500   # characters; truncate, do not reject
 _TAG_MAX_LEN = 50          # characters per tag
 _TAGS_MAX_COUNT = 5        # tags per fact
@@ -234,7 +243,8 @@ async def apply(
           "say":       "verbal answer for the episode",
           "new_facts": [{"contenido": "...", "tags": ["tag"]}],
           "new_tasks": [{"accion": "registered_action", "objetivo": "...", "params": {}}],
-          "delegate":  {"goal": "instruction for the org hierarchy", "department": "..."}
+          "delegate":  {"goal": "instruction for the org hierarchy", "department": "..."},
+          "script":    "python source for the PTC engine to run"
         }
 
     ``delegate`` may also be a LIST of such objects (up to ``_MAX_DELEGATES``); a
@@ -242,6 +252,12 @@ async def apply(
     accion="org_run" (goal from "goal" or the legacy "prompt" key; "department" is
     an optional hint; "high_risk" requests the org layer's own multi-person
     approval). See the "delegate" section below.
+
+    ``script`` is PURE SUGAR for ``new_tasks: [{"accion": "run_script", "params":
+    {"script": ...}}]`` — it mints through the exact same ``mint_task`` path (no
+    bespoke execution here). At most ``_MAX_SCRIPTS`` (1) is honored per reply; a
+    non-string, empty, or oversized value is ignored. See the "script" section
+    below.
 
     Security invariants enforced:
       - ``tipo`` is FORCED to ``"dato"``; a model may never write a directiva
@@ -409,6 +425,40 @@ async def _apply_inner(
         parts.append(task_str)
     for accion in skipped_unknown:
         parts.append(f"skipped: unknown accion {accion!r}")
+
+    # ── script ────────────────────────────────────────────────────────────────
+    # PURE SUGAR for new_tasks: [{"accion": "run_script", "params": {"script": ...}}].
+    # Routed through the IDENTICAL mint_task path used by new_tasks/delegate above
+    # — no bespoke execution here. run_script's own requires_approval=True (see
+    # security.allowlist) means a human always approves the ticket before the
+    # script actually runs. At most _MAX_SCRIPTS (1) per reply; a list, a
+    # non-string, an empty, or an oversized value is ignored defensively.
+    script_raw = payload.get("script")
+    if isinstance(script_raw, str):
+        script = script_raw.strip()
+        if not script:
+            logger.debug("dispatch: 'script' key present but empty, ignored")
+        elif len(script) > _SCRIPT_MAX_LEN:
+            logger.debug(
+                f"dispatch: 'script' key exceeds {_SCRIPT_MAX_LEN} chars, ignored"
+            )
+        else:
+            task_id, estado = await mint_task(
+                instance_id,
+                "run_script",
+                objetivo="judgment-authored script",
+                params={"script": script},
+                origin=task_origin,
+            )
+            if task_id:
+                if estado == "esperando_aprobacion":
+                    parts.append("1 script minted (awaiting approval)")
+                else:
+                    parts.append("1 script minted")
+    elif script_raw is not None:
+        logger.debug(
+            f"dispatch: 'script' key is not a string ({type(script_raw).__name__}), ignored"
+        )
 
     # ── delegate ──────────────────────────────────────────────────────────────
     # A well-formed delegate request mints a TASK (accion="org_run"), NOT an
