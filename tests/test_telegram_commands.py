@@ -734,3 +734,58 @@ def test_menu_entries_fallback_for_undescribed(monkeypatch):
         assert "help" in entries["zzmenutest"]  # the generic fallback line
     finally:
         commands.COMMANDS._items.pop("zzmenutest", None)
+
+
+# ── /remind — deterministic timed reminders from plain words ──────────────────────
+
+
+def test_parse_remind_handles_the_owner_phrases():
+    from datetime import datetime, timezone, timedelta
+
+    now = datetime(2026, 7, 6, 14, 0, tzinfo=timezone.utc).astimezone()
+
+    # "a las 5pm" → 17:00 local today (future)
+    run_at, what, when = commands.parse_remind("de un compromiso a las 5pm", now=now)
+    local = run_at.astimezone()
+    assert (local.hour, local.minute) == (17, 0)
+    assert what == "un compromiso"
+    assert when == "at 17:00"
+
+    # past time rolls to tomorrow
+    run_at, _, _ = commands.parse_remind("standup at 8am", now=now)
+    assert run_at.astimezone().date() == (now + timedelta(days=1)).date()
+
+    # relative
+    run_at, what, _ = commands.parse_remind("in 45 min estirar", now=now)
+    assert abs((run_at - now.astimezone(timezone.utc)).total_seconds() - 2700) < 2
+    assert what == "estirar"
+
+    # mañana + hora
+    run_at, what, _ = commands.parse_remind("pagar arriendo mañana a las 9am", now=now)
+    assert run_at.astimezone().date() == (now + timedelta(days=1)).date()
+    assert run_at.astimezone().hour == 9
+    assert what == "pagar arriendo"
+
+    # no time phrase → None
+    assert commands.parse_remind("que la vida es bella") is None
+
+
+def test_remind_command_mints_a_send_reminder_task(tmp_path, monkeypatch):
+    db = asyncio.run(_init_db(tmp_path, monkeypatch))
+    reply = asyncio.run(
+        commands.dispatch(
+            "/remind llamar al banco a las 5pm", config=_cfg(instance_id="inst_personal")
+        )
+    )
+    assert reply.startswith("⏰ Noted")
+    assert "llamar al banco" in reply
+    tasks = asyncio.run(db.list_tasks("inst_personal", estado="pendiente", limit=10))
+    match = [t for t in tasks if t.get("accion") == "send_reminder"]
+    assert len(match) == 1
+    assert match[0]["params"]["text"] == "⏰ llamar al banco"
+
+
+def test_remind_without_time_gives_usage_hint(tmp_path, monkeypatch):
+    asyncio.run(_init_db(tmp_path, monkeypatch))
+    reply = asyncio.run(commands.dispatch("/remind algo sin hora", config=_cfg()))
+    assert "what and when" in reply
