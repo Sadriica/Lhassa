@@ -111,7 +111,7 @@ commands (`COMMANDS`), actions (`core/actions.ACTIONS`), watchlist senses
 importing org), **seeds** (`seeds.SEEDS` — `@register_seed`, a drop-in preset that
 bootstraps an env; `cv` rebuilds the interns department + the CV work-flow, `digest`
 schedules the 08:00/21:00 daily digests, `maintenance` schedules `distill_memory` +
-`detect_repetition` daily and `review_tools` weekly; `lhassa seed
+`detect_repetition` daily and `review_tools` + `curate_skills` weekly; `lhassa seed
 list|apply <name>|apply-all`), org departments.
 `plugins.py:load_plugins(config)` imports every module under `plugins_dir` **and**
 every `lhassa.plugins` entry point — self-registration with **no core edit**;
@@ -130,8 +130,15 @@ capabilities` (alias `doctor`) shows everything wired and on/off.
   `memory/backup.py` does WAL-safe online backup/restore/verify.
 - **Layer 4** (`memory/embeddings.py` + `memory/load.py`) — semantic facts via a
   pluggable `Embedder` (`HashingEmbedder` offline default, `RemoteEmbedder` for a
-  real local endpoint). On by default (`LHASSA_MEMORY_LAYER4`); it has the lowest
-  priority so it truncates first and never touches the identity core.
+  real local endpoint). On by default (`LHASSA_MEMORY_LAYER4`).
+- **Episodic recall (layer 5, FTS5)** — `core/db.py` keeps an `episodes_fts`
+  FTS5 index over the episode log (triggers + backfill in `init_db`; degrades if
+  the SQLite build lacks FTS5). `db.search_episodes` is BM25-ranked,
+  hostile-input-safe, and *demotes* (never hides) automation episodes
+  (`monitor`/`task:*`). Surfaced as `GET /api/episodes/search`, the Telegram
+  `/recall` command, and the LOWEST-priority context layer in `memory/load.py`
+  (fires only when a `query` is given; truncates before everything else) — the
+  brain recalls its own past experiences when it thinks, at $0.
 - `memory/consolidate.py` — semantic consolidation via the cheap model (only the
   chica). `memory/store.py`/`session.py` is the legacy voice-session store.
 
@@ -154,6 +161,15 @@ capabilities` (alias `doctor`) shows everything wired and on/off.
   refuses (409) tools that didn't pass the gates. `review_tools` applies
   `should_retire`/`retire`. Authored code never executes outside quarantine before
   graduating.
+- **PTC — Programmatic Tool Calling** (`agents/ptc.py` + the `run_script` action) —
+  one LLM turn writes a Python script that orchestrates N deterministic ACTIONS:
+  `generate_stub()` renders `lhassa_actions.py` from the ACTIONS registry; the
+  script runs INSIDE the quarantine sandbox and speaks JSON-lines over a Unix
+  socket (AF_UNIX survives the no-network namespace); the PARENT dispatches every
+  RPC through the signed-Task + allowlist seam — unknown/disallowed/needs-approval
+  actions are refused, never run. Caps: 300s, 50 calls, 50KB/10KB output.
+  `run_script` itself is allowlisted with `requires_approval=True` (run_command-class
+  risk); the whole thing never raises — every failure returns a dict.
 - **Allowlist** (`security/allowlist.py`) — deny-by-default action allowlist;
   signed `Task` + `TrustLevel`/`Origin` (degrade = min, never promote) via Ed25519
   (`security/signing.py`).
@@ -169,16 +185,28 @@ capabilities` (alias `doctor`) shows everything wired and on/off.
 `notify/dispatch.py:notify()` fans out over `active_channels(config)` (from
 `LHASSA_NOTIFY_CHANNELS`). `notify/commands.py` — `COMMANDS` registry
 (`@register_command`): `/start`, `/help`, `/status`, `/approvals`, `/approve <id>`,
-`/deny <id>` (resolve via `security.approval`), `/watch <pattern> -> <accion>` /
+`/deny <id>` (resolve via `security.approval`), `/recall <text>` (FTS5 search over
+the episode log), `/watch <pattern> -> <accion>` /
 `/watches` / `/unwatch <i>` (author watch rules from chat), `/goal <text>
-[--every …]` (mints a recurring judgment task) — all LLM-free. Inbound Telegram
+[--every …]` (mints a recurring judgment task) — all LLM-free. Every surface that
+lists approvals (the `/approvals` command, the dashboard queue/Inbox, the digest)
+renders through `security/approval.py:describe(row)` → `{title, detail}` — one
+deterministic place that knows each payload shape, so the owner sees WHAT they are
+approving, never a bare id. Inbound Telegram
 (`notify/telegram_inbound.py`, getUpdates poller, honors only the configured chat)
 also handles `callback_query` (inline Approve/Deny buttons on watcher alerts, via
 `reply_markup`/`parse_mode` support in `notify/telegram.py`), then dispatches a
 slash command before falling back to a tool-less brain think over the routine
-fallback chain (`opencode → claude → codex → cloud`). `notify/digest.py` builds a
-deterministic $0 digest (signals + spend + approvals + episodes); the `send_digest`
-action + the `digest` seed schedule it at `LHASSA_DIGEST_HOUR_{MORNING,EVENING}`.
+fallback chain (`opencode → claude → codex → cloud`). `LHASSA_TELEGRAM_PROVIDER`
+(settings-editable) pins the CHAT door's provider independently — `default` (the
+fast API gateway) keeps replies ~1.5s while flows/hard work stay on the heartbeat
+seat; `auto`/empty keeps the router's routine decision. `notify/digest.py` builds a
+deterministic $0 digest (signals + spend + approvals + episodes) written in
+Lhassa's first-person voice, timestamps in the OWNER's local timezone; the
+`send_digest` action + the `digest` seed schedule it at
+`LHASSA_DIGEST_HOUR_{MORNING,EVENING}`. `digest_style=persona` (settings) adds ONE
+cheap-model pass that re-voices it naturally (`digest_language`; any failure
+degrades to plain — the digest always arrives).
 `health/checks.py` notifies through this channel registry too (documented layer
 exception).
 
@@ -280,6 +308,13 @@ instructions, the skills.md / awesome-agent-skills convention; JSON form too) �
 loaded into the brain's prompt at think time (effect). `skills/store.py`
 (`SkillStore`), `skills/skillmd.py` (the format), `skills/ai.py` (AI create/improve,
 degrades without a model). Offline `recommend` works off a seed catalog (no model).
+`skills/curator.py` is the lifecycle: usage telemetry in an atomic `.usage.json`
+sidecar (bumped best-effort on every skill read) + a deterministic $0 sweep —
+active → stale (`LHASSA_SKILL_STALE_DAYS`, 30) → archived
+(`LHASSA_SKILL_ARCHIVE_DAYS`, 90) with a tar.gz backup first, moved to
+`.archive/`, NEVER deleted; pinned skills exempt; `restore(name)` reverses. The
+weekly `curate_skills` action (maintenance seed) runs it, skipping while an agent
+run is active.
 `assign_to_brain` / `brains_with_skill`; assigning offers to install. `lhassa
 skills` (list/show/create[`--ai`]/improve/assign/who-has/recommend/import/export/
 seed) + `/api/skills/*`. The specialist registry domains (`org skills`) are the
@@ -321,6 +356,7 @@ grow server.py. Routes include `/api/status`,
 `/api/overview`, `/api/memory/*`, `/api/agents`, `/api/metrics`,
 `/api/llm/{ledger,limits,ccusage}`, `/api/approvals`, `/api/audit`,
 `/api/scheduled`, `/api/tools` (+ graduate), `/api/reports`, `/api/projections`,
+`/api/episodes/search` (FTS5 recall),
 `/api/fleet`, `/api/config` (GET/PATCH — the settings service), `/api/skills/*`,
 `/api/org/*` (topology, brains, route, templates, relationships),
 `/api/flows[/{id}[/run]]` (the work-flow editor), `/api/code` (+ `/clis`, `/runs` —
