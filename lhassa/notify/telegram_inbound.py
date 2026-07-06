@@ -76,8 +76,11 @@ _CHAT_INSTRUCTION = (
     "information (news, prices, weather, releases), do not answer from memory: "
     "say in one short sentence that you'll look it up, and include this marker on "
     "its own line: [[research: <a concise web search query>]] — the system runs "
-    "the search and messages the results in a couple of minutes. At most one "
-    "marker per reply."
+    "the search and messages the results shortly. The query must be a CONCRETE "
+    "search-engine query, never the user's vague phrase verbatim: name the topic, "
+    "add specifics (product, place, month/year). 'dame las noticias de hoy' → "
+    "[[research: technology news July 2026]] — not [[research: noticias de hoy]]. "
+    "At most one marker per reply."
 )
 
 # The research marker the chat model may emit (see _CHAT_INSTRUCTION). Parsed
