@@ -250,7 +250,7 @@ _HELP_GROUPS: list[Tuple[str, list[str]]] = [
     ("Decisions", ["approvals", "approve", "deny"]),
     ("Watch & goals", ["watch", "watches", "unwatch", "goal"]),
     ("CV", ["cvnewbase", "cvbase"]),
-    ("System", ["status", "report", "capabilities", "tools", "skills"]),
+    ("System", ["status", "report", "capabilities", "tools", "skills", "org", "fleet", "version"]),
 ]
 
 DESCRIPTIONS: dict[str, str] = {
@@ -272,6 +272,9 @@ DESCRIPTIONS: dict[str, str] = {
     "capabilities": "What I have wired and what's on.",
     "tools": "The tools I've written myself, and their state.",
     "skills": "The skills installed on me.",
+    "org": "The org chart — brains and how they hang together.",
+    "fleet": "Known machines, last check-in, desired state.",
+    "version": "My version, runtime and key toggles.",
 }
 
 
@@ -879,6 +882,100 @@ async def _cmd_tools(args: str, *, config=None) -> str:
     except Exception as exc:
         logger.warning(f"commands: /tools failed: {exc}")
         return _oops("list my tools")
+
+
+@register_command("org")
+async def _cmd_org(args: str, *, config=None) -> str:
+    """``/org`` — the org chart as a compact indented tree, LLM-free.
+
+    Renders :func:`lhassa.org.topology.load_topology`: each brain's id, role and
+    department (when it has one), indented by depth. The permanent administrator
+    (the root) is marked ``★``; a coordinating brain ``○``; a leaf that actually
+    executes ``●``. Never constructs a provider — reads the topology file/derived
+    default only.
+    """
+    try:
+        cfg = _config(config)
+        from lhassa.org.topology import load_topology
+
+        topology = load_topology(cfg)
+        nodes = topology.nodes()
+        if not nodes:
+            return _oops("read the org chart")
+
+        lines = ["Org chart:"]
+
+        def render(node_id: str, depth: int) -> None:
+            node = topology.node(node_id)
+            if topology.is_admin(node_id):
+                marker = "★"
+            elif topology.is_leaf(node_id):
+                marker = "●"
+            else:
+                marker = "○"
+            dept = f" [{node.department}]" if node.department else ""
+            lines.append("  " * depth + f"{marker} {node.id} ({node.role}){dept}")
+            for child in topology.children_of(node_id):
+                render(child.id, depth + 1)
+
+        render(topology.root().id, 0)
+        return "\n".join(lines)
+    except Exception as exc:
+        logger.warning(f"commands: /org failed: {exc}")
+        return _oops("read the org chart")
+
+
+@register_command("fleet")
+async def _cmd_fleet(args: str, *, config=None) -> str:
+    """``/fleet`` — known machines, last check-in and desired state, LLM-free.
+
+    Reuses :func:`lhassa.api.fleet_routes.get_fleet` directly — the exact same
+    read ``/api/fleet`` serves — rather than re-deriving the fleet from episodes.
+    """
+    try:
+        from lhassa.api.fleet_routes import get_fleet
+
+        rows = await get_fleet()
+        if not rows:
+            return "No machines known yet."
+        lines = [f"Fleet ({len(rows)}):"]
+        for r in rows[:10]:
+            mid = r.get("machine_id") or "?"
+            last = r.get("last_checkin") or "never"
+            ds = r.get("desired_state") or {}
+            ds_str = ", ".join(f"{k}={v}" for k, v in ds.items()) or "—"
+            lines.append(f"- {mid}: last {last} · {ds_str}")
+        if len(rows) > 10:
+            lines.append(f"…+{len(rows) - 10} more")
+        return "\n".join(lines)
+    except Exception as exc:
+        logger.warning(f"commands: /fleet failed: {exc}")
+        return _oops("read the fleet")
+
+
+@register_command("version")
+async def _cmd_version(args: str, *, config=None) -> str:
+    """``/version`` — version, runtime and key config toggles, LLM-free.
+
+    Reuses :func:`lhassa.cli.extra_cmds.version_info` — the same source
+    ``lhassa version`` prints — so the two surfaces never drift apart.
+    """
+    try:
+        from lhassa.cli.extra_cmds import version_info
+
+        info = version_info()
+        toggles = info.get("toggles") or {}
+        flags = ", ".join(f"{k}={'on' if v else 'off'}" for k, v in toggles.items())
+        lines = [
+            f"Lhassa {info.get('version')} · Python {info.get('python')}",
+            f"Instance: {info.get('instance_id')}",
+        ]
+        if flags:
+            lines.append(flags)
+        return "\n".join(lines)
+    except Exception as exc:
+        logger.warning(f"commands: /version failed: {exc}")
+        return _oops("read my version")
 
 
 @register_command("skills")
