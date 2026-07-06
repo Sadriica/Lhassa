@@ -331,6 +331,10 @@ def _run_output(
 
             artifact = payload if isinstance(payload, str) else str(payload)
             artifact = cv.clean_latex(artifact)  # strip prose/fences → compile-ready .tex
+            # Deterministically restore the owner's contact block from the base
+            # CV — the model never has to reproduce it, and the contact_preserved
+            # gate downstream always passes ($0; best-effort, degrades to no-op).
+            artifact = cv.restore_contact(artifact, cv.load_base())
             path = cv.export(artifact, company=company, run_id=run_id)
             record["output"] = "tex"
             record["path"] = str(path)

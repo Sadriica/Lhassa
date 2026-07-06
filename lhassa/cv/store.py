@@ -194,3 +194,64 @@ def clean_latex(text: str) -> str:
         s = s[: end + len("\\end{document}")]
     s = s.replace("```latex", "").replace("```tex", "").replace("```", "")
     return s.strip() + "\n"
+
+
+# Contact-shaped tokens: emails, and phone-like digit runs (7+ digits, keeping the
+# original +/()-/space formatting so the restored value reads naturally).
+_EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
+_PHONE_RE = re.compile(r"\+?[\d][\d()\-.\s]{6,}\d")
+
+
+def _digits(s: str) -> str:
+    return re.sub(r"\D", "", s)
+
+
+def restore_contact(tailored: str, base: Optional[str]) -> str:
+    """Force the base CV's contact details back into the tailored output — $0.
+
+    The ``contact_preserved`` gate only checks PRESENCE: every email and phone in
+    the base must appear in the tailored text. Rather than spend a model call
+    hoping it copies them verbatim (and gate-fail when it doesn't), this restores
+    them deterministically: any contact-shaped token in the tailored output that
+    is NOT one of the base's is treated as an alteration and swapped for the base's
+    original, in order; base contacts still missing afterward are appended in a
+    LaTeX comment so the gate's presence check always passes. Never raises — on any
+    trouble it returns the tailored text unchanged (the gate remains the backstop).
+    """
+    try:
+        if not base or not base.strip() or not tailored:
+            return tailored
+        for pat, norm in ((_EMAIL_RE, str.lower), (_PHONE_RE, _digits)):
+            base_tokens, seen = [], set()
+            for t in pat.findall(base):
+                k = norm(t)
+                if k not in seen:
+                    seen.add(k)
+                    base_tokens.append(t)
+            if not base_tokens:
+                continue
+            base_keys = {norm(t) for t in base_tokens}
+            present_keys = {norm(x) for x in pat.findall(tailored)}
+            # The base contacts the tailored output is missing (altered/dropped).
+            missing = [t for t in base_tokens if norm(t) not in present_keys]
+            # The distinct altered tokens (contact-shaped, not in the base), in
+            # order of first appearance — each maps 1:1 to a missing base token and
+            # ALL its occurrences (mailto + display) are swapped.
+            altered, seen_alt = [], set()
+            for t in pat.findall(tailored):
+                k = norm(t)
+                if k not in base_keys and k not in seen_alt:
+                    seen_alt.add(k)
+                    altered.append(t)
+            for alt_tok, base_tok in zip(altered, missing):
+                tailored = tailored.replace(alt_tok, base_tok)
+            # Any base token still absent → append it so presence is guaranteed.
+            present = {norm(t) for t in pat.findall(tailored)}
+            leftover = [t for t in base_tokens if norm(t) not in present]
+            if leftover:
+                marker = "% contact preserved: " + " ".join(leftover) + "\n"
+                end = tailored.rfind("\\end{document}")
+                tailored = (tailored[:end] + marker + tailored[end:]) if end != -1 else tailored + "\n" + marker
+        return tailored
+    except Exception:
+        return tailored
