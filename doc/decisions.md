@@ -37,6 +37,23 @@ finished by hand — the salvage was committed incrementally so nothing was lost
 Live validations: a reminder traveled mint → tasks table → runner → notification;
 the detector's five real denied shapes are pinned as regression fixtures.
 
+## 2026-07-06 — Personal secretary layer (digest check-ins, agenda, today/tomorrow)
+
+Extended the deterministic digest from "Lhassa reports itself" into "Lhassa also
+checks in with the owner" without adding token spend. `LHASSA_DIGEST_PERSONAL_CHECKIN`
+adds a $0 personal agenda + morning/evening check-in; `send_digest` parks an
+`owner_prompts` row for six hours, and the Telegram poller captures the next plain
+reply as a daily check-in fact (`personal_checkin` / `daily_checkin`) before it
+falls through to brain chat. Explicit `/checkin <text>` remains available. The
+same reusable `personal/agenda.py` powers `/today`, `/tomorrow`, digest agenda
+sections and the dashboard Overview's **Today with you** card. The core choice:
+personal memory starts append-only in the grande as facts, with a small
+`owner_prompts` table only for pending questions; this keeps auditability and
+avoids silently treating all chat as state. The `personal` seed formalizes the
+hierarchy: a stable `personal` department under Lhassa, with separate
+`personal-morning-briefing` and `personal-evening-briefing` flows so the order of
+execution can vary by time of day without changing department identity.
+
 ## 2026-07-05 — The narrative: flag, pillars, voice book, bilingual README
 
 Studied how Hermes *tells* its story (one hammered claim, features as promises,

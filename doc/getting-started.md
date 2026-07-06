@@ -152,6 +152,20 @@ lhassa seed apply digest # schedules the recurring send_digest task
 The digest arrives in Lhassa's own voice — signals, spend, approvals, recent
 episodes — no model call unless you opt into `digest_style=persona`.
 
+Optional personal layer:
+
+```bash
+lhassa seed apply personal # creates the personal department + morning/evening flows
+lhassa config set digest_personal_checkin true
+```
+
+With that on, the digest also includes a deterministic personal agenda and a
+morning/evening check-in question. If you reply in Telegram within six hours,
+Lhassa saves that reply as a daily check-in; you can also write
+`/checkin <text>` explicitly. `/today` and `/tomorrow` show the same local
+agenda on demand. The stable department is `personal`; the separate flows are
+`personal-morning-briefing` and `personal-evening-briefing`.
+
 ## 5. Open the dashboard
 
 ```

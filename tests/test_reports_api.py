@@ -56,6 +56,8 @@ async def test_reports_summary(api):
     assert body["by_despertar"]["checkin"] == 1
     assert body["by_despertar"]["timer"] == 1
     assert body["by_decision"]["step"] == 1
+    assert body["voice"]["headline"].startswith("I reviewed 2 recent episode")
+    assert "episode trail" in body["voice"]["detail"]
     assert len(body["recent"]) == 2
 
     all_rows = (await client.get("/api/reports?n=0")).json()

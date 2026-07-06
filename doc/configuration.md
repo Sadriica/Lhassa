@@ -398,6 +398,9 @@ In debug mode, every STT frame is printed to the terminal:
 | `LHASSA_BUDGET_SOFT_PCT` | No | `0.8` | Fraction of the daily token budget past which the router refuses the smart model and prefers $0 providers. |
 | `LHASSA_DEFERRED_RETRY_BACKOFF` / `LHASSA_DEFERRED_MAX_RETRIES` | No | backoff / `3` | Deferred-task re-queue sweep: retry window (seconds) and cap (then `rechazada`). |
 | `LHASSA_DIGEST_HOUR_MORNING` / `LHASSA_DIGEST_HOUR_EVENING` | No | `8` / `21` | Local hours the `digest` seed schedules the daily $0 Telegram digest at. |
+| `LHASSA_DIGEST_STYLE` | No | `plain` | `plain` keeps the deterministic $0 first-person template; `persona` adds one cheap re-voice pass over the same facts. |
+| `LHASSA_DIGEST_LANGUAGE` | No | *(empty)* | Language hint for the persona pass; also localizes the deterministic personal check-in when enabled (`es`, `en`, ...). |
+| `LHASSA_DIGEST_PERSONAL_CHECKIN` | No | `0` | Adds the $0 personal agenda/check-in section to the digest and captures the next Telegram reply as a daily check-in for six hours. |
 | `LHASSA_MONITOR_DELEGATE` | No | `0` | When on, the watcher converts monitor findings into minted `org_run` tasks (fingerprint-deduped). |
 | `LHASSA_REPETITION_THRESHOLD` | No | `5` | Occurrences (with real cost) before `detect_repetition` proposes minting a deterministic action. |
 

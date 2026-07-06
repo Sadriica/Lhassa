@@ -662,6 +662,12 @@ class Config:
     digest_style: str = os.getenv("LHASSA_DIGEST_STYLE", "plain")
     # Language for the persona pass ("" keeps the template's language; e.g. "es").
     digest_language: str = os.getenv("LHASSA_DIGEST_LANGUAGE", "")
+    # Add a short owner-facing personal check-in to the scheduled digest.
+    # Deterministic and $0: morning asks about sleep/day shape; evening asks what
+    # to remember for tomorrow. Future versions can enrich this from agenda/memory.
+    digest_personal_checkin: bool = os.getenv(
+        "LHASSA_DIGEST_PERSONAL_CHECKIN", ""
+    ).lower() in ("1", "true", "yes")
 
     # ── Tool guardrails ───────────────────────────────────────────────────────
     # If true, reject obviously destructive shell commands unless explicitly

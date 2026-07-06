@@ -419,6 +419,118 @@ def test_poll_once_command_replies_without_brain(monkeypatch):
     assert new_offset == 201
 
 
+def test_poll_once_checkin_command_saves_without_brain(tmp_path, monkeypatch):
+    import lhassa.core.db as db
+
+    monkeypatch.setattr(db, "DB_PATH", tmp_path / "brain.db")
+    asyncio.run(db.init_db())
+    payload = {
+        "ok": True,
+        "result": [
+            {
+                "update_id": 205,
+                "message": {
+                    "chat": {"id": 123},
+                    "text": "/checkin dormí poco pero estoy enfocado",
+                },
+            }
+        ],
+    }
+    monkeypatch.setattr(
+        telegram_inbound.httpx, "AsyncClient", _client_returning(payload)
+    )
+    provider = _patch_brain(monkeypatch)
+    sent = _patch_send(monkeypatch)
+
+    new_offset = asyncio.run(
+        telegram_inbound.poll_once(_cfg(instance_id="inst_personal"), offset=None)
+    )
+
+    assert provider.calls == []
+    assert sent and sent[0].startswith("Noted")
+    assert new_offset == 206
+
+    from lhassa.memory import checkins
+
+    latest = asyncio.run(checkins.latest("inst_personal"))
+    assert latest is not None
+    assert "dormí poco" in latest.content
+
+
+def test_poll_once_plain_reply_to_pending_checkin_is_captured(tmp_path, monkeypatch):
+    import lhassa.core.db as db
+
+    monkeypatch.setattr(db, "DB_PATH", tmp_path / "brain.db")
+    asyncio.run(db.init_db())
+    from datetime import datetime, timedelta, timezone
+
+    asyncio.run(
+        db.add_owner_prompt(
+            "inst_personal",
+            kind="personal_checkin",
+            slot="evening",
+            prompt="how was your day?",
+            expires_at=(datetime.now(timezone.utc) + timedelta(hours=1)).isoformat(),
+        )
+    )
+    payload = {
+        "ok": True,
+        "result": [
+            {
+                "update_id": 206,
+                "message": {
+                    "chat": {"id": 123},
+                    "text": "Fue un día pesado, mañana necesito enfocarme en CV.",
+                },
+            }
+        ],
+    }
+    monkeypatch.setattr(
+        telegram_inbound.httpx, "AsyncClient", _client_returning(payload)
+    )
+    provider = _patch_brain(monkeypatch)
+    sent = _patch_send(monkeypatch)
+
+    new_offset = asyncio.run(
+        telegram_inbound.poll_once(
+            _cfg(instance_id="inst_personal", digest_personal_checkin=True),
+            offset=None,
+        )
+    )
+
+    assert provider.calls == []
+    assert sent and sent[0].startswith("Noted for the day")
+    assert new_offset == 207
+    assert asyncio.run(db.pending_owner_prompt("inst_personal", kind="personal_checkin")) is None
+
+    from lhassa.memory import checkins
+
+    latest = asyncio.run(checkins.latest("inst_personal"))
+    assert latest is not None
+    assert "día pesado" in latest.content
+
+
+def test_today_and_tomorrow_commands_render_personal_agenda(tmp_path, monkeypatch):
+    import lhassa.core.db as db
+
+    monkeypatch.setattr(db, "DB_PATH", tmp_path / "brain.db")
+    asyncio.run(db.init_db())
+    asyncio.run(db.add_task("inst_personal", "send_digest", due_at=None))
+
+    from lhassa.notify import commands
+
+    today = asyncio.run(
+        commands.dispatch("/today", config=_cfg(instance_id="inst_personal"))
+    )
+    tomorrow = asyncio.run(
+        commands.dispatch("/tomorrow", config=_cfg(instance_id="inst_personal"))
+    )
+
+    assert "For today I see" in today
+    assert "send_digest" in today
+    assert "For tomorrow I see" in tomorrow
+
+
 def test_poll_once_unknown_command_replies_without_brain(monkeypatch):
     payload = {
         "ok": True,

@@ -61,8 +61,8 @@ underlying seams the terminal uses, all LLM-free: `/report [days]` (spend),
 `/memory <query>` (facts search), `/capabilities` (what's wired + on/off),
 `/tools` (self-written tools + gate state), `/skills` (installed skills),
 `/org` (the topology tree), `/fleet` (machines + last check-in), `/version`,
-and `/code <task>` (parks an approval — see "remote hands" below). `/help`
-groups them all with one-liners.
+`/today`, `/tomorrow`, `/checkin <text>`, and `/code <task>` (parks an approval
+— see "remote hands" below). `/help` groups them all with one-liners.
 
 ### `/start`
 Lhassa's first-person introduction (the monk's register):
@@ -258,6 +258,28 @@ substring-deduped against existing facts) and stripped from the visible
 reply. Combined with `remember:` (explicit) and `lhassa onboard` (the founding
 questionnaire), the brain's personal memory grows from both sides.
 
+### Personal check-ins
+
+`/checkin <text>` stores an owner-authored daily note in the grande as an
+append-only fact tagged `personal_checkin` / `daily_checkin`. It is LLM-free.
+The newest recent check-in feeds `/today`, `/tomorrow`, the dashboard Overview,
+and the optional personal digest.
+
+When `LHASSA_DIGEST_PERSONAL_CHECKIN=1`, the digest asks a short morning/evening
+question. A delivered digest also parks a `personal_checkin` prompt for six
+hours; the next plain Telegram reply in that window is captured as the answer
+without needing `/checkin`. Commands still behave as commands, and outside that
+pending window free text goes to the normal brain chat path.
+
+`/today` and `/tomorrow` render the same deterministic personal agenda Lhassa
+uses in the digest: pending approvals, pending tasks due soon, the latest
+check-in, and today's spend.
+
+Run `lhassa seed apply personal` once on a fresh machine to create the canonical
+`personal` department and the two scheduled briefing flows:
+`personal-morning-briefing` and `personal-evening-briefing`. The department is
+stable; the morning and night flows differ in their task order.
+
 ### Live questions — the research bridge
 
 The chat turn is tool-less and its instruction says so: the model must never
@@ -296,13 +318,28 @@ underlying rows are UTC.
 template, already in Lhassa's first-person voice:
 
 ```
-🧭 Lhassa — morning check-in
-🩺 I'm healthy (worst check: ok).
-💰 I've spent $0.0184 today.
-✅ Nothing waiting on you.
+🧭 Lhassa — morning check-in. I kept the wheel turning at $0.
+🩺 My health is steady (worst check: ok).
+💰 I have spent $0.0184 today. Thinking stayed intentional.
+✅ Nothing is waiting on you. I can keep watch.
 📜 My last 20 wake-ups: heartbeat ×14, telegram ×4, repo_changed ×2.
-🤖 No agent jobs running.
-🗓️ Coming up, your time (1): send_digest at 21:00.
+🤖 No rented bodies are moving right now.
+🗓️ Coming up in your time (1): send_digest at 21:00.
+```
+
+With `LHASSA_DIGEST_PERSONAL_CHECKIN=1`, the same deterministic digest adds the
+secretary layer:
+
+```
+🧾 Agenda
+For today I see 2 priority item(s):
+1. Resolve approval: Run 'send_email'
+2. send_digest (Mon 21:00)
+Spend today: $0.0184
+Reply with /goal if you want me to keep watch.
+🌤️ You
+Before the day starts: how did you sleep?
+Anything heavy on your mind, or should I keep the path clear?
 ```
 
 **Persona style** (`LHASSA_DIGEST_STYLE=persona`) adds ONE cheap fast-model

@@ -22,6 +22,34 @@ from lhassa.core import db
 router = APIRouter()
 
 
+def _report_voice(*, count: int, total: int, by_despertar: dict[str, int], by_decision: dict[str, int]) -> dict:
+    """A deterministic first-person summary for dashboard report surfaces.
+
+    This is intentionally $0 copy: no model, no inference, just the episode
+    counts shaped in Lhassa's own register.
+    """
+    if total <= 0:
+        return {
+            "headline": "I have not recorded an episode yet.",
+            "detail": "The brain is quiet. When the heartbeat has work to note, it will appear here.",
+        }
+
+    routine = sum(
+        n
+        for key, n in by_decision.items()
+        if key.startswith("step") or key.startswith("monitor: offline")
+    )
+    trigger = max(by_despertar.items(), key=lambda kv: kv[1])[0] if by_despertar else "episode"
+    if routine >= count and count > 0:
+        detail = "Most of this window was routine work. That is the point: watch, act, sleep, spend $0."
+    else:
+        detail = f"The busiest trigger was {trigger}. I am keeping the episode trail auditable."
+    return {
+        "headline": f"I reviewed {count} recent episode(s), out of {total} recorded.",
+        "detail": detail,
+    }
+
+
 @router.get("/api/reports")
 async def get_reports(n: int = Query(default=50, ge=0, le=10000)):
     """Recent episodes + an outcomes summary.
@@ -63,6 +91,12 @@ async def get_reports(n: int = Query(default=50, ge=0, le=10000)):
         "limit": n,
         "by_despertar": by_despertar,
         "by_decision": by_decision,
+        "voice": _report_voice(
+            count=len(rows),
+            total=total,
+            by_despertar=by_despertar,
+            by_decision=by_decision,
+        ),
         "recent": recent,
     }
 

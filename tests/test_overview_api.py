@@ -85,7 +85,10 @@ def test_overview_returns_all_sections(tmp_path, monkeypatch):
     data = res.json()
 
     # Every section is present.
-    for key in ("brains", "skills", "approvals", "cost", "health", "activity", "tools"):
+    for key in (
+        "brains", "skills", "approvals", "cost", "health", "activity", "tools",
+        "personal",
+    ):
         assert key in data
     assert data["errors"] == {}
 
@@ -129,6 +132,9 @@ def test_overview_returns_all_sections(tmp_path, monkeypatch):
     assert isinstance(data["flows"]["count"], int)
     assert data["flows"]["last_status"] is None  # flow runs aren't persisted yet
     assert set(data["runs_today"]) == {"done", "stopped", "failed"}
+    assert "priorities" in data["personal"]
+    assert data["personal"]["priorities"]
+    assert "Resolve approval" in data["personal"]["priorities"][0]
 
 
 def test_overview_command_center_reflects_agent_runs(tmp_path, monkeypatch):

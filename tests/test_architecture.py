@@ -58,6 +58,10 @@ RULES: tuple[Rule, ...] = (
         frozenset({"memory", "security", "llm"}),
         frozenset(SHELLS),
     ),
+    # The personal secretary layer (check-ins, agenda) is an interface-like
+    # read-model over config/core/memory — shells compose it (digest, the
+    # /today /tomorrow /checkin commands); it must never reach back into one.
+    Rule("personal-isolation", frozenset({"personal"}), frozenset(SHELLS)),
     # The "hands" (adapters) must not depend on the UI/messaging shells. ``voice``
     # is included; the single legitimate desktop-notifier edge is whitelisted in
     # ALLOWED_EXCEPTIONS below so this rule still blocks NEW voice coupling.
@@ -102,12 +106,21 @@ KEYSTONE_FILES = ("registry.py", "plugins.py")
 #     ``notify-send`` call. ``health`` is an adapter and ``notify`` is a shell, so
 #     this is a deliberate, precisely-keyed edge (the import is lazy, inside the
 #     function body) rather than a general adapter -> shell coupling.
+#   personal/secretary.py -> lhassa.org{,.management,.topology}:
+#     The secretary module is SEED-SHAPED composition: it provisions the stable
+#     ``personal`` department in the org chart and its canonical briefing flows —
+#     exactly what ``seeds/cv.py`` does from the shell layer. The read-model
+#     modules (``personal/agenda.py``, ``memory/checkins.py``) remain shell-free;
+#     keying the exception on secretary.py alone keeps them that way.
 ALLOWED_EXCEPTIONS: frozenset[tuple[str, str]] = frozenset(
     {
         ("tools/monitor.py", "lhassa.voice.notifier"),
         ("tools/handlers/agents.py", "lhassa.voice.notifier"),
         ("plugins.py", "lhassa.config"),
         ("health/checks.py", "lhassa.notify.dispatch"),
+        ("personal/secretary.py", "lhassa.org"),
+        ("personal/secretary.py", "lhassa.org.management"),
+        ("personal/secretary.py", "lhassa.org.topology"),
     }
 )
 

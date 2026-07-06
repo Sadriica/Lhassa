@@ -340,12 +340,12 @@ def _offline_report(signals: dict, department: str) -> dict:
     failures = signals.get("failures") or []
 
     observations = [
-        f"{len(episodes)} recent episode(s) reviewed.",
-        f"Health worst level: {health.get('worst_level', 'info')} "
+        f"I reviewed {len(episodes)} recent episode(s).",
+        f"My health worst level is {health.get('worst_level', 'info')} "
         f"(ok={bool(health.get('ok', True))}).",
-        f"{len(flows)} work-flow(s) defined.",
-        f"{len(approvals)} approval(s) pending.",
-        f"{len(failures)} recent failure/offline marker(s).",
+        f"I know {len(flows)} work-flow(s).",
+        f"{len(approvals)} approval(s) are waiting.",
+        f"{len(failures)} recent failure/offline marker(s) need attention.",
     ]
 
     risks: list[str] = []
@@ -355,7 +355,7 @@ def _offline_report(signals: dict, department: str) -> dict:
     failing = health.get("failing") or []
     if not health.get("ok", True) and failing:
         risks.append(
-            f"Health degraded ({health.get('worst_level', 'warn')}): "
+            f"My health is degraded ({health.get('worst_level', 'warn')}): "
             f"{', '.join(failing)}."
         )
         improvements.append(f"Investigate failing health checks: {', '.join(failing)}.")
@@ -367,7 +367,7 @@ def _offline_report(signals: dict, department: str) -> dict:
         )
 
     if failures:
-        risks.append(f"{len(failures)} recent failure/offline episode(s) detected.")
+        risks.append(f"I found {len(failures)} recent failure/offline episode(s).")
         improvements.append(
             "Triage the recent failures; add a verifier or fallback where they recur."
         )
@@ -381,7 +381,7 @@ def _offline_report(signals: dict, department: str) -> dict:
             )
 
     if approvals:
-        risks.append(f"{len(approvals)} action(s) parked awaiting human approval.")
+        risks.append(f"{len(approvals)} action(s) are parked awaiting human approval.")
         improvements.append(
             f"Clear the approval queue ({len(approvals)} pending) so parked work proceeds."
         )
@@ -394,7 +394,7 @@ def _offline_report(signals: dict, department: str) -> dict:
 
     if not risks:
         observations.append("No anomalies surfaced in the reviewed window.")
-        improvements.append("Keep monitoring; no action required this pass.")
+        improvements.append("Keep watch; no action is required this pass.")
 
     return {
         "department": department,

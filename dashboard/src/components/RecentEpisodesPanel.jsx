@@ -26,7 +26,7 @@ export default function RecentEpisodesPanel() {
       setReports(await r.json())
       setError('')
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not load episodes.')
+      setError(e instanceof Error ? e.message : 'I could not read the episode log right now.')
     } finally {
       setLoading(false)
     }
@@ -68,11 +68,11 @@ export default function RecentEpisodesPanel() {
   return (
     <div className="lh-card">
       <SectionHeader
-        eyebrow="Decision log"
+        eyebrow="Episode trail"
         title="Recent episodes"
         meta={(
           <>
-          <span className="lh-tag">{filtered.length} shown</span>
+          <span className="lh-tag">{filtered.length} in view</span>
           <span className="lh-tag">{total} total</span>
           <span className="lh-tag">{importantCount} important</span>
           </>
@@ -86,14 +86,14 @@ export default function RecentEpisodesPanel() {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-2 mb-3">
           <input
             className="lh-input md:col-span-1"
-            placeholder="Filter episodes…"
+            placeholder="Search the trail…"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
           <select className="lh-select" value={importance} onChange={(e) => setImportance(e.target.value)}>
             <option value="all">All types</option>
-            <option value="important">Important only</option>
-            <option value="routine">Routine only</option>
+            <option value="important">Needs attention</option>
+            <option value="routine">Routine quiet</option>
           </select>
           <select className="lh-select" value={trigger} onChange={(e) => setTrigger(e.target.value)}>
             <option value="all">All triggers</option>
@@ -109,13 +109,13 @@ export default function RecentEpisodesPanel() {
       )}
 
       {loading ? (
-        <EmptyState>Loading episodes…</EmptyState>
+        <EmptyState>I am reading the episode trail…</EmptyState>
       ) : error ? (
         <ErrorState>{error}</ErrorState>
       ) : recent.length === 0 ? (
-        <EmptyState>No episodes recorded yet.</EmptyState>
+        <EmptyState>I have not recorded an episode yet.</EmptyState>
       ) : filtered.length === 0 ? (
-        <EmptyState>No episodes match “{query}”.</EmptyState>
+        <EmptyState>I found no episode matching “{query}”.</EmptyState>
       ) : (
         <div className="space-y-2 max-h-[70vh] overflow-y-auto">
           {filtered.map((ep) => {

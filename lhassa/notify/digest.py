@@ -61,11 +61,16 @@ def _local_hhmm(dt: datetime) -> str:
     return dt.astimezone().strftime("%H:%M")
 
 
-def _greeting() -> str:
-    """A deterministic header that matches the send slot (morning vs evening)."""
+def _digest_slot() -> str:
+    """Return the local digest slot name."""
     hour = datetime.now().hour  # local — the digest hours are configured local too
-    slot = "morning" if hour < 14 else "evening"
-    return f"🧭 Lhassa — {slot} check-in"
+    return "morning" if hour < 14 else "evening"
+
+
+def _greeting(slot: Optional[str] = None) -> str:
+    """A deterministic header that matches the send slot (morning vs evening)."""
+    slot = slot or _digest_slot()
+    return f"🧭 Lhassa — {slot} check-in. I kept the wheel turning at $0."
 
 
 def _signals_section(config, instance_id: str) -> list[str]:
@@ -83,11 +88,11 @@ def _signals_section(config, instance_id: str) -> list[str]:
         worst = health.get("worst_level", "info")
         failing = health.get("failing") or []
         if health.get("ok", True):
-            lines = [f"🩺 I'm healthy (worst check: {worst})."]
+            lines = [f"🩺 My health is steady (worst check: {worst})."]
         else:
-            lines = [f"🩺 Health needs attention (worst check: {worst})."]
+            lines = [f"🩺 I need a look here (worst check: {worst})."]
         if failing:
-            lines.append(f"   failing: {', '.join(failing)}")
+            lines.append(f"   failing checks: {', '.join(failing)}")
         failures = signals.get("failures") or []
         if failures:
             names = "; ".join(
@@ -95,14 +100,14 @@ def _signals_section(config, instance_id: str) -> list[str]:
                 for f in failures[:_FAILURE_LIST_CAP]
             )
             more = f" …+{len(failures) - _FAILURE_LIST_CAP}" if len(failures) > _FAILURE_LIST_CAP else ""
-            lines.append(f"   recent failures I'm tracking ({len(failures)}): {names}{more}")
+            lines.append(f"   failures I am tracking ({len(failures)}): {names}{more}")
         n_flows = len(signals.get("flows") or [])
         if n_flows:
-            lines.append(f"   {n_flows} work-flow(s) ready to run")
+            lines.append(f"   {n_flows} work-flow(s) are ready when you want them")
         return lines
     except Exception as exc:
         logger.debug(f"digest: signals section unavailable: {exc}")
-        return ["🩺 I couldn't read my health right now."]
+        return ["🩺 I couldn't read my health right now. I will try again next pass."]
 
 
 async def _spend_section(config) -> list[str]:
@@ -113,7 +118,9 @@ async def _spend_section(config) -> list[str]:
         spend = await _today_spend(config)
         if spend is None:
             return []
-        return [f"💰 I've spent ${spend:.4f} today."]
+        if spend <= 0:
+            return ["💰 I have spent $0.0000 today. Quiet is doing its job."]
+        return [f"💰 I have spent ${spend:.4f} today. Thinking stayed intentional."]
     except Exception as exc:
         logger.debug(f"digest: spend section unavailable: {exc}")
         return []
@@ -126,11 +133,11 @@ async def _approvals_section(instance_id: str) -> list[str]:
 
         rows = await _approval.pending(instance_id)
         if not rows:
-            return ["✅ Nothing waiting on you."]
+            return ["✅ Nothing is waiting on you. I can keep watch."]
         names = "; ".join(_approval.describe(r)["title"] for r in rows[:2])
         more = f" …+{len(rows) - 2}" if len(rows) > 2 else ""
         return [
-            f"⏳ Waiting on you: {len(rows)} approval(s): {names}{more} — /approvals for details."
+            f"⏳ I am waiting on you for {len(rows)} approval(s): {names}{more} — /approvals shows the queue."
         ]
     except Exception as exc:
         logger.debug(f"digest: approvals section unavailable: {exc}")
@@ -144,7 +151,7 @@ async def _episodes_section(instance_id: str) -> list[str]:
 
         episodes = await _db.load_recent_episodes(instance_id, _EPISODE_WINDOW)
         if not episodes:
-            return [f"📜 No wake-ups in my last {_EPISODE_WINDOW} yet."]
+            return [f"📜 I have no wake-ups in my last {_EPISODE_WINDOW} yet."]
 
         by_source: dict[str, int] = {}
         for ep in episodes:
@@ -167,10 +174,10 @@ def _jobs_section() -> list[str]:
 
         runs = list(state.agent_runs.values())
         if not runs:
-            return ["🤖 No agent jobs running."]
+            return ["🤖 No rented bodies are moving right now."]
         running = sum(1 for r in runs if r.status == "running")
         finished = sum(1 for r in runs if r.status != "running")
-        return [f"🤖 Agent jobs: {running} running, {finished} finished."]
+        return [f"🤖 Rented bodies: {running} running, {finished} finished."]
     except Exception as exc:
         logger.debug(f"digest: jobs section unavailable: {exc}")
         return []
@@ -199,7 +206,7 @@ async def _due_soon_section(instance_id: str) -> list[str]:
                 due_soon.append((due_dt, task))
 
         if not due_soon:
-            return ["🗓️ Nothing scheduled in the next 24h."]
+            return ["🗓️ Nothing is due in the next 24h."]
 
         due_soon.sort(key=lambda pair: pair[0])
         names = [
@@ -207,9 +214,87 @@ async def _due_soon_section(instance_id: str) -> list[str]:
             for due, t in due_soon[:_DUE_SOON_LIST_CAP]
         ]
         more = f" …+{len(due_soon) - _DUE_SOON_LIST_CAP}" if len(due_soon) > _DUE_SOON_LIST_CAP else ""
-        return [f"🗓️ Coming up, your time ({len(due_soon)}): {', '.join(names)}{more}."]
+        return [f"🗓️ Coming up in your time ({len(due_soon)}): {', '.join(names)}{more}."]
     except Exception as exc:
         logger.debug(f"digest: due-soon section unavailable: {exc}")
+        return []
+
+
+def _lang_is_spanish(config) -> bool:
+    lang = (getattr(config, "digest_language", "") or "").strip().lower()
+    return lang.startswith("es") or lang.startswith("spanish")
+
+
+async def _latest_owner_checkin_line(instance_id: str, config) -> list[str]:
+    try:
+        from lhassa.memory import checkins
+
+        latest = await checkins.latest(instance_id, within_hours=36.0)
+        if latest is None:
+            return []
+        text = latest.content.replace("\n", " ").strip()
+        if len(text) > 140:
+            text = text[:137] + "..."
+        if _lang_is_spanish(config):
+            return [f"   último check-in: {text}"]
+        return [f"   last check-in: {text}"]
+    except Exception as exc:
+        logger.debug(f"digest: owner check-in memory unavailable: {exc}")
+        return []
+
+
+async def _owner_checkin_section(config, instance_id: str, slot: str) -> list[str]:
+    """A small owner-facing check-in. Deterministic, opt-in and $0."""
+    if not getattr(config, "digest_personal_checkin", False):
+        return []
+
+    remembered = await _latest_owner_checkin_line(instance_id, config)
+    if _lang_is_spanish(config):
+        if slot == "morning":
+            return [
+                "🌤️ Tú",
+                *remembered,
+                "Antes de arrancar: ¿cómo dormiste?",
+                "¿Hay algo pesando en la cabeza, o mantengo el camino despejado?",
+            ]
+        return [
+            "🌙 Tú",
+            *remembered,
+            "Antes de bajar el ritmo: ¿cómo estuvo tu día?",
+            "¿Hay algo que deba recordar para mañana?",
+        ]
+
+    if slot == "morning":
+        return [
+            "🌤️ You",
+            *remembered,
+            "Before the day starts: how did you sleep?",
+            "Anything heavy on your mind, or should I keep the path clear?",
+        ]
+    return [
+        "🌙 You",
+        *remembered,
+        "Before I quiet down: how was your day?",
+        "Anything I should remember for tomorrow?",
+    ]
+
+
+async def _personal_agenda_section(config, slot: str) -> list[str]:
+    if not getattr(config, "digest_personal_checkin", False):
+        return []
+    try:
+        from lhassa.personal import agenda as personal_agenda
+
+        agenda_slot = "tomorrow" if slot == "evening" else "today"
+        summary = await personal_agenda.build(config, slot=agenda_slot)
+        text = personal_agenda.render(
+            summary,
+            language=getattr(config, "digest_language", "") or "en",
+        )
+        header = "🧾 Agenda"
+        return [header, *text.splitlines()]
+    except Exception as exc:
+        logger.debug(f"digest: personal agenda unavailable: {exc}")
         return []
 
 
@@ -226,13 +311,16 @@ async def build_digest(config: Optional[object] = None) -> str:
     cfg = _resolve_config(config)
     instance_id = _instance_id(cfg)
 
-    lines: list[str] = [_greeting()]
+    slot = _digest_slot()
+    lines: list[str] = [_greeting(slot)]
     lines.extend(_signals_section(cfg, instance_id))
     lines.extend(await _spend_section(cfg))
     lines.extend(await _approvals_section(instance_id))
     lines.extend(await _episodes_section(instance_id))
     lines.extend(_jobs_section())
     lines.extend(await _due_soon_section(instance_id))
+    lines.extend(await _personal_agenda_section(cfg, slot))
+    lines.extend(await _owner_checkin_section(cfg, instance_id, slot))
     return "\n".join(lines)
 
 
@@ -257,9 +345,10 @@ async def _persona_pass(text: str, config) -> str:
         identity.persona_block
         + "\n\n"
         + "Rewrite the check-in digest below as yourself speaking to your owner: "
-          "first person, warm, plain and BRIEF (under 120 words). Keep every fact, "
-          "number and time exactly as given — never invent or drop one. Keep the "
-          "emoji section markers." + lang_line
+          "first person, warm, calm and BRIEF (under 120 words). Use the monk's "
+          "register: patient, frugal, attentive, humble. Keep every fact, number "
+          "and time exactly as given — never invent or drop one. Keep the emoji "
+          "section markers." + lang_line
     )
     completion = await provider.complete(
         [{"role": "user", "content": text}],
@@ -269,6 +358,27 @@ async def _persona_pass(text: str, config) -> str:
     )
     out = (completion.text or "").strip()
     return out or text
+
+
+async def _park_owner_checkin_prompt(config, slot: str) -> None:
+    if not getattr(config, "digest_personal_checkin", False):
+        return
+    try:
+        from lhassa.core import db
+
+        instance_id = _instance_id(config)
+        expires = (datetime.now(timezone.utc) + timedelta(hours=6)).isoformat()
+        prompt = "personal digest check-in"
+        await db.init_db()
+        await db.add_owner_prompt(
+            instance_id,
+            kind="personal_checkin",
+            slot=slot,
+            prompt=prompt,
+            expires_at=expires,
+        )
+    except Exception as exc:
+        logger.debug(f"digest: could not park owner check-in prompt: {exc}")
 
 
 async def send_digest(params: Optional[dict] = None, *, config: Optional[object] = None) -> str:
@@ -285,6 +395,7 @@ async def send_digest(params: Optional[dict] = None, *, config: Optional[object]
     """
     cfg = _resolve_config(config)
     try:
+        slot = _digest_slot()
         text = await build_digest(cfg)
         if (getattr(cfg, "digest_style", "plain") or "plain").strip().lower() == "persona":
             try:
@@ -294,6 +405,8 @@ async def send_digest(params: Optional[dict] = None, *, config: Optional[object]
         from lhassa.notify.dispatch import notify
 
         delivered = await notify(text, level="info", config=cfg)
+        if delivered:
+            await _park_owner_checkin_prompt(cfg, slot)
         return "send_digest: delivered" if delivered else "send_digest: no channel delivered"
     except Exception as exc:
         return f"send_digest: error: {exc}"

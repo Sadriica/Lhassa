@@ -452,13 +452,29 @@ EDITABLE: list[dict] = [
         "attr": "digest_language",
         "env_var": "LHASSA_DIGEST_LANGUAGE",
         "type": "str",
-        "label": "Digest language (persona style)",
+        "label": "Digest language",
         "help": (
             "Language the persona pass writes in (e.g. 'es', 'en'). Empty keeps the "
-            "template's language. Only applies when digest style is 'persona'."
+            "template's language. Also localizes the deterministic personal check-in "
+            "when that section is enabled."
         ),
         "group": "Surfaces",
         "default": "",
+        "restart": RESTART_NONE,
+    },
+    {
+        "key": "digest_personal_checkin",
+        "attr": "digest_personal_checkin",
+        "env_var": "LHASSA_DIGEST_PERSONAL_CHECKIN",
+        "type": "bool",
+        "label": "Personal check-in in digest",
+        "help": (
+            "Adds a short $0 personal check-in to the morning/evening digest. "
+            "Morning asks about sleep and the shape of the day; evening asks how "
+            "the day went and what Lhassa should remember for tomorrow."
+        ),
+        "group": "Surfaces",
+        "default": False,
         "restart": RESTART_NONE,
     },
     # ── Org ──────────────────────────────────────────────────────────────────────
