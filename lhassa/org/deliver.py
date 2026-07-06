@@ -161,8 +161,11 @@ async def _log_chain(
         try:
             if not is_root:
                 parent_id = up[i + 1]
-                source = origin_department or "flow" if i == 0 else up[i - 1]
-                parts = [f"received from {source}: {file_names}"]
+                # The origin brain PRODUCED the work; brains above RECEIVED it.
+                if i == 0:
+                    parts = [f"produced: {file_names}"]
+                else:
+                    parts = [f"received from {up[i - 1]}: {file_names}"]
                 if metadata_summary:
                     parts.append(metadata_summary)
                 parts.append(f"forwarding ↑ {parent_id}")

@@ -119,7 +119,7 @@ async def test_deliver_document_logs_one_episode_per_brain(tmp_path, monkeypatch
 
     dept_hop, mid_hop, root_intent, root_final = eps
 
-    assert "received from interns" in dept_hop["resultado"]
+    assert "produced:" in dept_hop["resultado"]  # the origin brain produced it
     assert "cv_sezzle.tex" in dept_hop["resultado"]
     assert "cv_sezzle.pdf" in dept_hop["resultado"]
     assert "company=sezzle" in dept_hop["resultado"]
