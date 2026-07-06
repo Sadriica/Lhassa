@@ -183,6 +183,20 @@ def build_allowlist(repos: "set[str] | str | None" = None) -> dict[str, ActionSp
             min_trust=TrustLevel.INTERNO,
             requires_approval=False,
         ),
+        "curate_skills": ActionSpec(
+            objetivos=WILDCARD,
+            min_trust=TrustLevel.INTERNO,
+            requires_approval=False,  # deterministic sweep; never deletes, pinned exempt
+        ),
+        # ── PTC — Programmatic Tool Calling (script-over-RPC in quarantine) ──
+        "run_script": ActionSpec(
+            objetivos=WILDCARD,
+            min_trust=TrustLevel.INTERNO,
+            # High-risk like run_command: one script drives MANY actions via RPC.
+            # The sandbox + per-call allowlist re-check still apply, but the entry
+            # ticket into PTC always crosses the approval frontier.
+            requires_approval=True,
+        ),
         # ── Etapa 2 — operative day via Telegram ─────────────────────────────
         "send_digest": ActionSpec(
             objetivos=WILDCARD,

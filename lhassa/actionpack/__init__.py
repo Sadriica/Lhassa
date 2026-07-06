@@ -38,11 +38,13 @@ def register_all() -> None:
     # Import sub-modules — this defines the functions without side-effects.
     from lhassa.actionpack import (  # noqa: F401
         _brain,
+        _curate,
         _digest,
         _llm,
         _memory,
         _net,
         _org,
+        _script,
         _selfimprove,
         _system,
     )
@@ -96,3 +98,9 @@ def register_all() -> None:
     # ── Self-improvement (§2.8, Etapa 4) ──────────────────────────────────────
     _reg("detect_repetition", _selfimprove.detect_repetition)
     _reg("review_tools", _selfimprove.review_tools)
+
+    # ── Skills curator (deterministic lifecycle sweep) ─────────────────────────
+    _reg("curate_skills", _curate.curate_skills)
+
+    # ── PTC — Programmatic Tool Calling (script-over-RPC in quarantine) ────────
+    _reg("run_script", _script.run_script)
