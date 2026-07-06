@@ -29,9 +29,13 @@ def _patch_mint(monkeypatch, *, raise_exc=None):
         )
         return ("task_1", "pendiente")
 
+    async def fake_run_now(*a, **k):
+        return True
+
     import lhassa.core.dispatch as dispatch_mod
 
     monkeypatch.setattr(dispatch_mod, "mint_task", fake_mint)
+    monkeypatch.setattr(dispatch_mod, "run_task_now", fake_run_now)
     return calls
 
 

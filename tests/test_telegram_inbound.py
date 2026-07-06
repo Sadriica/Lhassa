@@ -14,6 +14,22 @@ from lhassa.llm.provider import ProviderNotConfigured
 from lhassa.notify import telegram, telegram_inbound
 
 
+import pytest as _pytest
+
+
+@_pytest.fixture(autouse=True)
+def _fresh_chat_state():
+    """Module-level chat history/turn counters never leak between tests."""
+    from lhassa.notify import telegram_inbound as _ti
+
+    _ti._CHAT_HISTORY.clear()
+    _ti._CHAT_TURNS.clear()
+    yield
+    _ti._CHAT_HISTORY.clear()
+    _ti._CHAT_TURNS.clear()
+
+
+
 def _cfg(**over):
     base = dict(
         telegram_bot_token="TOKEN",
