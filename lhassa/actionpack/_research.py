@@ -163,11 +163,27 @@ async def research_reply(params: dict | None = None) -> str:
 
     delivered = False
     try:
-        from lhassa.notify import telegram
+        from lhassa.config import Config
+        from lhassa.org.deliver import deliver
 
-        delivered = await telegram.send(text)
+        # research_reply used to send over Telegram only (``telegram.send``); the
+        # deliver seam's text path fans out over ``notify.dispatch`` instead, whose
+        # default channel set is "telegram,desktop" (config.notify_channels). To
+        # keep this action's UX IDENTICAL (Telegram-only, as promised to the owner
+        # who asked a question in that chat) we pin the channel set to "telegram"
+        # for this one call rather than letting the broader default apply.
+        research_config = Config()
+        research_config.notify_channels = "telegram"
+
+        delivered, _artifact_id = await deliver(
+            text=text,
+            kind="research",
+            metadata={"query": query, "results": len(results)},
+            origin_department="",  # research is Lhassa's own hand — root-only hop
+            config=research_config,
+        )
     except Exception as exc:
-        logger.warning(f"research_reply: telegram delivery failed: {exc}")
+        logger.warning(f"research_reply: delivery failed: {exc}")
 
     status = "sent" if delivered else "not delivered"
     return f"research_reply: {len(results)} result(s) {status} for {query!r}"

@@ -824,15 +824,21 @@ def test_clean_tags_rejects_non_list():
 
 
 def test_send_reminder_delivers_via_notify():
-    with patch("lhassa.actionpack._reminder._notify", AsyncMock(return_value=True)) as mock_notify:
+    with patch(
+        "lhassa.actionpack._reminder._deliver", AsyncMock(return_value=(True, None))
+    ) as mock_deliver:
         from lhassa.actionpack._reminder import send_reminder
         result = _run(send_reminder({"text": "join the standup"}))
     assert "delivered" in result
-    mock_notify.assert_awaited_once_with("join the standup", level="info")
+    mock_deliver.assert_awaited_once_with(
+        text="join the standup", kind="reminder", origin_department=""
+    )
 
 
 def test_send_reminder_no_channel_delivered():
-    with patch("lhassa.actionpack._reminder._notify", AsyncMock(return_value=False)):
+    with patch(
+        "lhassa.actionpack._reminder._deliver", AsyncMock(return_value=(False, None))
+    ):
         from lhassa.actionpack._reminder import send_reminder
         result = _run(send_reminder({"text": "join the standup"}))
     assert "no channel delivered" in result
@@ -848,10 +854,40 @@ def test_send_reminder_empty_text():
 
 
 def test_send_reminder_never_raises_on_notify_error():
-    with patch("lhassa.actionpack._reminder._notify", AsyncMock(side_effect=RuntimeError("boom"))):
+    with patch(
+        "lhassa.actionpack._reminder._deliver", AsyncMock(side_effect=RuntimeError("boom"))
+    ):
         from lhassa.actionpack._reminder import send_reminder
         result = _run(send_reminder({"text": "x"}))
     assert "error" in result.lower()
+
+
+def test_send_reminder_writes_the_root_hop_episode(monkeypatch):
+    """A reminder has no owning department — it takes the root-only hop, same as
+    ``research_reply`` — so one ``org-deliver`` Episode lands on ``lhassa``
+    alongside the actual delivery."""
+    from lhassa.actionpack._reminder import send_reminder
+    from lhassa.core import db
+    from lhassa.notify import dispatch
+    from lhassa.org import topology as topo_mod
+    from lhassa.org.topology import BrainNode, Topology
+
+    monkeypatch.setattr(
+        topo_mod, "load_topology", lambda config=None: Topology([BrainNode(id="lhassa")])
+    )
+
+    async def fake_notify(text, *, level="info", config=None, **kwargs):
+        return True
+
+    monkeypatch.setattr(dispatch, "notify", fake_notify)
+
+    result = _run(send_reminder({"text": "join the standup"}))
+    assert "delivered" in result
+
+    rows = _run(db.load_recent_episodes("inst_personal", n=100))
+    eps = [r for r in rows if r["despertar_por"] == "org-deliver"]
+    assert eps and eps[0]["dominio"] == "lhassa"
+    assert "delivered:" in eps[0]["resultado"] and "ok)" in eps[0]["resultado"]
 
 
 # ---------------------------------------------------------------------------

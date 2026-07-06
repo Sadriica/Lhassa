@@ -831,7 +831,7 @@ async def _answer(text: str, *, config, chat_id: str = "") -> None:
             record, flow_id = await _run_cv_flow(
                 caption=stripped, company=company, base_cv=held["base_cv"], config=config
             )
-            await _reply_with_cv(record, flow_id, company, config=config)
+            await _reply_with_cv(record, flow_id, company, config=config, posting=stripped)
             return
 
     if not stripped.startswith("/") and getattr(config, "digest_personal_checkin", False):
@@ -1046,15 +1046,20 @@ def _gate_failure_reply(record: dict) -> str:
     return "I couldn't produce a tailored CV this time. Nothing was sent."
 
 
-async def _reply_with_cv(record, flow_id: str, company: str | None, *, config) -> None:
+async def _reply_with_cv(
+    record, flow_id: str, company: str | None, *, config, posting: str | None = None
+) -> None:
     """Turn a CV run record into the owner's reply. Never raises.
 
-    On success (the run reached its tex output) send the ``.tex`` via ``sendDocument``;
-    on a gate failure send a short text explaining what stopped it; a missing flow id
-    or a broken record degrades to a clear message. Nothing broken is ever sent.
+    On success (the run reached its tex output) the tailored CV travels UP the org
+    hierarchy via :func:`lhassa.org.deliver.deliver` — THE flagship of the
+    sender-of-record seam (§org: "the hierarchy is the philosophy, not a feature"):
+    the department that produced it (read off ``record["delegation"]``, the same
+    chain :func:`lhassa.org.delegate.delegate_flow` resolved to run the flow) logs its
+    hop, every intermediate coordinator logs its own, and Lhassa (root) sends. On a
+    gate failure send a short text explaining what stopped it; a missing flow id or a
+    broken record degrades to a clear message. Nothing broken is ever sent.
     """
-    from lhassa.notify import telegram_api
-
     if record is None:
         await telegram.send(
             f"My CV work-flow ({flow_id}) isn't set up yet — create it first.",
@@ -1070,12 +1075,33 @@ async def _reply_with_cv(record, flow_id: str, company: str | None, *, config) -
         from lhassa import cv
 
         send_path = path
+        paths = [path]
         with contextlib.suppress(Exception):
             pdf = cv.compile_pdf(path)
             if pdf is not None:
                 send_path = str(pdf)
-        ok = await telegram_api.send_document(send_path, caption=cap, config=config)
-        if not ok:
+                paths.append(str(pdf))
+
+        from lhassa.org.deliver import deliver
+
+        metadata: dict = {}
+        if company:
+            metadata["company"] = company
+        if posting:
+            metadata["posting"] = posting
+        metadata["run_id"] = record.get("id")
+        origin_department = (record.get("delegation") or {}).get("department") or "interns"
+
+        delivered, _artifact_id = await deliver(
+            document=send_path,
+            paths=paths,
+            caption=cap,
+            kind="cv",
+            metadata=metadata,
+            origin_department=origin_department,
+            config=config,
+        )
+        if not delivered:
             await telegram.send(
                 "I tailored your CV but couldn't send the file — try again.",
                 config=config,
@@ -1130,7 +1156,7 @@ async def _answer_document(document: dict, caption, *, config, chat_id: str = ""
         record, flow_id = await _run_cv_flow(
             caption=cap, company=company, base_cv=base_cv, config=config
         )
-        await _reply_with_cv(record, flow_id, company, config=config)
+        await _reply_with_cv(record, flow_id, company, config=config, posting=cap)
     except Exception as exc:  # never raise into the poll loop
         logger.warning(f"Telegram inbound: CV document handling failed: {exc}")
         with contextlib.suppress(Exception):
@@ -1162,7 +1188,7 @@ async def _answer_cv_command(text: str, *, config) -> None:
         record, flow_id = await _run_cv_flow(
             caption=posting, company=company, base_cv=None, config=config
         )
-        await _reply_with_cv(record, flow_id, company, config=config)
+        await _reply_with_cv(record, flow_id, company, config=config, posting=posting)
     except Exception as exc:  # never raise into the poll loop
         logger.warning(f"Telegram inbound: /cv command failed: {exc}")
         with contextlib.suppress(Exception):

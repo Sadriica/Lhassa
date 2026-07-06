@@ -143,13 +143,17 @@ def _patch_search(monkeypatch, results):
 def _patch_send(monkeypatch):
     sent = []
 
-    async def fake_send(text, *, config=None):
+    async def fake_send(text, *, config=None, **kwargs):
         sent.append(text)
         return True
 
     import lhassa.notify.telegram as telegram_mod
 
     monkeypatch.setattr(telegram_mod, "send", fake_send)
+    # research_reply now goes through org.deliver -> notify.dispatch, which only
+    # fans out to a channel that reports itself configured. Force that check
+    # deterministic here rather than depending on real credentials in .env.
+    monkeypatch.setattr(telegram_mod, "is_configured", lambda config: True)
     return sent
 
 
@@ -170,6 +174,37 @@ def test_research_reply_sends_sourced_results(monkeypatch):
     assert len(sent) == 1
     assert "China launches AI satellite" in sent[0]
     assert "https://example.com/a" in sent[0]
+
+
+def test_research_reply_delivers_through_org_deliver_root_hop(monkeypatch):
+    """research_reply now sends via ``org.deliver.deliver`` (an empty
+    ``origin_department`` — research is Lhassa's own hand, not delegated work) —
+    a single root-attributed ``org-deliver`` Episode should land alongside the
+    Telegram send, same as ``send_reminder``."""
+    from lhassa.actionpack._research import research_reply
+    from lhassa.core import db
+    from lhassa.org import topology as topo_mod
+    from lhassa.org.topology import BrainNode, Topology
+
+    monkeypatch.setattr(
+        topo_mod, "load_topology", lambda config=None: Topology([BrainNode(id="lhassa")])
+    )
+
+    _patch_search(
+        monkeypatch,
+        [{"title": "China launches AI satellite", "body": "…", "url": "https://example.com/a"}],
+    )
+    sent = _patch_send(monkeypatch)
+
+    out = asyncio.run(research_reply({"query": "china ai satellite"}))
+    assert "1 result(s) sent" in out
+    assert len(sent) == 1  # Telegram-only, exactly as telegram.send used to deliver
+
+    rows = asyncio.run(db.load_recent_episodes("inst_personal", n=100))
+    eps = [r for r in rows if r["despertar_por"] == "org-deliver"]
+    assert eps and eps[0]["dominio"] == "lhassa"
+    assert "delivered:" in eps[0]["resultado"]
+    assert "ok)" in eps[0]["resultado"]
 
 
 def test_research_reply_search_failure_still_messages_the_owner(monkeypatch):
