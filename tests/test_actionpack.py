@@ -819,6 +819,42 @@ def test_clean_tags_rejects_non_list():
 
 
 # ---------------------------------------------------------------------------
+# send_reminder action (lhassa/actionpack/_reminder.py)
+# ---------------------------------------------------------------------------
+
+
+def test_send_reminder_delivers_via_notify():
+    with patch("lhassa.actionpack._reminder._notify", AsyncMock(return_value=True)) as mock_notify:
+        from lhassa.actionpack._reminder import send_reminder
+        result = _run(send_reminder({"text": "join the standup"}))
+    assert "delivered" in result
+    mock_notify.assert_awaited_once_with("join the standup", level="info")
+
+
+def test_send_reminder_no_channel_delivered():
+    with patch("lhassa.actionpack._reminder._notify", AsyncMock(return_value=False)):
+        from lhassa.actionpack._reminder import send_reminder
+        result = _run(send_reminder({"text": "join the standup"}))
+    assert "no channel delivered" in result
+
+
+def test_send_reminder_empty_text():
+    from lhassa.actionpack._reminder import send_reminder
+    result = _run(send_reminder({"text": ""}))
+    assert result == "send_reminder: no text"
+
+    result_missing = _run(send_reminder({}))
+    assert result_missing == "send_reminder: no text"
+
+
+def test_send_reminder_never_raises_on_notify_error():
+    with patch("lhassa.actionpack._reminder._notify", AsyncMock(side_effect=RuntimeError("boom"))):
+        from lhassa.actionpack._reminder import send_reminder
+        result = _run(send_reminder({"text": "x"}))
+    assert "error" in result.lower()
+
+
+# ---------------------------------------------------------------------------
 # Architecture layer guard (actionpack is a shell)
 # ---------------------------------------------------------------------------
 
