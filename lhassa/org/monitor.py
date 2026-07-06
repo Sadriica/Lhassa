@@ -29,6 +29,7 @@ import contextlib
 import json
 import os
 import sqlite3
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -167,13 +168,53 @@ def _dept_from_episode(ep: dict) -> Optional[str]:
     return name or None
 
 
-def _failures_from_episodes(episodes: list[dict]) -> list[dict]:
-    """Recent episodes whose outcome reads as a failure / offline / deferred marker."""
+def _is_stale(ep: dict, max_age_hours: float) -> bool:
+    """Whether ``ep`` is older than the freshness window (0 → never stale).
+
+    An unparseable/missing ``creado_en`` counts as FRESH — defensively keep the
+    episode rather than silently dropping a real failure we can't date.
+    """
+    if max_age_hours <= 0:
+        return False
+    ts_str = str(ep.get("creado_en") or "")
+    try:
+        ts = datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    if ts.tzinfo is None:
+        ts = ts.replace(tzinfo=timezone.utc)
+    age = datetime.now(timezone.utc) - ts
+    return age.total_seconds() > max_age_hours * 3600
+
+
+def _failures_from_episodes(
+    episodes: list[dict], *, max_age_hours: float = 0.0
+) -> list[dict]:
+    """Recent episodes whose outcome reads as a failure / offline / deferred marker.
+
+    Three noise guards keep the signal honest:
+
+    - the monitor's OWN episodes (``despertar_por == "monitor"``) never count —
+      their summaries quote failure counts ("N new failure(s)"), so counting them
+      would have the watcher alerting on its own reflection.
+    - a completed think's ``resultado`` is model PROSE (a CV, an analysis…) where
+      "error"/"fail" are content, not outcome — for ``think*`` decisions the
+      markers match on ``decision``/``accion`` only. A think that actually failed
+      carries the marker in its decision ("telegram: error", "org: deferred").
+    - a failure only counts while FRESH (``max_age_hours``; 0 = no cutoff): on a
+      quiet instance old failures would otherwise sit in the last-N episode
+      window for days and keep inflating every "total N failure(s)".
+    """
     out: list[dict] = []
     for ep in episodes:
-        blob = " ".join(
-            str(ep.get(k) or "") for k in ("decision", "accion", "resultado")
-        ).lower()
+        if (ep.get("despertar_por") or "") == "monitor":
+            continue
+        if _is_stale(ep, max_age_hours):
+            continue
+        keys = ("decision", "accion")
+        if not str(ep.get("decision") or "").lower().startswith("think"):
+            keys = ("decision", "accion", "resultado")
+        blob = " ".join(str(ep.get(k) or "") for k in keys).lower()
         if any(marker in blob for marker in _FAILURE_MARKERS):
             out.append(
                 {
@@ -275,7 +316,10 @@ def gather_signals(config: Config, *, instance_id: Optional[str] = None) -> dict
         "health": _health_signal(config),
         "flows": _flows_signal(config),
         "approvals": _read_pending_approvals(instance_id),
-        "failures": _failures_from_episodes(episodes),
+        "failures": _failures_from_episodes(
+            episodes,
+            max_age_hours=getattr(config, "monitor_failure_window_h", 24.0),
+        ),
     }
 
 

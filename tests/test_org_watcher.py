@@ -80,6 +80,32 @@ def test_detect_new_failures():
     assert "2 new failure" in fail[0]["summary"]
 
 
+def test_detect_new_failures_names_them_without_a_total():
+    """The alert quotes WHAT is new this tick — never the standing total, which
+    read as if the whole backlog had just failed."""
+    prev = _snap()
+    curr = _snap()
+    curr["failures"] = [{"id": "ep_a", "decision": "distill_memory"}]
+    ev = watcher.detect_events(prev, curr)
+    fail = [e for e in ev if e["kind"] == "failures_new"]
+    assert len(fail) == 1
+    assert fail[0]["summary"] == "1 new failure(s): distill_memory"
+    assert "total" not in fail[0]["summary"]
+
+
+def test_detect_new_failures_by_identity_not_count():
+    """An old failure aging OUT while a new one arrives keeps the count flat —
+    the id diff still reports the genuinely new one."""
+    prev = _snap()
+    prev["failures"] = [{"id": "ep_old", "decision": "org: deferred"}]
+    curr = _snap()
+    curr["failures"] = [{"id": "ep_new", "decision": "telegram: error"}]
+    ev = watcher.detect_events(prev, curr)
+    fail = [e for e in ev if e["kind"] == "failures_new"]
+    assert len(fail) == 1
+    assert "telegram: error" in fail[0]["summary"]
+
+
 def test_detect_health_worsened_only_upward():
     ev = watcher.detect_events(_snap(worst="info"), _snap(worst="alert"))
     health = [e for e in ev if e["kind"] == "health_worsened"]

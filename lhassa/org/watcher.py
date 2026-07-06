@@ -162,7 +162,8 @@ def detect_events(prev_signals: Optional[dict], curr_signals: dict) -> list[dict
     Pure and deterministic — no I/O, no LLM. Each event is
     ``{kind, level, summary}``. Notable transitions:
 
-      * **NEW failures** — the failure-marker count rose (``failures_new``).
+      * **NEW failures** — failure episodes not present in the previous snapshot,
+        diffed by episode id and named in the summary (``failures_new``).
       * **health WORSENED** — ``health.worst_level`` climbed to ``warn`` / ``alert``
         (``health_worsened``; ``level`` carries the new worst level).
       * **NEW pending approvals** — the pending-approval count rose (``approvals_new``).
@@ -177,15 +178,26 @@ def detect_events(prev_signals: Optional[dict], curr_signals: dict) -> list[dict
 
     events: list[dict] = []
 
-    # NEW failures — count of failure/offline/deferred markers rose.
-    prev_fail, curr_fail = _count(prev_signals, "failures"), _count(curr_signals, "failures")
-    if curr_fail > prev_fail:
-        new = curr_fail - prev_fail
+    # NEW failures — failure episodes whose id was NOT in the previous snapshot.
+    # Diffing by identity (not by count) means an old failure aging out of the
+    # freshness window can never mask — or masquerade as — a genuinely new one,
+    # and the alert names only what happened in THIS tick; the standing total is
+    # deliberately not quoted (it read as if it all just happened).
+    prev_ids = {f.get("id") for f in (prev_signals.get("failures") or [])}
+    fresh = [
+        f for f in (curr_signals.get("failures") or []) if f.get("id") not in prev_ids
+    ]
+    if fresh:
+        names = "; ".join(
+            str(f.get("decision") or f.get("accion") or "episode")[:60]
+            for f in fresh[:3]
+        )
+        extra = f" (+{len(fresh) - 3} more)" if len(fresh) > 3 else ""
         events.append(
             {
                 "kind": _KIND_FAILURES,
                 "level": "alert",
-                "summary": f"{new} new failure(s) (total {curr_fail})",
+                "summary": f"{len(fresh)} new failure(s): {names}{extra}",
             }
         )
 
