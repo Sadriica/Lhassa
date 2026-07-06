@@ -1,13 +1,14 @@
 """The ``maintenance`` seed — mint the recurring self-improvement/hygiene tasks.
 
-Three of the built-in deterministic actions only do anything useful if something
+Four of the built-in deterministic actions only do anything useful if something
 schedules them repeatedly: ``distill_memory`` (turn recent episodes into durable
-facts), ``review_tools`` (gate 4 — retire unused/failing graduated tools), and
-``detect_repetition`` (spot a repeated-judgment pattern worth automating). This
-seed mints them as recurring tasks via the same task-minting path everything
-else uses (:func:`lhassa.core.dispatch.mint_task`), so they show up in
-``lhassa task list`` and fire on schedule through the ordinary watchlist/step
-loop — no new scheduler, no core edit.
+facts), ``review_tools`` (gate 4 — retire unused/failing graduated tools),
+``detect_repetition`` (spot a repeated-judgment pattern worth automating), and
+``curate_skills`` (Fase 2 — the skill usage lifecycle sweep: active -> stale ->
+archived, never deletes). This seed mints them as recurring tasks via the same
+task-minting path everything else uses (:func:`lhassa.core.dispatch.mint_task`),
+so they show up in ``lhassa task list`` and fire on schedule through the
+ordinary watchlist/step loop — no new scheduler, no core edit.
 
 Idempotent: a matching PENDING recurring task (same accion) is left alone rather
 than duplicated, so re-applying this seed on an already-seeded machine is a
@@ -27,12 +28,13 @@ if TYPE_CHECKING:
     from lhassa.config import Config
 
 # accion -> recurrence in seconds. distill_memory/detect_repetition are daily
-# hygiene passes; review_tools (gate 4) runs less often — a tool needs time to
-# accrue real usage before "unused" or "high failure rate" means anything.
+# hygiene passes; review_tools (gate 4) and curate_skills (Fase 2) run less
+# often — both need time to accrue real usage before "unused" means anything.
 _RECURRING_ACTIONS: tuple[tuple[str, int], ...] = (
     ("distill_memory", 86400),
     ("detect_repetition", 86400),
     ("review_tools", 604800),
+    ("curate_skills", 604800),
 )
 
 
@@ -110,7 +112,7 @@ def seed_maintenance(config: "Optional[Config]" = None) -> dict:
 @register_seed(
     "maintenance",
     "Mint the recurring self-improvement/hygiene tasks: distill_memory (daily), "
-    "detect_repetition (daily), review_tools (weekly).",
+    "detect_repetition (daily), review_tools (weekly), curate_skills (weekly).",
 )
 def apply(config: "Optional[Config]" = None) -> dict:
     """The ``maintenance`` seed entry point — see :func:`seed_maintenance`."""

@@ -150,7 +150,13 @@ class SkillStore:
         return out
 
     def get(self, name: str) -> Optional[Skill]:
-        """The skill named ``name``, or ``None`` if it is not in the store."""
+        """The skill named ``name``, or ``None`` if it is not in the store.
+
+        This is the read path used at think time to load a skill's instructions
+        into a brain's prompt (see ``org/executor.py``), so every successful read
+        bumps the curator's usage telemetry (best-effort — see
+        :mod:`lhassa.skills.curator`; never breaks a caller on failure).
+        """
         folder = self.folder_for(name)
         if not folder.exists() or not folder.is_dir():
             # Tolerate an exact (un-slugified) folder name too.
@@ -159,7 +165,14 @@ class SkillStore:
                 folder = alt
             else:
                 return None
-        return _read_skill_folder(folder)
+        skill = _read_skill_folder(folder)
+        try:
+            from lhassa.skills import curator as _curator
+
+            _curator.record_use(skill.name or name, config=self._config)
+        except Exception as exc:  # telemetry must never break a caller
+            logger.warning("skills: usage telemetry failed for {} — {}", name, exc)
+        return skill
 
     def exists(self, name: str) -> bool:
         return self.get(name) is not None
