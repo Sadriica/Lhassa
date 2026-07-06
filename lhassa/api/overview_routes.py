@@ -17,7 +17,7 @@ Mounted by the integrator with ``app.include_router(overview_routes.router)``.
 """
 
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter
 
@@ -59,13 +59,15 @@ async def _overview_approvals() -> dict:
     items = []
     for r in rows:
         payload = r.get("payload") or {}
+        desc = approval.describe(r)
         items.append(
             {
                 "id": r.get("id"),
                 "tipo": r.get("tipo"),
                 "accion": payload.get("accion"),
                 "actor_id": payload.get("actor_id"),
-                "summary": payload.get("accion") or r.get("tipo") or "?",
+                "summary": desc["title"],
+                "detail": desc.get("detail") or "",
                 "creado_en": r.get("creado_en"),
             }
         )
@@ -103,6 +105,9 @@ async def _overview_activity() -> dict:
     """The last few episodes — what the brain has been doing, newest first."""
     await db.init_db()
     rows = await db.load_recent_episodes(lhassa_config.Config.instance_id, 8)
+    total = await db.count_episodes(lhassa_config.Config.instance_id)
+    since_24h = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
+    last_24h = await db.count_episodes_since(lhassa_config.Config.instance_id, since_24h)
     recent = [
         {
             "id": r.get("id"),
@@ -113,7 +118,13 @@ async def _overview_activity() -> dict:
         }
         for r in rows
     ]
-    return {"recent": recent}
+    return {
+        "recent": recent,
+        "total": total,
+        "last_24h": last_24h,
+        "recent_limit": 8,
+        "window": "24h",
+    }
 
 
 async def _overview_tools() -> dict:
@@ -240,7 +251,7 @@ _OVERVIEW_DEFAULTS: dict[str, object] = {
         "kill_switch": False,
     },
     "health": {"worst_level": "info", "ok": True},
-    "activity": {"recent": []},
+    "activity": {"recent": [], "total": 0, "last_24h": 0, "recent_limit": 8, "window": "24h"},
     "tools": {"count": 0, "by_estado": {}},
     "now_running": [],
     "pulse": {"last_beat": None, "mode": "offline", "alive": False},

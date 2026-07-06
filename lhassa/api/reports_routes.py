@@ -23,10 +23,18 @@ router = APIRouter()
 
 
 @router.get("/api/reports")
-async def get_reports(n: int = Query(default=50, ge=1, le=500)):
-    """Recent episodes + an outcomes summary (counts by wake trigger / decision)."""
+async def get_reports(n: int = Query(default=50, ge=0, le=10000)):
+    """Recent episodes + an outcomes summary.
+
+    ``n=0`` returns every episode for the instance (bounded only by the DB), used by
+    the Activity log where the user can filter/sort locally.
+    """
     await db.init_db()
-    rows = await db.load_recent_episodes(lhassa_config.Config.instance_id, n)
+    total = await db.count_episodes(lhassa_config.Config.instance_id)
+    rows = await db.load_recent_episodes(
+        lhassa_config.Config.instance_id,
+        total if n == 0 else n,
+    )
 
     by_despertar: dict[str, int] = {}
     by_decision: dict[str, int] = {}
@@ -51,10 +59,27 @@ async def get_reports(n: int = Query(default=50, ge=1, le=500)):
     ]
     return {
         "count": len(rows),
+        "total": total,
+        "limit": n,
         "by_despertar": by_despertar,
         "by_decision": by_decision,
         "recent": recent,
     }
+
+
+@router.get("/api/episodes/search")
+async def search_episodes(
+    q: str = Query(default=""),
+    n: int = Query(default=20, ge=1, le=200),
+):
+    """Full-text search over the episode log (Fase 1 "Recall") — $0, deterministic.
+
+    Thin wrapper over :func:`lhassa.core.db.search_episodes` (BM25-ranked FTS5,
+    automation episodes demoted). An empty/blank ``q`` returns no results.
+    """
+    await db.init_db()
+    results = await db.search_episodes(lhassa_config.Config.instance_id, q, n)
+    return {"query": q, "count": len(results), "results": results}
 
 
 @router.get("/api/projections")

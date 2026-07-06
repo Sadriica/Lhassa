@@ -108,6 +108,7 @@ app.add_middleware(
 # ``api/_shared.py`` and the few call-time seams import ``server`` lazily.
 from lhassa.api import (  # noqa: E402
     activity_routes,
+    analytics_routes,
     approval_routes,
     checkin_routes,
     code_routes,
@@ -131,6 +132,7 @@ from lhassa.api import (  # noqa: E402
 from lhassa.api.overview_routes import build_overview  # noqa: F401,E402
 
 app.include_router(task_routes.router)
+app.include_router(analytics_routes.router)
 app.include_router(code_routes.router)
 app.include_router(relationship_routes.router)
 app.include_router(flow_routes.router)

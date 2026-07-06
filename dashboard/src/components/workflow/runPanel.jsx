@@ -1,4 +1,5 @@
 import { kindMeta } from '../flowNodeKinds'
+import { fmtDuration, fmtUsd } from '../../lib/format'
 
 // ── run-record renderer ─────────────────────────────────────────────────────────
 function StepResult({ step }) {
@@ -47,6 +48,12 @@ export function RunRecord({ run, live }) {
             offline / stubbed — set LHASSA_ORG_LIVE for a live run
           </span>
         )}
+        {run.duration_ms !== undefined && (
+          <span className="lh-tag">duration {fmtDuration(run.duration_ms)}</span>
+        )}
+        {Number(run.cost_usd || 0) > 0 && (
+          <span className="lh-tag">cost {fmtUsd(run.cost_usd)}</span>
+        )}
       </div>
       <div className="space-y-1">
         {(run.steps || []).map((s, i) => (
@@ -71,6 +78,11 @@ export function RunRecord({ run, live }) {
               {s.kind || '—'}
             </span>
             <span className="text-[11px]" style={{ flex: 1, minWidth: 0 }}><StepResult step={s} /></span>
+            {s.duration_ms !== undefined && (
+              <span className="lh-mono text-[10px]" style={{ color: 'var(--lh-text-faint)' }}>
+                {fmtDuration(s.duration_ms)}
+              </span>
+            )}
           </div>
         ))}
       </div>

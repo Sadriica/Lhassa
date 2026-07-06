@@ -98,7 +98,8 @@ def test_overview_returns_all_sections(tmp_path, monkeypatch):
     assert data["approvals"]["pending"] == 1
     item = data["approvals"]["items"][0]
     assert item["tipo"] == "send_email"
-    assert item["summary"] == "send_email"
+    assert item["summary"] == "Run 'send_email'"
+    assert "asked by duenio" in item["detail"]
 
     # Cost mirrors the /api/llm/limits path.
     assert data["cost"]["kill_switch"] is False
@@ -108,6 +109,10 @@ def test_overview_returns_all_sections(tmp_path, monkeypatch):
     # Health + activity + tools.
     assert data["health"]["ok"] is True
     assert any(ep["despertar_por"] == "heartbeat" for ep in data["activity"]["recent"])
+    assert data["activity"]["total"] == 1
+    assert data["activity"]["last_24h"] == 1
+    assert data["activity"]["recent_limit"] == 8
+    assert data["activity"]["window"] == "24h"
     assert data["tools"]["count"] == 1
     assert data["tools"]["by_estado"]["cuarentena"] == 1
 

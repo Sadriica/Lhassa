@@ -347,16 +347,16 @@ test('runtime panel renders and imports a snapshot through dry-run flow', async 
   page.on('dialog', (dialog) => dialog.accept())
 
   await page.goto('/')
-  await page.getByRole('button', { name: /Readiness/ }).click()
+  await page.getByRole('button', { name: 'Readiness', exact: true }).click()
 
   await expect(page.getByText('Runtime')).toBeVisible()
   await expect(page.getByText('openai / gpt-4o-mini')).toBeVisible()
   await expect(page.getByText('127.0.0.1:7766')).toBeVisible()
 
-  await page.getByRole('button', { name: /Activity/ }).click()
+  await page.getByRole('button', { name: 'Activity', exact: true }).click()
   await expect(page.getByText('shell', { exact: true })).toBeVisible()
 
-  await page.getByRole('button', { name: /Readiness/ }).click()
+  await page.getByRole('button', { name: 'Readiness', exact: true }).click()
 
   const fileInput = page.locator('input[type="file"]')
   await fileInput.setInputFiles({
@@ -378,7 +378,7 @@ test('runtime panel renders and imports a snapshot through dry-run flow', async 
 
 test('dashboard updates when a live audit event arrives over websocket', async ({ page }) => {
   await page.goto('/')
-  await page.getByRole('button', { name: /Activity/ }).click()
+  await page.getByRole('button', { name: 'Activity', exact: true }).click()
 
   await expect(page.getByText('pwd')).toBeVisible()
   await expect(page.getByText('/tmp/new.txt').first()).toBeVisible()

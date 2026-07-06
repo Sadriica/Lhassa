@@ -1,5 +1,8 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react'
 import { toast } from '../lib/toast'
+import { fmtDuration, fmtPct } from '../lib/format'
+import { requireOk } from '../lib/api'
+import { EmptyState, ErrorState, SectionHeader } from './ui/common'
 
 // The React-Flow canvas is heavy (React Flow + its styles). Lazy-load it so it is
 // code-split out of the initial dashboard bundle and only fetched when a flow opens.
@@ -38,7 +41,7 @@ function kindCount(flow, kind) {
 }
 
 // ── one flow row in the list ────────────────────────────────────────────────────
-function FlowRow({ flow, onOpen, onDelete, busy }) {
+function FlowRow({ flow, stats, onOpen, onDelete, busy }) {
   const [confirm, setConfirm] = useState(false)
   const n = (flow.nodes || []).length
   return (
@@ -57,6 +60,14 @@ function FlowRow({ flow, onOpen, onDelete, busy }) {
           {kindCount(flow, 'gate') > 0 && <span className="lh-badge">{kindCount(flow, 'gate')} gate</span>}
           {kindCount(flow, 'output') > 0 && <span className="lh-badge">{kindCount(flow, 'output')} output</span>}
           {kindCount(flow, 'branch') > 0 && <span className="lh-badge">{kindCount(flow, 'branch')} branch</span>}
+          {stats && (
+            <>
+              <span className="lh-badge">{stats.runs || 0} runs</span>
+              <span className="lh-badge">{fmtPct(stats.success_rate)} success</span>
+              <span className="lh-badge">avg {fmtDuration(stats.avg_duration_ms)}</span>
+              {stats.last_status && <span className="lh-badge">last {stats.last_status}</span>}
+            </>
+          )}
         </div>
       </div>
       <div className="flex gap-1.5 items-center shrink-0">
@@ -74,6 +85,47 @@ function FlowRow({ flow, onOpen, onDelete, busy }) {
   )
 }
 
+function FlowInsights({ items = [], onOpen }) {
+  const active = items.filter((item) => item.runs > 0)
+  return (
+    <div className="lh-card">
+      <SectionHeader
+        eyebrow="Flow analytics"
+        title="Usage, reliability and speed"
+        meta={<span className="lh-tag">30d</span>}
+      />
+      {active.length === 0 ? (
+        <EmptyState>
+          No workflow runs recorded yet. Run a flow and this will show run count, success rate, duration and latest status.
+        </EmptyState>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2">
+          {active.slice(0, 6).map((item) => (
+            <button
+              key={item.entity_id}
+              type="button"
+              className="lh-row text-left"
+              style={{ background: 'var(--lh-surface-2)', cursor: 'pointer' }}
+              onClick={() => onOpen(item.entity_id)}
+              title={`Open ${item.label || item.entity_id}`}
+            >
+              <div className="text-[13px] font-medium truncate" style={{ color: 'var(--lh-text)' }}>
+                {item.label || item.entity_id}
+              </div>
+              <div className="flex gap-1 flex-wrap mt-2">
+                <span className="lh-tag">{item.runs} runs</span>
+                <span className="lh-tag">{fmtPct(item.success_rate)} success</span>
+                <span className="lh-tag">avg {fmtDuration(item.avg_duration_ms)}</span>
+                {item.last_status && <span className="lh-tag">last {item.last_status}</span>}
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // Props (all optional so this works before App.jsx wires the hash sub-route):
 //   route     — a flow id to auto-open (string), or null/undefined for the list
 //   onRoute   — onRoute(idOrNull): update the URL hash (id opens a flow, null → list)
@@ -86,23 +138,54 @@ export default function WorkflowsPanel({ route, onRoute } = {}) {
   const [isNew, setIsNew] = useState(false)
   const [brains, setBrains] = useState([])
   const [skills, setSkills] = useState([])
+  const [flowAnalytics, setFlowAnalytics] = useState({})
+  const [flowAnalyticsItems, setFlowAnalyticsItems] = useState([])
+  const [flowRuns, setFlowRuns] = useState([])
 
   const loadFlows = useCallback(async () => {
     try {
       const r = await fetch('/api/flows')
-      if (!r.ok) throw new Error('flows fetch failed')
+      await requireOk(r, 'Flows')
       const d = await r.json()
       setFlows(Array.isArray(d) ? d : [])
       setError('')
-    } catch {
-      setError('Could not load flows.')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not load flows.')
     } finally {
       setLoading(false)
     }
   }, [])
 
+  const loadAnalytics = useCallback(async () => {
+    try {
+      const r = await fetch('/api/analytics/flows?range=30d')
+      await requireOk(r, 'Flow analytics')
+      const d = await r.json()
+      const byId = {}
+      for (const item of d.items || []) byId[item.entity_id] = item
+      setFlowAnalytics(byId)
+      setFlowAnalyticsItems(d.items || [])
+    } catch {
+      setFlowAnalytics({})
+      setFlowAnalyticsItems([])
+    }
+  }, [])
+
+  const loadFlowRuns = useCallback(async (id) => {
+    if (!id) { setFlowRuns([]); return }
+    try {
+      const r = await fetch(`/api/analytics/runs?kind=flow&entity_id=${encodeURIComponent(id)}&limit=25`)
+      await requireOk(r, 'Flow run history')
+      const d = await r.json()
+      setFlowRuns(Array.isArray(d.items) ? d.items : [])
+    } catch {
+      setFlowRuns([])
+    }
+  }, [])
+
   useEffect(() => {
     loadFlows()
+    loadAnalytics()
     // The org context task nodes route against: brains to pin, skills to auto-route.
     fetch('/api/org/topology')
       .then((r) => (r.ok ? r.json() : null))
@@ -112,7 +195,7 @@ export default function WorkflowsPanel({ route, onRoute } = {}) {
       .then((r) => (r.ok ? r.json() : []))
       .then((d) => setSkills(Array.isArray(d) ? d : []))
       .catch(() => setSkills([]))
-  }, [loadFlows])
+  }, [loadFlows, loadAnalytics])
 
   const openFlow = useCallback(async (id) => {
     setBusy(true)
@@ -123,13 +206,14 @@ export default function WorkflowsPanel({ route, onRoute } = {}) {
       const d = await r.json()
       setEditing(d)
       setIsNew(false)
+      await loadFlowRuns(d.id)
       onRoute?.(d.id) // deep-link: mirror the open flow into the URL hash
     } catch {
       setError('Could not open that flow.')
     } finally {
       setBusy(false)
     }
-  }, [onRoute])
+  }, [onRoute, loadFlowRuns])
 
   // Deep-link: when the `route` prop names a flow id (on mount or a hash change),
   // auto-open it. Guarded so re-opening the same flow doesn't refetch in a loop.
@@ -142,6 +226,7 @@ export default function WorkflowsPanel({ route, onRoute } = {}) {
   const newFlow = useCallback(() => {
     setEditing(starterFlow())
     setIsNew(true)
+    setFlowRuns([])
     onRoute?.(null) // a new flow has no persistent id yet — keep the URL on the list
   }, [onRoute])
 
@@ -209,20 +294,22 @@ export default function WorkflowsPanel({ route, onRoute } = {}) {
     }
   }, [isNew, loadFlows, onRoute])
 
-  const runFlow = useCallback(async (id) => {
+  const runFlow = useCallback(async (id, inputs = {}) => {
     try {
       const r = await fetch(`/api/flows/${encodeURIComponent(id)}/run`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}),
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ inputs }),
       })
       const d = await r.json().catch(() => ({}))
       if (!r.ok) return { ok: false, detail: d.detail || `Run failed (${r.status})` }
+      await loadAnalytics()
+      await loadFlowRuns(id)
       return { ok: true, run: d }
     } catch {
       return { ok: false, detail: 'Run failed — network error.' }
     }
-  }, [])
+  }, [loadAnalytics, loadFlowRuns])
 
-  const closeEditor = useCallback(() => { setEditing(null); setIsNew(false); onRoute?.(null) }, [onRoute])
+  const closeEditor = useCallback(() => { setEditing(null); setIsNew(false); setFlowRuns([]); onRoute?.(null) }, [onRoute])
 
   const sorted = useMemo(
     () => [...flows].sort((a, b) => (a.name || a.id).localeCompare(b.name || b.id)),
@@ -231,59 +318,63 @@ export default function WorkflowsPanel({ route, onRoute } = {}) {
 
   if (editing) {
     return (
-      <Suspense fallback={<EditorFallback />}>
-        <div className="lh-card">
-          <WorkflowEditor
-            flow={editing}
-            isNew={isNew}
-            brains={brains}
-            skills={skills}
-            onSave={saveFlow}
-            onRun={runFlow}
-            onClose={closeEditor}
-          />
-        </div>
-      </Suspense>
+      <div className="space-y-4">
+        <Suspense fallback={<EditorFallback />}>
+          <div className="lh-card">
+            <WorkflowEditor
+              flow={editing}
+              isNew={isNew}
+              brains={brains}
+              skills={skills}
+              flowStats={flowAnalytics[editing.id]}
+              flowRuns={flowRuns}
+              onSave={saveFlow}
+              onRun={runFlow}
+              onClose={closeEditor}
+            />
+          </div>
+        </Suspense>
+        <FlowInsights items={flowAnalyticsItems} onOpen={openFlow} />
+      </div>
     )
   }
 
   return (
-    <div className="lh-card">
-      <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
-        <div className="flex items-center gap-2">
-          <h2 className="lh-card-title">Flows</h2>
-          <span className="text-[11px]" style={{ color: 'var(--lh-text-faint)' }}>
-            {flows.length} flow{flows.length === 1 ? '' : 's'} · trigger → task → gate → output
-          </span>
+    <div className="space-y-4">
+      <div className="lh-card">
+        <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+          <div className="flex items-center gap-2">
+            <h2 className="lh-card-title">Flows</h2>
+            <span className="text-[11px]" style={{ color: 'var(--lh-text-faint)' }}>
+              {flows.length} flow{flows.length === 1 ? '' : 's'} · trigger → task → gate → output
+            </span>
+          </div>
+          <div className="flex gap-2 items-center">
+            <button type="button" className="lh-btn" onClick={() => { loadFlows(); loadAnalytics() }} disabled={busy}>Refresh</button>
+            <button type="button" className="lh-btn lh-btn-primary" onClick={newFlow}>+ New flow</button>
+          </div>
         </div>
-        <div className="flex gap-2 items-center">
-          <button type="button" className="lh-btn" onClick={loadFlows} disabled={busy}>Refresh</button>
-          <button type="button" className="lh-btn lh-btn-primary" onClick={newFlow}>+ New flow</button>
-        </div>
+
+        {error && <ErrorState>{error}</ErrorState>}
+
+        {loading ? (
+          <EmptyState>Loading flows…</EmptyState>
+        ) : sorted.length === 0 ? (
+          <div className="lh-row" style={{ textAlign: 'center' }}>
+            <p className="text-xs mb-2" style={{ color: 'var(--lh-text-faint)' }}>
+              No flows yet. A flow starts with a single trigger you can wire into tasks, gates, and outputs.
+            </p>
+            <button type="button" className="lh-btn lh-btn-primary" onClick={newFlow}>+ New flow</button>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {sorted.map((f) => (
+              <FlowRow key={f.id} flow={f} stats={flowAnalytics[f.id]} onOpen={openFlow} onDelete={deleteFlow} busy={busy} />
+            ))}
+          </div>
+        )}
       </div>
-
-      {error && (
-        <div className="lh-row mb-3" style={{ borderColor: 'rgba(162,62,52,0.45)', color: 'var(--lh-alert)' }}>
-          {error}
-        </div>
-      )}
-
-      {loading ? (
-        <p className="text-xs" style={{ color: 'var(--lh-text-faint)' }}>Loading flows…</p>
-      ) : sorted.length === 0 ? (
-        <div className="lh-row" style={{ textAlign: 'center' }}>
-          <p className="text-xs mb-2" style={{ color: 'var(--lh-text-muted)' }}>
-            No flows yet. A flow starts with a single trigger you can wire into tasks, gates, and outputs.
-          </p>
-          <button type="button" className="lh-btn lh-btn-primary" onClick={newFlow}>+ New flow</button>
-        </div>
-      ) : (
-        <div className="space-y-2">
-          {sorted.map((f) => (
-            <FlowRow key={f.id} flow={f} onOpen={openFlow} onDelete={deleteFlow} busy={busy} />
-          ))}
-        </div>
-      )}
+      <FlowInsights items={flowAnalyticsItems} onOpen={openFlow} />
     </div>
   )
 }
