@@ -215,8 +215,15 @@ ONE durable owner fact with `[[remember: …]]` → persisted to the grande as a
 `dato` (procedencia `telegram-chat`, substring-deduped, marker stripped).
 Reminders ride the ONE clock: `schedule_reminder` mints a `send_reminder` task
 (tasks table + heartbeat; `lhassa/scheduler.py` is a deprecation shim, a one-shot
-migration moved legacy rows). `lhassa onboard` (CLI) seeds the owner's founding
-facts; `lhassa memory add` writes one directly. Every surface that
+migration moved legacy rows). `/remind <what> <when>` is the Telegram door — a
+deterministic time-phrase parser (`commands.parse_remind`: "a las 5pm", "at
+17:00", "in 45 min", "mañana 9am"; system-local clock, past-today rolls to
+tomorrow), and a natural `acuérdame/recuérdame/remind me` message with a
+parseable time short-circuits to it before any model (time-less phrasings fall
+through to the remember/fact lanes). NO brain executes a reminder — the
+`personal` briefing flows only read pending ones as agenda data. `lhassa
+onboard` (CLI) seeds the owner's founding facts; `lhassa memory add` writes
+one directly. Every surface that
 lists approvals (the `/approvals` command, the dashboard queue/Inbox, the digest)
 renders through `security/approval.py:describe(row)` → `{title, detail}` — one
 deterministic place that knows each payload shape, so the owner sees WHAT they are

@@ -61,8 +61,10 @@ underlying seams the terminal uses, all LLM-free: `/report [days]` (spend),
 `/memory <query>` (facts search), `/capabilities` (what's wired + on/off),
 `/tools` (self-written tools + gate state), `/skills` (installed skills),
 `/org` (the topology tree), `/fleet` (machines + last check-in), `/version`,
-`/today`, `/tomorrow`, `/checkin <text>`, and `/code <task>` (parks an approval
-— see "remote hands" below). `/help` groups them all with one-liners.
+`/today`, `/tomorrow`, `/checkin <text>`, `/remind <what> <when>` (timed
+reminders — see its section below), and `/code <task>` (parks an approval
+— see "remote hands" below). `/help` groups them all with one-liners, and the
+bot's "/" menu is published from the same registry on poller start.
 
 ### `/start`
 Lhassa's first-person introduction (the monk's register):
@@ -211,6 +213,34 @@ deterministic $0 shortcut straight into the fact store — no LLM, no task:
 > remember: my flight home is on the 14th
 Remembered: f_2c91
 ```
+
+### `/remind <what> <when>` — timed reminders, no brain involved
+
+A deterministic time-phrase parser ($0 — the think never wakes): `a las 5pm`,
+`at 17:00`, `in 45 min`, `mañana 9am`. Times are read against the SYSTEM
+clock (local); a time already past today rolls to tomorrow. The reminder is
+minted as a `send_reminder` task on the one clock — the heartbeat delivers it
+through the notify fan-out at the due minute. No brain, no department, no
+model executes a reminder; the `personal` briefing flows merely *read*
+pending reminders as data when they build `/today`'s agenda.
+
+```
+> /remind llamar al banco a las 5pm
+⏰ Noted — I'll remind you at 17:00 (Mon 17:00): llamar al banco
+```
+
+The owner's natural phrasing routes here too — a message starting with
+`acuérdame` / `recuérdame` / `remind me` that carries a parseable time
+short-circuits to the same path before any model:
+
+```
+> acuérdame de un compromiso a las 5pm
+⏰ Noted — I'll remind you at 17:00 (Mon 17:00): un compromiso
+```
+
+A time-less "acuérdame que…" is NOT a reminder — it falls through to the
+`remember:`/fact lanes (a fact, not an appointment); the ambiguity is
+resolved by the presence of a time phrase.
 
 ---
 
