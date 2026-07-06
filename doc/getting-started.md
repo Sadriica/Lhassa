@@ -1,279 +1,189 @@
-# Getting Started with Lhassa
+# Getting started
 
-Lhassa is a JARVIS-inspired voice AI assistant. You speak to it; it listens, thinks, and talks back. It can search the web, run shell commands, read and write files, send emails, manage your calendar, set reminders, and hand off complex work to background agents — all through natural conversation.
+Lhassa is a persistent personal AI brain, not a chat window you open and
+close. It runs a **do-and-sleep** loop: state on disk plus a `step()` that
+advances one tick at a time, woken every couple of minutes by a heartbeat
+timer or on demand from the CLI, Telegram or the dashboard. A routine day
+costs $0 — most ticks are answered by deterministic checks, never a model —
+and it thinks only when the judgment actually calls for it.
 
-Runs on **Linux, macOS, and Windows**. Everything runs locally except three cloud API calls: Deepgram (speech-to-text), your LLM provider (reasoning), and Cartesia (text-to-speech).
+This walkthrough gets a real instance running on a Linux machine: installed,
+answering on the CLI, ticking its own heartbeat, wired to Telegram, and
+visible on the dashboard.
 
----
+## 1. Requirements
 
-## System Requirements
-
-| Requirement | Details |
-|---|---|
-| **OS** | Linux, macOS 13+, or Windows 10/11 |
-| **Python** | 3.13 or newer |
-| **Node.js** | 18 or newer (for the dashboard) |
-| **Package manager** | [`uv`](https://docs.astral.sh/uv/) |
-| **Audio (Linux)** | PipeWire recommended; any ALSA/PulseAudio device works |
-| **Audio (macOS/Win)** | Built-in CoreAudio / WASAPI — works out of the box |
-
-Verify everything before starting:
-
-```bash
-python --version    # 3.13.x or higher
-node --version      # v18.x or higher
-uv --version        # uv 0.x.x
-```
-
-Install `uv` if you don't have it:
-
-```bash
-# Linux / macOS
-curl -LsSf https://astral.sh/uv/install.sh | sh
-
-# Windows (PowerShell)
-powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
-```
-
----
-
-## Quick Start
-
-### 1. Clone the repository
-
-```bash
-git clone <repo-url> ~/code/potts
-cd ~/code/potts
-```
-
-### 2. Get your API keys
-
-You need **one LLM key** plus two keys for speech. Pick whichever LLM provider you prefer:
-
-**LLM — choose one:**
-
-| Provider | Sign up | Notes |
+| Dependency | Why | Required? |
 |---|---|---|
-| **Groq** | [console.groq.com](https://console.groq.com) → API Keys | Free tier, fast |
-| **Anthropic** | [console.anthropic.com](https://console.anthropic.com) → API Keys | Claude models |
-| **OpenAI** | [platform.openai.com](https://platform.openai.com) → API Keys | GPT models |
-| **OpenRouter** | [openrouter.ai](https://openrouter.ai) → Keys | Access many models |
-| **Cerebras** | [cloud.cerebras.ai](https://cloud.cerebras.ai) | Very fast inference |
+| [`uv`](https://docs.astral.sh/uv/) | Python toolchain — `uv sync` resolves the `.venv`. | Yes |
+| `node` + `npm` | Build the React/Vite dashboard (`npm ci && npm run build`). | Yes, for the dashboard |
+| `docker` | The containerized path + the installer's build/smoke test. | Only without `--no-docker` |
+| `tectonic` | LaTeX engine that compiles a tailored CV `.tex` into a PDF. Without it the CV bridge sends the raw `.tex`. | Optional |
+| `ccusage` | Cross-harness LLM-spend CLI for the dashboard cost panels. `npm install -g --prefix ~/.local ccusage`. Without it those panels show "unavailable". | Optional |
 
-Lhassa auto-detects the provider from whichever key you set — **no extra config needed**.
+For thinking, you need **one** LLM API key — Lhassa auto-detects the provider
+from whichever one is set (priority: Anthropic → OpenAI → Groq → OpenRouter →
+Cerebras), no extra config needed. Or skip API keys entirely and point it at
+a subscription CLI you already have (`claude` / `codex` / `opencode`) — those
+need no key at all, just the binary on `PATH`.
 
-If you set `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`, vision tools (`analyze_screen`, `analyze_image`) also work automatically with the same key.
+Verify the toolchain:
 
-**Deepgram** (speech-to-text — free tier includes $200 in credits)
-1. [console.deepgram.com](https://console.deepgram.com) → API Keys → Create a New API Key
+```bash
+uv --version
+node --version
+docker --version   # only if you'll use --no-docker is NOT set
+```
 
-**Cartesia** (text-to-speech — pay-as-you-go, very cheap)
-1. [console.cartesia.ai](https://console.cartesia.ai) → API Keys → Generate key
-2. To preview voices: [play.cartesia.ai](https://play.cartesia.ai) — copy a voice ID and set it as `LHASSA_VOICE_ID`
+## 2. Install
 
-### 3. Configure your environment
+Two paths — pick one.
+
+### One command (always-on Linux)
+
+```bash
+cd ~/Code/lhassa
+bash scripts/install.sh
+```
+
+This preflights `python3`/`uv`/`docker`, runs `uv sync`, builds the dashboard
+if `dashboard/dist` is missing, builds and smoke-tests a Docker image,
+installs the systemd **user** units (app + heartbeat + health timer + the
+always-on $0 monitor watcher, plus the Telegram poller if a token is already
+set in `.env`), and enables boot lingering so everything survives a reboot.
+Flags: `--no-docker`, `--docker-only`, `--no-boot`, `--image NAME`. Full
+details in [`install.md`](install.md).
+
+When it finishes, the dashboard is live at **http://127.0.0.1:7766** and the
+heartbeat is already ticking on a timer.
+
+### Manual dev path
+
+```bash
+make install   # uv sync --extra voice + npm install && npm run build
+```
+
+This is the laptop dev/voice workflow: it resolves the venv and builds the
+dashboard, but doesn't install any systemd units or start anything long-running
+— you run things yourself as you go (`make run`, `make dev`, `lhassa serve`,
+`lhassa beat`, ...). See the Makefile targets: `make test`, `make lint`,
+`make check` (validates the environment, no API calls).
+
+Either path, put your API key(s) in `.env` first:
 
 ```bash
 cp .env.example .env
+# then set ONE of: GROQ_API_KEY / ANTHROPIC_API_KEY / OPENAI_API_KEY /
+# OPENROUTER_API_KEY / CEREBRAS_API_KEY
 ```
 
-Open `.env` and fill in your keys. Minimum required — pick one LLM provider:
-
-```dotenv
-# Option A — Groq (free tier, recommended for getting started)
-GROQ_API_KEY=gsk_...
-DEEPGRAM_API_KEY=...
-CARTESIA_API_KEY=...
-
-# Option B — Anthropic (also enables vision tools automatically)
-ANTHROPIC_API_KEY=sk-ant-...
-DEEPGRAM_API_KEY=...
-CARTESIA_API_KEY=...
-
-# Option C — OpenAI (also enables vision tools automatically)
-OPENAI_API_KEY=sk-...
-DEEPGRAM_API_KEY=...
-CARTESIA_API_KEY=...
-```
-
-Lhassa will log which provider and model it resolved at startup, so you can confirm it picked the right one.
-
-**Language:** Lhassa defaults to English (`LHASSA_STT_LANGUAGE=en`). If you want a different language, set it in `.env`:
-
-```dotenv
-LHASSA_STT_LANGUAGE=es   # Spanish
-LHASSA_STT_LANGUAGE=fr   # French
-LHASSA_STT_LANGUAGE=de   # German
-```
-
-**Agents:** Lhassa auto-detects whether to use Claude Code or the built-in LLM for background agents. Check which you have:
+## 3. First contact
 
 ```bash
-which claude   # prints a path if Claude Code is installed, blank if not
+lhassa --help
 ```
 
-- **Claude Code found:** agents run via `claude --print` (your Claude subscription). Set `LHASSA_AGENT_DIR` to the project directory you want them to operate in.
-- **Claude Code not found:** agents use the built-in LLM tool loop with your configured provider. No extra config needed.
+prints Lhassa's own first-person greeting ("I am Lhassa. I live on this
+machine — I watch quietly, remember what matters, and think only when it is
+worth the spend.") followed by every subcommand.
 
-```dotenv
-# Only needed if claude is installed:
-LHASSA_AGENT_DIR=/home/yourname/code/myproject
-```
-
-Everything else in `.env` has sensible defaults and can be left as-is.
-
-### 4. Install dependencies and build the dashboard
+Talk to it:
 
 ```bash
-make install
+lhassa "hello"
 ```
 
-This runs `uv sync` (Python deps, including PyTorch for voice activity detection) and `npm install && npm run build` (React dashboard). First run takes 2–5 minutes.
+One-shot from an argument — this is a real chat turn through the tool-calling
+loop. With no argument it drops into an interactive REPL; piped stdin
+(`echo "..." | lhassa`) works the same way. Add `--json` to get a machine
+-readable `{response, model, tokens, cost}` object instead.
 
-### 5. Run Lhassa
+Run the loop yourself, once, for free:
 
 ```bash
-make run
+lhassa beat
 ```
 
----
+This is exactly what the heartbeat timer runs on its own schedule: one
+deterministic `step()` tick — zero-token watchlist checks, fixed actions,
+reflexes — printed as a summary. If there's nothing due it prints "nothing to
+do (all quiet)"; either way it costs $0.
 
-## First Run Experience
-
-You should see output like this:
-
-```
-12:34:01 | INFO     | Starting Lhassa...
-12:34:02 | INFO     | Agent backend: builtin (auto-detected: claude CLI not found)  ...
-12:34:02 | INFO     | Using audio device [3] 'PipeWire'
-12:34:03 | INFO     | No prior memory — first session.
-12:34:04 | INFO     | Dashboard available at http://localhost:7766
-12:34:04 | INFO     | Scheduler started.
-12:34:05 | INFO     | Lhassa ready. Say 'Lhassa' to activate.
-
-[Lhassa sleeping — say 'Lhassa' to wake]
-```
-
-About 1.5 seconds after startup, Lhassa speaks a greeting in your configured language — this confirms your speakers and TTS are working.
-
-### Waking Lhassa
-
-Say **"Lhassa"**. You'll hear a short high beep and see `[Lhassa active]`. Now speak your request naturally:
-
-```
-You: What's the weather like in London today?
-[searching: weather London today]
-Lhassa: Currently in London it's 12 degrees and overcast, with rain expected in the afternoon.
-```
-
-After 5 minutes of silence, Lhassa goes back to sleep automatically — you'll hear a lower beep and see `[Lhassa sleeping]`. Say "Lhassa" again to wake it.
-
-### The Dashboard
-
-Open [http://localhost:7766](http://localhost:7766) while Lhassa is running to see live status, agent output, memory, reminders, and metrics. The dashboard is optional — Lhassa works entirely without it.
-
-### Stopping Lhassa
-
-Press **Ctrl+C**. Lhassa saves the session to memory (extracts facts and writes a summary) before exiting. The next session will start with that context.
-
----
-
-## Optional Features
-
-These require additional setup but are not needed for core voice functionality.
-
-### Background agents
-
-When you ask Lhassa to delegate a complex task, it spawns a background agent. The agent backend is auto-detected (see step 3 above), but you can override it:
-
-```dotenv
-LHASSA_AGENT_BACKEND=claude_code   # force claude --print
-LHASSA_AGENT_BACKEND=builtin       # force built-in LLM tool loop
-```
-
-See [agents.md](agents.md) for details on what each agent type does.
-
-### Vision tools (analyze_screen, analyze_image)
-
-If your `LHASSA_LLM_PROVIDER` is already `anthropic`, `openai`, or `openrouter`, vision works automatically — no extra config needed.
-
-Otherwise, set one of:
-```dotenv
-ANTHROPIC_API_KEY=sk-ant-...   # Claude Haiku — fast and accurate
-OPENAI_API_KEY=sk-...          # GPT-4o-mini — good alternative
-```
-
-You also need a screenshot tool for `analyze_screen`:
-```bash
-sudo pacman -S scrot    # or: maim, imagemagick, spectacle
-```
-
-See [configuration.md](configuration.md) for advanced options (`LHASSA_VISION_PROVIDER`, `LHASSA_VISION_MODEL`).
-
-### GitHub tools
-
-```dotenv
-GITHUB_TOKEN=github_pat_...   # github.com/settings/tokens — needs repo, notifications scopes
-```
-
-### Outlook email and calendar
-
-See [outlook.md](outlook.md) for the full Azure app registration setup.
-
-### Better web search (Brave Search)
-
-```dotenv
-BRAVE_API_KEY=BSA-...   # api.search.brave.com — free tier available
-```
-
-Falls back to DuckDuckGo if not set.
-
----
-
-## Troubleshooting
-
-**Lhassa doesn't understand what I'm saying**
-
-1. Run `make dev` to see live transcriptions. You'll see what Deepgram is hearing in real time.
-2. Make sure `LHASSA_STT_LANGUAGE` matches the language you're speaking.
-3. Say "Lhassa" clearly — the wake word detection is tuned for the name "Lhassa" specifically.
-
-**No audio / Lhassa doesn't speak**
-
-Check that your speakers are not muted. The startup greeting plays ~1.5 seconds after launch — if you hear nothing, check `LHASSA_MIC_NAME`:
+See the whole brain at a glance:
 
 ```bash
-# List all audio devices:
-python -c "import pyaudio; p = pyaudio.PyAudio(); [print(i, p.get_device_info_by_index(i)['name']) for i in range(p.get_device_count())]"
+lhassa status
 ```
 
-Set `LHASSA_MIC_NAME` in `.env` to a substring of the device name you want to use. Set it to `""` (empty) to use the system default.
+Brains, skills, pending approvals, today's spend, health, and recent
+activity — offline and LLM-free (alias: `lhassa overview`). Add `--json` for
+the raw aggregate. `lhassa capabilities` (alias `lhassa doctor`) shows what's
+actually wired and on/off on this machine.
 
-**"PipeWire not found — using system default audio device"** (Linux)
+## 4. Wire Telegram
 
-PipeWire is not running or not named "pipewire" in PyAudio. Check with:
+Set the two credentials in `.env`:
+
+```dotenv
+LHASSA_TELEGRAM_BOT_TOKEN=      # from @BotFather
+LHASSA_TELEGRAM_CHAT_ID=        # the one chat id Lhassa answers (numbers only)
+```
+
+With no token set, Telegram stays off end to end — no network calls. Start
+the inbound poller (the one-command installer already enabled
+`lhassa-telegram.service` if a token was present; otherwise run it yourself):
+
 ```bash
-systemctl --user status pipewire
-pactl info | grep -i "server name"
+make install-telegram   # or: systemctl --user restart lhassa-telegram
 ```
-Or set `LHASSA_MIC_NAME=` (empty) in `.env` to use the system default device directly.
 
-**"LHASSA_AGENT_BACKEND=claude_code but the 'claude' CLI was not found in PATH"**
+Send `/start` from that chat. `/help` lists every registered command live
+(`/status`, `/approvals`, `/approve <id>`, `/deny <id>`, `/recall <text>`,
+`/watch`, `/goal`, ...) — all LLM-free. Free-text messages get a real brain
+think over the routine fallback chain (`opencode → claude → codex → cloud`).
 
-Either install Claude Code (`npm install -g @anthropic-ai/claude-code`) or add `LHASSA_AGENT_BACKEND=builtin` to your `.env`.
+Schedule the twice-daily digest (08:00 / 21:00 local, deterministic, $0):
 
-**"Missing required environment variable: ..."**
+```bash
+lhassa seed list         # see every registered seed
+lhassa seed apply digest # schedules the recurring send_digest task
+```
 
-A required key is missing from `.env`. Check that `GROQ_API_KEY`, `DEEPGRAM_API_KEY`, and `CARTESIA_API_KEY` are all set.
+The digest arrives in Lhassa's own voice — signals, spend, approvals, recent
+episodes — no model call unless you opt into `digest_style=persona`.
 
-**Dashboard shows a JSON message instead of the UI**
+## 5. Open the dashboard
 
-The React app hasn't been built yet. Run `make dashboard`.
+```
+http://127.0.0.1:7766
+```
 
-**analyze_screen returns "Vision requires ANTHROPIC_API_KEY or OPENAI_API_KEY"**
+Served by the same FastAPI process (`lhassa serve`, or already running under
+`lhassa-app.service` if you used the installer). One line per section:
 
-Vision tools need their own key — see the Optional Features section above.
+- **Overview** — the same at-a-glance status as `lhassa status`, live.
+- **Inbox** — messages waiting on this brain.
+- **Run task** — launch an agentic local-CLI task and watch it stream.
+- **Watchlist** — the reflex rules that answer ticks for $0.
+- **Flows** — the n8n-style editor for `trigger → task → gate → output` work-flows.
+- **Approvals** — the HITL queue that feeds the autonomy knob.
+- **Capabilities** — what's wired and on/off.
+- **Actions** — self-written tools and their gate/quarantine state.
+- **Skills** — first-class skills installed and assignable.
+- **Brains** — the org chart: Flow/Tree/Templates, plus the relationship overlay.
+- **Readiness** — the fleet: known machines and their last check-in.
+- **Analytics** — cost/usage reporting.
+- **Activity** — the full episode log, full-text searchable.
+- **Settings** — the editable runtime knobs (`GET`/`PATCH /api/config`).
 
-**Agent says "claude exited 127" or similar**
+The dashboard binds to `127.0.0.1` by default and is unauthenticated on
+localhost — don't set `LHASSA_API_HOST=0.0.0.0` without understanding that it
+then becomes reachable by any device on the LAN.
 
-`LHASSA_AGENT_BACKEND=claude_code` is set but the `claude` binary can't be found. Either install Claude Code or set `LHASSA_AGENT_BACKEND=builtin`.
+## 6. Where to go next
+
+- [`concepts.md`](concepts.md) — the ideas behind the loop: do-and-sleep, the two memories, the árbitro, the org.
+- [`security.md`](security.md) — trust, approvals, the allowlist, quarantine and the gates.
+- [`telegram.md`](telegram.md) — the full bot reference.
+- [`cli.md`](cli.md) — every `lhassa` subcommand, with flags and examples.
+- [`README.md`](README.md) — the docs index.
