@@ -295,6 +295,19 @@ halts the path. `api/flow_routes.py`: `GET/POST /api/flows`,
 `GET/PUT/PATCH/DELETE /api/flows/{id}`, `POST /api/flows/{id}/run`. The dashboard
 "Flows" section is the n8n-style canvas. No dedicated `lhassa` CLI subcommand yet.
 
+**Standing principle — the hierarchy is the philosophy, not a feature.** It is
+an INVARIANT of the same rank as deny-by-default and $0-first, and it binds
+EVERY implementation, present and future: work flows DOWN the chart, results
+and artifacts flow UP through it, and **every brain in a chain logs its own
+hop** — a deterministic, $0 episode attributed via `dominio=<brain_id>` naming
+what it received/produced/forwarded (files, company/role metadata, gates,
+timestamps). One log per brain, both directions. A capability that produces or
+delivers something to the owner is BORN on this path; a surface-direct send or
+an unlogged hop is a design bug, not a shortcut. (The `org/deliver.py` seam +
+artifact registry implement the up-direction; until they land, treat any
+remaining direct send — e.g. the CV bridge's `send_document` — as recorded
+debt, and never add another.)
+
 **Standing principle — every flow runs through the hierarchy.** A flow is never run
 bare: `POST /api/flows/{id}/run`, the Telegram bridge, and any future caller go through
 `org/delegate.py:delegate_flow(flow, …)`, NOT `run_flow` directly (`run_flow` is the
