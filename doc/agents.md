@@ -1,14 +1,38 @@
 # Background Agents
 
-Sub-agents let Lhassa hand off complex, time-consuming work to a dedicated background worker while keeping the voice conversation free for other things. You ask Lhassa to delegate, it starts the agent, and tells you it'll notify you when the work is done.
+> **This doc covers the `delegate_to_agent` voice/chat tool** — one of two
+> agentic surfaces in Lhassa today, and the older of the two. Sub-agents let
+> Lhassa hand off complex, time-consuming work to a dedicated background
+> worker (`code` / `research` / `system`) while keeping the conversation free
+> for other things. You ask Lhassa to delegate, it starts the agent, and tells
+> you it'll notify you when the work is done.
+>
+> The **other, newer agentic door** is `lhassa code "<task>"` / the dashboard
+> **Run task** section (`api/code_routes.py`, `agents/local_cli.py`,
+> `harness/adapter.py`) — it hands a task straight to a local AI CLI
+> (claude/codex/opencode) which edits files and runs real tools in the current
+> directory, streamed over the WebSocket. That door has no named "agent
+> types" and no 10-iteration cap; this doc's three sub-agents are the
+> constrained, tool-limited alternative reachable from a live conversation.
+> See `doc/cli.md` for `lhassa code`.
 
 ---
 
 ## What Sub-Agents Are
 
-Each agent is an instance of `BaseAgent` — a wrapper around a **multi-turn tool loop** backed by whichever LLM provider is configured (`LHASSA_LLM_PROVIDER`). All providers are supported: Groq, Anthropic, OpenAI, OpenRouter, Cerebras, and Ollama.
+Each agent is an instance of `BaseAgent` (`lhassa/agents/base.py`) — a wrapper
+around a **multi-turn tool loop** backed by whichever LLM provider is
+configured (`LHASSA_LLM_PROVIDER`). All providers are supported: Groq,
+Anthropic, OpenAI, OpenRouter, Cerebras, and Ollama (Anthropic uses its native
+tool-use format; every other provider goes through the OpenAI-compatible
+path).
 
-By default all agents run through `claude --print` (`LHASSA_AGENT_BACKEND=claude_code`), using your Claude Code subscription with the full Claude Code toolset. Set `LHASSA_AGENT_BACKEND=builtin` to use the internal LLM tool loop with `LHASSA_LLM_PROVIDER` instead. See [configuration.md](configuration.md) for details.
+By default, if a `claude` CLI is found on `PATH`, all agents run through
+`claude --print` (`LHASSA_AGENT_BACKEND=claude_code`, via
+`agents/claude_code.py`), using your Claude Code subscription with the full
+Claude Code toolset; otherwise the default falls back to `builtin`. Set
+`LHASSA_AGENT_BACKEND` explicitly to override the auto-detection. See
+[configuration.md](configuration.md) for details.
 
 When you trigger a delegation, Lhassa:
 
@@ -144,7 +168,7 @@ The spoken summary is truncated to the first 200 characters of the agent's outpu
 
 ## Real-Time Streaming in the Dashboard
 
-While an agent is running, its output streams into the dashboard's **Agents panel** token by token via WebSocket. You can watch the agent think in real time:
+While an agent is running, its output streams into the dashboard's **Agents panel** (`AgentsPanel.jsx`, under the **Activity** section) token by token via WebSocket. You can watch the agent think in real time:
 
 - **Running** — amber indicator, output accumulates as text
 - **Done** — green indicator, full output visible

@@ -1,6 +1,15 @@
 # Outlook Integration (Microsoft Graph)
 
-Lhassa can read your emails, send emails, read your calendar, and create calendar events — all through voice commands. This is powered by the Microsoft Graph API and requires a free Azure app registration.
+Lhassa can read your emails, send emails, read your calendar, and create calendar events — through the CLI/voice/Telegram chat surfaces. This is powered by the Microsoft Graph API and requires a free Azure app registration.
+
+> **Status: voice/chat-tool only.** The four handlers below
+> (`tools/handlers/outlook.py`, wired through `tools/registry.py`) are only
+> reachable from a live LLM conversation (the built-in agent's tool loop —
+> CLI, voice, or Telegram). There is no dashboard panel, no `lhassa` CLI
+> subcommand, no core `action`, and no watchlist sense for it — Outlook never
+> triggers anything on its own; it only answers when asked. If you want a
+> scheduled digest of email/calendar, there isn't one today; `notify/digest.py`
+> covers signals + spend + approvals + episodes, not Outlook.
 
 ---
 

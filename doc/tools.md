@@ -1,6 +1,42 @@
 # Tools
 
-Lhassa has access to a set of built-in tools it can call automatically when needed. You don't invoke them by name — you just describe what you want and Lhassa decides which tool to use. This document describes what each tool does, its limitations, and realistic example interactions.
+Lhassa has access to a set of built-in **voice/chat tools** it can call automatically when needed, inside a live LLM conversation (CLI, voice, Telegram). You don't invoke them by name — you just describe what you want and Lhassa decides which tool to use. This document describes what each tool does, its limitations, and realistic example interactions.
+
+> **Tools vs actions — don't conflate the two.** This doc is about
+> `lhassa/tools/` — the LLM-visible, function-calling tools wired through
+> `tools/schemas.py` (the `TOOLS` catalog) + `tools/handlers/*.py` (the
+> `handle_<name>` implementations) into `tools/registry.py`. They only run
+> *inside a conversation*, on the model's decision, and always cost the tokens
+> of that turn.
+>
+> The brain's **other**, unrelated mechanism is `core/actions.py` +
+> `actionpack/` — the closed, deny-by-default set of typed, deterministic
+> **actions** the do-and-sleep loop runs at **$0**, with zero LLM involvement,
+> when the watchlist / heartbeat / a task fires (`sync_repo`, `run_script`
+> the PTC/Programmatic-Tool-Calling action, `send_digest`, `org_run`,
+> `check_spend`, `detect_repetition`, and more — see `core/actions.ACTIONS`
+> and `actionpack/__init__.py`). Actions are triggered by code, never by a
+> model choosing to call them; tools are the reverse. The two do overlap in
+> spirit (both are "things Lhassa can do"), but a voice tool never becomes an
+> action and vice versa — they're separate registries with separate callers.
+>
+> Every handler module (`tools/handlers/*.py`) imports pipecat's
+> `FunctionCallParams` only under `TYPE_CHECKING` — handlers no longer import
+> pipecat at runtime, so the tool layer stays usable (e.g. by tests, or a
+> future non-voice caller) without pipecat installed. `tools/schemas.py` still
+> imports pipecat's `FunctionSchema`/`ToolsSchema` for real (it builds the
+> actual schema objects the voice LLM pipeline consumes).
+>
+> **Self-written tools** (a different lineage again) are how the brain
+> *extends its own* tool/action surface: `agents/repetition.py` ($0 SQL over
+> episodes) detects a repeated costly think, `agents/author.py` has the
+> routine model draft a candidate tool + test, and it only becomes real after
+> passing all four gates in `agents/gates.py` (segura → correcta → mejor →
+> retiro) plus a human `tool_graduation` approval — see
+> `POST /api/tools/{name}/graduate` and the dashboard's **Actions**
+> section (`QuarantinePanel.jsx`). `review_tools` retires ones that stop
+> earning their keep. None of the tools below went through that pipeline; they
+> are the hand-written baseline.
 
 ---
 

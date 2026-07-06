@@ -283,6 +283,11 @@ and the do-and-sleep / provider-harness / org-tree diagrams, read
 
 | Document | Contents |
 |---|---|
+| [doc/README.md](doc/README.md) | The docs index — start here, organized by reader intent |
+| [doc/getting-started.md](doc/getting-started.md) | Install → first heartbeat → Telegram → dashboard, step by step |
+| [doc/concepts.md](doc/concepts.md) | The ideas: do-and-sleep, the two seats, memory layers, the org |
+| [doc/security.md](doc/security.md) | The sovereignty model: allowlist, signed tasks, quarantine, gates |
+| [doc/telegram.md](doc/telegram.md) | The operative day over Telegram — commands, digest, /cv |
 | [doc/architecture.md](doc/architecture.md) | Current high-level overview (layers, data dir, phases, diagrams) |
 | [doc/cli.md](doc/cli.md) | CLI reference — every `lhassa` subcommand, flags and examples |
 | [doc/architecture-layers.md](doc/architecture-layers.md) | The modularity guard — layers + forbidden import directions |

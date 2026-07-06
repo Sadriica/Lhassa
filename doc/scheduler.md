@@ -1,12 +1,42 @@
 # Scheduler
 
-Lhassa has a built-in reminder system. You can set reminders by voice and Lhassa will notify you at the right time — speaking the message aloud if you're in an active session, or sending a desktop notification if it's idle.
+> **Two separate scheduling systems live in this codebase — don't conflate them.**
+>
+> 1. **This doc: `schedule_reminder` / `list_reminders`** — a lightweight,
+>    ad-hoc reminder tool (`tools/handlers/schedule.py` → `memory/store.py`'s
+>    `scheduled_tasks` table), fired by `lhassa/scheduler.py`, a 30-second
+>    poller. It exists only to say "notify me about X at time Y" from a live
+>    conversation; it has nothing to do with the brain's own judgment loop.
+> 2. **The real scheduling backbone of the do-and-sleep brain** is the
+>    `tasks` table in `core/db.py` (`add_task`/`load_pending_tasks`/
+>    `set_task_state`/`sweep_deferred_tasks`) — this is what `core/watchlist.py`'s
+>    `_from_pending_tasks` check reads every heartbeat tick, what recurring
+>    `/goal … --every …` commands and the `digest`/`maintenance` **seeds**
+>    (`seeds.py`, `lhassa seed apply <name>`) mint into, and what
+>    `sweep_deferred_tasks()` retries with backoff when a think degrades
+>    (§ deferred episodes, see `doc/architecture.md`). There is **no separate
+>    polling loop** for this path — the systemd **heartbeat** timer
+>    (`core/heartbeat.py` + `lhassa-heartbeat.timer`) IS the due-sweep: every
+>    beat, `core/step.py` calls `watchlist.check()` which finds tasks whose
+>    `due_at` has passed, zero tokens, and either runs a fixed `action` or
+>    escalates to judgment.
+>
+> This doc covers system (1) — the reminder tool. It is real, wired, and runs
+> today (`run_scheduler()` is started as a background task in root `main.py`
+> alongside the voice pipeline, and in `docker/run_api.py` for the API-only
+> container) — but it predates the brain framing and is intentionally the
+> "dumb" path: no heartbeat, no episode log, no watchlist trigger, just a
+> 30-second DB poll and a notification. For the brain's actual recurring/
+> scheduled judgment work, see `core/db.py`'s `tasks` table and
+> `doc/architecture.md`'s do-and-sleep section instead.
+
+You can set ad-hoc reminders from a live conversation (CLI/voice/Telegram) and Lhassa will notify you at the right time — speaking the message aloud if you're in an active voice session, or sending a desktop notification if it's idle.
 
 ---
 
 ## How It Works
 
-The scheduler is a background asyncio task that runs alongside the voice pipeline and the API server. It **polls the database every 30 seconds**, checks for any tasks whose `run_at` time is in the past with status `pending`, fires them, and marks them as done.
+`lhassa/scheduler.py`'s `run_scheduler()` is a background asyncio task that runs alongside the voice pipeline and the API server. It **polls the database every 30 seconds**, checks for any `scheduled_tasks` rows whose `run_at` time is in the past with status `pending`, fires them, and marks them as done.
 
 ```
 Scheduler polls → find due tasks → notify user → mark done → sleep 30s → repeat
@@ -14,11 +44,11 @@ Scheduler polls → find due tasks → notify user → mark done → sleep 30s �
 
 This means reminders fire within 30 seconds of their scheduled time. If you set a reminder for exactly 14:00, it will fire somewhere between 14:00:00 and 14:00:30.
 
-The scheduler starts automatically with `make run` and stops cleanly when you press Ctrl+C.
+The scheduler starts automatically with `make run` (and with the API-only container entrypoint) and stops cleanly when you press Ctrl+C.
 
 ---
 
-## Setting Reminders by Voice
+## Setting Reminders (voice, CLI chat, Telegram)
 
 ### Relative time (in_minutes)
 
@@ -114,7 +144,7 @@ The `list_reminders` tool returns all reminders with status `pending`. Fired rem
 
 ## Viewing Scheduled Tasks in the Dashboard
 
-The **Scheduled Tasks** panel in the dashboard at `http://localhost:7766` shows all tasks from the database (last 50, any status), including:
+The **Scheduled Tasks** panel (`ScheduledPanel.jsx`, under the dashboard's **Activity** section) at `http://localhost:7766` shows all reminder-tool tasks from the database (last 50, any status), including:
 
 - Task name
 - Scheduled time
