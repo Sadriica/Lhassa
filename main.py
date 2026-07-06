@@ -8,7 +8,6 @@ from lhassa.config import Config
 from lhassa.voice.pipeline import run as run_voice_pipeline
 from lhassa.memory.session import close_session
 from lhassa.memory.store import init_db
-from lhassa.scheduler import run_scheduler
 from lhassa.api.server import run_api_server
 from lhassa.state import state
 
@@ -81,9 +80,9 @@ async def _periodic_memory_snapshot(interval_s: int):
 
 async def _run_all(config: Config):
     """
-    Run voice pipeline as the primary task, with API server and scheduler as
-    background services that are cancelled cleanly when the voice pipeline exits.
-    Saves session memory before returning so everything runs in the same event loop.
+    Run voice pipeline as the primary task, with the API server as a background
+    service that is cancelled cleanly when the voice pipeline exits. Saves
+    session memory before returning so everything runs in the same event loop.
     """
     from lhassa import actionpack
     actionpack.register_all()
@@ -92,13 +91,21 @@ async def _run_all(config: Config):
     state.load_audit_events()
     config.validate()  # Check provider key is present before starting pipeline
 
+    # One-shot, idempotent: copy any still-pending legacy reminders
+    # (memory/store.py's scheduled_tasks) into the tasks table as
+    # send_reminder tasks. Never blocks startup. See doc/scheduler.md.
+    try:
+        from lhassa.core.db import init_db as init_core_db
+        from lhassa.tools.handlers.schedule import migrate_legacy_reminders
+
+        await init_core_db()
+        await migrate_legacy_reminders(config.instance_id)
+    except Exception as exc:
+        logger.warning(f"Legacy reminder migration failed: {exc}")
+
     api_task = asyncio.create_task(
         run_api_server(host=config.api_host, port=config.api_port),
         name="api-server",
-    )
-    scheduler_task = asyncio.create_task(
-        run_scheduler(),
-        name="scheduler",
     )
     snapshot_interval = max(60, int(os.getenv("LHASSA_MEMORY_SNAPSHOT_INTERVAL", "1800")))
     snapshot_task = asyncio.create_task(
@@ -121,9 +128,8 @@ async def _run_all(config: Config):
         await state.set_voice_active(False)
         state.pipeline_task = None
         api_task.cancel()
-        scheduler_task.cancel()
         snapshot_task.cancel()
-        await asyncio.gather(api_task, scheduler_task, snapshot_task, return_exceptions=True)
+        await asyncio.gather(api_task, snapshot_task, return_exceptions=True)
         await _close_http_clients()
 
     if messages:

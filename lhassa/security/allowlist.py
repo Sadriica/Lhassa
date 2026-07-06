@@ -193,6 +193,11 @@ def build_allowlist(repos: "set[str] | str | None" = None) -> dict[str, ActionSp
             min_trust=TrustLevel.INTERNO,
             requires_approval=False,  # read-only web search + a chat message
         ),
+        "send_reminder": ActionSpec(
+            objetivos=WILDCARD,
+            min_trust=TrustLevel.INTERNO,
+            requires_approval=False,  # a notification the owner scheduled themselves
+        ),
         # ── PTC — Programmatic Tool Calling (script-over-RPC in quarantine) ──
         "run_script": ActionSpec(
             objetivos=WILDCARD,

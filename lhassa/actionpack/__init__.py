@@ -44,6 +44,7 @@ def register_all() -> None:
         _memory,
         _net,
         _org,
+        _reminder,
         _research,
         _script,
         _selfimprove,
@@ -108,3 +109,6 @@ def register_all() -> None:
 
     # ── Research bridge (Telegram [[research: …]] → live web results) ──────────
     _reg("research_reply", _research.research_reply)
+
+    # ── Reminders (the one clock: tasks + heartbeat, no separate poller) ───────
+    _reg("send_reminder", _reminder.send_reminder)

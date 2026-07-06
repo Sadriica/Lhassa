@@ -1,76 +1,41 @@
-"""Tests for lhassa.scheduler."""
+"""Tests for lhassa.scheduler — the deprecated no-op shim.
+
+The 30s poller is retired; reminders now go through core/db.py's tasks table
++ the heartbeat (see doc/scheduler.md). ``run_scheduler`` must degrade to a
+harmless, immediately-returning no-op for any caller still importing it.
+"""
 
 import pytest
 
 
 @pytest.mark.asyncio
-async def test_scheduler_does_not_mark_done_when_notify_fails(monkeypatch):
+async def test_run_scheduler_returns_immediately_and_logs_deprecation(monkeypatch):
     import lhassa.scheduler as scheduler
 
-    calls: list[tuple[str, object]] = []
+    messages = []
+    monkeypatch.setattr(scheduler.logger, "info", lambda msg: messages.append(msg))
 
-    async def fake_load_pending_tasks():
-        return [{"id": 1, "name": "reminder", "message": "ping"}]
+    # Must not hang, sleep, or poll — a bounded await proves it returns.
+    await scheduler.run_scheduler()
 
-    async def fake_notify(message: str, title: str = "Lhassa"):
-        raise RuntimeError("speaker offline")
-
-    async def fake_mark_task_done(task_id: int):
-        calls.append(("mark_done", task_id))
-
-    async def fake_broadcast(event: dict):
-        calls.append(("broadcast", event))
-
-    async def fake_sleep(_seconds: float):
-        raise asyncio.CancelledError()
-
-    import asyncio
-
-    monkeypatch.setattr(scheduler, "load_pending_tasks", fake_load_pending_tasks)
-    monkeypatch.setattr(scheduler, "notify", fake_notify)
-    monkeypatch.setattr(scheduler, "mark_task_done", fake_mark_task_done)
-    monkeypatch.setattr(scheduler.state, "broadcast", fake_broadcast)
-    monkeypatch.setattr(scheduler.asyncio, "sleep", fake_sleep)
-
-    with pytest.raises(asyncio.CancelledError):
-        await scheduler.run_scheduler()
-
-    assert calls == []
+    assert any("deprecated" in m.lower() for m in messages)
 
 
 @pytest.mark.asyncio
-async def test_scheduler_marks_done_after_successful_notify(monkeypatch):
+async def test_run_scheduler_never_touches_the_legacy_store(monkeypatch):
     import lhassa.scheduler as scheduler
 
-    calls: list[tuple[str, object]] = []
+    called = []
 
     async def fake_load_pending_tasks():
-        return [{"id": 7, "name": "reminder", "message": "ping", "status": "pending"}]
+        called.append("load_pending_tasks")
+        return []
 
-    async def fake_notify(message: str, title: str = "Lhassa"):
-        calls.append(("notify", message))
+    # The shim doesn't import memory.store at all; patching a nonexistent
+    # attribute would fail this test if the shim regained the old behaviour.
+    assert not hasattr(scheduler, "load_pending_tasks")
+    assert not hasattr(scheduler, "notify")
+    assert not hasattr(scheduler, "mark_task_done")
 
-    async def fake_mark_task_done(task_id: int):
-        calls.append(("mark_done", task_id))
-
-    async def fake_broadcast(event: dict):
-        calls.append(("broadcast", event))
-
-    async def fake_sleep(_seconds: float):
-        raise asyncio.CancelledError()
-
-    import asyncio
-
-    monkeypatch.setattr(scheduler, "load_pending_tasks", fake_load_pending_tasks)
-    monkeypatch.setattr(scheduler, "notify", fake_notify)
-    monkeypatch.setattr(scheduler, "mark_task_done", fake_mark_task_done)
-    monkeypatch.setattr(scheduler.state, "broadcast", fake_broadcast)
-    monkeypatch.setattr(scheduler.asyncio, "sleep", fake_sleep)
-
-    with pytest.raises(asyncio.CancelledError):
-        await scheduler.run_scheduler()
-
-    assert calls[0] == ("notify", "ping")
-    assert calls[1] == ("mark_done", 7)
-    assert calls[2][0] == "broadcast"
-    assert calls[2][1]["task"]["status"] == "done"
+    await scheduler.run_scheduler()
+    assert called == []

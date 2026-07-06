@@ -1,50 +1,32 @@
 # Scheduler
 
-> **Two separate scheduling systems live in this codebase — don't conflate them.**
->
-> 1. **This doc: `schedule_reminder` / `list_reminders`** — a lightweight,
->    ad-hoc reminder tool (`tools/handlers/schedule.py` → `memory/store.py`'s
->    `scheduled_tasks` table), fired by `lhassa/scheduler.py`, a 30-second
->    poller. It exists only to say "notify me about X at time Y" from a live
->    conversation; it has nothing to do with the brain's own judgment loop.
-> 2. **The real scheduling backbone of the do-and-sleep brain** is the
->    `tasks` table in `core/db.py` (`add_task`/`load_pending_tasks`/
->    `set_task_state`/`sweep_deferred_tasks`) — this is what `core/watchlist.py`'s
->    `_from_pending_tasks` check reads every heartbeat tick, what recurring
->    `/goal … --every …` commands and the `digest`/`maintenance` **seeds**
->    (`seeds.py`, `lhassa seed apply <name>`) mint into, and what
->    `sweep_deferred_tasks()` retries with backoff when a think degrades
->    (§ deferred episodes, see `doc/architecture.md`). There is **no separate
->    polling loop** for this path — the systemd **heartbeat** timer
->    (`core/heartbeat.py` + `lhassa-heartbeat.timer`) IS the due-sweep: every
->    beat, `core/step.py` calls `watchlist.check()` which finds tasks whose
->    `due_at` has passed, zero tokens, and either runs a fixed `action` or
->    escalates to judgment.
->
-> This doc covers system (1) — the reminder tool. It is real, wired, and runs
-> today (`run_scheduler()` is started as a background task in root `main.py`
-> alongside the voice pipeline, and in `docker/run_api.py` for the API-only
-> container) — but it predates the brain framing and is intentionally the
-> "dumb" path: no heartbeat, no episode log, no watchlist trigger, just a
-> 30-second DB poll and a notification. For the brain's actual recurring/
-> scheduled judgment work, see `core/db.py`'s `tasks` table and
-> `doc/architecture.md`'s do-and-sleep section instead.
+**One scheduling system.** Ad-hoc reminders (`schedule_reminder` / `list_reminders`,
+`tools/handlers/schedule.py`) mint `send_reminder` tasks straight into the same
+`tasks` table (`core/db.py`: `add_task`/`load_pending_tasks`/`set_task_state`/
+`sweep_deferred_tasks`) that backs the rest of the do-and-sleep brain — recurring
+`/goal … --every …` commands, the `digest`/`maintenance` **seeds**
+(`seeds.py`, `lhassa seed apply <name>`), and `sweep_deferred_tasks()`'s
+backoff retries all mint into the exact same table. There is **no separate
+polling loop**: the systemd **heartbeat** timer (`core/heartbeat.py` +
+`lhassa-heartbeat.timer`) IS the due-sweep — every beat, `core/step.py` calls
+`watchlist.check()` (`core/watchlist.py:_from_pending_tasks`), which finds
+tasks whose `due_at` has passed, zero tokens, and runs the fixed `send_reminder`
+action (`actionpack/_reminder.py`) — deterministic, $0, a normal Episode.
 
-You can set ad-hoc reminders from a live conversation (CLI/voice/Telegram) and Lhassa will notify you at the right time — speaking the message aloud if you're in an active voice session, or sending a desktop notification if it's idle.
+You can set ad-hoc reminders from a live conversation (CLI/voice/Telegram) and
+Lhassa will notify you at the right time via `notify.dispatch.notify()` (whatever
+channels `LHASSA_NOTIFY_CHANNELS` configures — desktop, Telegram, log).
 
----
-
-## How It Works
-
-`lhassa/scheduler.py`'s `run_scheduler()` is a background asyncio task that runs alongside the voice pipeline and the API server. It **polls the database every 30 seconds**, checks for any `scheduled_tasks` rows whose `run_at` time is in the past with status `pending`, fires them, and marks them as done.
-
-```
-Scheduler polls → find due tasks → notify user → mark done → sleep 30s → repeat
-```
-
-This means reminders fire within 30 seconds of their scheduled time. If you set a reminder for exactly 14:00, it will fire somewhere between 14:00:00 and 14:00:30.
-
-The scheduler starts automatically with `make run` (and with the API-only container entrypoint) and stops cleanly when you press Ctrl+C.
+> **Legacy migration.** Before this pass, reminders lived in a separate
+> `memory/store.py` `scheduled_tasks` table, fired by a standalone 30-second
+> poller (`lhassa/scheduler.py`'s `run_scheduler()`, started by `main.py` and
+> `docker/run_api.py`). That poller is now a deprecated no-op shim. On first
+> startup after upgrade, `tools.handlers.schedule.migrate_legacy_reminders()`
+> runs once (guarded by a `watch_state` marker, so it's a no-op on every
+> subsequent start): it copies any still-`pending` legacy rows into the `tasks`
+> table as `send_reminder` tasks (preserving name/message/run_at) and marks the
+> legacy rows `status='migrated'` — they are never deleted, so `sqlite3
+> ~/.lhassa/memory.db` and the memory export/import snapshot still see them.
 
 ---
 
@@ -101,21 +83,18 @@ All times are stored internally as UTC ISO 8601 strings. Lhassa converts HH:MM t
 
 ## Notification Routing
 
-When a reminder fires, Lhassa routes the notification based on current state:
+When a reminder's `send_reminder` task fires, it fans out over
+`notify.dispatch.notify()` — every channel `LHASSA_NOTIFY_CHANNELS` configures
+and that is credential-gated/available gets it (`notify/channels.py`):
 
-| State | How you're notified |
+| Channel | Condition |
 |---|---|
-| Voice pipeline active (you said the wake word recently) | Lhassa **speaks the message** via Cartesia TTS |
-| Voice pipeline idle / sleeping | **Desktop notification** via `notify-send` |
-| `notify-send` not installed | Message is **printed to the terminal** |
+| `desktop` (`DesktopChannel`) | `notify-send` on `PATH` (Linux/libnotify toast) |
+| `telegram` (`TelegramChannel`) | bot token + chat id configured |
+| `log` (`LogChannel`) | always available — a log line, the last-resort fallback |
 
-The desktop notification title is always "Lhassa — Reminder".
-
-### Example: spoken reminder
-
-```
-[15:00:12] Lhassa: Reminder — join the standup.
-```
+A channel failure is logged and swallowed — `notify()` never raises, and
+delivery to at least one channel is enough for the task to be marked `hecha`.
 
 ### Example: desktop notification
 
@@ -138,37 +117,43 @@ You: Lhassa, any upcoming reminders?
 Lhassa: No pending reminders.
 ```
 
-The `list_reminders` tool returns all reminders with status `pending`. Fired reminders are marked `done` and don't appear in the list.
+The `list_reminders` tool reads pending `send_reminder` tasks (`estado ==
+"pendiente"`) from the `tasks` table, soonest `due_at` first. Once the
+heartbeat runs the task it moves to `hecha` and drops off the list.
 
 ---
 
 ## Viewing Scheduled Tasks in the Dashboard
 
-The **Scheduled Tasks** panel (`ScheduledPanel.jsx`, under the dashboard's **Activity** section) at `http://localhost:7766` shows all reminder-tool tasks from the database (last 50, any status), including:
+The **Scheduled Tasks** panel (`ScheduledPanel.jsx`, under the dashboard's
+**Activity** section) at `http://localhost:7766` shows pending `send_reminder`
+tasks (last 50), including:
 
-- Task name
-- Scheduled time
-- Message
-- Status (pending / done)
+- Task name (the task's `objetivo`)
+- Scheduled time (`due_at`)
+- Message (`params.text`)
+- Status (pending / done / cancelled)
 
-The panel refreshes when you load the page. The WebSocket broadcasts a `scheduled_task_fired` event when a task fires, which can be used by the dashboard to refresh the panel.
+The panel refreshes when you load the page. The WebSocket broadcasts a
+`scheduled_task_fired` event when a task fires, which can be used by the
+dashboard to refresh the panel.
 
 ---
 
 ## REST API
 
-You can also query scheduled tasks directly:
+You can also query scheduled reminders directly:
 
 ```bash
-# All tasks (last 50)
+# Pending send_reminder tasks (last 50), reshaped to the legacy response keys
 curl http://localhost:7766/api/scheduled
 ```
 
-Response format:
+Response format (unchanged for the dashboard):
 ```json
 [
   {
-    "id": 1,
+    "id": "t_abc123",
     "name": "call John",
     "run_at": "2026-03-28T14:20:00+00:00",
     "message": "Time to call John",
@@ -178,29 +163,48 @@ Response format:
 ]
 ```
 
+`/api/scheduled` reads the `tasks` table (`core/db.py`) filtered to `accion ==
+"send_reminder"` and maps `estado` → `status` (`pendiente`/`esperando_aprobacion`/
+`diferida` → `"pending"`, `hecha` → `"done"`, `rechazada` → `"cancelled"`).
+
 ---
 
 ## Limitations
 
-- **30-second granularity** — reminders fire within 30 seconds of the scheduled time, not at the exact second.
-- **No recurring reminders** — each reminder fires once and is marked done. To repeat, set a new one.
-- **No cancellation by voice** — once set, a reminder can't be cancelled by speaking. You can delete it from the SQLite database directly, or wait for it to fire.
-- **No sound if Lhassa is not running** — if you stop Lhassa before a reminder fires, it won't trigger. Reminders are not persisted to a system cron.
+- **Heartbeat granularity** — reminders fire on the next heartbeat beat after
+  their `due_at`, not at the exact second (see `lhassa-heartbeat.timer`'s
+  interval).
+- **No recurring reminders from the voice/CLI/Telegram tool** — the
+  `schedule_reminder` tool schema has no repeat parameter, so each reminder is
+  one-shot. (The underlying `tasks` table and `mint_task` *do* support a
+  `recurrence` interval — see `/goal … --every …` and the `digest`/
+  `maintenance` seeds — a future revision could thread it through here.)
+- **No cancellation by voice** — once set, a reminder can't be cancelled by
+  speaking. Use `set_task_state(instance_id, task_id, "rechazada")` or the
+  SQLite database directly, or wait for it to fire.
+- **No sound if Lhassa is not running** — if you stop Lhassa (and its
+  heartbeat) before a reminder fires, it won't trigger until the next beat
+  after you restart it.
 
 ---
 
 ## Direct Database Access
 
-Reminders live in `~/.lhassa/memory.db`, in the `scheduled_tasks` table:
+Reminders live in `~/.lhassa/brain.db` (or wherever `LHASSA_BRAIN_DB_PATH`
+points), in the `tasks` table:
 
 ```bash
-sqlite3 ~/.lhassa/memory.db "SELECT * FROM scheduled_tasks WHERE status='pending';"
+sqlite3 ~/.lhassa/brain.db "SELECT id, accion, objetivo, params, estado, due_at FROM tasks WHERE accion='send_reminder' AND estado='pendiente';"
 ```
 
 To cancel a pending reminder manually:
 
 ```bash
-sqlite3 ~/.lhassa/memory.db "UPDATE scheduled_tasks SET status='cancelled' WHERE id=3;"
+sqlite3 ~/.lhassa/brain.db "UPDATE tasks SET estado='rechazada' WHERE id='t_abc123';"
 ```
 
-(Any non-`pending` status prevents the scheduler from firing the task.)
+(Any non-`pendiente` estado prevents the watchlist from picking the task up.)
+
+The legacy `~/.lhassa/memory.db` `scheduled_tasks` table still exists (for
+audit / the memory export-import snapshot) but is no longer written to by the
+reminder tool — see the migration note above.
