@@ -285,3 +285,87 @@ async def test_deliver_reports_send_failure(tmp_path, monkeypatch):
     final = eps[-1]
     assert "failed" in final["resultado"]
     assert final["resultado"] == "delivered: cv.pdf → owner (telegram, failed)"
+
+
+# ── the invariant is GUARDED, not just documented ─────────────────────────────────
+
+
+def test_send_document_is_reachable_only_through_deliver():
+    """The enforcement behind the standing principle: an artifact (a file) may
+    reach the owner ONLY through org/deliver.py. A future flow or brain that
+    calls telegram_api.send_document directly — bypassing the per-brain
+    delivery ledger — fails this test. Documentation is not enforcement; this is.
+    """
+    import ast
+    import pathlib
+
+    root = pathlib.Path(__file__).resolve().parent.parent / "lhassa"
+    offenders = []
+    for py in root.rglob("*.py"):
+        rel = py.relative_to(root).as_posix()
+        if rel in ("org/deliver.py", "notify/telegram_api.py"):
+            continue  # the seam itself and the primitive it wraps
+        try:
+            tree = ast.parse(py.read_text(encoding="utf-8"))
+        except SyntaxError:
+            continue
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call):
+                fn = node.func
+                name = fn.attr if isinstance(fn, ast.Attribute) else getattr(fn, "id", "")
+                if name == "send_document":
+                    offenders.append(f"{rel}:{node.lineno}")
+    assert not offenders, (
+        "send_document called outside org/deliver.py — a file reaching the owner "
+        "must bubble UP through the hierarchy (see doc CLAUDE.md standing "
+        f"principle). Offenders: {offenders}"
+    )
+
+
+@pytest.mark.asyncio
+async def test_deliver_walks_arbitrary_depth(tmp_path, monkeypatch):
+    """The per-brain ledger is depth-independent: a 5-level chart logs 5 hops,
+    each attributed — so a FUTURE deeper org chart is respected with no seam
+    change (deliver reuses delegate.command_path)."""
+    import lhassa.core.db as _db
+
+    monkeypatch.setattr(_db, "DB_PATH", tmp_path / "brain.db")
+    await _db.init_db()
+
+    # A deep synthetic topology: lhassa → div → area → dept → cell.
+    from lhassa.org import deliver as deliver_mod
+
+    monkeypatch.setattr(
+        deliver_mod, "_resolve_chain",
+        lambda origin_department, config: ["lhassa", "div", "area", "dept", "cell"],
+    )
+    sent = []
+
+    async def fake_send_document(path, *, caption="", config=None):
+        sent.append(path)
+        return True
+
+    import lhassa.notify.telegram_api as _tapi
+    monkeypatch.setattr(_tapi, "send_document", fake_send_document)
+
+    ok, art = await deliver_mod.deliver(
+        document=str(tmp_path / "r.pdf"),
+        kind="report", origin_department="cell", config=None,
+    )
+    rows = await _db.load_recent_episodes(_db_instance(), 20)
+    hops = [r for r in rows if r["despertar_por"] == "org-deliver"]
+    domains = [h["dominio"] for h in hops]
+    # 5 brains on the chain → 4 forward/receive hops + the final outcome = 5+1
+    assert domains.count("cell") == 1 and domains.count("dept") == 1
+    assert domains.count("area") == 1 and domains.count("div") == 1
+    assert domains.count("lhassa") == 2  # intent + outcome
+    # deepest brain "produced", every level above "received from" its child
+    cell = next(h for h in hops if h["dominio"] == "cell")
+    assert "produced:" in cell["resultado"]
+    dept = next(h for h in hops if h["dominio"] == "dept")
+    assert "received from cell" in dept["resultado"]
+
+
+def _db_instance():
+    from lhassa.config import Config
+    return Config.instance_id
