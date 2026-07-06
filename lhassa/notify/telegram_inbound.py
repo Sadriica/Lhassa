@@ -463,8 +463,13 @@ async def _brain_reply(text: str, *, config) -> str:
             # Record the turn AS THE OWNER SAW IT (markers already stripped).
             _history_record(config, "user", text)
             _history_record(config, "assistant", reply)
+            # Record the provider that ACTUALLY answered — the router's reason
+            # predates the telegram_provider pin and the fallback walk, and an
+            # episode label that names the wrong provider poisons every later
+            # read (spend analysis, the repetition detector, /recall).
+            actual = getattr(prov, "name", "?")
             ep.finish(
-                decision=decision.reason,
+                decision=f"think: provider={actual} model={mdl or 'provider-default'}",
                 accion="responder",
                 resultado=reply,
                 costo_usd=result.cost_usd,
