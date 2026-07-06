@@ -10,7 +10,7 @@ made along the way. Newest first.
 Two waves of parallel subagents (one interrupted mid-flight by a session limit and
 finished by hand — the salvage was committed incrementally so nothing was lost twice):
 
-- **The chat remembers** (`1681a5b`): rolling per-chat history threads into every
+- **The chat remembers** (`1e72796`): rolling per-chat history threads into every
   Telegram think (multi-turn conversations keep their thread); every N turns the
   model may flag ONE durable owner fact with `[[remember: …]]` → a deduped `dato`
   in the grande. `lhassa onboard` (five questions → pinned datos + directivas) and
@@ -19,17 +19,17 @@ finished by hand — the salvage was committed incrementally so nothing was lost
   immediately via `core/dispatch.py:run_task_now` — the heartbeat's runner, early;
   a failure leaves the task pending so the beat keeps the promise. Research
   follow-ups arrive in seconds instead of minutes.
-- **The detector proposes only the automatable** (`da20987`): judgments
+- **The detector proposes only the automatable** (`3d643b2`): judgments
   (`responder`, `dept:* think`, any think-decision) are excluded by predicate; a
   DENIED pattern is never re-proposed (a denial is a human decision); repeated
   mechanical action chains become `mint_script` proposals carrying a deterministic
   draft PTC script; the judgment prompt finally advertises the `script` key.
-- **One clock** (`1cbf0ad`): reminders mint `send_reminder` tasks into the tasks
+- **One clock** (`3639630`): reminders mint `send_reminder` tasks into the tasks
   table (heartbeat delivers via notify); the legacy 30s poller is a deprecation
   shim; a one-shot idempotent migration moved pending legacy rows (marked, never
   deleted); `/api/scheduled` reads the tasks table with the old response shape.
-- **Parity batch 2** (`5f8b413`): `/org`, `/fleet`, `/version` from chat.
-- **Remote hands** (`b38502d`): `/code <task>` parks a `code_run` approval with an
+- **Parity batch 2** (`68a8441`): `/org`, `/fleet`, `/version` from chat.
+- **Remote hands** (`bc2d1c8`): `/code <task>` parks a `code_run` approval with an
   inline Approve/Deny keyboard; one tap launches through the dashboard's own
   `_stream_run` seam (same AgentRun tracking), reports start + completion with the
   output tail. Write access to the owner's files NEVER runs without the tap.
@@ -137,7 +137,7 @@ Telegram, self-improvement) found the recurring pattern: the pieces existed, ind
 tested, but were never wired into the hot path. Four stages implemented in parallel
 (1 in-tree + 3 isolated worktrees), merged in order:
 
-- **Etapa 1 — reflexes + spend judgment** (`4ee142b`): `core/policy.py`, a deterministic
+- **Etapa 1 — reflexes + spend judgment** (`8629e75`): `core/policy.py`, a deterministic
   REFLEXES registry between watchlist and judgment (job_review auto-triage, repo_changed →
   sync_repo for `LHASSA_AUTO_SYNC_REPOS`, health warn → notify; default think/minimal).
   Tiered context in `_judge` (minimal=600tk/full=2000tk; `query` + `active_tags` finally fed
@@ -145,20 +145,20 @@ tested, but were never wired into the hot path. Four stages implemented in paral
   max 3 then rechazada). `fallback_chain` moved to `llm/router.py` and walked by the heartbeat
   on ProviderNotConfigured/BudgetExceeded ($0 CLI subs first). `gateway.spend_summary()` +
   soft budget pct (default 0.8) downgrade away from the smart model; `check_spend` action.
-- **Etapa 2 — operative day via Telegram** (`f207fc8`): deterministic $0 digest
+- **Etapa 2 — operative day via Telegram** (`3d40489`): deterministic $0 digest
   (`notify/digest.py` + `send_digest` action + `digest` seed at 08:00/21:00);
   parse_mode/inline keyboards in the Telegram channel; `/approvals` `/approve` `/deny`
   commands + callback-button approvals on watcher alerts; `/watch` `/watches` `/unwatch`
   `/goal` author watch rules and recurring goals from chat; health notifications routed
   through the channel registry (one precise new layer exception, documented).
-- **Etapa 3 — real delegation** (`7ce6379`): the judgment `delegate` key now mints `org_run`
+- **Etapa 3 — real delegation** (`f34ea94`): the judgment `delegate` key now mints `org_run`
   tasks through the mint_task security path (cap 3); `org_run` action lazily runs
   `run_goal` (offline/$0 unless LHASSA_ORG_LIVE); monitor findings become minted work under
   `LHASSA_MONITOR_DELEGATE` (fingerprint-deduped); coordinator fans out to top-3 departments
   on ties/explicit multi with offline deterministic synthesis (live = one extra think);
   org inbox drained via a new extensible watchlist sense (`watchlist.register_check` +
   `org/inbox_sense.py` — core stays org-unaware, no new layer exception).
-- **Etapa 4 — visible self-improvement** (`98eb55b`): `agents/repetition.py` ($0 SQL
+- **Etapa 4 — visible self-improvement** (`3da06c4`): `agents/repetition.py` ($0 SQL
   detector of repeated costly thinks → parks a `mint_action` approval + notifies, deduped
   via watch_state); `agents/author.py` (routine-model tool authoring →
   `create_candidate` → gates → `tool_graduation` approval; `lhassa tools propose`);
@@ -184,16 +184,16 @@ Two small, behavior-preserving finishes to the refactor pass, both surfaced by a
   (`/api/overview` + the `build_overview` aggregate + the 11 `_overview_*` helpers); `misc_routes`
   deleted; server.py's `build_overview` re-export repointed to `overview_routes`; the overview
   Config-module-namespace test seam preserved. 1071 tests unchanged, all moved routes smoke-200
-  live. `server.py` is now a clean integrator with per-domain routers and no catch-all. (`81bd465`)
+  live. `server.py` is now a clean integrator with per-domain routers and no catch-all. (`65766a8`)
 
 - **ccusage: from a 20-30s dashboard hang to real data in ~3.7s.** A live smoke found `/api/
   projections` hanging ~20-30s: `read_ccusage` applied its timeout PER candidate command and tried
   a slow `npx ccusage@latest` cold-start, and — the real culprit — ccusage was **fetching model
   pricing over the network on every run**. Fixes, in layers: (1) `read_ccusage` timeout is now a
-  TOTAL budget (a deadline across candidates), never ~2× (`3af13da`); (2) an `allow_npx=False` the
+  TOTAL budget (a deadline across candidates), never ~2× (`3909d37`); (2) an `allow_npx=False` the
   dashboard auto-load callers pass, so a missing binary degrades in ~5ms instead of a cold npx
-  download (`a311ec8`); (3) the ccusage commands run **`--offline`** (cached pricing), which drops
-  a full run from 20s+ to ~3.7s (`a51bda3`). The `ccusage` binary is installed **user-level**
+  download (`552281b`); (3) the ccusage commands run **`--offline`** (cached pricing), which drops
+  a full run from 20s+ to ~3.7s (`8abe74c`). The `ccusage` binary is installed **user-level**
   (`npm install -g --prefix ~/.local ccusage` → `~/.local/bin`, on the app service's PATH); with
   it present the dashboard shows genuine cross-harness spend (`available: true`, real
   `total_cost_usd`), and stays instant-degrade when absent. Lesson logged: **live smoke earns its
@@ -212,8 +212,8 @@ time.
 heartbeat/claude/CLI providers, CV dir/flow/tectonic, monitor_*), grouped + commented with
 defaults; `scripts/install.sh` and the `Makefile` now install + enable the `lhassa-monitor` and
 `lhassa-health` units too (all units use `%h`, no hardcoded paths); README + `doc/install.md`
-document `uv`/`node`/`tectonic` (the last optional — CV→PDF else `.tex` fallback). (`62daad8`,
-`eac7d34`)
+document `uv`/`node`/`tectonic` (the last optional — CV→PDF else `.tex` fallback). (`c324c17`,
+`d4e1bd5`)
 
 **Seed registry (elastic bootstrap).** `lhassa/seeds/` — a `Seed` unit + a `SEEDS` Registry
 (`@register_seed`, plugins-discoverable like the other swap points) with `list_seeds`/`apply_seed`/
@@ -221,14 +221,14 @@ document `uv`/`node`/`tectonic` (the last optional — CV→PDF else `.tex` fall
 interns department + 6 worker brains + the monitor role + the canonical `flow-zvzpry` (captured
 verbatim from the live definition), idempotent + non-destructive. Future pipelines drop in as new
 seeds. So `lhassa seed apply cv` bootstraps the whole CV pipeline on a clean machine; the owner
-only supplies their real `cv_largo.tex`. (`8854db0`)
+only supplies their real `cv_largo.tex`. (`083f81a`)
 
 **Split the giants (behavior-preserving, each browser- or smoke-verified).** The recurring shape:
 extract cohesive pieces into folder-neighbour sub-modules, leave the original as a thin composition
 that re-exports / lazy-imports EXACTLY as before, prove it with the unchanged suite + a live check.
 - `api/server.py` **1464 → 227** lines, a pure integrator (app + auth middleware + CORS + `/ws` +
   static + `run_api_server` + 13 `include_router`). Two passes: runtime/llm/approval/checkin
-  (`18d8498`), then skills/org/memory/config/tools/misc (`4245623`) — 0 inline HTTP routes left,
+  (`1cceb2a`), then skills/org/memory/config/tools/misc (`7163d8c`) — 0 inline HTTP routes left,
   all moved routes smoke-200 live, test-monkeypatch seams preserved (overview reads Config via the
   module namespace; export/import + `build_overview` re-exported from `server` for the existing
   test/CLI importers).
@@ -236,20 +236,20 @@ that re-exports / lazy-imports EXACTLY as before, prove it with the unchanged su
   shell,files,agents,schedule,outlook,github,vision,monitor,jobs}.py` + `_shared`; `registry.py`
   re-exports every previously-importable symbol via `__all__` so callers/tests are untouched. The
   one architecture `ALLOWED_EXCEPTIONS` (voice.notifier edge) moved to `handlers/agents.py`.
-  (`09c65fc`)
+  (`88adff6`)
 - Dashboard: `App.jsx` **420 → 124** (hooks `useWebSocketEvents`/`useSectionRouting` + layout
   `NavRail`/`MobileNav`/`PanelShell` + `lib/sections.js`; the WS reconnect + hash routing byte-for-
-  byte, `9f1629e`); then the three big React-Flow/feature panels, each **live-verified in Chrome**
-  before commit: `OrgFlow` **915 → 372** (`9da440d` — render, click→inspector, dept-box drag),
-  `WorkflowEditor` **944 → 387** (`e2cd855` — deep-link open, vertical layout, HYBRID inspector),
-  `BrainsPanel` **1399 → 151** (`7f780d3` — inspector incl. skills+Undo/limits/monitor role, create
+  byte, `60f8dba`); then the three big React-Flow/feature panels, each **live-verified in Chrome**
+  before commit: `OrgFlow` **915 → 372** (`b968db0` — render, click→inspector, dept-box drag),
+  `WorkflowEditor` **944 → 387** (`8ecdf35` — deep-link open, vertical layout, HYBRID inspector),
+  `BrainsPanel` **1399 → 151** (`47bc2e8` — inspector incl. skills+Undo/limits/monitor role, create
   form, Flow/Tree/Templates switch). Every lazy-import contract + toast call preserved verbatim.
 
 **Automated frontend net.** Ran the previously-unrun Playwright e2e (browsers already installed);
 it immediately earned its keep — a stale assertion failed because the toast system now also surfaces
 the "Import complete" message (role=status) alongside the panel copy (role=main), so an unscoped
 `getByText` matched two nodes. Scoped the two assertions to `role=main`; **3 e2e green**, which also
-confirms the dashboard survives all the panel refactors. (`6a22093`)
+confirms the dashboard survives all the panel refactors. (`c834fe6`)
 
 **Verdict + remaining debt.** The reviewer's "dominant risk" (`server.py`) is resolved; tools and
 the original big panels are no longer concentration points. What's left is **normal growth debt, to
@@ -283,11 +283,11 @@ constant role**. All shipped green (final: **1061 tests**, ruff clean) in focuse
   `contact_preserved` verifier: every email + phone (formatting-agnostic) in the base CV must appear
   verbatim in the output, else the gate FAILS and the path stops before export. The engine threads
   `base_cv` into a gate's verify `context`; the CV flow's final gate runs it. So a tailored CV can
-  never ship altered contact details. (`86e3d1d`)
+  never ship altered contact details. (`7872321`)
 
 **Telegram as the CV surface.** `notify/telegram_inbound.py` bridges a chat to the flow:
 - `cv/extract.py` `extract_text` (reads `.tex`/`.txt`, extracts `.pdf` via **pypdf**); `run_flow`
-  gained a `base_cv` override; `notify/telegram_api.py` getFile/download + `sendDocument`. (`25e97a0`)
+  gained a `base_cv` override; `notify/telegram_api.py` getFile/download + `sendDocument`. (`287dd75`)
 - The base CV lives on disk (`~/.lhassa/cv/cv_largo.tex`) and rarely changes, so the frequent action
   is a **command that needs only the job posting**, and changing the base is explicit — **no
   per-upload button prompts** (a design the owner iterated to): `/cv <posting>` (acks, tailors the
@@ -295,10 +295,10 @@ constant role**. All shipped green (final: **1061 tests**, ruff clean) in focuse
   `/cvnewbase` (arms the chat — the next uploaded file replaces the base, backing up the old);
   `/cvbase` (shows the base on file). A caption-less document with no arm → a one-off tailor
   (hold, then the follow-up text is the posting). Commands publish to the bot `/` menu. New config
-  `LHASSA_TECTONIC_BIN`. Owner-gated, never raises into the poll loop. (`5c69b91`, `17f8e75`)
-- The poller runs in LIVE CV mode via service env (`LHASSA_ORG_LIVE=1` + claude sonnet-4.6). (`6ad0ac8`)
+  `LHASSA_TECTONIC_BIN`. Owner-gated, never raises into the poll loop. (`2aaf92e`, `f97ec50`)
+- The poller runs in LIVE CV mode via service env (`LHASSA_ORG_LIVE=1` + claude sonnet-4.6). (`b97b7fc`)
 
-**PRINCIPLE 1 — every flow runs through the hierarchy (`org/delegate.py`, `62a31e0`).** A flow is
+**PRINCIPLE 1 — every flow runs through the hierarchy (`org/delegate.py`, `352cf9f`).** A flow is
 no longer run bare. `delegate_flow(flow, …)` resolves the flow's **owning department** (pinned-brain
 → department table lookup — interns for the CV flow), walks the command path `lhassa → general →
 interns`, logs one **deterministic, $0, never-LLM** `org-delegate` Episode, then runs the flow (lazy
@@ -309,12 +309,12 @@ deterministic on purpose — governance + a full audit trail at **no extra token
 stays the flow's pinned worker brains.
 
 **PRINCIPLE 2 — "monitor" is a first-class, constant role.**
-- `org/monitor.py` (`37e6ae4`): a reusable capability — `gather_signals()` (read-only, $0: recent
+- `org/monitor.py` (`54c5bd1`): a reusable capability — `gather_signals()` (read-only, $0: recent
   episodes, health digest, flows, approvals, failures) + `monitor_pass()` → `{observations, risks,
   improvements, delegations}` (offline stub $0; live reasons via `brain_executor`). `make_brain_monitor()`
   makes ANY brain a monitor; applied to the interns brain (role → `monitor`; "everyone reports to it").
   `lhassa org monitor` CLI.
-- `org/watcher.py` (`40eb60b`): the always-on **$0 "ear"**. `detect_events()` diffs two `gather_signals`
+- `org/watcher.py` (`941353c`): the always-on **$0 "ear"**. `detect_events()` diffs two `gather_signals`
   snapshots (new failures / health-worsened / new approvals / run start+finish — transitions only);
   `watch_loop()` has an **elastic cadence** — idle `LHASSA_MONITOR_IDLE_INTERVAL` (default **300s**),
   active (something running, via `state.agent_runs`) `LHASSA_MONITOR_ACTIVE_INTERVAL` (default **15s**);
