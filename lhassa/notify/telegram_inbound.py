@@ -89,7 +89,105 @@ _RESEARCH_MAX_QUERY = 300
 
 # Appended when a research task was actually minted — the promise the marker makes
 # is only ever written by US, deterministically, after the mint succeeded.
-_RESEARCH_ACK = "🔎 Looking it up — I'll message you what I find in a few minutes."
+_RESEARCH_ACK = "🔎 Looking it up — I'll message you shortly."
+
+# The remember marker (offered by the periodic nudge in ``_brain_reply``): the
+# model flags ONE durable owner fact; we persist it to the grande (deduped) and
+# strip it from the visible reply. Same defensive parsing as the research marker.
+_REMEMBER_MARKER_RE = re.compile(
+    r"\[\[\s*remember\s*:\s*(.+?)\s*\]\]", re.IGNORECASE | re.DOTALL
+)
+_REMEMBER_MAX = 300
+
+_MEMORY_NUDGE = (
+    "If this conversation taught you a DURABLE fact about your owner (a "
+    "preference, a project, a constraint — not small talk), append this marker "
+    "at the very end: [[remember: <one concise fact>]]. At most one."
+)
+
+# ── rolling per-chat conversation history (process-memory only) ────────────────
+# The poller serves a single owner chat, but the store is keyed by chat id anyway
+# so isolated test configs never share state. Restarting the poller clears it —
+# deliberate: the durable memory lives in the grande, not here.
+_CHAT_HISTORY: dict = {}
+_CHAT_TURNS: dict = {}
+
+# Per-message cap when threading history back into the prompt (chars).
+_HISTORY_MSG_CAP = 1500
+
+
+def _history_key(config) -> str:
+    return str(getattr(config, "telegram_chat_id", "") or "owner")
+
+
+def _history_messages(config) -> list[dict]:
+    """The still-fresh history as ``[{role, content}, …]``, oldest first.
+
+    TTL is applied on read (an old conversation never leaks into a new one) and
+    each message is capped so a pasted wall of text can't flood the prompt.
+    """
+    ttl = float(getattr(config, "telegram_history_ttl", 7200.0) or 7200.0)
+    now = time.time()
+    entries = [
+        e for e in _CHAT_HISTORY.get(_history_key(config), []) if now - e["ts"] <= ttl
+    ]
+    return [
+        {"role": e["role"], "content": str(e["content"])[:_HISTORY_MSG_CAP]}
+        for e in entries
+    ]
+
+
+def _history_record(config, role: str, content: str) -> None:
+    """Append one turn, trimming to the configured number of user+assistant pairs."""
+    if not content:
+        return
+    turns = int(getattr(config, "telegram_history_turns", 8) or 8)
+    key = _history_key(config)
+    entries = _CHAT_HISTORY.setdefault(key, [])
+    entries.append({"role": role, "content": content, "ts": time.time()})
+    max_entries = max(2, turns * 2)
+    if len(entries) > max_entries:
+        del entries[: len(entries) - max_entries]
+
+
+async def _apply_remember_marker(reply: str, *, instance_id: str) -> str:
+    """Persist a ``[[remember: …]]`` fact to the grande (deduped); strip the marker.
+
+    Best-effort on every branch — a memory failure never breaks the chat turn.
+    Dedupe: a case-insensitive substring overlap with an existing fact (either
+    direction) skips the write, so the model re-noticing the same thing doesn't
+    pile up near-duplicates.
+    """
+    if not reply or "[[" not in reply:
+        return reply
+    match = _REMEMBER_MARKER_RE.search(reply)
+    if match is None:
+        return reply
+    fact = " ".join(match.group(1).split())[:_REMEMBER_MAX]
+    visible = _REMEMBER_MARKER_RE.sub("", reply).strip()
+    if not fact:
+        return visible or reply
+    try:
+        from lhassa.memory import facts as _facts
+
+        existing = await _facts.load_facts(instance_id)
+        low = fact.lower()
+        for row in existing:
+            other = str(getattr(row, "contenido", "") or "").lower()
+            if other and (low in other or other in low):
+                return visible  # already known — silently keep the clean reply
+        await _facts.add_fact(
+            instance_id,
+            "dato",
+            fact,
+            tags=("owner", "chat"),
+            procedencia="telegram-chat",
+            confianza=0.7,
+        )
+        logger.info(f"Telegram inbound: remembered owner fact ({len(fact)} chars)")
+    except Exception as exc:
+        logger.warning(f"Telegram inbound: remember marker failed: {exc}")
+    return visible
 
 # ── Telegram → CV work-flow bridge replies ────────────────────────────────────
 # The base CV lives on disk (``cv_largo.tex``) and rarely changes, so a document
@@ -209,17 +307,28 @@ async def _apply_research_marker(reply: str, *, instance_id: str, config) -> str
         try:
             from datetime import datetime, timezone
 
-            from lhassa.core.dispatch import mint_task
+            from lhassa.core import dispatch as _dispatch
             from lhassa.security.trust import Origin, TrustLevel
 
-            await mint_task(
+            params = {"query": query}
+            task_id, estado = await _dispatch.mint_task(
                 instance_id,
                 "research_reply",
-                params={"query": query},
+                params=params,
                 origin=Origin(trust=TrustLevel.HUMANO, actor_id="telegram"),
                 due_at=datetime.now(timezone.utc).isoformat(),
             )
-            minted = True
+            minted = bool(task_id)
+            if task_id and estado == "pendiente":
+                # No approval needed → run it NOW (fire-and-forget; the reply goes
+                # out first, the results follow in seconds). A failure here leaves
+                # the task pending, so the heartbeat still keeps the promise.
+                asyncio.create_task(
+                    _dispatch.run_task_now(
+                        instance_id, task_id, "research_reply", params,
+                        despertar_por="telegram",
+                    )
+                )
         except Exception as exc:  # a mint failure must not break the chat turn
             logger.warning(f"Telegram inbound: research mint failed: {exc}")
 
@@ -278,7 +387,18 @@ async def _brain_reply(text: str, *, config) -> str:
         if memory_block:
             parts.append(memory_block)
         parts.append(_CHAT_INSTRUCTION)
+
+        # Rolling conversation history + the periodic memory nudge. The counter
+        # increments per USER turn; on the cadence the model is invited (once)
+        # to flag a durable owner fact with [[remember: …]].
+        history = _history_messages(config)
+        hkey = _history_key(config)
+        _CHAT_TURNS[hkey] = _CHAT_TURNS.get(hkey, 0) + 1
+        nudge_every = int(getattr(config, "chat_memory_nudge_turns", 6) or 6)
+        if nudge_every > 0 and _CHAT_TURNS[hkey] % nudge_every == 0:
+            parts.append(_MEMORY_NUDGE)
         system = "\n\n".join(parts)
+        messages = [*history, {"role": "user", "content": text}]
 
         # Try the routine provider (opencode/local — $0), then walk the configured
         # fallback CHAIN: the owner's CLI subscriptions (claude → codex) before the
@@ -318,7 +438,7 @@ async def _brain_reply(text: str, *, config) -> str:
         for prov, mdl in attempts:
             try:
                 result = await prov.complete(
-                    [{"role": "user", "content": text}],
+                    messages,
                     model=mdl,
                     max_tokens=_CHAT_MAX_TOKENS,
                     system=system,
@@ -336,6 +456,10 @@ async def _brain_reply(text: str, *, config) -> str:
             reply = await _apply_research_marker(
                 reply, instance_id=instance_id, config=config
             )
+            reply = await _apply_remember_marker(reply, instance_id=instance_id)
+            # Record the turn AS THE OWNER SAW IT (markers already stripped).
+            _history_record(config, "user", text)
+            _history_record(config, "assistant", reply)
             ep.finish(
                 decision=decision.reason,
                 accion="responder",

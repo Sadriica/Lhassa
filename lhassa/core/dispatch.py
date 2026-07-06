@@ -219,6 +219,39 @@ async def mint_task(
         return ("", f"mint_task error: {exc}")
 
 
+async def run_task_now(
+    instance_id: str,
+    task_id: str,
+    accion: str,
+    params: dict | None = None,
+    *,
+    despertar_por: str = "chat",
+) -> bool:
+    """Run one already-minted PENDING task immediately — the heartbeat's runner, early.
+
+    The chat surfaces use this so a no-approval task (e.g. ``research_reply``)
+    answers in seconds instead of waiting for the next beat. Semantics are
+    IDENTICAL to a beat-run fixed action: the same ``actions.run`` dispatcher, a
+    structured Episode, and the same ``hecha`` state transition — observability
+    cannot tell an early run from a beat run. Only call it for a task minted
+    ``estado == "pendiente"`` (an approval-parked task must wait for its human).
+    Any failure leaves the task pending so the heartbeat retries it on schedule.
+    Returns whether the run happened. Never raises.
+    """
+    from lhassa.core.episode import Episode
+
+    try:
+        ep = Episode.begin(despertar_por=despertar_por, instance_id=instance_id)
+        result = await _actions.run(accion, dict(params or {}), ep)
+        ep.finish(decision=accion, accion=accion, resultado=str(result)[:500])
+        await ep.append()
+        await _db.set_task_state(instance_id, task_id, "hecha")
+        return True
+    except Exception as exc:  # leave the task for the heartbeat — never raise
+        logger.warning(f"run_task_now: {accion!r} failed, left pending: {exc}")
+        return False
+
+
 # ── Public surface ───────────────────────────────────────────────────────────
 
 
