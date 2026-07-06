@@ -387,6 +387,25 @@ EDITABLE: list[dict] = [
         "restart": RESTART_TELEGRAM,
     },
     {
+        "key": "telegram_provider",
+        "attr": "telegram_provider",
+        "env_var": "LHASSA_TELEGRAM_PROVIDER",
+        "type": "enum",
+        "options": ["auto", "default", "claude", "codex", "opencode", "local"],
+        "label": "Telegram chat provider (reply speed)",
+        "help": (
+            "Who answers a plain Telegram chat message. 'auto' → the router's routine "
+            "decision (the heartbeat seat). 'default' → the API cost gateway (groq/… — "
+            "~1.5s replies, metered pennies). 'claude'/'codex'/'opencode' → that CLI "
+            "subscription ($0, but a cold CLI boot per message ≈ 5–10s). 'local' → the "
+            "local endpoint. Flows and hard work are NOT affected — this pins only the "
+            "chat door, and the fallback chain still backs a failing pick."
+        ),
+        "group": "Surfaces",
+        "default": "auto",
+        "restart": RESTART_TELEGRAM,
+    },
+    {
         "key": "notify_channels",
         "attr": "notify_channels",
         "env_var": "LHASSA_NOTIFY_CHANNELS",
@@ -395,6 +414,37 @@ EDITABLE: list[dict] = [
         "group": "Surfaces",
         "default": "telegram,desktop",
         "restart": RESTART_APP,
+    },
+    {
+        "key": "digest_style",
+        "attr": "digest_style",
+        "env_var": "LHASSA_DIGEST_STYLE",
+        "type": "enum",
+        "options": ["plain", "persona"],
+        "label": "Digest style (8am/9pm check-in)",
+        "help": (
+            "'plain' → the deterministic $0 template (already first-person). "
+            "'persona' → one cheap fast-model pass re-voices it naturally as Lhassa "
+            "(same facts; ~$0.0001 per digest). If the model fails, the plain text "
+            "is sent instead — the digest always arrives."
+        ),
+        "group": "Surfaces",
+        "default": "plain",
+        "restart": RESTART_NONE,
+    },
+    {
+        "key": "digest_language",
+        "attr": "digest_language",
+        "env_var": "LHASSA_DIGEST_LANGUAGE",
+        "type": "str",
+        "label": "Digest language (persona style)",
+        "help": (
+            "Language the persona pass writes in (e.g. 'es', 'en'). Empty keeps the "
+            "template's language. Only applies when digest style is 'persona'."
+        ),
+        "group": "Surfaces",
+        "default": "",
+        "restart": RESTART_NONE,
     },
     # ── Org ──────────────────────────────────────────────────────────────────────
     {

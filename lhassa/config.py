@@ -470,6 +470,12 @@ class Config:
     # Inbound: long-poll Telegram for messages and answer them. Off by default;
     # requires the bot token + chat id above. Only the configured chat is honored.
     telegram_poll_enabled: bool = os.getenv("LHASSA_TELEGRAM_POLL", "0") not in ("0", "false", "")
+    # Provider for the Telegram CHAT reply specifically (the tool-less brain think).
+    # Empty/"auto" → the router's routine decision (the heartbeat seat), as always.
+    # "default" pins the API cost gateway — ~1.5s replies vs ~9s for a cold CLI
+    # boot per message — WITHOUT touching what flows / hard work think with. The
+    # fallback chain still backs a failing pick, so a bad value degrades, never breaks.
+    telegram_provider: str = os.getenv("LHASSA_TELEGRAM_PROVIDER", "")
 
     # ── Phase 6 — heartbeat via opencode (no local model server needed) ───────
     # The owner has the opencode CLI (no Zen), so the routine/heartbeat thinking can
@@ -547,6 +553,11 @@ class Config:
     skills_dir: str = os.getenv(
         "LHASSA_SKILLS_DIR", str(Path.home() / ".lhassa" / "skills")
     )
+    # Curator (Fase 2) lifecycle thresholds: no use for this many days -> "stale";
+    # stale AND unused for this many more -> "archived" (moved into
+    # ``<skills_dir>/.archive/``, never deleted). See ``skills/curator.py``.
+    skill_stale_days: int = _safe_int(os.getenv("LHASSA_SKILL_STALE_DAYS", "30"), 30)
+    skill_archive_days: int = _safe_int(os.getenv("LHASSA_SKILL_ARCHIVE_DAYS", "90"), 90)
 
     # ── Modularity — registries, channels, plugins (elastic & modular) ────────
     # Which notify CHANNELS are active (comma-separated); each is a registered,
@@ -587,6 +598,12 @@ class Config:
     # deterministic report by default (still $0); de-duped by fingerprint so a
     # standing condition is not re-minted every tick. OFF by default.
     monitor_delegate: bool = os.getenv("LHASSA_MONITOR_DELEGATE", "0") not in ("0", "false", "")
+    # A failure only counts while it is FRESH: episodes older than this many hours
+    # never enter the failure signal, so an alert's "total N" means "N current",
+    # not "N ever seen in the episode window". 0 disables the age cutoff.
+    monitor_failure_window_h: float = _safe_float(
+        os.getenv("LHASSA_MONITOR_FAILURE_WINDOW_H", "24"), 24.0
+    )
 
     # ── Phase 2 — judgment dispatch (close the think-loop) ────────────────────
     # When on (default), the judgment branch parses the model's JSON reply and
@@ -618,6 +635,12 @@ class Config:
     # CSV so each is independently overridable without a parsing helper.
     digest_hour_morning: int = _safe_int(os.getenv("LHASSA_DIGEST_HOUR_MORNING", "8"), 8)
     digest_hour_evening: int = _safe_int(os.getenv("LHASSA_DIGEST_HOUR_EVENING", "21"), 21)
+    # How the digest reads: "plain" → the deterministic $0 template (already in
+    # Lhassa's first-person voice); "persona" → one cheap fast-model pass re-voices
+    # it naturally (same facts; ANY failure degrades to plain — it always arrives).
+    digest_style: str = os.getenv("LHASSA_DIGEST_STYLE", "plain")
+    # Language for the persona pass ("" keeps the template's language; e.g. "es").
+    digest_language: str = os.getenv("LHASSA_DIGEST_LANGUAGE", "")
 
     # ── Tool guardrails ───────────────────────────────────────────────────────
     # If true, reject obviously destructive shell commands unless explicitly

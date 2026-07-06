@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from '../lib/toast'
+import { shortWhen } from '../lib/format'
 
 // The approval queue (§2.9 — "la cola de aprobaciones"). Lists pending approvals
 // and lets a human approve or deny each one. Resolving feeds the autonomy knob on
@@ -72,19 +73,21 @@ export default function ApprovalQueuePanel() {
         <ul className="space-y-2">
           {approvals.map(a => {
             const p = a.payload || {}
+            const s = a.summary || {}
             return (
               <li key={a.id} className="lh-row">
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-xs font-medium" style={{ color: 'var(--lh-text)' }}>{a.tipo || p.accion || 'action'}</span>
-                  <span className="text-[10px]" style={{ color: 'var(--lh-text-muted)' }}>{a.creado_en}</span>
+                  <span className="text-xs font-medium" style={{ color: 'var(--lh-text)' }}>
+                    {s.title || a.tipo || p.accion || 'action'}
+                  </span>
+                  <span className="text-[10px] shrink-0" style={{ color: 'var(--lh-text-muted)' }}>{shortWhen(a.creado_en)}</span>
                 </div>
-                {(p.objetivo || p.actor_id) && (
-                  <div className="text-[11px] mt-1" style={{ color: 'var(--lh-text-muted)' }}>
-                    {p.objetivo ? `target: ${p.objetivo}` : ''}
-                    {p.objetivo && p.actor_id ? ' · ' : ''}
-                    {p.actor_id ? `who: ${p.actor_id}` : ''}
-                  </div>
+                {s.detail && (
+                  <div className="text-[11px] mt-1" style={{ color: 'var(--lh-text-muted)' }}>{s.detail}</div>
                 )}
+                <div className="text-[10px] mt-1 lh-mono" style={{ color: 'var(--lh-text-faint)' }}>
+                  {a.tipo}{a.id ? ` · ${a.id}` : ''}
+                </div>
                 <div className="flex gap-2 mt-2">
                   <button
                     type="button"

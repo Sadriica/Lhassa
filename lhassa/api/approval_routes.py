@@ -19,9 +19,15 @@ router = APIRouter()
 
 @router.get("/api/approvals")
 async def get_approvals():
-    """The pending approval queue for this instance (oldest first)."""
+    """The pending approval queue for this instance (oldest first).
+
+    Each row carries a ``summary`` (``{title, detail}`` from
+    :func:`lhassa.security.approval.describe`) so every UI shows what is being
+    approved, not just ids.
+    """
     await db.init_db()
-    return await approval.pending(Config.instance_id)
+    rows = await approval.pending(Config.instance_id)
+    return [{**row, "summary": approval.describe(row)} for row in rows]
 
 
 @router.post("/api/approvals/{approval_id}")

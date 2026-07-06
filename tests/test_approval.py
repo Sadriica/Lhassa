@@ -272,3 +272,60 @@ async def test_api_approvals_rejects_bad_body(tmp_path, monkeypatch, knob_config
         assert missing.status_code == 400
         wrong_type = await client.post(f"/api/approvals/{ap_id}", json={"approved": "yes"})
         assert wrong_type.status_code == 400
+
+
+# ── describe(): the one human-readable render every queue surface uses ─────────────
+
+
+def test_describe_mint_action():
+    row = {
+        "tipo": "mint_action",
+        "payload": {
+            "accion": "mint_action",
+            "pattern": "telegram::responder",
+            "despertar_por": "telegram",
+            "candidate_accion": "responder",
+            "count": 41,
+            "total_cost_usd": 0.2625,
+        },
+    }
+    desc = approval.describe(row)
+    assert desc["title"] == "Make 'responder' automatic"
+    assert "×41" in desc["detail"]
+    assert "$0.26" in desc["detail"]
+    assert "$0 deterministic action" in desc["detail"]
+
+
+def test_describe_tool_graduation():
+    desc = approval.describe(
+        {"tipo": "tool_graduation", "payload": {"accion": "tool_graduation", "tool": "csv_summarize", "branch": "cand/1"}}
+    )
+    assert desc["title"] == "Graduate self-written tool 'csv_summarize'"
+    assert "gates" in desc["detail"] and "cand/1" in desc["detail"]
+
+
+def test_describe_flow_gate_and_org_task():
+    gate = approval.describe({"tipo": "flow_gate", "payload": {"accion": "flow_gate", "node": "contact_preserved"}})
+    assert "contact_preserved" in gate["title"]
+
+    org = approval.describe(
+        {"tipo": "org_task", "payload": {"accion": "org_task", "department": "interns", "goal": "tailor the CV", "actor_id": "lhassa"}}
+    )
+    assert org["title"] == "Org task for 'interns'"
+    assert "tailor the CV" in org["detail"] and "lhassa" in org["detail"]
+
+
+def test_describe_dispatch_task_and_unknown_degrade():
+    task = approval.describe(
+        {"tipo": "task", "payload": {"accion": "sync_repo", "objetivo": "~/Code/x", "actor_id": "duenio", "origen_trust": 3}}
+    )
+    assert task["title"] == "Run 'sync_repo'"
+    assert "~/Code/x" in task["detail"] and "trust: 3" in task["detail"]
+
+    # Unknown/malformed shapes degrade, never raise.
+    assert approval.describe({})["title"] == "Approval: ?"
+    assert approval.describe({"tipo": "weird", "payload": "not-a-dict"})["title"] == "Approval: weird"
+    weird_cost = approval.describe(
+        {"tipo": "mint_action", "payload": {"total_cost_usd": "not-a-number", "candidate_accion": "x"}}
+    )
+    assert weird_cost["title"]  # degraded but present

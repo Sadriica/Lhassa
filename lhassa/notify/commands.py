@@ -316,9 +316,29 @@ async def _cmd_status(args: str, *, config=None) -> str:
 # ── Etapa 2 — approve/deny from chat ──────────────────────────────────────────
 
 
+def _approval_age(creado_en) -> str:
+    """A compact relative age ('3h ago') for an approval row; '' when unparseable."""
+    from datetime import datetime, timezone
+
+    try:
+        ts = datetime.fromisoformat(str(creado_en or "").replace("Z", "+00:00"))
+    except (ValueError, TypeError):
+        return ""
+    if ts.tzinfo is None:
+        ts = ts.replace(tzinfo=timezone.utc)
+    seconds = max(0.0, (datetime.now(timezone.utc) - ts).total_seconds())
+    if seconds < 3600:
+        return f"{int(seconds // 60)}m ago"
+    if seconds < 86400:
+        return f"{int(seconds // 3600)}h ago"
+    return f"{int(seconds // 86400)}d ago"
+
+
 @register_command("approvals")
 async def _cmd_approvals(args: str, *, config=None) -> str:
-    """List pending approvals — LLM-free, reuses ``security.approval.pending``."""
+    """List pending approvals — LLM-free; renders ``security.approval.describe``
+    so the owner sees WHAT each one is (not just an id) plus its age and the
+    exact commands to resolve it."""
     try:
         cfg = _config(config)
         instance_id = getattr(cfg, "instance_id", None) or "inst_personal"
@@ -330,15 +350,17 @@ async def _cmd_approvals(args: str, *, config=None) -> str:
         if not rows:
             return "No pending approvals."
 
-        lines = ["Pending approvals:"]
-        for row in rows[:10]:
-            payload = row.get("payload") or {}
-            accion = payload.get("accion", "") if isinstance(payload, dict) else ""
-            label = f"{row.get('tipo', '?')}:{accion}" if accion else row.get("tipo", "?")
-            lines.append(f"{row.get('id', '?')} — {label}")
+        lines = [f"Pending approvals ({len(rows)}):"]
+        for i, row in enumerate(rows[:10], start=1):
+            desc = _approval.describe(row)
+            age = _approval_age(row.get("creado_en"))
+            lines.append("")
+            lines.append(f"{i}. {desc['title']}{f' — {age}' if age else ''}")
+            if desc.get("detail"):
+                lines.append(f"   {desc['detail']}")
+            lines.append(f"   /approve {row.get('id', '?')} · /deny {row.get('id', '?')}")
         if len(rows) > 10:
-            lines.append(f"…+{len(rows) - 10} more")
-        lines.append("Use /approve <id> or /deny <id>.")
+            lines.append(f"\n…+{len(rows) - 10} more")
         return "\n".join(lines)
     except Exception as exc:
         logger.warning(f"commands: /approvals failed: {exc}")
@@ -501,6 +523,46 @@ async def _cmd_unwatch(args: str, *, config=None) -> str:
     except Exception as exc:
         logger.warning(f"commands: /unwatch failed: {exc}")
         return "Could not remove that watch rule."
+
+
+# ── Fase 1 — Recall (LLM-free full-text search over the episode log) ─────────
+
+
+@register_command("recall")
+async def _cmd_recall(args: str, *, config=None) -> str:
+    """``/recall <text>`` — full-text search over the episode log, LLM-free.
+
+    Shows up to 5 matches: relative age, ``despertar_por``, ``decision`` and a
+    short ``resultado`` snippet. $0 — a deterministic FTS5 query, never a model
+    call. No args → a usage hint.
+    """
+    text = (args or "").strip()
+    if not text:
+        return "Usage: /recall <text> — searches past episodes for a match."
+    try:
+        cfg = _config(config)
+        instance_id = getattr(cfg, "instance_id", None) or "inst_personal"
+        from lhassa.core import db as _db
+
+        await _db.init_db()
+        rows = await _db.search_episodes(instance_id, text, 5)
+        if not rows:
+            return f"No episodes match {text!r}."
+
+        lines = [f"Recall for {text!r} ({len(rows)}):"]
+        for i, row in enumerate(rows, start=1):
+            age = _approval_age(row.get("creado_en"))
+            despertar = row.get("despertar_por") or "?"
+            decision = row.get("decision") or "?"
+            snippet = (row.get("resultado") or "").replace("\n", " ").strip()
+            lines.append("")
+            lines.append(f"{i}. {despertar} — {decision}{f' — {age}' if age else ''}")
+            if snippet:
+                lines.append(f"   {snippet}")
+        return "\n".join(lines)
+    except Exception as exc:
+        logger.warning(f"commands: /recall {text!r} failed: {exc}")
+        return "Could not search episodes right now."
 
 
 @register_command("goal")

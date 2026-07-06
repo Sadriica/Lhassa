@@ -60,7 +60,7 @@ function approvalItems(overview) {
     rawId: a.id,
     kind: 'approval',
     title: a.summary || a.accion || a.tipo || 'Approval requested',
-    body: [a.tipo, a.actor_id ? `actor ${a.actor_id}` : null].filter(Boolean).join(' · '),
+    body: a.detail || [a.tipo, a.actor_id ? `actor ${a.actor_id}` : null].filter(Boolean).join(' · '),
     status: 'needs approval',
     when: a.creado_en,
     href: '#approvals',
