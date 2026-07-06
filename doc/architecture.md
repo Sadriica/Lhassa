@@ -130,6 +130,23 @@ added by dropping a self-registering module into `plugins_dir` or a `lhassa.plug
 entry point (`plugins.py`) — no core edit. `lhassa capabilities` (alias `doctor`)
 prints the whole wired / on-off picture.
 
+### The delivery chain (sender of record)
+
+Work goes DOWN the tree through `org/delegate.py`; whatever a leaf produces comes
+back UP through its exact mirror, `org/deliver.py`. A department that finishes a
+work product — a tailored CV (`.tex` + compiled `.pdf`), a report, any file the
+owner ends up receiving — doesn't send it itself: `deliver()` walks the SAME
+command chain the down-hop used, and every brain on it (the department, any
+intermediate coordinator, the root) logs its own `org-deliver` Episode before
+Lhassa, the permanent root administrator, actually sends. One append-only row per
+delivered file lands in the `artifacts` registry (`core/artifacts.py` —
+`GET /api/artifacts[/{id}]`, `lhassa artifacts list|show`), carrying its paths,
+free-form metadata, origin department, and the episode it travelled with. The
+golden rule mirrors `delegate`'s: **audit is best-effort, delivery is not** — a
+broken topology or a failed episode write degrades to a single root-attributed
+hop and is logged, never blocks the send; the only thing that can make `deliver()`
+report failure is the send itself.
+
 ## Beyond phase 7 — product/hardening
 
 Continuing past the phase plan: a keystone `Registry` + plugin loader adopted at

@@ -110,6 +110,7 @@ from lhassa.api import (  # noqa: E402
     activity_routes,
     analytics_routes,
     approval_routes,
+    artifacts_routes,
     checkin_routes,
     code_routes,
     config_routes,
@@ -149,6 +150,7 @@ app.include_router(activity_routes.router)
 app.include_router(reports_routes.router)
 app.include_router(fleet_routes.router)
 app.include_router(overview_routes.router)
+app.include_router(artifacts_routes.router)
 
 
 # ── WebSocket ──────────────────────────────────────────────────────────────────
