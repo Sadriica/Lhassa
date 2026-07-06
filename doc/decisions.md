@@ -5,6 +5,82 @@ build. The source of truth for the architecture is `doc/lhassa-brief.md` (a
 living doc — correct it after each phase per §4). This file records the choices
 made along the way. Newest first.
 
+## 2026-07-05 — The narrative: flag, pillars, voice book, bilingual README
+
+Studied how Hermes *tells* its story (one hammered claim, features as promises,
+pain-point-titled sections, user-stories social proof) and built Lhassa's own
+narrative — the craft, not the form. Decisions: audience is **public from day one
+with the owner as first user** (honest claims only); **bilingual** (README.md EN +
+README.es.md); the flag is **"Build the brain, rent the body"** with the owner's
+priorities leading the pillars ($0 routine day → subscriptions before APIs → it
+forges its own hands → sovereign → no lock-in → 1..N org); tone between
+**mítico-sobrio and cálido-personal** with the Tibetan imagery governed by explicit
+rules (one touch per section, never replacing a technical noun, homage not doctrine).
+Artifacts: `doc/narrative.md` (the voice book — source of truth for all public text),
+rewritten `README.md` + new `README.es.md` (identity head, pillars table with the
+real ledger as proof — Jul 4: ~720 wake-ups, 5 thinks, $0.0031 —, "a day in the
+life" told tick by tick, the gates as a rite of passage), `assets/lhassa-mark.svg`
+(the stupa extracted from the dashboard). Unique narrative devices claimed: the
+day-in-the-life ticker, the ledger-as-proof, the gates-as-pilgrimage.
+
+## 2026-07-05 — Operative-UX pass + the Hermes study (recall / curator / PTC / portability)
+
+A day of operator-driven fixes followed by a deliberate competitive study of Nous
+Research's **Hermes Agent** (cloned to `~/Code/hermes-agent`, full architecture map in
+the session log). Verdict recorded: Hermes validates the thesis from the opposite side —
+it built the most complete *body* (20+ surfaces, packaging, tools) with no deterministic
+$0 plane and OS-only security; Lhassa owns the *nervous system* (do-and-sleep, allowlist/
+quarantine/gates, the org). Three Hermes ideas were adopted, made Lhassa-shaped, and
+implemented by four parallel Sonnet subagents with disjoint file territories:
+
+- **Recall (FTS5 episodic memory)**: `episodes_fts` external-content index + triggers +
+  backfill in `core/db.py` (defensive — a build without FTS5 degrades); `search_episodes`
+  (BM25, hostile-input-safe, automation episodes *demoted* not hidden — Hermes' recall-
+  blindness lesson); `GET /api/episodes/search`; Telegram `/recall`; and a 5th, lowest-
+  priority context layer in `memory/load.py` so a think's `query` pulls the brain's own
+  past experiences into context ($0, truncates first).
+- **Skills curator** (`skills/curator.py`): usage telemetry in an atomic `.usage.json`
+  sidecar (bumped on skill read, best-effort); deterministic $0 lifecycle active→stale
+  (`LHASSA_SKILL_STALE_DAYS` 30) →archived (`LHASSA_SKILL_ARCHIVE_DAYS` 90) with tar.gz
+  backup first, move to `.archive/`, NEVER delete, pinned exempt, `restore()`; weekly
+  `curate_skills` action in the `maintenance` seed, skipped while an agent run is active.
+- **PTC — Programmatic Tool Calling** (`agents/ptc.py` + the `run_script` action): one
+  LLM turn writes a Python script that orchestrates N deterministic ACTIONS over a
+  JSON-lines Unix-socket RPC; the script runs inside the quarantine sandbox (AF_UNIX
+  survives the network namespace — proven in a real `unshare -rn` test) and the PARENT
+  dispatches every call through the signed-Task + allowlist seam (unknown/disallowed/
+  needs-approval → refused, never run). Caps: 300s, 50 calls, 50KB/10KB output.
+  `run_script` itself is allowlisted with `requires_approval=True` (run_command-class risk).
+- **Portability**: `doc/portability.md` audit (most couplings already degrade; real gaps:
+  headless CLI-subscription auth, no voice-less extra in pyproject); docker-compose gained
+  the missing `monitor` role. Standing constraint recorded: laptop today, VPS tomorrow —
+  no laptop-only couplings in new work.
+
+Earlier the same day (operator-driven fixes, same session):
+
+- **Telegram was dead end-to-end**: `lhassa-telegram.service` lacked `~/.local/bin` on
+  PATH (claude CLI invisible → silent chain skip) while `settings.env` pinned
+  `LHASSA_MODEL_CHEAP=claude-sonnet-4-6`, poisoning the Groq gateway link (404). Fixed:
+  PATH added to the telegram/heartbeat/monitor units; stale model overrides removed;
+  `distill_memory` (memory/consolidate) now resolves its provider via
+  `router.pick_provider(hard=False)` — the heartbeat seat — instead of hardwiring the
+  gateway.
+- **Chat-speed seat split**: new `LHASSA_TELEGRAM_PROVIDER` (settings-editable) pins the
+  Telegram CHAT door's provider (set to `default`/Groq — ~1.5s replies vs ~9s cold CLI
+  boot) without touching what flows/hard work think with; fallback chain unchanged.
+- **Monitor signal hygiene**: `_failures_from_episodes` no longer counts the monitor's
+  own episodes ("alerting on its own reflection") nor prose of successful thinks; a
+  freshness window (`LHASSA_MONITOR_FAILURE_WINDOW_H`, 24h) ages failures out; watcher
+  alerts diff by episode *identity* (not count) and NAME what is new — no more
+  "(total N)" reading as if the whole backlog just failed.
+- **Digest personality**: template rewritten in Lhassa's first-person voice (still $0,
+  local-timezone times, failures named); optional `digest_style=persona` re-voices it
+  through the cheap gateway model (`digest_language`, degrades to plain — the digest
+  always arrives).
+- **Approvals became legible**: one deterministic `security/approval.describe(row)` →
+  `{title, detail}` rendered by /approvals (Telegram), the dashboard queue/Inbox, and
+  the digest — "Make 'responder' automatic · repeated ×41 · $0.26 spent" instead of ids.
+
 ## 2026-07-03 — Intelligence pass: deterministic-first brain across four fronts (Etapas 1-4)
 
 Full-brain study (6 parallel subagent audits: core loop, LLM/cost, memory, org/flows,

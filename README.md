@@ -1,23 +1,88 @@
-# Lhassa
+<p align="center">
+  <img src="assets/lhassa-mark.svg" alt="Lhassa — the gold stupa mark" width="88">
+</p>
 
-[![CI](https://github.com/OWNER/lhassa/actions/workflows/ci.yml/badge.svg)](https://github.com/OWNER/lhassa/actions/workflows/ci.yml)
+<h1 align="center">Lhassa</h1>
 
-> Replace `OWNER` in the badge URL above with your GitHub owner/org once a remote is configured.
+<p align="center"><b>Build the brain, rent the body.</b></p>
 
-A personal AI **brain** — a JARVIS-style core with its own identity that runs the
-**do-and-sleep** loop: state lives on disk and a `step()` function advances it one
-tick, woken by a systemd **heartbeat** timer (or on demand via the API). Lhassa
-does not depend on any one model or tool — it **orchestrates** models (the
-"think-directly" `ModelProvider`) and agentic harnesses (the `HarnessAdapter`)
-behind stable interfaces: **build the brain, rent the body.** It is local-first,
-**elastic and modular** (every swap point sits behind a registry; capabilities
-drop in without editing core), reaches your machines by **check-in, not push**,
-and grows from **one brain to an org of 1..N brains** with a user-defined
-hierarchy. Surfaces: a terminal **CLI**, a **Telegram** bot, a live **dashboard**,
-and an opt-in **voice** pipeline.
+<p align="center">
+  <a href="README.es.md">Español</a> ·
+  <a href="doc/architecture.md">Architecture</a> ·
+  <a href="doc/cli.md">CLI reference</a> ·
+  <a href="LICENSE">AGPL-3.0</a>
+</p>
 
-For the design rationale see [`doc/lhassa-brief.md`](doc/lhassa-brief.md); for a
-current high-level map see [`doc/architecture.md`](doc/architecture.md).
+---
+
+Lhassa is a persistent personal AI **brain** — an identity that lives awake all
+day for $0, orchestrates rented models and tools, earns its autonomy through
+verified trust, and grows from one brain into an organization.
+
+It is named for Lhasa, the city at the roof of the world: a place pilgrims
+reach slowly, on purpose. The durable thing here is *who Lhassa is* — its
+memory, its judgment, its trust record. Models, harnesses and tools are
+interchangeable muscle, rented by the hour and swapped without surgery. That is
+the whole thesis: **build the brain, rent the body.**
+
+> This is not a chatbot with cron jobs. It is a **do-and-sleep** organism:
+> state lives on disk, a heartbeat advances it one deterministic tick every two
+> minutes, and thinking — an actual model call — is the exception, not the rule.
+
+## Why Lhassa
+
+| | |
+|---|---|
+| **A routine day costs $0** | The heartbeat beats ~720 times a day; a deterministic plane (watchlist, reflexes, actions, monitor, digest, org routing) answers almost all of it without touching a model. From the author's real ledger — July 4, 2026: ~720 wake-ups, **5** metered thinks, **$0.0031**. |
+| **Subscriptions before APIs** | When it does think, it walks your already-paid CLI subscriptions (`claude` / `codex` / `opencode`) before spending a metered API cent. A budget router, a soft brake at 80% and a kill-switch guard whatever remains. |
+| **It forges its own hands** | Repetition is detected with $0 SQL over its episode log; the brain writes the tool (and its test) that replaces the repeated spend. Self-written code runs **only in quarantine** until it passes the four gates and you approve its graduation. Tools that stop earning their keep are retired. |
+| **Sovereign by construction** | Deny-by-default action allowlist, Ed25519-signed tasks, trust that only degrades, human-in-the-loop approvals with an autonomy knob that is *earned*, and an append-only episode log: every decision it ever made, auditable. |
+| **No lock-in, ever** | Two swap axes — a `ModelProvider` to think, a `HarnessAdapter` to act — behind registries; every capability drops in as a plugin without editing core. Swap the model, keep the brain. |
+| **From one brain to an org** | The same core scales to a hierarchy of brains: departments, command chains, a monitor role that is always listening for $0, deterministic routing, and a full audit trail on every delegation. |
+| **It remembers, in layers** | Typed facts with contradiction handling, a working cache, semantic retrieval, and FTS5 recall over its own past episodes — ask it something and its answer arrives already informed by its experience. |
+
+## A day in the life
+
+What "ambient at $0" actually looks like, tick by tick:
+
+```
+07:58  heartbeat — watchlist quiet, nothing due. $0.
+08:00  the morning check-in lands on Telegram, in Lhassa's own voice,
+       built deterministically from state already on disk. $0.
+10:14  you ask it something; FTS5 recall pulls two past episodes into
+       context before the think — one subscription CLI call, $0 metered.
+11:03  a repo it watches gets a commit → the repo_changed reflex syncs it.
+       No judgment needed. $0.
+13:40  the monitor (its always-on ear) sees a new failure episode and
+       names it in a Telegram alert — what failed, not just how many. $0.
+14:03  daily maintenance: memory distills, repetition is scanned, stale
+       skills are curated (never deleted — archived, with a backup). $0.
+19:04  the repetition detector proposes: "Make 'responder' automatic —
+       repeated ×41, $0.26 spent on it so far." Your call, one tap.
+21:00  the evening check-in. The wheel turned all day; the ledger
+       barely moved.
+```
+
+## It forges its own hands
+
+Self-written code earns trust the way a pilgrim earns altitude — one gate at a
+time, no shortcuts:
+
+1. **detected** — $0 SQL finds a pattern you keep paying for;
+2. **written** — the routine model authors a candidate tool *and its test*;
+3. **quarantined** — it runs only inside the strongest sandbox available
+   (`unshare`/`firejail`/`bwrap`), no network, scrubbed env;
+4. **gated** — segura → correcta → mejor: objective verifiers, never an LLM
+   judging an LLM;
+5. **graduated** — a human approves; the API refuses (409) anything that
+   skipped the gates;
+6. **retired** — tools that stop earning their keep are removed the same
+   audited way.
+
+The same discipline extends to orchestration: with PTC (Programmatic Tool
+Calling), one think can write a Python script that drives many deterministic
+actions over an RPC socket — inside the same quarantine, every call re-checked
+against the same allowlist.
 
 ---
 
@@ -30,8 +95,8 @@ System dependencies (install these first):
 - **[`uv`](https://docs.astral.sh/uv/)** — the Python toolchain (`uv sync` resolves the venv). Required.
 - **`node` + `npm`** — build the React/Vite dashboard (`npm ci && npm run build`). Required for the dashboard.
 - **`docker`** — only for the containerized path / the installer smoke test (skip with `--no-docker`).
-- **`tectonic`** *(optional)* — the LaTeX engine that compiles a tailored CV `.tex` into a PDF. Without it, the CV bridge falls back to sending the raw `.tex`. See the CV pipeline below.
-- **`ccusage`** *(optional)* — cross-harness LLM-spend CLI for the dashboard's cost panels. Install user-level with `npm install -g --prefix ~/.local ccusage`. Without it, those panels show "unavailable" (the read runs `--offline` and is budget-capped, so it never blocks the dashboard).
+- **`tectonic`** *(optional)* — the LaTeX engine that compiles a tailored CV `.tex` into a PDF. Without it, the CV bridge falls back to sending the raw `.tex`.
+- **`ccusage`** *(optional)* — cross-harness LLM-spend CLI for the dashboard's cost panels. Install user-level with `npm install -g --prefix ~/.local ccusage`.
 
 The subscription CLIs (`claude` / `codex` / `opencode`) are optional and need **no API key** — install whichever you use.
 
@@ -75,13 +140,15 @@ make check     # validate the environment, no API calls
 
 ```bash
 cp .env.example .env          # fill in the keys you use
-docker compose up -d          # api + heartbeat roles
+docker compose up -d          # api + heartbeat + monitor roles
 docker compose logs -f lhassa
 ```
 
-One image, `LHASSA_RUN` selects the role (`api` / `heartbeat` / `telegram`). All
-state lives under `/data` (`HOME=/data`). Details and portability caveats:
-[`doc/deployment.md`](doc/deployment.md).
+One image, `LHASSA_RUN` selects the role (`api` / `heartbeat` / `telegram` /
+`monitor`). All state lives under `/data` (`HOME=/data`). Lhassa runs on a
+laptop today and is built to run unchanged on a small VPS: details and the
+portability audit live in [`doc/deployment.md`](doc/deployment.md) and
+[`doc/portability.md`](doc/portability.md).
 
 ---
 
@@ -132,10 +199,15 @@ reference with every flag and example is in **[`doc/cli.md`](doc/cli.md)**.
 ### Telegram bot
 
 Inbound/outbound over the Bot API, credential-gated (no token → no network).
-Commands: `/start`, `/help` (lists registered commands live), `/status`
-(provider + model + health + today's spend, **LLM-free**). Free-text messages are
-answered by a tool-less brain think over the routine **fallback chain**
-(`opencode → claude → codex → cloud`, see `LHASSA_FALLBACK_PROVIDERS`).
+LLM-free commands: `/start`, `/help` (lists registered commands live), `/status`,
+`/approvals` (each pending decision described in plain words — what it is, how
+old, what approving does), `/approve` / `/deny`, `/recall <text>` (FTS5 search
+over the brain's own past episodes), `/watch`, `/goal`. Free-text messages are
+answered by a tool-less brain think — the chat door can pin its own fast
+provider (`telegram_provider`) while heavier work stays on the heartbeat seat —
+over the routine **fallback chain** (`opencode → claude → codex → cloud`). The
+twice-daily check-in digest arrives in Lhassa's first-person voice ($0
+deterministic template, optional model re-voicing via `digest_style=persona`).
 
 ### Dashboard
 
@@ -145,15 +217,15 @@ Flow/Tree/Templates editor, with the typed **relationship overlay** drawn as das
 per-kind edges — legend + toggles — and add/remove from the inspector); **Skills**;
 **Run** (launch an agentic local-CLI task and watch it stream); **Flows** (an
 n8n-style work-flow editor wiring `trigger → task → gate → output`); **Settings**
-(the editable runtime knobs); **Reports**; **Fleet**; and **Activity**. The LLM
-ledger/limits, approvals and tools/quarantine surface here too. WebSocket fan-out at
-`/ws` streams live events (including the agentic run tokens).
+(the editable runtime knobs); **Reports**; **Fleet**; and **Activity** (with
+full-text search over the episode log). The LLM ledger/limits, approvals and
+tools/quarantine surface here too. WebSocket fan-out at `/ws` streams live events
+(including the agentic run tokens).
 
 The same FastAPI app exposes the REST surface. Beyond the brain/LLM/approval routes
-it includes `/api/org/*` (topology · brains · route · templates · **relationships**:
-`GET /api/org/relationships`, `/kinds`, `POST`/`DELETE`), `/api/flows[/{id}[/run]]`
-(the work-flow editor), and `/api/code` (+ `/clis`, `/runs` — the agentic local-CLI
-door, the backend for the **Run** section and `lhassa code`).
+it includes `/api/org/*` (topology · brains · route · templates · **relationships**),
+`/api/flows[/{id}[/run]]` (the work-flow editor), `/api/episodes/search` (FTS5
+recall), and `/api/code` (+ `/clis`, `/runs` — the agentic local-CLI door).
 
 ### Voice (opt-in)
 
@@ -175,10 +247,14 @@ is loaded *after* `.env` (override on) and never holds secrets. The most relevan
 |---|---|
 | **Chat (CLI/voice/agent)** | `LHASSA_LLM_PROVIDER` (groq/anthropic/openai/openrouter/cerebras/ollama **or** the local CLIs claude/codex/opencode), `LHASSA_MODEL` |
 | **Heartbeat / opencode** | `LHASSA_HEARTBEAT_PROVIDER` (auto/local/cloud/opencode/claude/codex), `LHASSA_OPENCODE_BIN`, `LHASSA_OPENCODE_MODEL` |
+| **Telegram chat seat** | `LHASSA_TELEGRAM_PROVIDER` (auto/default/claude/codex/opencode/local — the chat door's own fast provider) |
 | **Local / fallback chain** | `LHASSA_LOCAL_MODEL_URL`, `LHASSA_LOCAL_MODEL`, `LHASSA_FALLBACK_PROVIDERS` (default `claude,codex,default`) |
 | **Cost / router** | `LHASSA_ROUTER`, `LHASSA_MODEL_CHEAP`, `LHASSA_MODEL_SMART`, `LHASSA_LLM_DAILY_TOKEN_BUDGET`, `LHASSA_KILL_SWITCH` |
 | **Telegram** | `LHASSA_TELEGRAM_BOT_TOKEN`, `LHASSA_TELEGRAM_CHAT_ID`, `LHASSA_TELEGRAM_POLL` |
+| **Digest** | `LHASSA_DIGEST_HOUR_MORNING/EVENING`, `LHASSA_DIGEST_STYLE` (plain/persona), `LHASSA_DIGEST_LANGUAGE` |
 | **Memory (layer 4)** | `LHASSA_MEMORY_LAYER4`, `LHASSA_EMBEDDING_MODEL`, `LHASSA_MEMORY_SEMANTIC_TOPK` |
+| **Monitor** | `LHASSA_MONITOR_ENABLED`, `LHASSA_MONITOR_IDLE_INTERVAL`, `LHASSA_MONITOR_FAILURE_WINDOW_H` |
+| **Skills curator** | `LHASSA_SKILL_STALE_DAYS` (30), `LHASSA_SKILL_ARCHIVE_DAYS` (90) |
 | **Privacy** | `LHASSA_PSEUDONYMIZE_REMOTE` |
 | **Org / topology** | `LHASSA_ROOT_ADMIN`, `LHASSA_ORG_ROLE`, `LHASSA_ORG_DEPARTMENT`, `LHASSA_ORG_DEPARTMENTS`, `LHASSA_ORG_TOPOLOGY_FILE`, `LHASSA_ORG_RELATIONSHIPS_FILE`, `LHASSA_ORG_LIVE` |
 | **Work-flows** | `LHASSA_FLOWS_FILE` (the work-flow graph store; runs are offline/stubbed unless `LHASSA_ORG_LIVE`) |
@@ -202,7 +278,8 @@ architecture-guard test. For the layer map, the data dir, the phase history (0�
 and the do-and-sleep / provider-harness / org-tree diagrams, read
 [`doc/architecture.md`](doc/architecture.md). For the full spec read
 [`doc/lhassa-brief.md`](doc/lhassa-brief.md); the running decisions log is
-[`doc/decisions.md`](doc/decisions.md).
+[`doc/decisions.md`](doc/decisions.md); the narrative voice book is
+[`doc/narrative.md`](doc/narrative.md).
 
 | Document | Contents |
 |---|---|
@@ -211,8 +288,10 @@ and the do-and-sleep / provider-harness / org-tree diagrams, read
 | [doc/architecture-layers.md](doc/architecture-layers.md) | The modularity guard — layers + forbidden import directions |
 | [doc/lhassa-brief.md](doc/lhassa-brief.md) | The implementation spec (Spanish) |
 | [doc/decisions.md](doc/decisions.md) | Running decisions log (phase by phase) |
+| [doc/narrative.md](doc/narrative.md) | The narrative & voice book (flag, pillars, tone, vocabulary) |
 | [doc/install.md](doc/install.md) | One-command always-on Linux install |
 | [doc/deployment.md](doc/deployment.md) | Docker image, Compose roles, portability |
+| [doc/portability.md](doc/portability.md) | The VPS-portability audit (couplings, status, blockers) |
 
 ---
 
@@ -231,8 +310,15 @@ PRs via [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
 
 ---
 
+## Status & honesty
+
+Lhassa is a young project with one demanding first user: its author. Everything
+described above runs today and is covered by ~1,400 tests; what doesn't run yet
+is not on this page. It lives on a laptop and is built to move to a small VPS
+without surgery.
+
 ## License
 
 AGPL-3.0-or-later — see [LICENSE](LICENSE).
-</content>
-</invoke>
+
+<p align="center">— <i>The wheel turns all day; the ledger barely moves.</i> —</p>
