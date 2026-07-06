@@ -9,13 +9,16 @@ Layers, in priority order:
   3. active context by TAGS (exact membership, NOT semantics).
   4. semantic retrieval (embeddings): facts whose embedding is closest to the
      active ``query``. OFF by default — only when ``config.memory_layer4_enabled``
-     and a ``query`` is supplied AND fact embeddings have been indexed. The lowest
-     priority layer; dropped first under budget.
+     and a ``query`` is supplied AND fact embeddings have been indexed.
+  5. episodic recall (Fase 1): the top few past episodes whose text matches the
+     active ``query`` (FTS5, $0, deterministic — see ``core.db.search_episodes``).
+     The LOWEST priority layer; dropped first under budget, and fully defensive
+     (any error → empty, never raises).
 
 Then :func:`truncate` trims to the token budget, dropping the lowest-priority
-layer first (``priority=["pinned","recent","tags","semantic"]``): semantic goes
-before tags, tags before recent, and the identity core (directives + pinned facts)
-is never dropped.
+layer first (``priority=["pinned","recent","tags","semantic","recall"]``): recall
+goes before semantic, semantic before tags, tags before recent, and the identity
+core (directives + pinned facts) is never dropped.
 
 Token counting is a deterministic estimate — exact via tiktoken when installed,
 else a ~3 chars/token safety heuristic (see :func:`estimate_tokens`). The semantic
@@ -32,7 +35,7 @@ from lhassa.memory.facts import Fact, load_by_tags, load_facts, resolve
 from lhassa.persona import load_identity
 
 # Priority of the layers, highest first. Truncation drops from the tail.
-PRIORITY = ["pinned", "recent", "tags", "semantic"]
+PRIORITY = ["pinned", "recent", "tags", "semantic", "recall"]
 
 
 # Lazy, cached tiktoken probe: attempted at most once per process. When tiktoken
@@ -84,6 +87,11 @@ def _render_episode(ep: dict) -> str:
     return f"- [{ep.get('creado_en', '')}] {ep.get('despertar_por', '')}: {resultado}".rstrip(": ")
 
 
+def _render_recall(row: dict) -> str:
+    resultado = (row.get("resultado") or "").replace("\n", " ").strip()
+    return f"- [{row.get('creado_en', '')}] {row.get('despertar_por', '')} ({row.get('decision', '')}): {resultado}".rstrip(": ")
+
+
 @dataclass
 class Context:
     """
@@ -97,6 +105,7 @@ class Context:
     tag_facts: list[Fact] = field(default_factory=list)
     episodes: list[dict] = field(default_factory=list)
     semantic_facts: list[Fact] = field(default_factory=list)
+    recall_episodes: list[dict] = field(default_factory=list)
     token_budget: int = 0
 
     @property
@@ -122,6 +131,9 @@ class Context:
         if self.episodes:
             lines = "\n".join(_render_episode(e) for e in self.episodes)
             blocks.append(f"Episodios recientes:\n{lines}")
+        if self.recall_episodes:
+            lines = "\n".join(_render_recall(r) for r in self.recall_episodes)
+            blocks.append(f"Recall (episodios relacionados):\n{lines}")
         return "\n\n".join(blocks)
 
     @property
@@ -155,6 +167,7 @@ def truncate(ctx: Context, token_budget: int) -> Context:
     recent_rank = PRIORITY.index("recent")
     tags_rank = PRIORITY.index("tags")
     semantic_rank = PRIORITY.index("semantic")
+    recall_rank = PRIORITY.index("recall")
     items: list[dict] = []
     for ep in ctx.episodes:
         items.append({"rank": recent_rank, "tok": estimate_tokens(_render_episode(ep)),
@@ -165,6 +178,9 @@ def truncate(ctx: Context, token_budget: int) -> Context:
     for f in ctx.semantic_facts:
         items.append({"rank": semantic_rank, "tok": estimate_tokens(_render_fact(f)),
                       "kind": "semantic", "payload": f})
+    for r in ctx.recall_episodes:
+        items.append({"rank": recall_rank, "tok": estimate_tokens(_render_recall(r)),
+                      "kind": "recall", "payload": r})
 
     used = mandatory + sum(it["tok"] for it in items)
     # Drop lowest-priority (highest rank) items, from the tail, until we fit.
@@ -176,6 +192,7 @@ def truncate(ctx: Context, token_budget: int) -> Context:
     ctx.episodes = [it["payload"] for it in items if it["kind"] == "ep"]
     ctx.tag_facts = [it["payload"] for it in items if it["kind"] == "tag"]
     ctx.semantic_facts = [it["payload"] for it in items if it["kind"] == "semantic"]
+    ctx.recall_episodes = [it["payload"] for it in items if it["kind"] == "recall"]
     return ctx
 
 
@@ -221,6 +238,19 @@ async def _semantic_layer(
     # Highest similarity first; fact id breaks ties deterministically.
     scored.sort(key=lambda s: (-s[0], s[1]))
     return [by_id[fid] for _, fid in scored[:topk]]
+
+
+async def _recall_layer(instance_id: str, query: str, *, topk: int = 3) -> list[dict]:
+    """Layer 5 (Fase 1 "Recall"): top past episodes matching ``query`` — $0, no LLM.
+
+    Fully defensive by design: this is the lowest-priority, purely-additive layer,
+    so ANY failure (missing FTS5 index, bad DB state, whatever) must silently
+    yield an empty layer rather than disturb the rest of the context build.
+    """
+    try:
+        return await db.search_episodes(instance_id, query, topk)
+    except Exception:
+        return []
 
 
 async def index_facts(instance_id: str | None = None, config=None) -> int:
@@ -310,6 +340,12 @@ async def load(
             topk=getattr(config, "memory_semantic_topk", 5),
         )
 
+    # Layer 5 — episodic recall (Fase 1). Lowest priority, purely additive: only
+    # when a query is given, and never allowed to raise (see _recall_layer).
+    recall_episodes: list[dict] = []
+    if query:
+        recall_episodes = await _recall_layer(instance_id, query)
+
     ctx = Context(
         instance_id=instance_id,
         directives=directives,
@@ -317,6 +353,7 @@ async def load(
         tag_facts=tag_facts,
         episodes=episodes,
         semantic_facts=semantic_facts,
+        recall_episodes=recall_episodes,
         token_budget=token_budget,
     )
     return truncate(ctx, token_budget)

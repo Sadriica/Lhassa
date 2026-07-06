@@ -26,6 +26,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
+from loguru import logger
+
 from lhassa._vendor import aiosqlite
 
 from lhassa.config import Config
@@ -103,6 +105,58 @@ async def init_db() -> None:
             CREATE INDEX IF NOT EXISTS episodes_by_instance
             ON episodes(instance_id, creado_en)
         """)
+
+        # episodes_fts — Fase 1 "Recall": a full-text index over the episode log
+        # (§ decisions log Fase 1). An FTS5 EXTERNAL-CONTENT table over `episodes`
+        # (no row duplication — content lives only in `episodes`), kept in sync by
+        # triggers. Defensive: some SQLite builds omit FTS5, so this — and ONLY
+        # this — is wrapped so init_db() never crashes on an old/stripped build.
+        try:
+            await db.execute("""
+                CREATE VIRTUAL TABLE IF NOT EXISTS episodes_fts USING fts5(
+                    decision, accion, resultado, despertar_por,
+                    content='episodes', content_rowid='rowid'
+                )
+            """)
+            await db.execute("""
+                CREATE TRIGGER IF NOT EXISTS episodes_fts_ai AFTER INSERT ON episodes BEGIN
+                    INSERT INTO episodes_fts(rowid, decision, accion, resultado, despertar_por)
+                    VALUES (new.rowid, new.decision, new.accion, new.resultado, new.despertar_por);
+                END
+            """)
+            await db.execute("""
+                CREATE TRIGGER IF NOT EXISTS episodes_fts_ad AFTER DELETE ON episodes BEGIN
+                    INSERT INTO episodes_fts(episodes_fts, rowid, decision, accion, resultado, despertar_por)
+                    VALUES ('delete', old.rowid, old.decision, old.accion, old.resultado, old.despertar_por);
+                END
+            """)
+            await db.execute("""
+                CREATE TRIGGER IF NOT EXISTS episodes_fts_au AFTER UPDATE ON episodes BEGIN
+                    INSERT INTO episodes_fts(episodes_fts, rowid, decision, accion, resultado, despertar_por)
+                    VALUES ('delete', old.rowid, old.decision, old.accion, old.resultado, old.despertar_por);
+                    INSERT INTO episodes_fts(rowid, decision, accion, resultado, despertar_por)
+                    VALUES (new.rowid, new.decision, new.accion, new.resultado, new.despertar_por);
+                END
+            """)
+
+            # Backfill: episodes existed before the index (or from a version
+            # without triggers) — if the index is empty but episodes aren't,
+            # rebuild it from the content table in one shot. NOTE: `SELECT
+            # count(*) FROM episodes_fts` is NOT a reliable emptiness check for
+            # an external-content table — SQLite answers a plain count(*) off
+            # the content table itself, not the index. The `_docsize` shadow
+            # table (one row per row actually INDEXED) is the true signal.
+            async with db.execute("SELECT COUNT(*) FROM episodes_fts_docsize") as cur:
+                fts_count = (await cur.fetchone())[0]
+            if fts_count == 0:
+                async with db.execute("SELECT COUNT(*) FROM episodes") as cur:
+                    ep_count = (await cur.fetchone())[0]
+                if ep_count > 0:
+                    await db.execute(
+                        "INSERT INTO episodes_fts(episodes_fts) VALUES ('rebuild')"
+                    )
+        except Exception as exc:
+            logger.warning(f"db: episodes_fts (FTS5) unavailable, recall search disabled: {exc}")
 
         await db.execute("""
             CREATE TABLE IF NOT EXISTS tasks (
@@ -469,6 +523,109 @@ async def load_recent_episodes(instance_id: str, n: int = 20) -> list[dict]:
     for row in rows:
         row["memoria_cargada"] = _loads(row.get("memoria_cargada"), [])
     return rows
+
+
+async def count_episodes(instance_id: str) -> int:
+    """Return the total number of episodes for ``instance_id``."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        async with db.execute(
+            "SELECT COUNT(*) FROM episodes WHERE instance_id = ?",
+            (instance_id,),
+        ) as cur:
+            row = await cur.fetchone()
+    return int(row[0] if row else 0)
+
+
+async def count_episodes_since(instance_id: str, since: str) -> int:
+    """Return the number of episodes for ``instance_id`` at or after ``since``."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        async with db.execute(
+            """SELECT COUNT(*) FROM episodes
+               WHERE instance_id = ? AND creado_en >= ?""",
+            (instance_id, since),
+        ) as cur:
+            row = await cur.fetchone()
+    return int(row[0] if row else 0)
+
+
+# ── recall (FTS5 full-text search over episodes — Fase 1) ───────────────────────
+#
+# $0, deterministic full-text search over the episode log — no model call. The
+# query is SANITIZED into a safe FTS5 MATCH expression (each token individually
+# double-quoted) so arbitrary user input (quotes, parens, AND/OR/NOT, dangling
+# operators) can never raise an FTS5 syntax error. Automation-originated episodes
+# (``despertar_por`` is ``monitor`` or starts with ``task:``) are DEMOTED (not
+# hidden) in ranking so interactive history surfaces first.
+
+
+def _fts_query(query: str) -> str:
+    """Turn free text into a safe FTS5 MATCH expression.
+
+    Each whitespace-delimited token is individually double-quoted (FTS5 string
+    syntax: a doubled `"` escapes a literal quote), then the tokens are joined
+    with an implicit AND. This defuses any FTS5 operator/punctuation the user
+    might type (``AND``, ``OR``, ``NOT``, ``(``, ``)``, a bare ``"``) — the
+    result is always a valid MATCH argument, never a syntax error.
+    """
+    tokens = query.split()
+    quoted = ['"' + tok.replace('"', '""') + '"' for tok in tokens if tok]
+    return " ".join(quoted)
+
+
+async def search_episodes(instance_id: str, query: str, n: int = 10) -> list[dict]:
+    """BM25-ranked full-text search over ``instance_id``'s episode log.
+
+    Returns up to ``n`` dicts: ``id``, ``despertar_por``, ``decision``, ``accion``,
+    a ``resultado`` snippet (via FTS5 ``snippet()``), ``creado_en`` and ``rank``.
+    Automation episodes (``despertar_por`` == ``monitor`` or starting with
+    ``task:``) are ranked BELOW interactive ones for an equally-good match (a
+    CASE-based penalty added to the raw bm25 rank), never hidden. An empty/blank
+    ``query`` returns ``[]`` with no query executed. If the FTS5 index is
+    missing (older SQLite build), returns ``[]`` (debug-logged) rather than
+    raising — recall degrades to "no results", never a crash.
+    """
+    query = (query or "").strip()
+    if not query:
+        return []
+    match_expr = _fts_query(query)
+    if not match_expr:
+        return []
+
+    sql = """
+        SELECT e.id, e.despertar_por, e.decision, e.accion, e.creado_en,
+               snippet(episodes_fts, 2, '[', ']', '…', 8) AS snippet,
+               bm25(episodes_fts) + (CASE
+                   WHEN e.despertar_por = 'monitor' THEN 5.0
+                   WHEN e.despertar_por LIKE 'task:%' THEN 5.0
+                   ELSE 0.0
+               END) AS rank
+        FROM episodes_fts
+        JOIN episodes e ON e.rowid = episodes_fts.rowid
+        WHERE episodes_fts MATCH ? AND e.instance_id = ?
+        ORDER BY rank
+        LIMIT ?
+    """
+    try:
+        async with aiosqlite.connect(DB_PATH) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(sql, (match_expr, instance_id, n)) as cur:
+                rows = [dict(row) for row in await cur.fetchall()]
+    except Exception as exc:
+        logger.debug(f"db: search_episodes unavailable ({exc}); returning no results")
+        return []
+
+    return [
+        {
+            "id": row["id"],
+            "despertar_por": row["despertar_por"],
+            "decision": row["decision"],
+            "accion": row["accion"],
+            "resultado": row["snippet"],
+            "creado_en": row["creado_en"],
+            "rank": row["rank"],
+        }
+        for row in rows
+    ]
 
 
 # ── runs / run_steps (durable execution analytics) ─────────────────────────────
