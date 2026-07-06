@@ -136,3 +136,45 @@ def test_run_endpoint_offline(client):
 
 def test_run_missing_flow_is_404(client):
     assert client.post("/api/flows/ghost/run", json={}).status_code == 404
+
+
+# ── flow-templates gallery ────────────────────────────────────────────────────────
+
+
+def test_list_flow_templates(client):
+    r = client.get("/api/flows/templates")
+    assert r.status_code == 200, r.text
+    ids = {t["id"] for t in r.json()}
+    assert {"research-brief", "code-review-pass", "daily-summary", "content-pipeline"} <= ids
+
+
+def test_flow_templates_route_ordering_not_captured_as_flow_id(client):
+    # /api/flows/templates must resolve to the gallery, NOT get_flow(flow_id="templates").
+    r = client.get("/api/flows/templates")
+    assert r.status_code == 200
+    assert isinstance(r.json(), list)  # get_flow would 404 (a list is never a 404 body)
+
+
+def test_apply_flow_template_creates_a_flow(client):
+    r = client.post("/api/flows/templates/daily-summary/apply")
+    assert r.status_code == 201, r.text
+    created = r.json()
+    assert created["id"] == "daily-summary"
+    assert created["name"] == "Daily Summary"
+
+    # It is now a real stored flow, reachable through the normal /{flow_id} route.
+    got = client.get("/api/flows/daily-summary")
+    assert got.status_code == 200
+    assert got.json()["name"] == "Daily Summary"
+
+
+def test_apply_flow_template_reapply_gets_a_fresh_id(client):
+    first = client.post("/api/flows/templates/daily-summary/apply").json()
+    second = client.post("/api/flows/templates/daily-summary/apply").json()
+    assert first["id"] == "daily-summary"
+    assert second["id"] == "daily-summary-2"
+
+
+def test_apply_unknown_flow_template_is_400(client):
+    r = client.post("/api/flows/templates/nope/apply")
+    assert r.status_code == 400

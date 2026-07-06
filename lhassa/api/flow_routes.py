@@ -6,13 +6,20 @@ model errors into 4xx (never a 500), so a malformed flow from the canvas is a cl
 
 Routes (all under ``/api/flows``)::
 
-    GET    /api/flows            → list every flow            → 200 [flow, ...]
-    GET    /api/flows/{id}       → one flow                   → 200 flow | 404
-    POST   /api/flows            → create from a flow dict     → 201 flow | 400 | 409
-    PUT    /api/flows/{id}       → replace a flow              → 200 flow | 400
-    PATCH  /api/flows/{id}       → merge fields into a flow    → 200 flow | 400 | 404
-    DELETE /api/flows/{id}       → delete a flow              → 200 {deleted} | 404
-    POST   /api/flows/{id}/run   → execute → the run record    → 200 run | 404
+    GET    /api/flows                        → list every flow          → 200 [flow, ...]
+    GET    /api/flows/templates              → the flow-templates gallery → 200 [template, ...]
+    POST   /api/flows/templates/{name}/apply → instantiate a template   → 201 flow | 400
+    GET    /api/flows/{id}                   → one flow                 → 200 flow | 404
+    POST   /api/flows                        → create from a flow dict   → 201 flow | 400 | 409
+    PUT    /api/flows/{id}                   → replace a flow            → 200 flow | 400
+    PATCH  /api/flows/{id}                   → merge fields into a flow  → 200 flow | 400 | 404
+    DELETE /api/flows/{id}                   → delete a flow            → 200 {deleted} | 404
+    POST   /api/flows/{id}/run               → execute → the run record  → 200 run | 404
+
+NOTE on ordering: the literal-path ``/api/flows/templates`` routes are declared
+BEFORE ``/api/flows/{flow_id}`` so FastAPI/Starlette (which matches routes in
+declaration order) resolves ``GET /api/flows/templates`` to the gallery, never to
+``get_flow(flow_id="templates")``.
 
 The integrator wires this in with ``app.include_router(flow_routes.router)``.
 """
@@ -26,6 +33,7 @@ from loguru import logger
 
 import lhassa.config as lhassa_config
 from lhassa.core import db
+from lhassa.flows import templates as flow_templates
 from lhassa.flows.model import Flow, FlowValidationError
 from lhassa.flows.store import FlowStore
 from lhassa.org.delegate import delegate_flow
@@ -54,6 +62,25 @@ def _parse(body: Any) -> Flow:
 async def list_flows() -> list[dict]:
     """Every stored flow."""
     return [f.to_dict() for f in _store().list_flows()]
+
+
+# ── flow-templates gallery (declared BEFORE /{flow_id} — see module docstring) ─────
+
+
+@router.get("/templates")
+async def list_flow_templates() -> list[dict]:
+    """The flow-templates gallery: name + description + what each one teaches."""
+    return flow_templates.list_templates()
+
+
+@router.post("/templates/{name}/apply", status_code=201)
+async def apply_flow_template(name: str) -> dict:
+    """Instantiate template ``name`` into the store under a fresh id (never clobbers)."""
+    try:
+        flow = flow_templates.apply_template(name)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return flow.to_dict()
 
 
 @router.get("/{flow_id}")

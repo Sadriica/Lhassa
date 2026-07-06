@@ -117,6 +117,45 @@ remember: my new phone number is +34 600 123 456
 
 ---
 
+## Work-flow examples (`lhassa flows`)
+
+Per `doc/boundaries.md`: **these four are the public presets** — a portable gallery
+anyone can apply, routing every task node by generic `skill` name rather than a
+pinned personal brain. Your customized instances (renamed, rewired, tailored to
+your own org chart) live in `~/.lhassa/flows.json` and never enter git; applying a
+template never overwrites one of yours — a taken id gets a fresh suffix instead.
+
+```bash
+lhassa flows templates          # the gallery: id, node count/kinds, what it teaches
+lhassa flows apply daily-summary
+lhassa flows list
+lhassa flows show daily-summary
+```
+
+**`research-brief`** — trigger → task (research) → gate (an objective, LLM-free
+regex check that the answer actually cites a source) → output (notify). Teaches the
+engine's simplest VERIFIED pipeline: a `task → gate:verify → output` chain where a
+non-pass halts the path before anything reaches the owner.
+
+**`code-review-pass`** — trigger → task (code review) → branch on the verdict →
+two distinct outputs (approved → notify; changes requested → log the follow-up).
+Teaches the `branch` node kind: one upstream result, routed by conditional edge
+`when` clauses (an unconditional edge is the implicit "else").
+
+**`daily-summary`** — trigger → task (summarize) → output (doc). The simplest
+possible three-node flow — no gate, no branch — the hello-world to read before the
+other three.
+
+**`content-pipeline`** — trigger → task (draft) → task (critique) → gate (a human
+APPROVAL, parked via `/approve <id>`) → output (publish). Teaches a HITL gate
+*mid-flow*: two chained tasks feed a person before anything ships.
+
+Applying a template is $0 and offline (it just writes a validated flow); running it
+(`lhassa code`/dashboard/API `POST /api/flows/{id}/run`) goes through the org
+delegation seam and is offline/stubbed unless `LHASSA_ORG_LIVE=1`.
+
+---
+
 ## Voice (opt-in appendix)
 
 Voice is one opt-in surface among CLI / Telegram / dashboard — off by
