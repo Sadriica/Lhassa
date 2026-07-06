@@ -56,7 +56,7 @@ _BACKOFF_MAX = 60.0
 _CHAT_MAX_TOKENS = 512
 
 # Short fallback when the brain can't reach a model — sent verbatim to the chat.
-_FALLBACK_REPLY = "I can't reach my model right now."
+_FALLBACK_REPLY = "I can't reach my model right now — give it a moment and ask me again."
 
 # Marker for an episode whose model could not run (mirrors core/step + voice).
 _DEFERRED_DECISION = "deferred: telegram needs judgment"

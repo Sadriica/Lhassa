@@ -45,7 +45,7 @@ if TYPE_CHECKING:
 
 # A short, spoken fallback when the brain can't reach a model. No markdown — this
 # is read aloud by TTS.
-FALLBACK_REPLY = "I can't reach my model right now."
+FALLBACK_REPLY = "I can't reach my model right now — give it a moment and ask me again."
 
 # A wake-for-a-spoken-turn is a short answer, not a long job.
 _VOICE_MAX_TOKENS = 512

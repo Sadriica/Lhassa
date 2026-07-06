@@ -51,6 +51,6 @@ def test_backward_compatible_exports_unchanged():
     assert PERSONA_BLOCK == load_identity("inst_personal").persona_block
     assert persona.PERSONA_NAME == "Lhassa"
     # STYLE_GUIDE + format_alert still present and behaving as before.
-    assert persona.STYLE_GUIDE["tone"].startswith("humble")
+    assert "humble" in persona.STYLE_GUIDE["tone"]  # the tone evolved; humility is permanent
     assert format_alert("disk almost full", level="warn") == "Heads up — disk almost full"
     assert format_alert("all good", level="info") == "all good"

@@ -121,10 +121,20 @@ async def dispatch(text: str, *, config=None) -> Optional[str]:
         return await handler(args, config=config)
     except Exception as exc:  # a command must never crash the poll loop
         logger.warning(f"commands: handler {name!r} failed: {exc}")
-        return "Sorry, that command hit a snag. Try /help."
+        return "That one stumbled on me — try it again in a moment, or /help for the map."
 
 
 # ── helpers (LLM-free, never raise) ───────────────────────────────────────────
+
+
+
+def _oops(what: str) -> str:
+    """A degraded-path reply in Lhassa's voice — calm, owned, with a next step.
+
+    Every LLM-free command that fails says it the same way: first person, no
+    alarm, no blame, and an invitation to retry. One voice, one place.
+    """
+    return f"I couldn't {what} just now. Give it a moment and try again."
 
 
 def _config(config):
@@ -366,7 +376,7 @@ async def _cmd_status(args: str, *, config=None) -> str:
         return "\n".join(lines)
     except Exception as exc:
         logger.warning(f"commands: /status failed: {exc}")
-        return "Status is unavailable right now."
+        return _oops("read my own status")
 
 
 # ── Etapa 2 — approve/deny from chat ──────────────────────────────────────────
@@ -420,7 +430,7 @@ async def _cmd_approvals(args: str, *, config=None) -> str:
         return "\n".join(lines)
     except Exception as exc:
         logger.warning(f"commands: /approvals failed: {exc}")
-        return "Could not load pending approvals right now."
+        return _oops("open the approvals queue")
 
 
 async def _resolve_from_chat(args: str, *, config, approved: bool) -> str:
@@ -449,7 +459,7 @@ async def _resolve_from_chat(args: str, *, config, approved: bool) -> str:
         return f"Approval {ap_id} {'approved' if approved else 'denied'}."
     except Exception as exc:
         logger.warning(f"commands: /{verb} {ap_id} failed: {exc}")
-        return f"Could not resolve approval {ap_id}."
+        return _oops(f"resolve approval {ap_id}")
 
 
 @register_command("approve")
@@ -528,11 +538,11 @@ async def _cmd_watch(args: str, *, config=None) -> str:
         rules = _ti._load_raw_watch_rules(cfg)
         rules.append({"pattern": pattern_src, "accion": accion, "params": {}})
         if not _ti.save_watch_rules(cfg, rules):
-            return "Could not save the watch rule (no watch_rules_file configured?)."
+            return _oops("save the watch rule (is watch_rules_file configured?)")
         return f"Watch added (#{len(rules) - 1}): /{pattern_src}/ -> {accion}"
     except Exception as exc:
         logger.warning(f"commands: /watch failed: {exc}")
-        return "Could not add that watch rule."
+        return _oops("add that watch rule")
 
 
 @register_command("watches")
@@ -551,7 +561,7 @@ async def _cmd_watches(args: str, *, config=None) -> str:
         return "\n".join(lines)
     except Exception as exc:
         logger.warning(f"commands: /watches failed: {exc}")
-        return "Could not list watch rules right now."
+        return _oops("list the watch rules")
 
 
 @register_command("unwatch")
@@ -571,14 +581,14 @@ async def _cmd_unwatch(args: str, *, config=None) -> str:
             return f"No watch rule at index {idx}. See /watches."
         removed = rules.pop(idx)
         if not _ti.save_watch_rules(cfg, rules):
-            return "Could not save after removing that rule."
+            return _oops("save after removing that rule")
         return (
             f"Removed watch rule {idx}: "
             f"/{removed.get('pattern', '')}/ -> {removed.get('accion', '')}"
         )
     except Exception as exc:
         logger.warning(f"commands: /unwatch failed: {exc}")
-        return "Could not remove that watch rule."
+        return _oops("remove that watch rule")
 
 
 # ── Fase 1 — Recall (LLM-free full-text search over the episode log) ─────────
@@ -618,7 +628,7 @@ async def _cmd_recall(args: str, *, config=None) -> str:
         return "\n".join(lines)
     except Exception as exc:
         logger.warning(f"commands: /recall {text!r} failed: {exc}")
-        return "Could not search episodes right now."
+        return _oops("search my episodes")
 
 
 @register_command("goal")
@@ -666,7 +676,7 @@ async def _cmd_goal(args: str, *, config=None) -> str:
         )
     except Exception as exc:
         logger.warning(f"commands: /goal failed: {exc}")
-        return "Sorry, I couldn't schedule that goal."
+        return _oops("schedule that goal")
 
     if not task_id:
         return f"Could not schedule goal: {estado}"
@@ -774,7 +784,7 @@ async def _cmd_memory(args: str, *, config=None) -> str:
         return "\n".join(lines)
     except Exception as exc:
         logger.warning(f"commands: /memory {query!r} failed: {exc}")
-        return "Could not search my memory right now."
+        return _oops("search my memory")
 
 
 @register_command("capabilities")
@@ -832,7 +842,7 @@ async def _cmd_capabilities(args: str, *, config=None) -> str:
         return "\n".join(lines)
     except Exception as exc:
         logger.warning(f"commands: /capabilities failed: {exc}")
-        return "Could not read my capabilities right now."
+        return _oops("read my capabilities")
 
 
 def _flag(value: bool) -> str:
@@ -868,7 +878,7 @@ async def _cmd_tools(args: str, *, config=None) -> str:
         return "\n".join(lines)
     except Exception as exc:
         logger.warning(f"commands: /tools failed: {exc}")
-        return "Could not list my tools right now."
+        return _oops("list my tools")
 
 
 @register_command("skills")
@@ -909,4 +919,4 @@ async def _cmd_skills(args: str, *, config=None) -> str:
         return "\n".join(lines)
     except Exception as exc:
         logger.warning(f"commands: /skills failed: {exc}")
-        return "Could not list my skills right now."
+        return _oops("list my skills")
