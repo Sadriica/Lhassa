@@ -134,3 +134,69 @@ async def resolve(
 async def pending(instance_id: str) -> list:
     """The approval queue: pending approvals for ``instance_id`` (oldest first)."""
     return await db.load_pending_approvals(instance_id)
+
+
+def describe(row: dict) -> dict:
+    """A human-readable ``{title, detail}`` for one approval row — deterministic, $0.
+
+    Every surface that shows the queue (the Telegram ``/approvals`` command, the
+    dashboard panels, the digest) renders through this ONE helper, so "what am I
+    approving?" reads the same everywhere. It understands the payload shape each
+    ``request_approval`` caller writes (``mint_action``, ``tool_graduation``,
+    ``flow_gate``, ``org_task``, dispatch/remote tasks) and degrades to
+    ``tipo``+``accion`` for anything unknown. Never raises.
+    """
+    tipo = str((row or {}).get("tipo") or "?")
+    payload = (row or {}).get("payload") or {}
+    if not isinstance(payload, dict):
+        payload = {}
+    accion = str(payload.get("accion") or "")
+    try:
+        if tipo == "mint_action":
+            cand = payload.get("candidate_accion") or payload.get("pattern") or "?"
+            bits = []
+            if payload.get("despertar_por"):
+                bits.append(f"trigger: {payload['despertar_por']}")
+            if payload.get("count"):
+                bits.append(f"repeated ×{payload['count']}")
+            if payload.get("total_cost_usd") is not None:
+                bits.append(f"${float(payload['total_cost_usd']):.2f} spent on it so far")
+            bits.append("approving mints a $0 deterministic action")
+            return {
+                "title": f"Make '{cand}' automatic",
+                "detail": " · ".join(bits),
+            }
+        if tipo == "tool_graduation":
+            tool = payload.get("tool") or "?"
+            detail = "passed the gates in quarantine — approving activates it"
+            if payload.get("branch"):
+                detail += f" (branch {payload['branch']})"
+            return {"title": f"Graduate self-written tool '{tool}'", "detail": detail}
+        if tipo == "flow_gate":
+            node = payload.get("node") or "?"
+            return {
+                "title": f"Work-flow paused at gate '{node}'",
+                "detail": "the flow waits at this step until you approve it",
+            }
+        if tipo == "org_task":
+            dept = payload.get("department") or "?"
+            bits = []
+            if payload.get("goal"):
+                bits.append(f"goal: {str(payload['goal'])[:100]}")
+            if payload.get("actor_id"):
+                bits.append(f"asked by {payload['actor_id']}")
+            return {"title": f"Org task for '{dept}'", "detail": " · ".join(bits) or tipo}
+        # Dispatch tasks (tipo="task") and remote tasks (tipo=<accion>) share
+        # objetivo / actor_id / origen_trust.
+        bits = []
+        if payload.get("objetivo"):
+            bits.append(f"goal: {str(payload['objetivo'])[:100]}")
+        if payload.get("actor_id"):
+            bits.append(f"asked by {payload['actor_id']}")
+        if payload.get("origen_trust") is not None:
+            bits.append(f"origin trust: {payload['origen_trust']}")
+        title = f"Run '{accion}'" if accion else f"Approval: {tipo}"
+        detail = " · ".join(bits) or str(payload.get("title") or "")
+        return {"title": title, "detail": detail}
+    except Exception:  # a malformed payload must never break a queue render
+        return {"title": tipo + (f": {accion}" if accion else ""), "detail": ""}
