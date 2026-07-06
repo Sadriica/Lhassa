@@ -184,6 +184,15 @@ def describe(row: dict) -> dict:
             if payload.get("branch"):
                 detail += f" (branch {payload['branch']})"
             return {"title": f"Graduate self-written tool '{tool}'", "detail": detail}
+        if tipo == "code_run":
+            task = str(payload.get("task") or "?")
+            preview = task if len(task) <= 60 else task[:57] + "…"
+            cli = payload.get("cli") or "?"
+            cwd = payload.get("cwd") or "?"
+            return {
+                "title": f"Run a coding agent: {preview}",
+                "detail": f"{cli} · {cwd} · write access to your files — approving launches it",
+            }
         if tipo == "flow_gate":
             node = payload.get("node") or "?"
             return {

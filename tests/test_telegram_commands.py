@@ -373,6 +373,66 @@ def test_goal_requires_text():
     assert "Usage" in reply
 
 
+# ── /code — parks a code_run approval, never runs directly ───────────────────
+
+
+def test_code_requires_task():
+    reply = asyncio.run(commands.dispatch("/code", config=_cfg()))
+    assert "Usage" in reply
+    assert "[[" not in reply  # no leaked marker on the usage hint
+
+
+def test_code_parks_approval_with_expected_payload(tmp_path, monkeypatch):
+    db = asyncio.run(_init_db(tmp_path, monkeypatch))
+    from lhassa.agents import local_cli
+
+    monkeypatch.setattr(local_cli, "detect_ai_cli", lambda: "claude")
+    from lhassa.api import code_routes
+
+    monkeypatch.setattr(code_routes, "_agent_cwd", lambda: tmp_path)
+
+    reply = asyncio.run(
+        commands.dispatch(
+            "/code fix the failing test", config=_cfg(instance_id="inst_personal")
+        )
+    )
+
+    # Voice: confirms what was parked, points at the coming button / fallback commands.
+    assert "claude" in reply
+    assert "fix the failing test" in reply
+    assert "approve" in reply.lower()
+
+    rows = asyncio.run(db.load_pending_approvals("inst_personal"))
+    assert len(rows) == 1
+    row = rows[0]
+    assert row["tipo"] == "code_run"
+    payload = row["payload"]
+    assert payload["accion"] == "code_run"
+    assert payload["task"] == "fix the failing test"
+    assert payload["cli"] == "claude"
+    assert payload["cwd"] == str(tmp_path)
+
+    # The hidden approval-id marker is present (the poller strips it before
+    # sending) and matches the parked row's id.
+    import re
+
+    m = re.search(r"\[\[approval_id: (\S+)\]\]", reply)
+    assert m and m.group(1) == row["id"]
+
+
+def test_code_caps_task_length(tmp_path, monkeypatch):
+    db = asyncio.run(_init_db(tmp_path, monkeypatch))
+    from lhassa.agents import local_cli
+
+    monkeypatch.setattr(local_cli, "detect_ai_cli", lambda: "codex")
+
+    long_task = "x" * 900
+    asyncio.run(commands.dispatch(f"/code {long_task}", config=_cfg(instance_id="inst_personal")))
+
+    rows = asyncio.run(db.load_pending_approvals("inst_personal"))
+    assert len(rows[0]["payload"]["task"]) == 500
+
+
 # ── /help renders every registered command + never drops an unlisted one ─────
 
 

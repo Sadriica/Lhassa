@@ -315,6 +315,31 @@ def test_describe_flow_gate_and_org_task():
     assert "tailor the CV" in org["detail"] and "lhassa" in org["detail"]
 
 
+def test_describe_code_run():
+    desc = approval.describe(
+        {
+            "tipo": "code_run",
+            "payload": {
+                "accion": "code_run",
+                "task": "fix the failing test in tests/test_x.py",
+                "cli": "claude",
+                "cwd": "/home/w/Code/lhassa",
+            },
+        }
+    )
+    assert desc["title"] == "Run a coding agent: fix the failing test in tests/test_x.py"
+    assert "claude" in desc["detail"]
+    assert "/home/w/Code/lhassa" in desc["detail"]
+    assert "write access" in desc["detail"]
+
+
+def test_describe_code_run_truncates_long_task():
+    desc = approval.describe(
+        {"tipo": "code_run", "payload": {"task": "x" * 200, "cli": "codex", "cwd": "/tmp"}}
+    )
+    assert desc["title"].startswith("Run a coding agent: " + "x" * 57 + "…")
+
+
 def test_describe_dispatch_task_and_unknown_degrade():
     task = approval.describe(
         {"tipo": "task", "payload": {"accion": "sync_repo", "objetivo": "~/Code/x", "actor_id": "duenio", "origen_trust": 3}}
