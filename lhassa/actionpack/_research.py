@@ -11,6 +11,8 @@ channel. No LLM call: the results speak for themselves, with their links. $0.
 
 from __future__ import annotations
 
+import re
+
 from loguru import logger
 
 # A chat-born query is a sentence, not a document.
@@ -18,6 +20,13 @@ _MAX_QUERY = 300
 
 # Results kept in the reply — a phone screen, not a report.
 _MAX_RESULTS = 4
+
+# News-intent detection: these queries route to the NEWS vertical first — the
+# reason a general engine answers "noticias de hoy" and a bare text search
+# doesn't is exactly this routing.
+_NEWS_RE = re.compile(
+    r"\b(noticias?|news|headlines?|titulares|última hora|breaking)\b", re.IGNORECASE
+)
 
 
 def _format_results(query: str, results: list[dict]) -> str:
@@ -27,7 +36,11 @@ def _format_results(query: str, results: list[dict]) -> str:
         title = str(r.get("title") or "").strip()[:90]
         body = str(r.get("body") or "").strip()[:160]
         url = str(r.get("url") or "").strip()
+        source = str(r.get("source") or "").strip()[:40]
+        date = str(r.get("date") or "").strip()[:10]
         entry = f"\n• {title}" if title else "\n•"
+        if source or date:
+            entry += f"\n  {' · '.join(x for x in (source, date) if x)}"
         if body:
             entry += f"\n  {body}"
         if url:
@@ -52,16 +65,26 @@ async def research_reply(params: dict | None = None) -> str:
     results: list[dict] = []
     errored = False
     try:
-        from lhassa.tools.search import web_search
+        from lhassa.tools import search as _search
 
-        results = await web_search(query, max_results=_MAX_RESULTS) or []
+        # News intent routes to the news vertical first — that's what makes
+        # "noticias de hoy" answerable at all. Any vertical failure falls
+        # through to the plain web path rather than ending the run.
+        if _NEWS_RE.search(query):
+            try:
+                results = await _search.news_search(query, max_results=_MAX_RESULTS) or []
+            except Exception as exc:
+                logger.debug(f"research_reply: news vertical failed, falling back: {exc}")
+
+        if not results:
+            results = await _search.web_search(query, max_results=_MAX_RESULTS) or []
         if not results:
             # A vague query often finds nothing where a dated one succeeds —
             # one deterministic retry anchored to the current month/year.
             from datetime import datetime, timezone
 
             anchored = f"{query} {datetime.now(timezone.utc).strftime('%B %Y')}"
-            results = await web_search(anchored, max_results=_MAX_RESULTS) or []
+            results = await _search.web_search(anchored, max_results=_MAX_RESULTS) or []
             if results:
                 query = anchored
     except Exception as exc:  # a failed search still owes the owner a message

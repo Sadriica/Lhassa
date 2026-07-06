@@ -65,9 +65,36 @@ async def _brave_search(query: str, max_results: int, api_key: str) -> list[dict
 
 
 async def _ddg_search(query: str, max_results: int) -> list[dict]:
-    from duckduckgo_search import DDGS
+    from ddgs import DDGS
+
     raw = await asyncio.wait_for(
         asyncio.to_thread(lambda: list(DDGS().text(query, max_results=max_results))),
         timeout=15.0,
     )
     return [{"title": r["title"], "body": r["body"], "url": r.get("href", "")} for r in raw]
+
+
+async def news_search(query: str, max_results: int = 4) -> list[dict]:
+    """Search the NEWS vertical. Returns ``{title, body, url, source, date}`` dicts.
+
+    A general engine answers "noticias de hoy" because it routes the intent to
+    its news index — the text endpoint alone returns junk for that phrase. This
+    is that routing seam: DDG's news vertical via ``ddgs`` (a Brave news backend
+    can slot in here later the same way :func:`web_search` prefers Brave).
+    """
+    from ddgs import DDGS
+
+    raw = await asyncio.wait_for(
+        asyncio.to_thread(lambda: list(DDGS().news(query, max_results=max_results))),
+        timeout=15.0,
+    )
+    return [
+        {
+            "title": r.get("title", ""),
+            "body": r.get("body", r.get("excerpt", "")),
+            "url": r.get("url", r.get("href", "")),
+            "source": r.get("source", ""),
+            "date": str(r.get("date", ""))[:10],
+        }
+        for r in raw
+    ]
