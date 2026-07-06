@@ -32,6 +32,7 @@ from lhassa.cli._boot import quiet_logging
 quiet_logging()
 
 from lhassa.cli import agent  # noqa: E402  (must follow quiet_logging)
+from lhassa.cli import artifact_cmds as _artifact_cmds  # noqa: E402
 from lhassa.cli import capabilities as _capabilities  # noqa: E402
 from lhassa.cli import commands as _commands  # noqa: E402
 from lhassa.cli import config_cmds as _config_cmds  # noqa: E402
@@ -270,6 +271,9 @@ app.add_typer(_skills_cmds.skills_app, name="skills")
 
 # Attach the `lhassa flows` sub-app (stored work-flows + the flow-templates gallery).
 app.add_typer(_flow_cmds.flow_app, name="flows")
+
+# Attach the `lhassa artifacts` sub-app (registered artifacts — the delivery chain).
+app.add_typer(_artifact_cmds.artifact_app, name="artifacts")
 
 # Attach the `lhassa seed` sub-app (reproducible bootstrap seeds — cv, …).
 app.add_typer(_seed_cmds.seed_app, name="seed")

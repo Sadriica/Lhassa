@@ -239,6 +239,20 @@ deterministic $0 `org-delegate` episode, and *then* runs the flow. A topology fa
 degrades to a direct run rather than blocking the work — the hierarchy hop is a
 deliberate audit trail at no extra token cost, not a hard dependency.
 
+The org chart is a ledger in both directions: who did what, when, with which
+files. Work flows down through `org/delegate.py`; whatever a leaf produces flows
+back up through its mirror, `org/deliver.py` — the CV a department tailored, the
+report it wrote, any file the owner ends up receiving. The department doesn't
+send it directly: `deliver()` re-walks the very command chain the down-hop used,
+and every brain it passes through — the department, any coordinator in between,
+Lhassa at the root — writes its own `org-deliver` episode narrating the hop
+before the root actually sends. The delivered file itself becomes one row in the
+`artifacts` registry (`core/artifacts.py`), an append-only record of paths +
+metadata + origin department, so a delivery is reconstructable later purely from
+what got logged — the same "audit is best-effort, delivery is not" rule that
+governs `delegate`: a broken hop is swallowed and degraded, but the send always
+goes through.
+
 ## Self-improvement: the brain forges its own hands
 
 Repetition is the trigger. `agents/repetition.py:detect_repetition()` is a **pure SQL

@@ -206,6 +206,16 @@ I couldn't tailor it safely: contact details would have changed.
 I didn't send a file.
 ```
 
+Before that PDF goes out, the tailored files (the `.tex` source alongside the
+compiled `.pdf`) are registered as one artifact and travel UP the command chain
+via `org/deliver.py` — the mirror of the `delegate_flow` hop above: every brain
+on the path from the department that tailored it up to Lhassa logs its own
+`org-deliver` episode narrating the hand-off, and only then does the root
+actually send. Nothing here needs a dedicated lookup command: `/recall
+<company>` later reconstructs the whole chain, since the delivery episodes carry
+the job's metadata (company, role) in their text and turn up in the same
+full-text search over the episode log.
+
 Also: a message starting with `remember:` / `recuerda:` / `recordá:` is a
 deterministic $0 shortcut straight into the fact store — no LLM, no task:
 
