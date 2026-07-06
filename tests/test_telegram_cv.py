@@ -867,7 +867,7 @@ def test_cv_reply_writes_the_per_brain_delivery_chain(monkeypatch, tmp_path):
 
     # The department hop names the file it received and forwards up, plus the
     # company metadata threaded through from the CV bridge.
-    assert "received from interns" in dept_hop["resultado"]
+    assert "produced:" in dept_hop["resultado"]  # origin brain produced, not received from itself
     assert "ab12_acme.tex" in dept_hop["resultado"]
     assert "company=Acme" in dept_hop["resultado"]
     assert "forwarding ↑ lhassa" in dept_hop["resultado"]
