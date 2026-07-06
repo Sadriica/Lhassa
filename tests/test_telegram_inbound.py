@@ -1021,3 +1021,70 @@ def test_callback_query_missing_fields_does_not_raise(monkeypatch):
         telegram_inbound.poll_once(_cfg(instance_id="inst_personal"), offset=None)
     )
     assert new_offset == 205
+
+
+def test_natural_acuerdame_with_time_routes_to_remind(monkeypatch):
+    """"acuérdame de un compromiso a las 5pm" — the owner's literal phrase —
+    never touches the brain: the deterministic remind path answers."""
+    payload = {
+        "ok": True,
+        "result": [
+            {
+                "update_id": 300,
+                "message": {"chat": {"id": 123}, "text": "acuérdame de un compromiso a las 5pm"},
+            }
+        ],
+    }
+    monkeypatch.setattr(
+        telegram_inbound.httpx, "AsyncClient", _client_returning(payload)
+    )
+    provider = _patch_brain(monkeypatch)
+    sent = _patch_send(monkeypatch)
+
+    minted = []
+
+    async def fake_remind(args, *, config=None):
+        minted.append(args)
+        return "⏰ Noted — I'll remind you at 17:00: un compromiso"
+
+    from lhassa.notify import commands as commands_mod
+
+    monkeypatch.setitem(commands_mod.COMMANDS._items, "remind", fake_remind)
+
+    asyncio.run(telegram_inbound.poll_once(_cfg(), offset=None))
+    assert provider.calls == []  # no LLM
+    assert minted == ["de un compromiso a las 5pm"]
+    assert sent and sent[0].startswith("⏰ Noted")
+
+
+def test_natural_acuerdame_without_time_falls_through(monkeypatch):
+    """A time-less "acuérdame que…" is NOT a timed reminder — it falls through
+    (to the remember/fact/brain paths), never mis-minting a task."""
+    payload = {
+        "ok": True,
+        "result": [
+            {
+                "update_id": 301,
+                "message": {"chat": {"id": 123}, "text": "acuérdame que la vida es bella"},
+            }
+        ],
+    }
+    monkeypatch.setattr(
+        telegram_inbound.httpx, "AsyncClient", _client_returning(payload)
+    )
+    _patch_brain(monkeypatch, reply="anotado")
+    sent = _patch_send(monkeypatch)
+
+    called = []
+
+    async def fake_remind(args, *, config=None):
+        called.append(args)
+        return "should not run"
+
+    from lhassa.notify import commands as commands_mod
+
+    monkeypatch.setitem(commands_mod.COMMANDS._items, "remind", fake_remind)
+
+    asyncio.run(telegram_inbound.poll_once(_cfg(), offset=None))
+    assert called == []
+    assert sent  # answered by a later path (remember hook or the brain)

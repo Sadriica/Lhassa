@@ -259,6 +259,12 @@ _COMPANY_RES = (
     re.compile(r"(?:^|\s)@\s*(?P<name>[^\n]+)"),
 )
 
+# Natural "remind me" trigger — routed to the /remind parser when a time phrase
+# is present ("acuérdame de X a las 5pm"); time-less phrasings fall through.
+_REMIND_NL_RE = re.compile(
+    r"^(acu[ée]rdame|recu[ée]rdame|remind me)\b[,:]?\s*", re.IGNORECASE
+)
+
 # Deterministic remember command: "remember: X", "recuerda: X", "recordá: X".
 # Handled BEFORE the watch-rules hook so it is $0 (no LLM, no task mint).
 _REMEMBER_RE = re.compile(
@@ -862,6 +868,21 @@ async def _answer(text: str, *, config, chat_id: str = "") -> None:
     command_name, _ = commands.parse(stripped)
     if command_name == "cvnewbase":
         _arm_base(chat_id)
+
+    # Deterministic "acuérdame/remind me" shortcut — the owner's natural phrase
+    # routes straight to the /remind parser ($0, no LLM): "acuérdame de un
+    # compromiso a las 5pm" just works. Only when a TIME phrase parses; a
+    # time-less "acuérdame que…" falls through to the remember/fact paths below.
+    if not stripped.startswith("/"):
+        m_remind = _REMIND_NL_RE.match(stripped)
+        if m_remind:
+            rest = stripped[m_remind.end():].strip()
+            if commands.parse_remind(rest) is not None:
+                handler = commands.COMMANDS.get_or_none("remind")
+                if handler is not None:
+                    reply = await handler(rest, config=config)
+                    await telegram.send(reply, config=config)
+                    return
 
     # Deterministic "remember" shortcut — $0, no LLM, no task.
     # Handled before watch-rules so it short-circuits cleanly.
