@@ -10,9 +10,9 @@ Platform support:
 
 import platform
 import subprocess
+
 from loguru import logger
 
-from pipecat.frames.frames import TTSSpeakFrame
 from lhassa.state import state
 
 _SYSTEM = platform.system()
@@ -22,8 +22,18 @@ async def notify(message: str, title: str = "Lhassa"):
     """Send a notification through the best available channel."""
     if state.is_voice_active and state.pipeline_task is not None:
         try:
+            # Lazy import: the `voice` extra (pipecat) is only installed when the
+            # voice pipeline itself is running, which is the only place
+            # `state.is_voice_active` can ever be true. Guarding it here means
+            # this module — and everything that imports it (the scheduler, the
+            # proactive-monitoring tools) — loads cleanly on a headless install
+            # with no voice extra.
+            from pipecat.frames.frames import TTSSpeakFrame
+
             await state.pipeline_task.queue_frame(TTSSpeakFrame(text=message))
             return
+        except ImportError:
+            logger.warning("voice extra not installed — falling back to desktop notify")
         except Exception as e:
             logger.warning(f"TTS notify failed, falling back to desktop: {e}")
 

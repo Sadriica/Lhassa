@@ -1,12 +1,17 @@
 """Shell / privileged-command tool handlers."""
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from pipecat.services.llm_service import FunctionCallParams
+
 import asyncio
 import os
 import subprocess
 
 from loguru import logger
-
-from pipecat.services.llm_service import FunctionCallParams
 
 from lhassa.state import state
 from lhassa.tools.guardrails import validate_shell_command

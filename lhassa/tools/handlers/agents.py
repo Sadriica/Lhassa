@@ -1,16 +1,21 @@
 """Agent-delegation tool handlers (background agents + local AI CLIs)."""
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from pipecat.services.llm_service import FunctionCallParams
+
 import asyncio
 
 from loguru import logger
 
-from pipecat.services.llm_service import FunctionCallParams
-
-from lhassa.config import Config
+from lhassa.agents.claude_code import make_agent as make_claude_agent
 from lhassa.agents.code import CodeAgent
 from lhassa.agents.research import ResearchAgent
 from lhassa.agents.system import SystemAgent
-from lhassa.agents.claude_code import make_agent as make_claude_agent
+from lhassa.config import Config
 from lhassa.tools.handlers._shared import _bump_tool
 
 

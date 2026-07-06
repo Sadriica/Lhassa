@@ -32,14 +32,15 @@ Key facts:
 - **Healthcheck:** `GET /api/status` via stdlib `urllib` (no extra packages).
 - **Lean:** `.dockerignore` excludes `.venv`, `.git`, `dashboard/node_modules`,
   the prior `dashboard/dist`, `__pycache__`, `.env`, `*.db`, logs and test caches.
-- **Native libs:** `libportaudio2` (pyaudio is imported by `lhassa.voice` at
-  module load), `libgomp1` and `libsndfile1` (torch / onnxruntime / Silero VAD).
-
-> Note on size: the runtime deps include `torch` and `pipecat` (the voice stack),
-> so the image is large (multi-GB). These are pinned by `uv.lock` and are required
-> for `import lhassa`/`main` to succeed even when voice is off. A future, smaller
-> "API-only" variant could drop the voice extras, but that means editing
-> `pyproject.toml` (out of scope for this slice). `[SUPUESTO]`
+- **No voice deps:** the image installs `uv sync --frozen --no-dev` — no
+  `--extra voice` — so `pipecat`/`torch`/`pyaudio` are never resolved or
+  installed. Every import site that touches them (`lhassa/voice/notifier.py`,
+  the `tools/handlers/*.py` type hints, `lhassa/voice/pipeline.py`) is guarded
+  (lazy import or `TYPE_CHECKING`), so `lhassa.api.server`, `lhassa.core.step`,
+  `lhassa.notify.telegram_inbound` and `lhassa.org.watcher` — everything the
+  container roles need — import cleanly with no voice extra installed. This is
+  the fix for the size/cost blocker previously logged in `doc/portability.md`;
+  the image no longer needs `libportaudio2`/`libgomp1`/`libsndfile1` either.
 
 ## Build & run
 
@@ -104,7 +105,10 @@ Copy `.env.example` to `.env` and set what you use:
 - **Voice (only if you enable it):** `DEEPGRAM_API_KEY`, `CARTESIA_API_KEY`.
   Note `Config.validate()` requires these two — it is called by `main.py` (the
   voice entrypoint), **not** by the container's `api`/`heartbeat` roles, so the
-  API and heartbeat run without them.
+  API and heartbeat run without them. The container image doesn't even install
+  the `voice` extra (`pipecat`/`torch`), so `main.py`/the voice pipeline simply
+  isn't runnable inside this image — voice is a laptop-only surface, run via
+  `make run`/`make dev` after `make install` (which does install the extra).
 - **Telegram:** `LHASSA_TELEGRAM_BOT_TOKEN`, `LHASSA_TELEGRAM_CHAT_ID`.
 - **Heartbeat via opencode:** `LHASSA_HEARTBEAT_PROVIDER=opencode`,
   `LHASSA_OPENCODE_BIN`, `LHASSA_OPENCODE_MODEL` (see the caveat below).
@@ -114,14 +118,19 @@ Copy `.env.example` to `.env` and set what you use:
 
 ## Portability caveats (honest)
 
-1. **Voice needs host audio.** The voice pipeline opens local audio devices via
-   `pyaudio`/PipeWire/PulseAudio and needs the Deepgram (STT) and Cartesia (TTS)
-   keys. It is **off in the container by default** (the `api` role never starts
-   it). To run voice in a container you must pass the host audio through, e.g.
-   `--device /dev/snd` plus the PulseAudio/PipeWire socket
-   (`-v /run/user/1000/pulse:/run/user/1000/pulse -e PULSE_SERVER=...`), or use
-   `--network host`. This is host-specific and not wired into the default
-   Compose file. `[SUPUESTO]` the exact device/socket mapping varies per host.
+1. **Voice needs host audio, and the extra isn't in this image.** The voice
+   pipeline opens local audio devices via `pyaudio`/PipeWire/PulseAudio and
+   needs the Deepgram (STT) and Cartesia (TTS) keys. It is **off in the
+   container by default** (the `api` role never starts it) — and, since the
+   image is built without `uv sync --extra voice`, `pipecat`/`torch`/`pyaudio`
+   aren't even installed. To run voice in a container you'd need a separate
+   image built with `RUN uv sync --frozen --no-dev --extra voice`, pass the
+   host audio through (e.g. `--device /dev/snd` plus the PulseAudio/PipeWire
+   socket — `-v /run/user/1000/pulse:/run/user/1000/pulse -e
+   PULSE_SERVER=...`), or use `--network host`. This is host-specific and not
+   wired into the default Compose file or Dockerfile. `[SUPUESTO]` the exact
+   device/socket mapping varies per host; nobody has needed containerized voice
+   yet, so this stays a documented path rather than a built image variant.
 
 2. **The opencode heartbeat is a host CLI.** `LHASSA_HEARTBEAT_PROVIDER=opencode`
    shells out to the `opencode` binary using the **owner's local credentials** —

@@ -1,10 +1,15 @@
 """Reminder / scheduling tool handlers."""
 
-from datetime import datetime, timezone, timedelta
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from pipecat.services.llm_service import FunctionCallParams
+
+from datetime import datetime, timedelta, timezone
 
 from loguru import logger
-
-from pipecat.services.llm_service import FunctionCallParams
 
 from lhassa.memory.store import add_scheduled_task, load_all_scheduled_tasks
 from lhassa.tools.handlers._shared import _bump_tool

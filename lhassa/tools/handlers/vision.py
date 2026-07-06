@@ -1,8 +1,13 @@
 """Vision tool handlers (screen + image analysis)."""
 
-from loguru import logger
+from __future__ import annotations
 
-from pipecat.services.llm_service import FunctionCallParams
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from pipecat.services.llm_service import FunctionCallParams
+
+from loguru import logger
 
 from lhassa.tools.handlers._shared import _bump_tool
 
@@ -14,7 +19,7 @@ async def handle_analyze_screen(params: FunctionCallParams):
     _bump_tool()
 
     try:
-        from lhassa.tools.vision import take_screenshot, analyze_image
+        from lhassa.tools.vision import analyze_image, take_screenshot
         screenshot = await take_screenshot()
         result = await analyze_image(screenshot, question)
         await params.result_callback(result)
