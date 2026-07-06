@@ -74,7 +74,9 @@ async def _ddg_search(query: str, max_results: int) -> list[dict]:
     return [{"title": r["title"], "body": r["body"], "url": r.get("href", "")} for r in raw]
 
 
-async def news_search(query: str, max_results: int = 4) -> list[dict]:
+async def news_search(
+    query: str, max_results: int = 4, *, timelimit: str | None = None
+) -> list[dict]:
     """Search the NEWS vertical. Returns ``{title, body, url, source, date}`` dicts.
 
     A general engine answers "noticias de hoy" because it routes the intent to
@@ -84,8 +86,11 @@ async def news_search(query: str, max_results: int = 4) -> list[dict]:
     """
     from ddgs import DDGS
 
+    kwargs = {"timelimit": timelimit} if timelimit else {}
     raw = await asyncio.wait_for(
-        asyncio.to_thread(lambda: list(DDGS().news(query, max_results=max_results))),
+        asyncio.to_thread(
+            lambda: list(DDGS().news(query, max_results=max_results, **kwargs))
+        ),
         timeout=15.0,
     )
     return [

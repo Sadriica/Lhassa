@@ -126,10 +126,11 @@ def _patch_search(monkeypatch, results):
             return results.get(query, [])
         return results
 
-    async def fake_news(query, max_results=4):
-        queries.append(f"news:{query}")
+    async def fake_news(query, max_results=4, *, timelimit=None):
+        key = f"news:{query}" + (f":{timelimit}" if timelimit else "")
+        queries.append(key)
         if isinstance(results, dict):
-            return results.get(f"news:{query}", [])
+            return results.get(key, [])
         return []
 
     import lhassa.tools.search as search_mod
@@ -198,7 +199,7 @@ def test_research_reply_retries_with_a_date_anchor(monkeypatch):
 
     from lhassa.actionpack._research import research_reply
 
-    anchored = f"noticias de hoy {datetime.now(timezone.utc).strftime('%B %Y')}"
+    anchored = f"noticias de hoy {datetime.now(timezone.utc).strftime('%B %d %Y')}"
     queries = _patch_search(
         monkeypatch,
         {anchored: [{"title": "Portada", "body": "…", "url": "https://example.com/n"}]},
@@ -206,7 +207,7 @@ def test_research_reply_retries_with_a_date_anchor(monkeypatch):
     sent = _patch_send(monkeypatch)
 
     out = asyncio.run(research_reply({"query": "noticias de hoy"}))
-    assert queries == ["news:noticias de hoy", "noticias de hoy", anchored]
+    assert queries == ["news:noticias de hoy:d", "noticias de hoy", anchored]
     assert "1 result(s) sent" in out
     assert anchored in sent[0]  # the digest names the query that actually worked
 
@@ -229,21 +230,26 @@ def test_news_intent_routes_to_the_news_vertical_first(monkeypatch):
     the routing a general search engine does internally."""
     from lhassa.actionpack._research import research_reply
 
+    from datetime import datetime, timezone
+
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     queries = _patch_search(
         monkeypatch,
         {
-            "news:noticias de hoy": [
+            "news:noticias de hoy:d": [
                 {"title": "Portada", "body": "…", "url": "https://example.com/n",
-                 "source": "El Tiempo", "date": "2026-07-06"}
+                 "source": "El Tiempo", "date": today},
+                {"title": "Segunda", "body": "…", "url": "https://example.com/m",
+                 "source": "Portafolio", "date": today},
             ]
         },
     )
     sent = _patch_send(monkeypatch)
 
     out = asyncio.run(research_reply({"query": "noticias de hoy"}))
-    assert queries == ["news:noticias de hoy"]  # the vertical answered; no web fallback
-    assert "1 result(s) sent" in out
-    assert "El Tiempo" in sent[0] and "2026-07-06" in sent[0]
+    assert queries == ["news:noticias de hoy:d"]  # the vertical answered; no web fallback
+    assert "2 result(s) sent" in out
+    assert "El Tiempo" in sent[0] and today in sent[0]
 
 
 def test_non_news_query_never_touches_the_news_vertical(monkeypatch):
@@ -257,3 +263,28 @@ def test_non_news_query_never_touches_the_news_vertical(monkeypatch):
 
     asyncio.run(research_reply({"query": "python 3.14 release"}))
     assert queries == ["python 3.14 release"]
+
+
+def test_today_intent_filters_to_fresh_results():
+    """"de hoy" means the SYSTEM date: stale items drop when fresh ones exist,
+    relative stamps ('6 h') count as today, and order is freshest-first."""
+    from datetime import datetime, timedelta, timezone
+
+    from lhassa.actionpack._research import _freshest_first
+
+    now = datetime(2026, 7, 6, 12, tzinfo=timezone.utc)
+    old = (now - timedelta(days=18)).strftime("%Y-%m-%d")
+    yesterday = (now - timedelta(days=1)).strftime("%Y-%m-%d")
+    rows = [
+        {"title": "vieja", "date": old},
+        {"title": "ayer", "date": yesterday},
+        {"title": "hace horas", "date": "Opinion6 h"},
+        {"title": "sin fecha", "date": ""},
+    ]
+    fresh = _freshest_first(rows, today_only=True, now=now)
+    assert [r["title"] for r in fresh] == ["hace horas", "ayer"]
+
+    # Too few fresh → the honest full list, sorted freshest-first.
+    rows2 = [{"title": "vieja", "date": old}, {"title": "hace horas", "date": "6 h"}]
+    kept = _freshest_first(rows2, today_only=True, now=now)
+    assert [r["title"] for r in kept] == ["hace horas", "vieja"]
