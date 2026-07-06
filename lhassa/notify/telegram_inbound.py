@@ -62,10 +62,34 @@ _FALLBACK_REPLY = "I can't reach my model right now."
 _DEFERRED_DECISION = "deferred: telegram needs judgment"
 
 # Chat-output instruction layered on the persona (plain text for a chat bubble).
+# The honesty block exists because this turn is TOOL-LESS: without it the model
+# roleplays capabilities it lacks ("I'm searching…", "I'll update you") — promises
+# nothing will ever keep. The [[research: …]] marker is the ONE real escape hatch:
+# the poller mints a research_reply task from it (see _extract_research) and the
+# heartbeat delivers actual results in a follow-up message.
 _CHAT_INSTRUCTION = (
     "You are answering in a Telegram chat with your owner. Reply in short, natural "
-    "messages. Lead with the answer and keep it brief."
+    "messages. Lead with the answer and keep it brief.\n"
+    "IMPORTANT — you have NO tools in this turn: no web access, no search, no "
+    "files. Never claim to be searching or browsing, and never promise to report "
+    "back on your own — you cannot. For questions that need LIVE or current "
+    "information (news, prices, weather, releases), do not answer from memory: "
+    "say in one short sentence that you'll look it up, and include this marker on "
+    "its own line: [[research: <a concise web search query>]] — the system runs "
+    "the search and messages the results in a couple of minutes. At most one "
+    "marker per reply."
 )
+
+# The research marker the chat model may emit (see _CHAT_INSTRUCTION). Parsed
+# defensively: first match wins, every occurrence is stripped from the visible text.
+_RESEARCH_RE = re.compile(r"\[\[\s*research\s*:\s*(.+?)\s*\]\]", re.IGNORECASE | re.DOTALL)
+
+# Cap on a chat-born research query (mirrors actionpack._research._MAX_QUERY).
+_RESEARCH_MAX_QUERY = 300
+
+# Appended when a research task was actually minted — the promise the marker makes
+# is only ever written by US, deterministically, after the mint succeeded.
+_RESEARCH_ACK = "🔎 Looking it up — I'll message you what I find in a few minutes."
 
 # ── Telegram → CV work-flow bridge replies ────────────────────────────────────
 # The base CV lives on disk (``cv_largo.tex``) and rarely changes, so a document
@@ -158,6 +182,55 @@ from lhassa.llm.router import fallback_chain as _fallback_chain  # noqa: E402
 def _secondary_model(config):
     """The model the cloud fallback should use (cheap routine model)."""
     return getattr(config, "model_cheap", "") or getattr(config, "model", "") or None
+
+
+async def _apply_research_marker(reply: str, *, instance_id: str, config) -> str:
+    """Turn a ``[[research: …]]`` marker into a REAL minted task; strip it from view.
+
+    The chat model may promise a lookup only through this marker (see
+    ``_CHAT_INSTRUCTION``): the first marker's query is capped and minted as a
+    ``research_reply`` task through ``core.dispatch.mint_task`` with the same
+    HUMANO/telegram origin ``/goal`` uses — allowlist and approval frontier apply
+    unchanged — and the next heartbeat runs it. Every marker occurrence is removed
+    from the visible reply; the follow-up promise (``_RESEARCH_ACK``) is appended
+    ONLY after the mint actually succeeded, so the owner is never promised a
+    message that cannot arrive. Best-effort and never raises.
+    """
+    if not reply or "[[" not in reply:
+        return reply
+    match = _RESEARCH_RE.search(reply)
+    if match is None:
+        return reply
+    query = " ".join(match.group(1).split())[:_RESEARCH_MAX_QUERY]
+    visible = _RESEARCH_RE.sub("", reply).strip()
+
+    minted = False
+    if query:
+        try:
+            from datetime import datetime, timezone
+
+            from lhassa.core.dispatch import mint_task
+            from lhassa.security.trust import Origin, TrustLevel
+
+            await mint_task(
+                instance_id,
+                "research_reply",
+                params={"query": query},
+                origin=Origin(trust=TrustLevel.HUMANO, actor_id="telegram"),
+                due_at=datetime.now(timezone.utc).isoformat(),
+            )
+            minted = True
+        except Exception as exc:  # a mint failure must not break the chat turn
+            logger.warning(f"Telegram inbound: research mint failed: {exc}")
+
+    if minted:
+        return f"{visible}\n{_RESEARCH_ACK}".strip()
+    if visible:
+        return visible
+    return (
+        "I can't see the web from this chat turn, and the lookup path is "
+        "unavailable right now — ask me again in a bit."
+    )
 
 
 async def _brain_reply(text: str, *, config) -> str:
@@ -260,6 +333,9 @@ async def _brain_reply(text: str, *, config) -> str:
                 last_exc = exc
                 continue
             reply = (result.text or "").strip() or _FALLBACK_REPLY
+            reply = await _apply_research_marker(
+                reply, instance_id=instance_id, config=config
+            )
             ep.finish(
                 decision=decision.reason,
                 accion="responder",

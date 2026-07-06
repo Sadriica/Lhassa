@@ -184,11 +184,24 @@ capabilities` (alias `doctor`) shows everything wired and on/off.
 (`@register_channel`); `TelegramChannel` / `DesktopChannel` / `LogChannel`.
 `notify/dispatch.py:notify()` fans out over `active_channels(config)` (from
 `LHASSA_NOTIFY_CHANNELS`). `notify/commands.py` — `COMMANDS` registry
-(`@register_command`): `/start`, `/help`, `/status`, `/approvals`, `/approve <id>`,
+(`@register_command`): `/start`, `/help` (a grouped catalog with per-command
+one-liners; unregistered-in-DESCRIPTIONS commands still surface), `/status`,
+`/approvals`, `/approve <id>`,
 `/deny <id>` (resolve via `security.approval`), `/recall <text>` (FTS5 search over
-the episode log), `/watch <pattern> -> <accion>` /
+the episode log), `/report [days]` (spend), `/memory <query>` (facts search),
+`/capabilities`, `/tools`, `/skills` (the first CLI-parity batch — the standing
+principle is that Telegram grows toward the CLI's capabilities, LLM-free handlers
+over the same underlying seams), `/watch <pattern> -> <accion>` /
 `/watches` / `/unwatch <i>` (author watch rules from chat), `/goal <text>
-[--every …]` (mints a recurring judgment task) — all LLM-free. Every surface that
+[--every …]` (mints a recurring judgment task) — all LLM-free. The chat think is
+TOOL-LESS and its instruction says so (it must never claim to search); live-data
+questions go through the **research bridge**: the model emits `[[research:
+<query>]]`, `telegram_inbound._apply_research_marker` mints a `research_reply`
+task (same HUMANO/telegram origin as `/goal`; the ack line is appended only after
+the mint succeeds), and the next heartbeat runs `actionpack/_research.py` — one
+web search (Brave → DuckDuckGo via `tools/search.py`) delivered back over
+Telegram with sources, $0, and the follow-up ALWAYS arrives (a failed search
+degrades to an honest message). Every surface that
 lists approvals (the `/approvals` command, the dashboard queue/Inbox, the digest)
 renders through `security/approval.py:describe(row)` → `{title, detail}` — one
 deterministic place that knows each payload shape, so the owner sees WHAT they are
