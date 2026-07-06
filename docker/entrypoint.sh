@@ -9,6 +9,10 @@
 #                                     LHASSA_HEARTBEAT_INTERVAL seconds (default 900).
 #                                     Set the interval to 0 to run a single beat and exit.
 #   LHASSA_RUN=telegram             — the Telegram inbound long-poller
+#   LHASSA_RUN=monitor               — the always-on $0 monitor watcher (org.watcher);
+#                                     gated by LHASSA_MONITOR_ENABLED (logs once + exits
+#                                     cleanly, exit code 0, when off — same
+#                                     credential/opt-in-gated discipline as telegram).
 #
 # Any explicit command/args passed to the container are executed verbatim (so
 # `docker run lhassa:dev python -c "..."` still works for debugging/sanity checks).
@@ -47,8 +51,13 @@ case "$mode" in
         exec python -m lhassa.notify.telegram_inbound
         ;;
 
+    monitor)
+        echo "lhassa: starting monitor watcher (LHASSA_MONITOR_ENABLED=${LHASSA_MONITOR_ENABLED:-0})"
+        exec python -m lhassa.org.watcher
+        ;;
+
     *)
-        echo "lhassa: unknown LHASSA_RUN='${mode}' (expected api | heartbeat | telegram)" >&2
+        echo "lhassa: unknown LHASSA_RUN='${mode}' (expected api | heartbeat | telegram | monitor)" >&2
         exit 64
         ;;
 esac
