@@ -1,8 +1,13 @@
 """Job/internship application tracking tool handler (postulaciones)."""
 
-from loguru import logger
+from __future__ import annotations
 
-from pipecat.services.llm_service import FunctionCallParams
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from pipecat.services.llm_service import FunctionCallParams
+
+from loguru import logger
 
 from lhassa.tools.handlers._shared import _bump_tool
 

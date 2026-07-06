@@ -1,6 +1,11 @@
 """GitHub tool handlers."""
 
-from pipecat.services.llm_service import FunctionCallParams
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from pipecat.services.llm_service import FunctionCallParams
 
 from lhassa.tools.handlers._shared import _bump_tool
 

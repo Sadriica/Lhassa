@@ -15,20 +15,17 @@ RUN npm run build
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Stage 2 — builder: resolve + install the Python venv (needs compilers)
-# pyaudio (pulled by pipecat-ai[local]) ships no cp313 wheel, so it is compiled
-# here against the portaudio dev headers. The toolchain stays out of the runtime
-# image — only the finished /app/.venv is copied forward.
+# The image is built WITHOUT the `voice` extra (no pipecat, no torch, no
+# pyaudio) — the container only ever runs the API/heartbeat/telegram/monitor
+# roles, none of which need the voice stack (see doc/portability.md). This is
+# the whole point of the extra: a lean, fast-building headless image. The
+# toolchain stays out of the runtime image — only the finished /app/.venv is
+# copied forward.
 # ─────────────────────────────────────────────────────────────────────────────
 FROM python:3.13-slim AS builder
 
 # uv — pinned to the version that produced uv.lock.
 COPY --from=ghcr.io/astral-sh/uv:0.11.2 /uv /uvx /bin/
-
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends \
-        build-essential \
-        portaudio19-dev \
-    && rm -rf /var/lib/apt/lists/*
 
 ENV UV_LINK_MODE=copy \
     UV_COMPILE_BYTECODE=1 \
@@ -36,13 +33,14 @@ ENV UV_LINK_MODE=copy \
 
 WORKDIR /app
 
-# Resolve and install the runtime dependencies first (no dev deps), from the
-# lockfile, WITHOUT the project itself — this layer is cached across code edits.
+# Resolve and install the runtime dependencies first (no dev deps, no voice
+# extra), from the lockfile, WITHOUT the project itself — this layer is cached
+# across code edits.
 COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev --no-install-project
 
 # Copy the application source and the pre-built dashboard, then install the
-# project package into the venv (still no dev deps).
+# project package into the venv (still no dev deps, no voice extra).
 COPY . .
 COPY --from=dashboard-build /dashboard/dist ./dashboard/dist
 RUN uv sync --frozen --no-dev
@@ -53,16 +51,10 @@ RUN uv sync --frozen --no-dev
 # ─────────────────────────────────────────────────────────────────────────────
 FROM python:3.13-slim AS runtime
 
-# Runtime shared libraries:
-#   libportaudio2 — pyaudio (imported by lhassa.voice at module load)
-#   libgomp1      — OpenMP runtime used by torch / onnxruntime (Silero VAD)
-#   libsndfile1   — audio I/O used by the local audio stack
-#   ca-certificates — TLS for outbound provider calls
+# ca-certificates — TLS for outbound provider calls. No audio/ML shared libs
+# (libportaudio2/libgomp1/libsndfile1) needed: the voice extra isn't installed.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-        libportaudio2 \
-        libgomp1 \
-        libsndfile1 \
         ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 

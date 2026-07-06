@@ -1,8 +1,11 @@
 .PHONY: install install-health install-heartbeat install-telegram install-monitor install-privileged dashboard run dev check test lint clean
 
-# First-time setup: install Python deps + build the dashboard
+# First-time setup: install Python deps + build the dashboard.
+# Installs the `voice` extra (pipecat/torch) — this is the laptop dev workflow
+# (`make run`/`make dev` run the voice pipeline via main.py). Headless deploys
+# (Docker/VPS) intentionally skip it — see doc/portability.md.
 install:
-	uv sync
+	uv sync --extra voice
 	cd dashboard && npm install && npm run build
 
 # Install + enable the LLM-free PC-state health timer (user unit, no sudo)
@@ -66,13 +69,15 @@ dashboard-dev:
 check:
 	uv run python scripts/check.py
 
-# Run the test suite
+# Run the test suite (dev + voice extras — the full suite covers the voice
+# pipeline modules too; the VPS/headless image never needs them, see
+# doc/portability.md).
 test:
-	uv run --extra dev python -m pytest
+	uv run --extra dev --extra voice python -m pytest
 
 # Lint with ruff
 lint:
-	uv run --extra dev python -m ruff check .
+	uv run --extra dev --extra voice python -m ruff check .
 
 clean:
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true

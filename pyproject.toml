@@ -7,10 +7,6 @@ dependencies = [
     # Core
     "loguru>=0.7.0",
     "python-dotenv>=1.0.0",
-    # Voice pipeline (STT → LLM → TTS)
-    # Pipecat bundles LLM services for groq, anthropic, openai, openrouter, ollama, cerebras
-    "pipecat-ai[cartesia,deepgram,groq,local,silero]>=0.0.108",
-    "torch>=2.0.0",             # required by Silero VAD
     # LLM clients — used directly by agents (all providers)
     "openai>=1.0.0",            # covers groq (openai-compat), openai, openrouter, ollama, cerebras
     "anthropic>=0.50.0",        # Anthropic Claude direct client
@@ -56,6 +52,15 @@ dev = [
 # so this is never required — install with `uv sync --extra tokens` to enable it.
 tokens = [
     "tiktoken>=0.7.0",
+]
+# Voice pipeline (STT → LLM → TTS) — only the laptop/desktop voice surface needs
+# this. The default install (API/heartbeat/telegram/monitor/CLI) never imports
+# pipecat or torch; every import site is guarded (lazy import or TYPE_CHECKING).
+# Install with `uv sync --extra voice` to restore the voice surface.
+# Pipecat bundles LLM services for groq, anthropic, openai, openrouter, ollama, cerebras.
+voice = [
+    "pipecat-ai[cartesia,deepgram,groq,local,silero]>=0.0.108",
+    "torch>=2.0.0",             # required by Silero VAD
 ]
 
 [tool.pytest.ini_options]
