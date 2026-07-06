@@ -36,6 +36,7 @@ from lhassa.cli import capabilities as _capabilities  # noqa: E402
 from lhassa.cli import commands as _commands  # noqa: E402
 from lhassa.cli import config_cmds as _config_cmds  # noqa: E402
 from lhassa.cli import extra_cmds as _extra_cmds  # noqa: E402
+from lhassa.cli import memory_cmds as _memory_cmds  # noqa: E402
 from lhassa.cli import org_cmds as _org_cmds  # noqa: E402
 from lhassa.cli import seed_cmds as _seed_cmds  # noqa: E402
 from lhassa.cli import skills_cmds as _skills_cmds  # noqa: E402
@@ -277,6 +278,9 @@ app.add_typer(_task_cmds.task_app, name="task")
 
 # Attach the `lhassa tools` sub-app (self-written tools: list + propose).
 app.add_typer(_tools_cmds.tools_app, name="tools")
+
+# Attach `lhassa memory` (search + add) and `lhassa onboard` (guided questionnaire).
+_memory_cmds.register(app)
 
 
 def main() -> None:

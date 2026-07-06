@@ -549,3 +549,98 @@ def test_skills_empty_reports_none(tmp_path):
     cfg = _cfg(skills_dir=str(tmp_path / "empty_skills"))
     reply = asyncio.run(commands.dispatch("/skills", config=cfg))
     assert "No skills installed." in reply
+
+
+# ── /org ─────────────────────────────────────────────────────────────────────
+
+
+def test_org_renders_standalone_admin(tmp_path):
+    cfg = _cfg(org_topology_file=str(tmp_path / "missing_topology.json"), org_role="")
+    reply = asyncio.run(commands.dispatch("/org", config=cfg))
+    assert reply.startswith("Org chart:")
+    assert "lhassa" in reply
+    assert "★" in reply
+
+
+def test_org_renders_departments_indented(tmp_path):
+    cfg = _cfg(
+        org_topology_file=str(tmp_path / "missing_topology.json"),
+        org_role="general",
+        org_departments="finance,optimization",
+    )
+    reply = asyncio.run(commands.dispatch("/org", config=cfg))
+    assert "dept:finance" in reply
+    assert "dept:optimization" in reply
+    # departments are indented under the root.
+    assert "  ● dept:finance" in reply or "  ○ dept:finance" in reply
+
+
+def test_org_degrades_on_failure(monkeypatch):
+    from lhassa.org import topology as topo_mod
+
+    def _boom(config=None):
+        raise RuntimeError("topology file corrupt")
+
+    monkeypatch.setattr(topo_mod, "load_topology", _boom)
+    reply = asyncio.run(commands.dispatch("/org", config=_cfg()))
+    assert "couldn't" in reply
+
+
+# ── /fleet ───────────────────────────────────────────────────────────────────
+
+
+def test_fleet_lists_known_machines(monkeypatch):
+    async def _fake_get_fleet():
+        return [
+            {"machine_id": "samos", "last_checkin": "2026-07-01T00:00:00Z", "desired_state": {"mode": "on"}},
+        ]
+
+    import lhassa.api.fleet_routes as fleet_routes
+
+    monkeypatch.setattr(fleet_routes, "get_fleet", _fake_get_fleet)
+    reply = asyncio.run(commands.dispatch("/fleet", config=_cfg()))
+    assert "samos" in reply
+    assert "mode=on" in reply
+
+
+def test_fleet_empty_reports_none(monkeypatch):
+    async def _fake_get_fleet():
+        return []
+
+    import lhassa.api.fleet_routes as fleet_routes
+
+    monkeypatch.setattr(fleet_routes, "get_fleet", _fake_get_fleet)
+    reply = asyncio.run(commands.dispatch("/fleet", config=_cfg()))
+    assert "No machines known yet." in reply
+
+
+def test_fleet_degrades_on_failure(monkeypatch):
+    async def _boom():
+        raise RuntimeError("db unreachable")
+
+    import lhassa.api.fleet_routes as fleet_routes
+
+    monkeypatch.setattr(fleet_routes, "get_fleet", _boom)
+    reply = asyncio.run(commands.dispatch("/fleet", config=_cfg()))
+    assert "couldn't" in reply
+
+
+# ── /version ─────────────────────────────────────────────────────────────────
+
+
+def test_version_reports_version_and_toggles():
+    reply = asyncio.run(commands.dispatch("/version", config=_cfg()))
+    assert "Lhassa" in reply
+    assert "Python" in reply
+    assert "Instance:" in reply
+
+
+def test_version_degrades_on_failure(monkeypatch):
+    import lhassa.cli.extra_cmds as extra_cmds
+
+    def _boom():
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(extra_cmds, "version_info", _boom)
+    reply = asyncio.run(commands.dispatch("/version", config=_cfg()))
+    assert "couldn't" in reply

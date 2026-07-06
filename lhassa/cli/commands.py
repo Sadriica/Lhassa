@@ -380,10 +380,13 @@ def register(app: "typer.Typer") -> None:
     ``tools`` is intentionally NOT registered here: it is now the ``tools`` Typer
     GROUP in :mod:`lhassa.cli.tools_cmds` (list + ``propose``), which reuses
     ``tools_cmd`` for its bare/``--json`` form — see that module's callback.
+
+    ``memory`` is likewise NOT registered here: it is now the ``memory`` Typer
+    GROUP in :mod:`lhassa.cli.memory_cmds` (search + ``add``), which reuses
+    ``memory_cmd`` (below) as its hidden default ``search`` subcommand.
     """
     app.command("approvals")(approvals_cmd)
     app.command("approve")(approve_cmd)
     app.command("deny")(deny_cmd)
     app.command("report")(report_cmd)
-    app.command("memory")(memory_cmd)
     app.command("fleet")(fleet_cmd)
