@@ -220,8 +220,12 @@ def _chat_entry(prompt_text: str, json_out: bool) -> None:
 
 @app.callback(invoke_without_command=True)
 def _root(ctx: typer.Context) -> None:
-    """Lhassa — ask it something, or use a subcommand (tools, approvals, report,
-    memory, fleet). With no subcommand it reads a piped prompt or starts a REPL."""
+    """Build the brain, rent the body.
+
+    Lhassa is a persistent personal AI brain — it lives awake all day for $0,
+    orchestrates rented models and tools, and earns its autonomy through
+    verified trust. Ask it something, or use a subcommand; with no subcommand
+    it reads a piped prompt or starts a REPL."""
     if ctx.invoked_subcommand is not None:
         return
     # No subcommand: the legacy bare/piped behavior (REPL or stdin one-shot).
