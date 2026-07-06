@@ -420,7 +420,13 @@ async def react(events: list[dict], *, department: str, config: Optional[Config]
     if important:
         fp = _fingerprint(important)
         if getattr(config, "monitor_notify", True) and fp != _STATE.get("last_alert_fp"):
-            message = f"monitor · {department}: {_summarize(important)}"
+            from lhassa.persona import format_alert
+
+            body = f"monitor · {department}: {_summarize(important)}"
+            message = format_alert(
+                body,
+                level="alert" if any(e.get("level") == "alert" for e in important) else "warn",
+            )
             if delegate_notes:
                 message += " | " + "; ".join(delegate_notes)
             level = "error" if any(e.get("level") == "alert" for e in important) else "warning"
