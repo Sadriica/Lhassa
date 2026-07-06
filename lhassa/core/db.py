@@ -352,6 +352,25 @@ async def init_db() -> None:
             )
         """)
 
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS owner_prompts (
+                id           TEXT PRIMARY KEY,
+                instance_id  TEXT NOT NULL,
+                kind         TEXT NOT NULL,
+                slot         TEXT,
+                prompt       TEXT,
+                status       TEXT NOT NULL DEFAULT 'pending',
+                created_at   TEXT NOT NULL,
+                expires_at   TEXT NOT NULL,
+                answered_at  TEXT,
+                answer       TEXT
+            )
+        """)
+        await db.execute("""
+            CREATE INDEX IF NOT EXISTS owner_prompts_pending
+            ON owner_prompts(instance_id, kind, status, expires_at)
+        """)
+
         # ── Phase 4 migrations: add columns to existing tables ───────────────
         # tasks: due_at (ISO timestamp when the task becomes ready)
         if not await _has_column(db, "tasks", "due_at"):
@@ -1173,6 +1192,76 @@ async def load_pending_approvals(instance_id: str) -> list[dict]:
     for row in rows:
         row["payload"] = _loads(row.get("payload"), {})
     return rows
+
+
+async def add_owner_prompt(
+    instance_id: str,
+    *,
+    kind: str,
+    slot: str = "",
+    prompt: str = "",
+    expires_at: str,
+) -> str:
+    """Add one pending owner-facing prompt, replacing older pending prompts of same kind."""
+    now = _now()
+    prompt_id = _new_id("op")
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            """UPDATE owner_prompts
+                  SET status = 'superseded'
+                WHERE instance_id = ? AND kind = ? AND status = 'pending'""",
+            (instance_id, kind),
+        )
+        await db.execute(
+            """INSERT INTO owner_prompts(
+                   id, instance_id, kind, slot, prompt, status,
+                   created_at, expires_at)
+               VALUES(?, ?, ?, ?, ?, 'pending', ?, ?)""",
+            (prompt_id, instance_id, kind, slot, prompt, now, expires_at),
+        )
+        await db.commit()
+    return prompt_id
+
+
+async def pending_owner_prompt(
+    instance_id: str,
+    *,
+    kind: str,
+    now: Optional[str] = None,
+) -> Optional[dict]:
+    """Return the newest unexpired pending owner prompt for ``kind``."""
+    now = now or _now()
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            """SELECT * FROM owner_prompts
+               WHERE instance_id = ?
+                 AND kind = ?
+                 AND status = 'pending'
+                 AND expires_at >= ?
+               ORDER BY created_at DESC, rowid DESC
+               LIMIT 1""",
+            (instance_id, kind, now),
+        ) as cur:
+            row = await cur.fetchone()
+    return dict(row) if row else None
+
+
+async def consume_owner_prompt(
+    instance_id: str,
+    prompt_id: str,
+    *,
+    answer: str,
+) -> None:
+    """Mark a pending owner prompt as answered."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            """UPDATE owner_prompts
+                  SET status = 'answered', answered_at = ?, answer = ?
+                WHERE instance_id = ? AND id = ? AND status = 'pending'""",
+            (_now(), answer, instance_id, prompt_id),
+        )
+        await db.commit()
 
 
 async def get_approval(instance_id: str, approval_id: str) -> Optional[dict]:

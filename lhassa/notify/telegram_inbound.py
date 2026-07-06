@@ -820,6 +820,34 @@ async def _answer(text: str, *, config, chat_id: str = "") -> None:
             await _reply_with_cv(record, flow_id, company, config=config)
             return
 
+    if not stripped.startswith("/") and getattr(config, "digest_personal_checkin", False):
+        try:
+            from lhassa.core import db as _db_prompt
+            from lhassa.memory import checkins as _checkins
+
+            instance_id = getattr(config, "instance_id", None) or "inst_personal"
+            await _db_prompt.init_db()
+            prompt = await _db_prompt.pending_owner_prompt(
+                instance_id,
+                kind="personal_checkin",
+            )
+            if prompt:
+                item = await _checkins.record(
+                    instance_id,
+                    stripped,
+                    slot=prompt.get("slot") or None,
+                    source="telegram-checkin-reply",
+                )
+                await _db_prompt.consume_owner_prompt(
+                    instance_id,
+                    prompt["id"],
+                    answer=stripped[:1000],
+                )
+                await telegram.send(f"Noted for the day: {item.id}", config=config)
+                return
+        except Exception as exc:
+            logger.warning(f"Telegram inbound: check-in reply capture failed: {exc}")
+
     # ``/cvnewbase`` ARMS this chat so the next uploaded document replaces the base CV
     # (the arm side-effect needs the chat id, which the string-only registry lacks; the
     # instruction reply itself is the registry command below).

@@ -246,7 +246,7 @@ async def _cmd_start(args: str, *, config=None) -> str:
 # registered by a plugin but missing here still appears — see _cmd_help's final
 # "also available" line — so a drop-in command can never vanish from /help.
 _HELP_GROUPS: list[Tuple[str, list[str]]] = [
-    ("Chat & memory", ["recall", "memory"]),
+    ("Chat & memory", ["recall", "memory", "checkin", "today", "tomorrow"]),
     ("Decisions", ["approvals", "approve", "deny"]),
     ("Watch & goals", ["watch", "watches", "unwatch", "goal"]),
     ("CV", ["cvnewbase", "cvbase"]),
@@ -259,6 +259,9 @@ DESCRIPTIONS: dict[str, str] = {
     "help": "This catalog.",
     "recall": "<text> — search past episodes.",
     "memory": "<query> — search durable facts.",
+    "checkin": "<text> — save a personal morning/evening note.",
+    "today": "Personal agenda for today.",
+    "tomorrow": "Personal agenda for tomorrow.",
     "approvals": "List what's waiting on your decision.",
     "approve": "<id> — approve a pending action.",
     "deny": "<id> — deny a pending action.",
@@ -874,6 +877,65 @@ async def _cmd_memory(args: str, *, config=None) -> str:
     except Exception as exc:
         logger.warning(f"commands: /memory {query!r} failed: {exc}")
         return _oops("search my memory")
+
+
+@register_command("checkin")
+async def _cmd_checkin(args: str, *, config=None) -> str:
+    """``/checkin <text>`` — persist an owner-authored daily check-in.
+
+    This is the explicit capture path for the personal digest questions. It is
+    deterministic and $0: append one tagged fact to the grande, then acknowledge.
+    """
+    text = (args or "").strip()
+    if not text:
+        return (
+            "Usage: /checkin <how you are / how you slept / what I should remember>"
+        )
+    try:
+        cfg = _config(config)
+        instance_id = getattr(cfg, "instance_id", None) or "inst_personal"
+        from lhassa.core import db as _db
+        from lhassa.memory import checkins
+
+        await _db.init_db()
+        item = await checkins.record(instance_id, text, source="telegram-checkin")
+        if item.slot == "morning":
+            return f"Noted for the morning trail: {item.id}"
+        if item.slot == "evening":
+            return f"Noted for tomorrow: {item.id}"
+        return f"Noted: {item.id}"
+    except Exception as exc:
+        logger.warning(f"commands: /checkin failed: {exc}")
+        return _oops("save that check-in")
+
+
+async def _render_personal_agenda(config, *, slot: str) -> str:
+    cfg = _config(config)
+    from lhassa.personal import agenda as personal_agenda
+
+    summary = await personal_agenda.build(cfg, slot=slot)
+    lang = getattr(cfg, "digest_language", "") or "en"
+    return personal_agenda.render(summary, language=lang)
+
+
+@register_command("today")
+async def _cmd_today(args: str, *, config=None) -> str:
+    """``/today`` — personal agenda for the current day, LLM-free."""
+    try:
+        return await _render_personal_agenda(config, slot="today")
+    except Exception as exc:
+        logger.warning(f"commands: /today failed: {exc}")
+        return _oops("read today's agenda")
+
+
+@register_command("tomorrow")
+async def _cmd_tomorrow(args: str, *, config=None) -> str:
+    """``/tomorrow`` — personal agenda for the next day, LLM-free."""
+    try:
+        return await _render_personal_agenda(config, slot="tomorrow")
+    except Exception as exc:
+        logger.warning(f"commands: /tomorrow failed: {exc}")
+        return _oops("read tomorrow's agenda")
 
 
 @register_command("capabilities")

@@ -305,6 +305,7 @@ export default function OverviewPanel() {
   const tools = data?.tools || { count: 0, by_estado: {} }
   const flows = data?.flows || { count: 0, last_status: null }
   const runsToday = data?.runs_today || { done: 0, stopped: 0, failed: 0 }
+  const personal = data?.personal || { priorities: [], latest_checkin: '', pending_tasks: [], approvals: [], text: '' }
   const errors = data?.errors || {}
   const errorKeys = Object.keys(errors)
   const items = approvals.items || []
@@ -438,6 +439,34 @@ export default function OverviewPanel() {
             })}
           </ul>
         )}
+      </div>
+
+      {/* 2 — Personal secretary snapshot */}
+      <div className="lh-card">
+        <div className="lh-card-head">
+          <div className="flex items-center gap-2">
+            <span className="lh-eyebrow">Today with you</span>
+            <span className="lh-tag">{(personal.priorities || []).length} priority item(s)</span>
+          </div>
+        </div>
+        <div className="lh-row" style={{ background: 'var(--lh-surface-2)' }}>
+          {(personal.priorities || []).length > 0 ? (
+            <ol className="space-y-1 text-[12px]" style={{ color: 'var(--lh-text)' }}>
+              {(personal.priorities || []).slice(0, 3).map((item, idx) => (
+                <li key={`${item}-${idx}`}>{idx + 1}. {item}</li>
+              ))}
+            </ol>
+          ) : (
+            <div className="text-xs" style={{ color: 'var(--lh-text-faint)' }}>
+              I do not see anything urgent in the local queue.
+            </div>
+          )}
+          {personal.latest_checkin && (
+            <div className="text-[11px] mt-2" style={{ color: 'var(--lh-text-muted)' }}>
+              Last check-in: {personal.latest_checkin}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* 2 — Autonomy heartbeat + automation summary */}
@@ -632,7 +661,7 @@ export default function OverviewPanel() {
       <div className="lh-card">
         <div className="lh-card-head">
           <div className="flex items-center gap-2">
-            <span className="lh-eyebrow">Decision log</span>
+            <span className="lh-eyebrow">Episode trail</span>
             <span className="lh-mono text-[10px]" style={{ color: 'var(--lh-text-faint)' }}>
               {importantCount} important · latest {grouped.length} of {fmtInt(activityTotal)}
             </span>
@@ -660,7 +689,9 @@ export default function OverviewPanel() {
         </div>
         {shown.length === 0 ? (
           <p className="text-xs" style={{ color: 'var(--lh-text-faint)' }}>
-            {grouped.length === 0 ? 'No episodes yet.' : 'No important events — switch to All to see routine beats.'}
+            {grouped.length === 0
+              ? 'I have not recorded an episode yet.'
+              : 'Nothing needs your attention. Switch to All to see the routine beats.'}
           </p>
         ) : (
           <ul className="lh-timeline space-y-2">

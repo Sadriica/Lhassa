@@ -231,13 +231,20 @@ def report_cmd(
         _dump_json(data)
         return
     out = _out()
+    spent = float(data["total_cost_usd"] or 0.0)
+    cost_line = (
+        "I spent $0.0000 in this window. The quiet path held."
+        if spent <= 0
+        else f"I spent ${spent:.4f} in this window. Every think is on the ledger."
+    )
     out.print(
         Panel(
             f"[title]Last {data['window_days']}d[/]\n"
-            f"[value]{data['calls']}[/] calls [dim]·[/] "
+            f"{cost_line}\n"
+            f"[value]{data['calls']}[/] think(s) [dim]·[/] "
             f"[tokens]{data['input_tokens']}+{data['output_tokens']} tokens[/] [dim]·[/] "
-            f"[cost]${data['total_cost_usd']:.4f}[/]",
-            title="[brand]Lhassa usage[/]",
+            f"[cost]${spent:.4f}[/]",
+            title="[brand]Lhassa ledger[/]",
             **PANEL_KWARGS,
         )
     )

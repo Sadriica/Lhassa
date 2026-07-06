@@ -88,7 +88,10 @@ Shows connection/voice indicators at a glance:
 `OverviewPanel.jsx`, backed by `GET /api/overview` — one defensive aggregate:
 brains, skills, pending approvals, today's spend, health, recent activity, and
 tool states, all gathered independently so one failing subsystem never 500s the
-whole panel. It is the same digest `lhassa status` prints on the CLI.
+whole panel. It also includes the personal secretary snapshot (`personal`):
+priorities for today, the latest check-in, and nearby tasks/approvals, rendered
+in the **Today with you** card. It is the same digest `lhassa status` prints on
+the CLI, with dashboard-only personal context added for the home surface.
 
 ### Run task
 
@@ -105,6 +108,11 @@ be stopped mid-flight (`POST /api/code/{run_id}/stop`).
 the n8n-style canvas over `flows/model.py`'s `trigger → task → gate → output`
 (+ `branch`) DAG. `GET/POST /api/flows`, `GET/PUT/PATCH/DELETE /api/flows/{id}`,
 `POST /api/flows/{id}/run`.
+
+`lhassa seed apply personal` creates the canonical personal secretary flows
+visible here: `personal-morning-briefing` and `personal-evening-briefing`. Both
+pin their task nodes to the `personal` department brain, but their node order
+differs so morning planning and evening review can evolve independently.
 
 ### Approvals
 
@@ -128,6 +136,8 @@ up — the tools *the brain writes for itself*.
 `BrainsPanel.jsx` — the org chart (`OrgTree.jsx`/`OrgFlow.jsx`), skill
 assignment, use-case templates, and the relationship overlay (`reads`/
 `notifies`/`reviews`/`collaborates` edges) drawn dashed over the command tree.
+The `personal` seed adds the `personal` department under Lhassa for assistant /
+secretary work.
 
 ### Readiness (fleet section)
 

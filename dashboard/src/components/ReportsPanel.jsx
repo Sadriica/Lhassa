@@ -24,7 +24,7 @@ export default function ReportsPanel() {
       setProj(await r2.json())
       setError('')
     } catch {
-      setError('Could not load reports.')
+      setError('I could not read the reports right now.')
     } finally {
       setLoading(false)
     }
@@ -60,14 +60,25 @@ export default function ReportsPanel() {
         <>
           {today && (
             <div className="text-[11px] mb-2" style={{ color: 'var(--lh-text-muted)' }}>
-              <span style={{ color: 'var(--lh-text)' }}>Today: {fmtUsd(today.cost_usd)}</span>
+              <span style={{ color: 'var(--lh-text)' }}>Today I spent {fmtUsd(today.cost_usd)}</span>
               {' · '}{today.input_tokens}+{today.output_tokens} tokens
               {projection && (
                 <span style={{ color: 'var(--lh-text-muted)' }}>
-                  {' · '}proj. day {fmtUsd(projection.projected_today_cost_usd)}
+                  {' · '}if this pace holds: day {fmtUsd(projection.projected_today_cost_usd)}
                   {' · '}month {fmtUsd(projection.projected_month_cost_usd)}
                 </span>
               )}
+            </div>
+          )}
+
+          {reports?.voice && (
+            <div className="lh-row mb-2">
+              <div className="text-[12px]" style={{ color: 'var(--lh-text)' }}>
+                {reports.voice.headline}
+              </div>
+              <div className="text-[11px] mt-0.5" style={{ color: 'var(--lh-text-muted)' }}>
+                {reports.voice.detail}
+              </div>
             </div>
           )}
 
@@ -82,7 +93,7 @@ export default function ReportsPanel() {
           )}
 
           {recent.length === 0 ? (
-            <p className="text-xs" style={{ color: 'var(--lh-text-faint)' }}>No episodes yet.</p>
+            <p className="text-xs" style={{ color: 'var(--lh-text-faint)' }}>I have not recorded an episode yet.</p>
           ) : (
             <ul className="space-y-1 max-h-64 overflow-y-auto">
               {recent.slice(0, 20).map(e => (

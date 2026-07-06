@@ -226,6 +226,24 @@ async def _overview_runs_today() -> dict:
     return {"done": done, "stopped": stopped, "failed": failed}
 
 
+async def _overview_personal() -> dict:
+    """Personal secretary snapshot: priorities, last check-in and rendered agenda."""
+    from lhassa.personal import agenda as personal_agenda
+
+    cfg = lhassa_config.Config()
+    summary = await personal_agenda.build(cfg, slot="today")
+    return {
+        "priorities": summary.priorities,
+        "latest_checkin": summary.latest_checkin,
+        "pending_tasks": [t.__dict__ for t in summary.pending_tasks[:5]],
+        "approvals": summary.approvals[:5],
+        "text": personal_agenda.render(
+            summary,
+            language=getattr(cfg, "digest_language", "") or "en",
+        ),
+    }
+
+
 _OVERVIEW_SECTIONS = {
     "brains": _overview_brains,
     "skills": _overview_skills,
@@ -238,6 +256,7 @@ _OVERVIEW_SECTIONS = {
     "pulse": _overview_pulse,
     "flows": _overview_flows,
     "runs_today": _overview_runs_today,
+    "personal": _overview_personal,
 }
 
 _OVERVIEW_DEFAULTS: dict[str, object] = {
@@ -257,6 +276,7 @@ _OVERVIEW_DEFAULTS: dict[str, object] = {
     "pulse": {"last_beat": None, "mode": "offline", "alive": False},
     "flows": {"count": 0, "last_status": None},
     "runs_today": {"done": 0, "stopped": 0, "failed": 0},
+    "personal": {"priorities": [], "latest_checkin": "", "pending_tasks": [], "approvals": [], "text": ""},
 }
 
 

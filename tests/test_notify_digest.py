@@ -54,15 +54,15 @@ def test_build_digest_has_all_sections_deterministic(tmp_path, monkeypatch):
     text = asyncio.run(digest.build_digest(_cfg()))
 
     assert "Lhassa —" in text and "check-in" in text
-    assert "Health needs attention (worst check: warn)" in text
-    assert "failing: disk" in text
-    assert "recent failures I'm tracking (2)" in text
+    assert "I need a look here (worst check: warn)" in text
+    assert "failing checks: disk" in text
+    assert "failures I am tracking (2)" in text
     assert "3 work-flow(s)" in text
-    assert "I've spent $0.4200 today." in text
-    assert "Nothing waiting on you." in text
+    assert "I have spent $0.4200 today." in text
+    assert "Nothing is waiting on you." in text
     assert "wake-ups" in text
-    assert "agent jobs" in text.lower()
-    assert "Nothing scheduled in the next 24h." in text
+    assert "rented bodies" in text.lower()
+    assert "Nothing is due in the next 24h." in text
 
 
 def test_build_digest_no_llm_call(tmp_path, monkeypatch):
@@ -81,6 +81,68 @@ def test_build_digest_no_llm_call(tmp_path, monkeypatch):
     assert isinstance(text, str) and text
 
 
+def test_personal_checkin_is_opt_in(tmp_path, monkeypatch):
+    asyncio.run(_init_db(tmp_path, monkeypatch))
+    _patch_signals(monkeypatch)
+
+    text = asyncio.run(digest.build_digest(_cfg()))
+    assert "Before the day starts" not in text
+    assert "¿cómo dormiste?" not in text
+
+
+def test_personal_checkin_morning_spanish(tmp_path, monkeypatch):
+    asyncio.run(_init_db(tmp_path, monkeypatch))
+    _patch_signals(monkeypatch)
+    monkeypatch.setattr(digest, "_digest_slot", lambda: "morning")
+
+    text = asyncio.run(
+        digest.build_digest(
+            _cfg(digest_personal_checkin=True, digest_language="es")
+        )
+    )
+
+    assert "🌤️ Tú" in text
+    assert "¿cómo dormiste?" in text
+    assert "mantengo el camino despejado" in text
+
+
+def test_personal_checkin_evening_english(tmp_path, monkeypatch):
+    asyncio.run(_init_db(tmp_path, monkeypatch))
+    _patch_signals(monkeypatch)
+    monkeypatch.setattr(digest, "_digest_slot", lambda: "evening")
+
+    text = asyncio.run(digest.build_digest(_cfg(digest_personal_checkin=True)))
+
+    assert "🌙 You" in text
+    assert "how was your day?" in text
+    assert "remember for tomorrow" in text
+
+
+def test_personal_checkin_mentions_recent_saved_checkin(tmp_path, monkeypatch):
+    asyncio.run(_init_db(tmp_path, monkeypatch))
+    _patch_signals(monkeypatch)
+    monkeypatch.setattr(digest, "_digest_slot", lambda: "evening")
+
+    from lhassa.memory import checkins
+
+    asyncio.run(
+        checkins.record(
+            "inst_personal",
+            "Dormí poco, pero quiero cerrar el CV hoy.",
+            slot="morning",
+        )
+    )
+
+    text = asyncio.run(
+        digest.build_digest(
+            _cfg(digest_personal_checkin=True, digest_language="es")
+        )
+    )
+
+    assert "último check-in: Dormí poco" in text
+    assert "¿cómo estuvo tu día?" in text
+
+
 def test_pending_approvals_are_counted(tmp_path, monkeypatch):
     db = asyncio.run(_init_db(tmp_path, monkeypatch))
     _patch_signals(monkeypatch)
@@ -88,7 +150,7 @@ def test_pending_approvals_are_counted(tmp_path, monkeypatch):
     asyncio.run(db.add_approval("inst_personal", "task", {"accion": "run_command"}))
 
     text = asyncio.run(digest.build_digest(_cfg()))
-    assert "Waiting on you: 1 approval(s)" in text
+    assert "I am waiting on you for 1 approval(s)" in text
 
 
 def test_due_soon_lists_tasks_within_24h(tmp_path, monkeypatch):
@@ -103,7 +165,7 @@ def test_due_soon_lists_tasks_within_24h(tmp_path, monkeypatch):
     asyncio.run(db.add_task("inst_personal", "sync_repo", due_at=far))
 
     text = asyncio.run(digest.build_digest(_cfg()))
-    assert "Coming up, your time (1)" in text
+    assert "Coming up in your time (1)" in text
     assert "send_digest at " in text
 
 
@@ -125,6 +187,29 @@ def test_send_digest_delivers_through_notify(tmp_path, monkeypatch):
     assert result == "send_digest: delivered"
     assert len(calls) == 1
     assert "check-in" in calls[0]
+
+
+def test_send_digest_parks_personal_prompt_when_delivered(tmp_path, monkeypatch):
+    db = asyncio.run(_init_db(tmp_path, monkeypatch))
+    _patch_signals(monkeypatch)
+    monkeypatch.setattr(digest, "_digest_slot", lambda: "morning")
+
+    async def fake_notify(text, *, level="info", config=None, **kwargs):
+        return True
+
+    import lhassa.notify.dispatch as dispatch_mod
+
+    monkeypatch.setattr(dispatch_mod, "notify", fake_notify)
+
+    result = asyncio.run(
+        digest.send_digest({}, config=_cfg(digest_personal_checkin=True))
+    )
+    assert result == "send_digest: delivered"
+    prompt = asyncio.run(
+        db.pending_owner_prompt("inst_personal", kind="personal_checkin")
+    )
+    assert prompt is not None
+    assert prompt["slot"] == "morning"
 
 
 def test_send_digest_persona_revoices_through_the_model(tmp_path, monkeypatch):

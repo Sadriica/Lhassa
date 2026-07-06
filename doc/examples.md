@@ -107,6 +107,9 @@ remember: my new phone number is +34 600 123 456
 /approvals
 /approve 17
 /recall sync_repo
+/today
+/tomorrow
+/checkin slept badly, keep tomorrow light
 /watch deploy failed -> judgment
 /goal check my open PRs and flag anything stale --every daily
 /cv Senior backend engineer at a fintech, Python/Postgres, remote
