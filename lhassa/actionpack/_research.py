@@ -50,19 +50,35 @@ async def research_reply(params: dict | None = None) -> str:
         return "research_reply: no query"
 
     results: list[dict] = []
+    errored = False
     try:
         from lhassa.tools.search import web_search
 
         results = await web_search(query, max_results=_MAX_RESULTS) or []
+        if not results:
+            # A vague query often finds nothing where a dated one succeeds —
+            # one deterministic retry anchored to the current month/year.
+            from datetime import datetime, timezone
+
+            anchored = f"{query} {datetime.now(timezone.utc).strftime('%B %Y')}"
+            results = await web_search(anchored, max_results=_MAX_RESULTS) or []
+            if results:
+                query = anchored
     except Exception as exc:  # a failed search still owes the owner a message
+        errored = True
         logger.warning(f"research_reply: search failed for {query!r}: {exc}")
 
     if results:
         text = _format_results(query, results)
-    else:
+    elif errored:
         text = (
             f"I went looking for “{query}” but couldn't reach a search backend "
-            "just now. Ask me again in a while, or refine the query."
+            "just now. Ask me again in a while."
+        )
+    else:
+        text = (
+            f"I searched for “{query}” and found nothing useful. A more specific "
+            "phrasing — topic, name, place — usually does it; ask me again."
         )
 
     delivered = False

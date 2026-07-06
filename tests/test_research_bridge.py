@@ -116,14 +116,20 @@ def test_marker_query_is_capped_and_whitespace_collapsed(monkeypatch):
 
 
 def _patch_search(monkeypatch, results):
+    queries = []
+
     async def fake_search(query, max_results=4):
+        queries.append(query)
         if isinstance(results, Exception):
             raise results
+        if isinstance(results, dict):  # per-query results (retry tests)
+            return results.get(query, [])
         return results
 
     import lhassa.tools.search as search_mod
 
     monkeypatch.setattr(search_mod, "web_search", fake_search)
+    return queries
 
 
 def _patch_send(monkeypatch):
@@ -177,3 +183,35 @@ def test_research_reply_no_query_is_a_noop(monkeypatch):
     out = asyncio.run(research_reply({}))
     assert out == "research_reply: no query"
     assert sent == []
+
+
+def test_research_reply_retries_with_a_date_anchor(monkeypatch):
+    """A vague query that finds nothing is retried once anchored to month/year."""
+    from datetime import datetime, timezone
+
+    from lhassa.actionpack._research import research_reply
+
+    anchored = f"noticias de hoy {datetime.now(timezone.utc).strftime('%B %Y')}"
+    queries = _patch_search(
+        monkeypatch,
+        {anchored: [{"title": "Portada", "body": "…", "url": "https://example.com/n"}]},
+    )
+    sent = _patch_send(monkeypatch)
+
+    out = asyncio.run(research_reply({"query": "noticias de hoy"}))
+    assert queries == ["noticias de hoy", anchored]
+    assert "1 result(s) sent" in out
+    assert anchored in sent[0]  # the digest names the query that actually worked
+
+
+def test_research_reply_found_nothing_says_so_honestly(monkeypatch):
+    """Zero results with a WORKING backend never claims the backend was down."""
+    from lhassa.actionpack._research import research_reply
+
+    _patch_search(monkeypatch, [])
+    sent = _patch_send(monkeypatch)
+
+    asyncio.run(research_reply({"query": "xyzzy"}))
+    assert len(sent) == 1
+    assert "found nothing useful" in sent[0]
+    assert "search backend" not in sent[0]
