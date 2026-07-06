@@ -615,6 +615,103 @@ async def _try_mint_rule_task(text: str, rules: list[dict], *, config) -> Option
 # the monitor watcher's Approve/Deny buttons (see lhassa.org.watcher._approval_keyboard).
 _CALLBACK_RE = re.compile(r"^(approve|deny):(.+)$")
 
+# The hidden marker /code appends to a successful park reply (see
+# lhassa.notify.commands._CODE_APPROVAL_MARKER) — parsed here to attach the same
+# inline Approve/Deny keyboard the monitor watcher's alerts already use, then
+# stripped so the owner never sees it.
+_CODE_APPROVAL_RE = re.compile(r"\[\[\s*approval_id\s*:\s*(\S+?)\s*\]\]")
+
+# Hard safety cap around an approved /code run: the CLI has its own timeout
+# (LHASSA_AI_CLI_TIMEOUT, default 600s), this is just a belt-and-braces ceiling so
+# a fire-and-forget launch can never hang the process forever.
+_CODE_RUN_TIMEOUT = 1800.0  # 30 min
+
+# Tail of a finished run's output included in the completion message.
+_CODE_OUTPUT_TAIL = 500
+
+
+def _code_approval_keyboard(ap_id: str) -> dict:
+    """A single-approval inline Approve/Deny row — the same shape/encoding as
+    :func:`lhassa.org.watcher._approval_keyboard`, built for exactly one id."""
+    return {
+        "inline_keyboard": [
+            [
+                {"text": f"✅ Approve {ap_id}", "callback_data": f"approve:{ap_id}"},
+                {"text": f"❌ Deny {ap_id}", "callback_data": f"deny:{ap_id}"},
+            ]
+        ]
+    }
+
+
+async def _launch_code_run(approval_row: dict, *, config) -> None:
+    """Launch an approved ``code_run`` approval's task. Fire-and-forget; never raises.
+
+    Reuses the EXACT seam the dashboard's Run section launches through
+    (:func:`lhassa.api.code_routes._stream_run` — it broadcasts ``agent_started``/
+    ``agent_token``/``agent_done`` over ``/ws`` and persists the run through
+    ``lhassa.state.state``), so a Telegram-launched run is indistinguishable from a
+    dashboard one. Sends a "started" message immediately, awaits completion (capped
+    by :data:`_CODE_RUN_TIMEOUT` on top of the CLI's own timeout), then sends a
+    final status + output-tail message. Approving twice on a resolved id is a
+    caller concern upstream (the callback only fires this on an actual resolve).
+    """
+    payload = approval_row.get("payload") or {}
+    task = str(payload.get("task") or "").strip()
+    if not task:
+        with contextlib.suppress(Exception):
+            await telegram.send(
+                "That approval had no task text on it — nothing to run.", config=config
+            )
+        return
+
+    try:
+        import uuid
+
+        from lhassa.agents import local_cli
+        from lhassa.api.code_routes import _stream_run
+        from lhassa.state import AgentRun, state
+
+        cli = str(payload.get("cli") or "").strip() or local_cli.detect_ai_cli()
+        if not local_cli.is_installed(cli):
+            installed = ", ".join(local_cli.available_clis()) or "none installed"
+            await telegram.send(
+                f"Can't launch — the {cli!r} CLI isn't available ({installed}).",
+                config=config,
+            )
+            return
+
+        agent = local_cli.make_agent(cli)
+        run_id = uuid.uuid4().hex[:8]
+        run = AgentRun(id=run_id, name=f"ai-cli ({cli})", status="running", task=task, cli=cli)
+        state.register_agent(run)
+
+        with contextlib.suppress(Exception):
+            await telegram.send(
+                f"Started: run #{run_id} ({cli}) — {task[:80]}", config=config
+            )
+
+        try:
+            await asyncio.wait_for(
+                _stream_run(agent, run_id, run, task), timeout=_CODE_RUN_TIMEOUT
+            )
+        except asyncio.TimeoutError:
+            with contextlib.suppress(Exception):
+                await telegram.send(
+                    f"Run #{run_id} is still going after a while — check the "
+                    "dashboard's Run section.",
+                    config=config,
+                )
+            return
+
+        tail = (run.output or "")[-_CODE_OUTPUT_TAIL:]
+        message = f"Run #{run_id} {run.status}." + (f"\n{tail}" if tail else "")
+        with contextlib.suppress(Exception):
+            await telegram.send(message, config=config)
+    except Exception as exc:  # a launch failure must never crash the poller
+        logger.warning(f"Telegram inbound: code_run launch failed: {exc}")
+        with contextlib.suppress(Exception):
+            await telegram.send("I couldn't launch that coding run.", config=config)
+
 
 async def _handle_callback_query(
     callback_query: dict, *, config, allowed_chat: str
@@ -679,6 +776,12 @@ async def _handle_callback_query(
             )
         with contextlib.suppress(Exception):
             await telegram.send(ack_text, config=config)
+
+        # A resolved code_run approval LAUNCHES the run — Approve only; Deny is a
+        # calm acknowledgment and nothing runs. Fire-and-forget so this handler
+        # (and the poll loop) is never blocked on the CLI's runtime.
+        if existing is not None and approved and existing.get("tipo") == "code_run":
+            asyncio.ensure_future(_launch_code_run(existing, config=config))
     except Exception as exc:  # a malformed callback_query must never crash the poller
         logger.warning(f"Telegram inbound: callback_query handling failed: {exc}")
         with contextlib.suppress(Exception):
@@ -776,6 +879,23 @@ async def _answer(text: str, *, config, chat_id: str = "") -> None:
     if reply is None:
         # Not a command → let the brain answer (the existing plain-language path).
         reply = await _brain_reply(text, config=config)
+    elif command_name == "code":
+        # A successful /code park carries a hidden marker with the fresh approval
+        # id (see lhassa.notify.commands._CODE_APPROVAL_MARKER) — attach the same
+        # inline Approve/Deny keyboard the monitor watcher's alerts already use,
+        # strip the marker, and send directly (this reply needs reply_markup, which
+        # the plain send() below does not attach).
+        m = _CODE_APPROVAL_RE.search(reply)
+        if m:
+            ap_id = m.group(1)
+            visible = _CODE_APPROVAL_RE.sub("", reply).strip()
+            try:
+                await telegram.send(
+                    visible, config=config, reply_markup=_code_approval_keyboard(ap_id)
+                )
+            except Exception as exc:
+                logger.warning(f"Telegram inbound: /code reply send failed: {exc}")
+            return
 
     try:
         await telegram.send(reply, config=config)

@@ -747,6 +747,156 @@ def test_callback_query_malformed_data_never_crashes(tmp_path, monkeypatch):
     assert len(ack_calls) == 1  # still acked, just with an "unrecognised" note
 
 
+# ── /code — parks an approval with an inline keyboard; approve launches it ────
+
+
+async def _poll_and_drain(cfg, *, offset=None):
+    """Run one poll_once cycle AND await any fire-and-forget tasks it scheduled
+    (e.g. ``_launch_code_run`` via ``asyncio.ensure_future``) before the event
+    loop this call owns goes away."""
+    new_offset = await telegram_inbound.poll_once(cfg, offset=offset)
+    pending = [t for t in asyncio.all_tasks() if t is not asyncio.current_task()]
+    if pending:
+        await asyncio.gather(*pending)
+    return new_offset
+
+
+def _text_update(update_id, text, *, chat_id=123):
+    return {
+        "ok": True,
+        "result": [
+            {
+                "update_id": update_id,
+                "message": {"chat": {"id": chat_id}, "text": text},
+            }
+        ],
+    }
+
+
+def test_code_reply_carries_inline_keyboard_no_leaked_marker(tmp_path, monkeypatch):
+    asyncio.run(_init_approval_db(tmp_path, monkeypatch))
+    from lhassa.agents import local_cli
+
+    monkeypatch.setattr(local_cli, "detect_ai_cli", lambda: "claude")
+
+    sent = []
+
+    async def _fake_send(text, *, config=None, reply_markup=None, parse_mode=None):
+        sent.append({"text": text, "reply_markup": reply_markup})
+        return True
+
+    monkeypatch.setattr(telegram, "send", _fake_send)
+    monkeypatch.setattr(
+        telegram_inbound.httpx,
+        "AsyncClient",
+        _client_returning(_text_update(300, "/code fix the flaky test")),
+    )
+
+    new_offset = asyncio.run(
+        telegram_inbound.poll_once(_cfg(instance_id="inst_personal"), offset=None)
+    )
+
+    assert new_offset == 301
+    assert len(sent) == 1
+    assert "[[" not in sent[0]["text"]  # marker never reaches the owner
+    kb = sent[0]["reply_markup"]
+    assert kb and "inline_keyboard" in kb
+    row = kb["inline_keyboard"][0]
+    assert row[0]["callback_data"].startswith("approve:")
+    assert row[1]["callback_data"].startswith("deny:")
+
+
+def test_callback_query_approve_code_run_launches_and_reports(tmp_path, monkeypatch):
+    db = asyncio.run(_init_approval_db(tmp_path, monkeypatch))
+    ap_id = asyncio.run(
+        db.add_approval(
+            "inst_personal",
+            "code_run",
+            {"accion": "code_run", "task": "fix the flaky test", "cli": "claude", "cwd": "/tmp"},
+        )
+    )
+
+    from lhassa.agents import local_cli
+
+    monkeypatch.setattr(local_cli, "is_installed", lambda cli: True)
+    monkeypatch.setattr(local_cli, "make_agent", lambda cli=None: object())
+
+    from lhassa.api import code_routes
+
+    async def _fake_stream_run(agent, run_id, run, task):
+        run.output = "did the fix\nall good"
+        run.status = "done"
+
+    monkeypatch.setattr(code_routes, "_stream_run", _fake_stream_run)
+
+    payload = {
+        "ok": True,
+        "result": [
+            {
+                "update_id": 210,
+                "callback_query": {
+                    "id": "cbq_code",
+                    "data": f"approve:{ap_id}",
+                    "message": {"chat": {"id": 123}},
+                },
+            }
+        ],
+    }
+    monkeypatch.setattr(telegram_inbound.httpx, "AsyncClient", _client_returning(payload))
+    _patch_answer_callback(monkeypatch)
+    sent = _patch_send(monkeypatch)
+
+    asyncio.run(_poll_and_drain(_cfg(instance_id="inst_personal")))
+
+    assert any("Approved" in s for s in sent)
+    assert any(s.startswith("Started: run #") and "claude" in s for s in sent)
+    assert any("done" in s and "did the fix" in s for s in sent)
+
+
+def test_callback_query_deny_code_run_does_not_launch(tmp_path, monkeypatch):
+    db = asyncio.run(_init_approval_db(tmp_path, monkeypatch))
+    ap_id = asyncio.run(
+        db.add_approval(
+            "inst_personal",
+            "code_run",
+            {"accion": "code_run", "task": "fix the flaky test", "cli": "claude", "cwd": "/tmp"},
+        )
+    )
+
+    from lhassa.api import code_routes
+
+    launched = []
+
+    async def _fake_stream_run(agent, run_id, run, task):
+        launched.append(run_id)
+
+    monkeypatch.setattr(code_routes, "_stream_run", _fake_stream_run)
+
+    payload = {
+        "ok": True,
+        "result": [
+            {
+                "update_id": 211,
+                "callback_query": {
+                    "id": "cbq_code2",
+                    "data": f"deny:{ap_id}",
+                    "message": {"chat": {"id": 123}},
+                },
+            }
+        ],
+    }
+    monkeypatch.setattr(telegram_inbound.httpx, "AsyncClient", _client_returning(payload))
+    _patch_answer_callback(monkeypatch)
+    sent = _patch_send(monkeypatch)
+
+    asyncio.run(_poll_and_drain(_cfg(instance_id="inst_personal")))
+
+    assert any("Denied" in s for s in sent)
+    assert launched == []
+    remaining = asyncio.run(db.load_pending_approvals("inst_personal"))
+    assert remaining == []
+
+
 def test_callback_query_missing_fields_does_not_raise(monkeypatch):
     """A totally empty/garbage callback_query must never crash the poll loop."""
     payload = {
