@@ -669,6 +669,43 @@ export default function SettingsPanel() {
           </div>
         )
       })}
+
+      <AboutCard />
+    </div>
+  )
+}
+
+// ── about footer — the flag, the identity sentence, a pointer to the docs ──────
+// Settings is the one panel every owner opens sooner or later and reads slowly
+// (it's a form, not a stream), so it is the quiet place for Lhassa to say what it
+// is — once, without repeating it on every screen.
+function AboutCard() {
+  return (
+    <div className="lh-card flex items-center gap-3 flex-wrap" style={{ borderColor: 'var(--lh-border)' }}>
+      <svg
+        width="28" height="28" viewBox="0 0 48 48"
+        className="rounded-[8px]"
+        style={{ flexShrink: 0, border: '1px solid rgba(217,165,33,0.24)' }}
+        aria-hidden="true"
+      >
+        <rect width="48" height="48" rx="9" fill="#16140f" />
+        <circle cx="24" cy="7.2" r="1.7" fill="#a23e34" />
+        <path fill="#d9a521" d="M24 9.5l4.4 5.2h-8.8L24 9.5z" />
+        <path fill="#d9a521" d="M18.6 17h10.8l1.7 4.4H16.9L18.6 17z" />
+        <path fill="#ece4d3" d="M17.4 23.4h13.2l2.1 5.3H15.3l2.1-5.3z" />
+        <path fill="#d9a521" d="M14.6 30.7h18.8l2.4 8.3H12.2l2.4-8.3z" />
+      </svg>
+      <div className="min-w-0">
+        <p className="text-[13px]" style={{ color: 'var(--lh-text)' }}>
+          <strong style={{ color: 'var(--lh-accent-text)' }}>Build the brain, rent the body.</strong>{' '}
+          Lhassa is a persistent personal AI brain — it lives awake all day for $0,
+          orchestrates rented models and tools, and earns its autonomy through
+          verified trust.
+        </p>
+        <p className="text-[11px] mt-1" style={{ color: 'var(--lh-text-faint)' }}>
+          More on how it's told: <span className="lh-mono">README.md</span> in the repo.
+        </p>
+      </div>
     </div>
   )
 }
