@@ -81,19 +81,24 @@ The voice pipeline (`make run` / `main.py`) is **not** run as a service — it
 needs host audio and the Deepgram/Cartesia keys. The always-on path is API-only
 by design.
 
-### CV pipeline bootstrap
+### Operational seeds
 
-The "Impossible-to-reject CV" work-flow (driven from Telegram) needs its
-department + flow seeded once on a fresh env:
+Some behaviors are explicit seeds so a clean env can recreate the same
+departments and work-flows:
 
 ```bash
 lhassa seed list       # list the registered seeds
 lhassa seed apply cv   # recreates the interns department + the CV work-flow
+lhassa seed apply personal # creates the personal department + morning/evening flows
 ```
 
-Then drop your real CV at `~/.lhassa/cv/cv_largo.tex` (or point `LHASSA_CV_DIR`
-elsewhere). Install the optional `tectonic` system dep to have the bridge reply
-with a compiled PDF; without it, it sends the raw `.tex`.
+The `personal` seed creates the stable personal secretary department
+(`personal`) plus two different execution flows:
+`personal-morning-briefing` and `personal-evening-briefing`.
+
+For the CV seed, drop your real CV at `~/.lhassa/cv/cv_largo.tex` (or point
+`LHASSA_CV_DIR` elsewhere). Install the optional `tectonic` system dep to have
+the bridge reply with a compiled PDF; without it, it sends the raw `.tex`.
 
 ### Boot persistence
 
