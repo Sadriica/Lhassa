@@ -39,8 +39,6 @@ async def detect_repetition(params: dict) -> str:
 
         await _db.init_db()
         findings = await _repetition.detect_repetition(instance_id, days=days)
-        if not findings:
-            return "detect_repetition: no repeated patterns found"
 
         proposed = 0
         for f in findings:
@@ -69,8 +67,40 @@ async def detect_repetition(params: dict) -> str:
             await _db.set_watch_state(instance_id, key, "1")
             proposed += 1
 
+        # Second signal: repeated MECHANICAL action chains → mint_script (PTC)
+        # proposals. Same once-only dedupe; the payload carries a deterministic
+        # draft the human reviews (running it still crosses the approval gate).
+        chains = await _repetition.detect_mechanical_chains(instance_id, days=days)
+        for f in chains:
+            key = _SEEN_PREFIX + f["pattern"]
+            if await _db.get_watch_state(instance_id, key):
+                continue
+            chain_label = " → ".join(f["chain"])
+            payload = {
+                "accion": "mint_script",
+                "pattern": f["pattern"],
+                "despertar_por": f["despertar_por"],
+                "chain": f["chain"],
+                "count": f["count"],
+                "draft_script": _repetition.draft_script_for_chain(f["chain"]),
+                "title": f"collapse the {chain_label} chain into one script",
+            }
+            await _approval.request_approval(
+                instance_id, tipo="mint_script", payload=payload
+            )
+            await _notify(
+                f"PTC candidate: {chain_label} repeated {f['count']}x in the "
+                f"last {days}d — a draft script awaits your review.",
+                level="info",
+            )
+            await _db.set_watch_state(instance_id, key, "1")
+            proposed += 1
+
+        total = len(findings) + len(chains)
+        if not total:
+            return "detect_repetition: no repeated patterns found"
         return (
-            f"detect_repetition: {len(findings)} pattern(s) found, "
+            f"detect_repetition: {total} pattern(s) found, "
             f"{proposed} newly proposed"
         )
 

@@ -166,6 +166,18 @@ def describe(row: dict) -> dict:
                 "title": f"Make '{cand}' automatic",
                 "detail": " · ".join(bits),
             }
+        if tipo == "mint_script":
+            chain = payload.get("chain") or []
+            label = " → ".join(str(c) for c in chain) if chain else "?"
+            bits = []
+            if payload.get("count"):
+                bits.append(f"repeated ×{payload['count']}")
+            bits.append("approving records the draft")
+            bits.append("running it still crosses the approval gate")
+            return {
+                "title": f"Collapse the {label} chain into one script",
+                "detail": " · ".join(bits),
+            }
         if tipo == "tool_graduation":
             tool = payload.get("tool") or "?"
             detail = "passed the gates in quarantine — approving activates it"
