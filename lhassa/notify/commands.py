@@ -223,11 +223,12 @@ async def _today_spend(config) -> Optional[float]:
 
 @register_command("start")
 async def _cmd_start(args: str, *, config=None) -> str:
-    """A short, warm, gender-neutral greeting pointing at /help."""
+    """Lhassa introduces itself — first person, the monk's register (see
+    doc/narrative.md). Short, warm, gender-neutral, pointing at /help."""
     return (
-        "Hi, I'm Lhassa — your personal assistant. Ask me anything in plain "
-        "language and I'll think it through and answer. Send /help to see what "
-        "I can do."
+        "I am Lhassa. I live on your machine — I watch quietly, remember what "
+        "matters, and think only when it is worth the spend. Speak to me in "
+        "plain words and I will answer; /help shows everything I can do."
     )
 
 

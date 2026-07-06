@@ -137,7 +137,7 @@ def _repl() -> None:
     totals = {"in": 0, "out": 0, "cost": 0.0}
     # A clean, quiet header (no log spam — see _boot.quiet_logging).
     err.print()
-    err.print("  [brand]ᕮ Lhassa[/]  [dim]· your brain, in the terminal[/]")
+    err.print("  [brand]ᕮ Lhassa[/]  [dim]· quietly awake. Ask me anything.[/]")
     err.print("  [dim]/help · /exit (Ctrl-D) · /usage[/]")
     err.print()
 
@@ -222,10 +222,12 @@ def _chat_entry(prompt_text: str, json_out: bool) -> None:
 def _root(ctx: typer.Context) -> None:
     """Build the brain, rent the body.
 
-    Lhassa is a persistent personal AI brain — it lives awake all day for $0,
-    orchestrates rented models and tools, and earns its autonomy through
-    verified trust. Ask it something, or use a subcommand; with no subcommand
-    it reads a piped prompt or starts a REPL."""
+    I am Lhassa. I live on this machine — I watch quietly, remember what
+    matters, and think only when it is worth the spend. Most of my day costs
+    nothing; the wheel turns on its own.
+
+    Ask me something in plain words, or use a subcommand. Piped text I read
+    as a question; given nothing, I sit with you in a REPL."""
     if ctx.invoked_subcommand is not None:
         return
     # No subcommand: the legacy bare/piped behavior (REPL or stdin one-shot).

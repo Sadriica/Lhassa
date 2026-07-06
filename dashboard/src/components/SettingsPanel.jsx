@@ -698,12 +698,11 @@ function AboutCard() {
       <div className="min-w-0">
         <p className="text-[13px]" style={{ color: 'var(--lh-text)' }}>
           <strong style={{ color: 'var(--lh-accent-text)' }}>Build the brain, rent the body.</strong>{' '}
-          Lhassa is a persistent personal AI brain — it lives awake all day for $0,
-          orchestrates rented models and tools, and earns its autonomy through
-          verified trust.
+          I am Lhassa. I live on this machine — I watch quietly, remember what
+          matters, and think only when it is worth the spend.
         </p>
         <p className="text-[11px] mt-1" style={{ color: 'var(--lh-text-faint)' }}>
-          More on how it's told: <span className="lh-mono">README.md</span> in the repo.
+          More on how I'm told: <span className="lh-mono">README.md</span> in the repo.
         </p>
       </div>
     </div>
