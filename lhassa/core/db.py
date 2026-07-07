@@ -494,6 +494,33 @@ async def init_db() -> None:
             ON artifacts(instance_id, creado_en)
         """)
 
+        # answer_cache — the "$0 intelligence" answer cache (§ notify.intent /
+        # memory.answer_cache): one row per PAST (question, answer) turn the chat
+        # actually thought through, so a semantically-similar future question can be
+        # served again for FREE instead of spending another model call. Scoped to
+        # ``instance_id``; ``embedding`` is the question's vector (JSON-encoded floats,
+        # same shape as ``fact_embeddings.vector``) so a lookup is a cosine scan, no
+        # extra index needed at this scale. ``hits`` counts how many times a cached
+        # row has served a lookup above threshold — an observability/tuning signal,
+        # not a cache-invalidation mechanism (TTL, applied at read time in
+        # memory/answer_cache.py, is what ages a row out).
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS answer_cache (
+                id          TEXT PRIMARY KEY,
+                instance_id TEXT NOT NULL,
+                question    TEXT NOT NULL,
+                answer      TEXT NOT NULL,
+                embedding   TEXT NOT NULL,
+                tags        TEXT,
+                hits        INTEGER NOT NULL DEFAULT 0,
+                creado_en   TEXT NOT NULL
+            )
+        """)
+        await db.execute("""
+            CREATE INDEX IF NOT EXISTS answer_cache_by_instance
+            ON answer_cache(instance_id, creado_en)
+        """)
+
         await db.commit()
 
 
@@ -1894,3 +1921,65 @@ async def ack_job(instance_id: str, job_id: str) -> None:
             (instance_id, job_id),
         )
         await conn.commit()
+
+
+# ── answer_cache (the "$0 intelligence" cache over past chat answers) ───────────
+
+async def insert_answer_cache(row: dict) -> str:
+    """Insert one cached (question, answer) row. Returns its id.
+
+    ``row`` needs ``instance_id``, ``question``, ``answer``, ``embedding`` (a list
+    of floats) and optionally ``tags`` (a list). Append-only, like ``facts``: a
+    later store for the same question is a NEW row, not an overwrite — the
+    lookup's cosine scan picks the best (and freshest-on-tie) match regardless.
+    """
+    cache_id = row.get("id") or _new_id("ac")
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            """INSERT INTO answer_cache(
+                   id, instance_id, question, answer, embedding, tags, hits, creado_en)
+               VALUES(?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                cache_id,
+                row["instance_id"],
+                row["question"],
+                row["answer"],
+                _dumps(list(row.get("embedding") or [])),
+                _dumps(list(row.get("tags") or [])),
+                int(row.get("hits") or 0),
+                row.get("creado_en") or _now(),
+            ),
+        )
+        await db.commit()
+    return cache_id
+
+
+async def list_answer_cache(instance_id: str, limit: int = 500) -> list[dict]:
+    """Return the ``limit`` most recent cached rows for ``instance_id``.
+
+    ``embedding``/``tags`` are decoded back into lists. Scoped to ``instance_id``.
+    """
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            """SELECT * FROM answer_cache
+               WHERE instance_id = ?
+               ORDER BY creado_en DESC, rowid DESC
+               LIMIT ?""",
+            (instance_id, limit),
+        ) as cur:
+            rows = [dict(row) for row in await cur.fetchall()]
+    for row in rows:
+        row["embedding"] = _loads(row.get("embedding"), [])
+        row["tags"] = _loads(row.get("tags"), [])
+    return rows
+
+
+async def bump_answer_cache_hit(instance_id: str, cache_id: str) -> None:
+    """Increment the ``hits`` counter for one cached row, scoped to ``instance_id``."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "UPDATE answer_cache SET hits = hits + 1 WHERE instance_id = ? AND id = ?",
+            (instance_id, cache_id),
+        )
+        await db.commit()

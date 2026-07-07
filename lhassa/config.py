@@ -498,6 +498,25 @@ class Config:
         os.getenv("LHASSA_CHAT_MEMORY_NUDGE_TURNS", "6"), 6
     )
 
+    # ── The "$0 intelligence" answer cache (notify/intent.py + memory/answer_cache.py) ──
+    # A deterministic intent classifier gates a semantic cache of past chat answers to
+    # STABLE questions ("what's the capital of France") so a repeat ask is served free
+    # instead of spending another model call. Time-sensitive questions (news/prices/
+    # weather/"today") are never cached — see notify/intent.py's live_data bucket.
+    answer_cache_enabled: bool = os.getenv("LHASSA_ANSWER_CACHE", "1") not in (
+        "0", "false", "",
+    )
+    # Cosine-similarity floor for a cache hit — high on purpose (0.90) so a
+    # merely-similar-but-different question is never served the wrong past answer.
+    answer_cache_threshold: float = _safe_float(
+        os.getenv("LHASSA_ANSWER_CACHE_THRESHOLD", "0.90"), 0.90
+    )
+    # A cached row older than this many seconds is ignored on lookup (default 7
+    # days) — even a "cacheable" question's answer can go stale over time.
+    answer_cache_ttl: float = _safe_float(
+        os.getenv("LHASSA_ANSWER_CACHE_TTL", str(7 * 24 * 3600)), 7 * 24 * 3600.0
+    )
+
     # ── Phase 6 — heartbeat via opencode (no local model server needed) ───────
     # The owner has the opencode CLI (no Zen), so the routine/heartbeat thinking can
     # run through opencode instead of a local model server. ``OpenCodeProvider`` shells
