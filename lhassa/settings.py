@@ -349,6 +349,37 @@ EDITABLE: list[dict] = [
         "default": 600,
         "restart": RESTART_NONE,
     },
+    {
+        "key": "answer_cache_enabled",
+        "attr": "answer_cache_enabled",
+        "env_var": "LHASSA_ANSWER_CACHE",
+        "type": "bool",
+        "label": "Answer cache (serve repeat stable questions for $0)",
+        "help": (
+            "A deterministic intent classifier gates a semantic cache of past chat "
+            "answers to STABLE questions (facts, how-tos, definitions) — a repeat "
+            "ask is served free instead of spending another model call. "
+            "Time-sensitive questions (news/prices/weather/'today') are never cached."
+        ),
+        "group": "Memory",
+        "default": True,
+        "restart": RESTART_NONE,
+    },
+    {
+        "key": "answer_cache_threshold",
+        "attr": "answer_cache_threshold",
+        "env_var": "LHASSA_ANSWER_CACHE_THRESHOLD",
+        "type": "float",
+        "label": "Answer cache similarity threshold",
+        "help": (
+            "Cosine-similarity floor for a cache hit — kept high (0.90 default) so "
+            "a merely-similar-but-different question is never served the wrong "
+            "past answer."
+        ),
+        "group": "Memory",
+        "default": 0.90,
+        "restart": RESTART_NONE,
+    },
     # ── Watchlist ────────────────────────────────────────────────────────────────
     {
         "key": "auto_sync_repos",

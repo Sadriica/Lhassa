@@ -366,7 +366,9 @@ async def _brain_reply(text: str, *, config) -> str:
     from lhassa.llm import router
     from lhassa.llm.gateway import BudgetExceeded
     from lhassa.llm.provider import ProviderNotConfigured
+    from lhassa.memory import answer_cache
     from lhassa.memory import load as memory_load
+    from lhassa.notify.intent import classify
     from lhassa.persona import load_identity
 
     instance_id = getattr(config, "instance_id", None) or "inst_personal"
@@ -377,6 +379,31 @@ async def _brain_reply(text: str, *, config) -> str:
     ep = Episode.begin(despertar_por="telegram", instance_id=instance_id)
     reply = _FALLBACK_REPLY
     try:
+        # $0 intent classification BEFORE any provider/spend is resolved (§CLAUDE.md:
+        # "thinking is the EXCEPTION"). Only a "cacheable" (stable, non-time-sensitive)
+        # question is even eligible for the answer cache; live_data/judgment/command
+        # are unaffected and fall straight through to the unchanged think below.
+        intent = classify(text)
+        cache_enabled = bool(getattr(config, "answer_cache_enabled", True))
+        if intent == "cacheable" and cache_enabled:
+            threshold = float(getattr(config, "answer_cache_threshold", 0.90) or 0.90)
+            hit = await answer_cache.lookup(
+                instance_id, text, threshold=threshold, config=config
+            )
+            if hit is not None:
+                cached_answer, similarity = hit
+                # A cache hit is still part of the conversation — record it in the
+                # rolling history exactly like a normal turn.
+                _history_record(config, "user", text)
+                _history_record(config, "assistant", cached_answer)
+                ep.finish(
+                    decision=f"cache-hit: served past answer (sim={similarity:.2f})",
+                    accion="responder",
+                    resultado=cached_answer,
+                    costo_usd=0.0,
+                )
+                return cached_answer
+
         # Layer memory (semantic query = the message; layer 4 fires only when
         # enabled + indexed, otherwise it's the unchanged pinned/recent/tags).
         ctx = await memory_load.load(
@@ -469,6 +496,12 @@ async def _brain_reply(text: str, *, config) -> str:
             # Record the turn AS THE OWNER SAW IT (markers already stripped).
             _history_record(config, "user", text)
             _history_record(config, "assistant", reply)
+            # A "cacheable" question just got a real think — store it so the NEXT
+            # semantically-similar ask can be served for $0. Best-effort: a store
+            # failure must never break a reply that already succeeded.
+            if intent == "cacheable" and cache_enabled:
+                with contextlib.suppress(Exception):
+                    await answer_cache.store(instance_id, text, reply, config=config)
             # Record the provider that ACTUALLY answered — the router's reason
             # predates the telegram_provider pin and the fallback walk, and an
             # episode label that names the wrong provider poisons every later
