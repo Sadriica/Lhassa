@@ -210,3 +210,227 @@ async def test_chain_needs_distinct_actions_and_threshold(brain):
         )
     chains = await detect_mechanical_chains("inst_personal", days=7, threshold=3)
     assert chains == []
+
+
+# ── detect_recurring: recurring regardless of cost, + temporal cadence ──────────
+
+
+@pytest.mark.asyncio
+async def test_detect_recurring_finds_many_times_zero_cost_pattern(brain):
+    """A pattern that never cost anything still shows up here (unlike detect_repetition)."""
+    from lhassa.agents.repetition import detect_recurring
+
+    for _ in range(4):
+        await _seed_episode(
+            brain, instance_id="inst_test", despertar_por="telegram", accion="responder", cost=0.0
+        )
+    findings = await detect_recurring("inst_test", days=7, min_count=3)
+    assert any(f["despertar_por"] == "telegram" and f["accion"] == "responder" for f in findings)
+    hit = next(f for f in findings if f["accion"] == "responder")
+    assert hit["count"] == 4
+    assert hit["judgment"] is True  # "responder" is a chat judgment, not a tool candidate
+    assert hit["cadence"] is None  # all seeded at ~the same instant — no regular gap
+
+
+@pytest.mark.asyncio
+async def test_detect_recurring_below_min_count_is_not_reported(brain):
+    from lhassa.agents.repetition import detect_recurring
+
+    for _ in range(2):
+        await _seed_episode(
+            brain, instance_id="inst_test", despertar_por="telegram", accion="responder", cost=0.0
+        )
+    findings = await detect_recurring("inst_test", days=7, min_count=3)
+    assert findings == []
+
+
+@pytest.mark.asyncio
+async def test_detect_recurring_flags_a_regular_cadence(brain):
+    """Episodes spaced ~7 days apart, low variance, are flagged as a cadence."""
+    from datetime import datetime, timedelta, timezone
+
+    from lhassa.agents.repetition import detect_recurring
+
+    base = datetime.now(timezone.utc) - timedelta(days=28)
+    for i in range(5):
+        await _seed_episode(
+            brain, instance_id="inst_test", despertar_por="weekly_digest", accion="think",
+            cost=0.0, when=(base + timedelta(days=7 * i)).isoformat(),
+        )
+    findings = await detect_recurring("inst_test", days=60, min_count=3)
+    hit = next(f for f in findings if f["despertar_por"] == "weekly_digest")
+    assert hit["cadence"] is not None
+    assert hit["cadence"]["interval_days"] == pytest.approx(7.0, abs=0.1)
+
+
+@pytest.mark.asyncio
+async def test_detect_recurring_irregular_gaps_are_not_a_cadence(brain):
+    from datetime import datetime, timedelta, timezone
+
+    from lhassa.agents.repetition import detect_recurring
+
+    base = datetime.now(timezone.utc) - timedelta(days=30)
+    offsets = [0, 1, 15, 16, 29]  # bursty, not a regular rhythm
+    for off in offsets:
+        await _seed_episode(
+            brain, instance_id="inst_test", despertar_por="irregular", accion="think",
+            cost=0.0, when=(base + timedelta(days=off)).isoformat(),
+        )
+    findings = await detect_recurring("inst_test", days=60, min_count=3)
+    hit = next(f for f in findings if f["despertar_por"] == "irregular")
+    assert hit["cadence"] is None
+
+
+@pytest.mark.asyncio
+async def test_detect_recurring_surfaces_answer_cache_hits(brain):
+    """A repeated, real question already in the answer cache is its own finding."""
+    from lhassa.agents.repetition import detect_recurring
+
+    cache_id = await brain.insert_answer_cache(
+        {
+            "instance_id": "inst_test",
+            "question": "what is the capital of France",
+            "answer": "Paris",
+            "embedding": [0.1, 0.2, 0.3],
+            "tags": [],
+        }
+    )
+    for _ in range(4):
+        await brain.bump_answer_cache_hit("inst_test", cache_id)
+
+    findings = await detect_recurring("inst_test", days=7, min_count=3)
+    hit = next(f for f in findings if f.get("in_cache"))
+    assert hit["question"] == "what is the capital of France"
+    assert hit["answer"] == "Paris"
+    assert hit["count"] == 5  # 1 original store + 4 bumped hits
+    assert hit["judgment"] is True
+
+
+@pytest.mark.asyncio
+async def test_detect_recurring_never_raises_on_missing_table(brain, monkeypatch):
+    import lhassa.core.db as db
+    from lhassa.agents.repetition import detect_recurring
+
+    monkeypatch.setattr(db, "DB_PATH", "/nonexistent/path/does-not-exist.db")
+    findings = await detect_recurring("inst_test", days=7, min_count=3)
+    assert findings == []
+
+
+@pytest.mark.asyncio
+async def test_detect_recurring_respects_denied_patterns(brain):
+    from lhassa.agents.repetition import detect_recurring, pattern_key
+
+    for _ in range(4):
+        await _seed_episode(
+            brain, instance_id="inst_test", despertar_por="cron", accion="fetch_feed", cost=0.0
+        )
+    ap_id = await brain.add_approval(
+        "inst_test", "mint_memory",
+        {"accion": "mint_memory", "pattern": pattern_key("cron", "fetch_feed")},
+    )
+    await brain.resolve_approval("inst_test", ap_id, "rechazada")
+
+    findings = await detect_recurring("inst_test", days=7, min_count=3)
+    assert all(f["pattern"] != pattern_key("cron", "fetch_feed") for f in findings)
+
+
+# ── recommend_intervention: the cheapest-fix decision table ──────────────────────
+
+
+def test_recommend_intervention_picks_script_for_a_chain():
+    from lhassa.agents.repetition import recommend_intervention
+
+    finding = {
+        "pattern": "cron::chain:web_fetch→send_digest",
+        "despertar_por": "cron",
+        "chain": ["web_fetch", "send_digest"],
+        "count": 3,
+    }
+    rec = recommend_intervention(finding)
+    assert rec["kind"] == "script"
+    assert "web_fetch" in rec["payload"]["draft_script"]
+    assert rec["payload"]["chain"] == ["web_fetch", "send_digest"]
+
+
+def test_recommend_intervention_picks_schedule_for_a_cadence():
+    from lhassa.agents.repetition import recommend_intervention
+
+    finding = {
+        "pattern": "weekly_digest::think",
+        "despertar_por": "weekly_digest",
+        "accion": "think",
+        "count": 5,
+        "total_cost_usd": 0.4,
+        "judgment": False,
+        "cadence": {"interval_days": 7.0, "cv": 0.02, "occurrences": 5},
+        "in_cache": False,
+    }
+    rec = recommend_intervention(finding)
+    assert rec["kind"] == "schedule"
+    assert rec["payload"]["interval_days"] == 7.0
+    assert "7" in rec["rationale"]
+
+
+def test_recommend_intervention_picks_memory_fact_for_a_judgment():
+    from lhassa.agents.repetition import recommend_intervention
+
+    finding = {
+        "pattern": "telegram::responder",
+        "despertar_por": "telegram",
+        "accion": "responder",
+        "count": 10,
+        "total_cost_usd": 0.5,
+        "judgment": True,
+        "cadence": None,
+        "in_cache": False,
+    }
+    rec = recommend_intervention(finding)
+    assert rec["kind"] == "memory_fact"
+    assert rec["payload"]["despertar_por"] == "telegram"
+    assert "×10" in rec["rationale"]
+
+
+def test_recommend_intervention_picks_cache_seed_for_an_already_cached_question():
+    from lhassa.agents.repetition import recommend_intervention
+
+    finding = {
+        "pattern": "answer_cache::abc123",
+        "despertar_por": "telegram",
+        "accion": "responder",
+        "count": 5,
+        "total_cost_usd": 0.0,
+        "judgment": True,
+        "cadence": None,
+        "in_cache": True,
+        "question": "what is the capital of France",
+        "answer": "Paris",
+    }
+    rec = recommend_intervention(finding)
+    assert rec["kind"] == "cache_seed"
+    assert rec["payload"]["question"] == "what is the capital of France"
+
+
+def test_recommend_intervention_picks_tool_for_a_costly_non_judgment_pattern():
+    from lhassa.agents.repetition import recommend_intervention
+
+    finding = {
+        "pattern": "pending_task::think",
+        "despertar_por": "pending_task",
+        "accion": "think",
+        "count": 6,
+        "total_cost_usd": 0.06,
+        "judgment": False,
+        "cadence": None,
+        "in_cache": False,
+    }
+    rec = recommend_intervention(finding)
+    assert rec["kind"] == "tool"
+    assert rec["payload"]["candidate_accion"] == "think"
+
+
+def test_recommend_intervention_never_raises_on_malformed_finding():
+    from lhassa.agents.repetition import recommend_intervention
+
+    rec = recommend_intervention({})
+    assert rec["kind"] == "tool"
+    assert "rationale" in rec and "payload" in rec

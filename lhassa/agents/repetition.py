@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import json
 import re
+import statistics
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
@@ -48,6 +49,28 @@ DEFAULT_THRESHOLD = 5
 # Mechanical-chain detection defaults (see detect_mechanical_chains).
 DEFAULT_CHAIN_THRESHOLD = 3
 DEFAULT_CHAIN_MAX_LEN = 4
+
+# detect_recurring defaults — a much lower bar than detect_repetition's cost
+# threshold: a pattern is worth noticing just for repeating, regardless of cost.
+DEFAULT_RECURRING_THRESHOLD = 3
+# A cadence needs at least this many occurrences before gaps mean anything.
+CADENCE_MIN_OCCURRENCES = 3
+# Coefficient of variation (stdev/mean of the gaps, in days) at or below this
+# is treated as a "regular" cadence — a HEURISTIC, not exact schedule
+# detection: a human still reviews the resulting schedule proposal.
+CADENCE_MAX_CV = 0.35
+# A mean gap below this (in days) is just "close together in a burst", not a
+# cadence worth scheduling — floors out sub-day noise (e.g. a rapid retry loop).
+CADENCE_MIN_INTERVAL_DAYS = 0.5
+# tipos the denied-patterns query recognizes — every self-improvement proposal
+# kind this module (and actionpack._selfimprove) can park an approval for.
+_PROPOSAL_TIPOS = (
+    "mint_action",
+    "mint_script",
+    "mint_memory",
+    "mint_schedule",
+    "seed_cache",
+)
 
 # Candidate action names that are ALWAYS a judgment, never automatable — see the
 # module docstring for the real denied proposals this encodes.
@@ -95,7 +118,11 @@ def is_excluded(accion: str, decision: str = "") -> bool:
 
 
 async def denied_patterns(instance_id: str) -> set[str]:
-    """Patterns whose most recent ``mint_action``/``mint_script`` proposal was DENIED.
+    """Patterns whose most recent self-improvement proposal was DENIED.
+
+    Covers every proposal kind this module (and ``actionpack._selfimprove``) can
+    park — ``mint_action``, ``mint_script``, and the consciousness's ``mint_memory``
+    / ``mint_schedule`` / ``seed_cache`` kinds (see :func:`recommend_intervention`).
 
     ``watch_state`` (see ``actionpack._selfimprove._SEEN_PREFIX``) only stops a
     pattern from being re-proposed while its approval is still PENDING; once a
@@ -110,11 +137,12 @@ async def denied_patterns(instance_id: str) -> set[str]:
     try:
         async with aiosqlite.connect(_db.DB_PATH) as conn:
             conn.row_factory = aiosqlite.Row
+            placeholders = ",".join("?" * len(_PROPOSAL_TIPOS))
             async with conn.execute(
-                """SELECT payload FROM approvals
+                f"""SELECT payload FROM approvals
                    WHERE instance_id = ? AND estado = 'rechazada'
-                     AND tipo IN ('mint_action', 'mint_script')""",
-                (instance_id,),
+                     AND tipo IN ({placeholders})""",
+                (instance_id, *_PROPOSAL_TIPOS),
             ) as cur:
                 rows = await cur.fetchall()
         for row in rows:
@@ -194,6 +222,320 @@ async def detect_repetition(
             }
         )
     return out
+
+
+def _cadence_stats(timestamps: list[str]) -> Optional[dict[str, Any]]:
+    """Gaps-between-occurrences cadence check — a HEURISTIC, not a real scheduler.
+
+    Parses ``timestamps`` (ISO-8601, any order), sorts them, and computes the
+    gaps between consecutive occurrences in days. With fewer than
+    :data:`CADENCE_MIN_OCCURRENCES` timestamps there aren't enough gaps to say
+    anything about regularity, so this returns ``None``. Otherwise it returns
+    ``{"interval_days", "cv", "occurrences"}`` when the coefficient of variation
+    (population stdev / mean of the gaps) is at or below :data:`CADENCE_MAX_CV`
+    — "low variance" meaning the gaps cluster tightly around one interval (e.g.
+    ~daily, ~weekly). **Limits, stated honestly**: this is exact-count blind —
+    it cannot distinguish "every Friday" from "every 7 days starting Tuesday",
+    and a handful of points can look regular by chance. It is a proposal for a
+    human to review, never an automatic schedule change. Never raises
+    (unparseable/insufficient input degrades to ``None``).
+    """
+    try:
+        parsed = []
+        for ts in timestamps:
+            if not ts:
+                continue
+            dt = datetime.fromisoformat(str(ts))
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            parsed.append(dt)
+        parsed.sort()
+        if len(parsed) < CADENCE_MIN_OCCURRENCES:
+            return None
+        gaps_days = [
+            (b - a).total_seconds() / 86400.0 for a, b in zip(parsed, parsed[1:])
+        ]
+        if not gaps_days:
+            return None
+        mean = statistics.mean(gaps_days)
+        if mean < CADENCE_MIN_INTERVAL_DAYS:
+            # Sub-floor gaps (e.g. a burst of episodes seconds apart) are not a
+            # "cadence" in any useful sense — they are just close together.
+            return None
+        stdev = statistics.pstdev(gaps_days) if len(gaps_days) > 1 else 0.0
+        cv = stdev / mean
+        if cv > CADENCE_MAX_CV:
+            return None
+        return {
+            "interval_days": round(mean, 2),
+            "cv": round(cv, 3),
+            "occurrences": len(parsed),
+        }
+    except Exception:
+        return None
+
+
+async def detect_recurring(
+    instance_id: str,
+    *,
+    days: int = DEFAULT_DAYS,
+    min_count: Optional[int] = None,
+) -> list[dict[str, Any]]:
+    """Find patterns that repeat OFTEN, regardless of cost — the broader sense.
+
+    :func:`detect_repetition` only flags patterns that both repeated AND spent
+    real money; a $0 pattern (a question asked many times, a trigger firing on
+    a schedule-like cadence) never surfaces there even though it may still be
+    worth a $0 intervention (a memory fact, a scheduled action, a cache seed).
+    This is that broader sense: same pure-SQL aggregation over ``episodes``,
+    but WITHOUT the cost filter, at a lower default bar
+    (:data:`DEFAULT_RECURRING_THRESHOLD`).
+
+    Each finding also tries a cadence check (see :func:`_cadence_stats`) once it
+    has enough occurrences, and is tagged ``"judgment": True`` when the
+    candidate action is one of the judgment shapes :func:`is_excluded` knows
+    about (a chat reply, an org department's think) — a judgment pattern can
+    never become a ``mint_action`` tool, but it CAN be the subject of a memory
+    fact / cache seed proposal (see :func:`recommend_intervention`), so it is
+    NOT dropped here the way :func:`detect_repetition` drops it.
+
+    On top of the episodes-based patterns, this also surfaces entries from the
+    answer cache (:mod:`lhassa.memory.answer_cache`) that have been hit at
+    least ``min_count`` times — a REAL repeated question with REAL text
+    (``question``/``answer`` keys on the finding), already served for $0. These
+    are tagged ``"in_cache": True``.
+
+    Pure SQL + Python, $0, never raises (degrades to ``[]``).
+    """
+    min_count = min_count if min_count is not None else DEFAULT_RECURRING_THRESHOLD
+    if min_count < 1:
+        min_count = DEFAULT_RECURRING_THRESHOLD
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+
+    rows: list[dict[str, Any]] = []
+    timestamps_by_pattern: dict[tuple[str, str], list[str]] = {}
+    try:
+        async with aiosqlite.connect(_db.DB_PATH) as conn:
+            conn.row_factory = aiosqlite.Row
+            async with conn.execute(
+                """SELECT despertar_por, accion,
+                          COUNT(*) AS n,
+                          SUM(COALESCE(costo_usd, 0)) AS cost,
+                          MAX(decision) AS decision_sample
+                   FROM episodes
+                   WHERE instance_id = ? AND creado_en >= ?
+                   GROUP BY despertar_por, accion
+                   HAVING COUNT(*) >= ?
+                   ORDER BY n DESC""",
+                (instance_id, cutoff, min_count),
+            ) as cur:
+                rows = [dict(r) for r in await cur.fetchall()]
+
+            for row in rows:
+                if int(row.get("n") or 0) < CADENCE_MIN_OCCURRENCES:
+                    continue
+                despertar_por = row.get("despertar_por") or ""
+                accion = row.get("accion") or ""
+                async with conn.execute(
+                    """SELECT creado_en FROM episodes
+                       WHERE instance_id = ? AND despertar_por = ? AND accion = ?
+                             AND creado_en >= ?
+                       ORDER BY creado_en""",
+                    (instance_id, despertar_por, accion, cutoff),
+                ) as cur2:
+                    ts_rows = await cur2.fetchall()
+                timestamps_by_pattern[(despertar_por, accion)] = [
+                    r["creado_en"] for r in ts_rows
+                ]
+    except Exception:
+        # A missing/corrupt table degrades to "nothing detected" — this is a
+        # cheap sense, not a critical path; it must never crash a caller.
+        return []
+
+    denied = await denied_patterns(instance_id)
+    out: list[dict[str, Any]] = []
+    for row in rows:
+        despertar_por = row.get("despertar_por") or ""
+        accion = row.get("accion") or ""
+        pattern = pattern_key(despertar_por, accion)
+        if pattern in denied:
+            continue
+        cadence = _cadence_stats(timestamps_by_pattern.get((despertar_por, accion), []))
+        out.append(
+            {
+                "pattern": pattern,
+                "despertar_por": despertar_por,
+                "accion": accion,
+                "count": int(row.get("n") or 0),
+                "total_cost_usd": float(row.get("cost") or 0.0),
+                "judgment": is_excluded(accion, str(row.get("decision_sample") or "")),
+                "cadence": cadence,
+                "in_cache": False,
+            }
+        )
+
+    # A second, REAL source of repeated-question findings: the answer cache
+    # already stores actual question/answer text and a hit counter — no
+    # heuristic needed here, hits IS the repeat count.
+    try:
+        cache_rows = await _db.list_answer_cache(instance_id, limit=500)
+    except Exception:
+        cache_rows = []
+    for row in cache_rows:
+        # hits starts at 0 on the row that was actually stored — +1 counts the
+        # original turn that seeded the cache as one occurrence too.
+        count = int(row.get("hits") or 0) + 1
+        if count < min_count:
+            continue
+        pattern = f"answer_cache::{row.get('id')}"
+        if pattern in denied:
+            continue
+        out.append(
+            {
+                "pattern": pattern,
+                "despertar_por": "telegram",
+                "accion": "responder",
+                "count": count,
+                "total_cost_usd": 0.0,
+                "judgment": True,
+                "cadence": None,
+                "in_cache": True,
+                "question": row.get("question"),
+                "answer": row.get("answer"),
+            }
+        )
+
+    out.sort(key=lambda f: -f["count"])
+    return out
+
+
+def recommend_intervention(finding: dict[str, Any]) -> dict[str, Any]:
+    """The "consciousness" reasoning: pick the CHEAPEST fix for one finding.
+
+    Deterministic, $0 — no model call. ``finding`` is one item from
+    :func:`detect_repetition`, :func:`detect_recurring`, or
+    :func:`detect_mechanical_chains`; this looks only at its SHAPE (never at
+    outside state) to decide which intervention is cheapest, in priority order:
+
+      1. a ``chain`` key → ``kind="script"`` — the existing PTC path
+         (:func:`draft_script_for_chain`) collapses a mechanical action chain.
+      2. a ``cadence`` key (regular gaps, see :func:`_cadence_stats`) →
+         ``kind="schedule"`` — propose a recurring $0 action instead of
+         re-deriving the same judgment on a rhythm.
+      3. ``judgment=True`` (a chat reply / org think — never automatable as a
+         tool, see :func:`is_excluded`) →
+           - ``in_cache=True`` → ``kind="cache_seed"``: it is ALREADY being
+             served for $0 from the answer cache — nothing further to mint,
+             the rationale just names the savings.
+           - otherwise → ``kind="memory_fact"``: the brain keeps re-deriving
+             the same answer; propose storing it as a durable fact instead.
+      4. anything else (a genuinely costly, non-judgment, non-chain pattern
+         with no cheaper fix available) → ``kind="tool"`` — the original
+         ``mint_action`` path.
+
+    Returns ``{"kind", "rationale", "payload"}``. ``rationale`` names the
+    tokens/cost/repeats it would save, in plain text. Never raises — a
+    malformed ``finding`` degrades to a ``"tool"`` recommendation with a
+    best-effort rationale.
+    """
+    try:
+        pattern = finding.get("pattern")
+        count = int(finding.get("count") or 0)
+        cost = float(finding.get("total_cost_usd") or 0.0)
+        despertar_por = finding.get("despertar_por") or "?"
+        accion = finding.get("accion") or "?"
+
+        chain = finding.get("chain")
+        if chain:
+            chain = list(chain)
+            label = " → ".join(chain)
+            return {
+                "kind": "script",
+                "rationale": (
+                    f"mechanical chain {label} repeated ×{count} — collapsing it "
+                    "into one reviewed script (PTC) replaces N fixed-action "
+                    "episodes with one $0 run"
+                ),
+                "payload": {
+                    "pattern": pattern,
+                    "despertar_por": despertar_por,
+                    "chain": chain,
+                    "count": count,
+                    "draft_script": draft_script_for_chain(chain),
+                },
+            }
+
+        cadence = finding.get("cadence")
+        if cadence:
+            interval = cadence.get("interval_days")
+            return {
+                "kind": "schedule",
+                "rationale": (
+                    f"'{despertar_por}' fires on a ~{interval}-day cadence "
+                    f"(×{count}, cv={cadence.get('cv')}) — a scheduled $0 action "
+                    "beats re-deriving the same judgment on a rhythm"
+                ),
+                "payload": {
+                    "pattern": pattern,
+                    "despertar_por": despertar_por,
+                    "accion": accion,
+                    "interval_days": interval,
+                    "count": count,
+                    "recurrence_seconds": int(round((interval or 0) * 86400)),
+                },
+            }
+
+        if finding.get("judgment"):
+            if finding.get("in_cache"):
+                return {
+                    "kind": "cache_seed",
+                    "rationale": (
+                        f"already answered from the cache ×{count} — this is "
+                        "already $0, nothing further to mint"
+                    ),
+                    "payload": {
+                        "pattern": pattern,
+                        "question": finding.get("question"),
+                        "answer": finding.get("answer"),
+                        "count": count,
+                    },
+                }
+            return {
+                "kind": "memory_fact",
+                "rationale": (
+                    f"'{despertar_por}' keeps re-deriving the same answer ×{count} "
+                    f"(${cost:.4f} spent so far) — a durable fact removes the "
+                    "re-derivation entirely"
+                ),
+                "payload": {
+                    "pattern": pattern,
+                    "despertar_por": despertar_por,
+                    "accion": accion,
+                    "count": count,
+                    "total_cost_usd": cost,
+                },
+            }
+
+        return {
+            "kind": "tool",
+            "rationale": (
+                f"'{accion}' repeated ×{count} costing ${cost:.4f} with no cheaper "
+                "fix available — mint it as a deterministic $0 action"
+            ),
+            "payload": {
+                "pattern": pattern,
+                "despertar_por": despertar_por,
+                "candidate_accion": accion,
+                "count": count,
+                "total_cost_usd": cost,
+            },
+        }
+    except Exception:
+        return {
+            "kind": "tool",
+            "rationale": "degraded: could not reason about this finding",
+            "payload": {"pattern": (finding or {}).get("pattern")},
+        }
 
 
 def _ident(accion: str) -> str:

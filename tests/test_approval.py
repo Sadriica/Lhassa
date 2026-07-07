@@ -296,6 +296,58 @@ def test_describe_mint_action():
     assert "$0 deterministic action" in desc["detail"]
 
 
+def test_describe_mint_memory():
+    desc = approval.describe(
+        {
+            "tipo": "mint_memory",
+            "payload": {
+                "accion": "mint_memory",
+                "despertar_por": "telegram",
+                "count": 10,
+                "total_cost_usd": 0.5,
+            },
+        }
+    )
+    assert desc["title"] == "Remember the answer to 'telegram' so I stop re-deriving it"
+    assert "×10" in desc["detail"]
+    assert "$0.50" in desc["detail"]
+    assert "durable $0 fact" in desc["detail"]
+
+
+def test_describe_mint_schedule():
+    desc = approval.describe(
+        {
+            "tipo": "mint_schedule",
+            "payload": {
+                "accion": "mint_schedule",
+                "despertar_por": "weekly_report",
+                "interval_days": 7.0,
+                "count": 5,
+            },
+        }
+    )
+    assert desc["title"] == "Answer 'weekly_report' on its cadence automatically"
+    assert "7" in desc["detail"]
+    assert "×5" in desc["detail"]
+    assert "$0 recurring action" in desc["detail"]
+
+
+def test_describe_seed_cache():
+    desc = approval.describe(
+        {
+            "tipo": "seed_cache",
+            "payload": {
+                "accion": "seed_cache",
+                "question": "what is the capital of France",
+                "count": 5,
+            },
+        }
+    )
+    assert desc["title"] == "'what is the capital of France' is already answered from the cache"
+    assert "×5" in desc["detail"]
+    assert "nothing further to mint" in desc["detail"]
+
+
 def test_describe_tool_graduation():
     desc = approval.describe(
         {"tipo": "tool_graduation", "payload": {"accion": "tool_graduation", "tool": "csv_summarize", "branch": "cand/1"}}

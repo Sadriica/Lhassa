@@ -96,7 +96,52 @@ async def detect_repetition(params: dict) -> str:
             await _db.set_watch_state(instance_id, key, "1")
             proposed += 1
 
-        total = len(findings) + len(chains)
+        # Third signal: the consciousness — recurring patterns (any cost,
+        # temporal cadence, cache-worthy repeated questions) reasoned through
+        # recommend_intervention into the cheapest of mint_memory / mint_schedule
+        # / seed_cache. "tool" and "script" recommendations are skipped here —
+        # those exact patterns are already covered by the two loops above, so
+        # proposing them again would just duplicate the same fix.
+        all_recurring = await _repetition.detect_recurring(instance_id, days=days)
+        # Only the kinds this loop actually owns count as a distinct signal —
+        # "tool"/"script" recommendations are the SAME fix the two loops above
+        # already proposed for that exact pattern, not a new finding.
+        recurring = [
+            (f, _repetition.recommend_intervention(f))
+            for f in all_recurring
+        ]
+        recurring = [(f, rec) for f, rec in recurring if rec["kind"] not in ("tool", "script")]
+
+        for f, rec in recurring:
+            key = _SEEN_PREFIX + f["pattern"]
+            if await _db.get_watch_state(instance_id, key):
+                continue
+
+            kind = rec["kind"]
+            tipo = {
+                "memory_fact": "mint_memory",
+                "schedule": "mint_schedule",
+                "cache_seed": "seed_cache",
+            }[kind]
+            payload = dict(rec["payload"])
+            payload["accion"] = tipo
+            payload["rationale"] = rec["rationale"]
+
+            if kind == "memory_fact":
+                title = f"remember the answer for '{f['despertar_por']}'"
+            elif kind == "schedule":
+                title = f"schedule '{f['despertar_por']}' on its own cadence"
+            else:
+                subject = f.get("question") or f["despertar_por"]
+                title = f"'{subject}' is already answered from cache"
+            payload["title"] = title
+
+            await _approval.request_approval(instance_id, tipo=tipo, payload=payload)
+            await _notify(f"{title} — {rec['rationale']}", level="info")
+            await _db.set_watch_state(instance_id, key, "1")
+            proposed += 1
+
+        total = len(findings) + len(chains) + len(recurring)
         if not total:
             return "detect_repetition: no repeated patterns found"
         return (
