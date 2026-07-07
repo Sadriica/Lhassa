@@ -159,6 +159,13 @@ assembled by `memory/load.py:load()` and trimmed to a token budget by `truncate(
 something to match against — a judgment isn't just "recent episodes plus identity", it
 can genuinely recall a related fact or a related past decision.
 
+Sitting on top of all five layers, `memory/graph.py` is a deterministic **knowledge
+graph read-model**: it derives entities from fact tags and a simple capitalized/quoted-
+term regex, links them by co-occurrence in the same fact or episode, and answers "what
+do I know about X?" (`what_do_i_know`), "what do I track?" (`entities`), and "the story
+of one thing" (`timeline`) — all `$0`, all pure reads over the grande, never a model
+call. It is the brain reasoning over its own memory without spending a token.
+
 Why the identity core never truncates: a brain that forgets its own standing directives
 under context pressure isn't a brain with amnesia about facts, it's a brain that stops
 being *itself*. Everything else — recency, tags, semantic hits, episodic recall — is
