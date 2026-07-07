@@ -142,6 +142,42 @@ capabilities` (alias `doctor`) shows everything wired and on/off.
 - `memory/consolidate.py` — semantic consolidation via the cheap model (only the
   chica). `memory/store.py`/`session.py` is the legacy voice-session store.
 
+## The $0 intelligence layer (think only when it's worth it)
+
+The philosophy "thinking is the exception" made into machinery — every piece is
+deterministic, $0, degrade-to-normal-think on any failure:
+
+- **Answer cache + intent router.** `notify/intent.py:classify()` sorts each chat
+  message into `command`/`live_data`/`cacheable`/`judgment` (pure regex, no model;
+  `live_data` — news/prices/`hoy`/weather — is checked FIRST so it is never
+  cached). `memory/answer_cache.py` embeds a cacheable question via the offline
+  `HashingEmbedder`, cosine-matches past answers (`answer_cache` table), and on a
+  hit above `LHASSA_ANSWER_CACHE_THRESHOLD` (0.90, TTL 7d) serves the stored answer
+  from disk — provider never called, episode logged `cache-hit`, `costo_usd=0`.
+  Hooked into `telegram_inbound._brain_reply` BEFORE spending; a miss stores the
+  answer after the think. `LHASSA_ANSWER_CACHE*` knobs, settings-editable.
+- **Knowledge graph.** `memory/graph.py` is a $0 read-model over facts + episodes:
+  `what_do_i_know(x)` (facts + FTS5-recalled episodes mentioning an entity, its
+  co-occurring terms, its time span), `entities()`, `timeline()`. Entity
+  extraction is tags-first + capitalized/quoted terms (documented as heuristic,
+  not NLP). `GET /api/memory/graph|entities`, `lhassa memory graph|entities`.
+- **The consciousness** (`agents/repetition.py` + `actionpack/_selfimprove.py`).
+  Beyond the cost detector: `detect_recurring` finds patterns repeated OFTEN
+  (any cost) and reads a temporal cadence (regular gaps → "fires weekly");
+  `recommend_intervention` picks the CHEAPEST fix deterministically — chain →
+  `script`, cadence → `schedule`, re-derived stable answer → `memory_fact`,
+  already-cached → nothing, costly judgment with no cheaper path → `tool`. Each
+  parks one approval naming the tokens it would save (`describe()` renders
+  `mint_memory`/`mint_schedule`/`seed_cache`); `denied_patterns` respects prior
+  denials across all proposal tipos.
+- **Feedback signal** (`core/feedback.py`). Infers whether an answer landed from
+  behavior already in the log — re-ask soon after (negative), a correction ("no,
+  en realidad…", negative), an action taken on it (positive), silence-after
+  (weak positive). `derive_signals` / `summary` (net "am I landing?" score) at
+  `GET /api/analytics/feedback`. Inference, not truth (episodes don't store the
+  user's raw text) — documented as such; exposes the signal, doesn't yet feed
+  the autonomy knob.
+
 ## The árbitro (verify) + security
 
 - **Verifiers** (`agents/verify.py`) are objective (`command/tests/lint/health/
