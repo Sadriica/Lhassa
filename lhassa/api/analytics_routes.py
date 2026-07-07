@@ -235,6 +235,37 @@ async def analytics_runs(
     return {"items": runs}
 
 
+@router.get("/feedback")
+async def analytics_feedback(range: str = Query(default="7d")) -> dict:
+    """The $0 feedback signal — is Lhassa landing? (see lhassa.core.feedback).
+
+    Inferred from behavior already in the episode log (re-ask/correction/
+    silence-after/acted-on) — never asks the owner to rate anything, never
+    calls a model. Folded into this router (rather than a new ``*_routes``
+    module) per the feature's own read-surface note.
+    """
+    value = (range or "7d").strip().lower()
+    days = 7
+    if value.endswith("d") and value[:-1].isdigit():
+        days = int(value[:-1])
+    elif value.endswith("h") and value[:-1].isdigit():
+        days = max(1, int(int(value[:-1]) / 24))
+    try:
+        from lhassa.core import feedback as _feedback
+
+        return await _feedback.summary(lhassa_config.Config.instance_id, days=days)
+    except Exception as exc:
+        logger.debug("analytics: feedback summary failed: {}", exc)
+        return {
+            "positive": 0,
+            "negative": 0,
+            "neutral": 0,
+            "total": 0,
+            "net_score": 0.0,
+            "range_days": days,
+        }
+
+
 @router.get("/runs/{run_id}")
 async def analytics_run_detail(run_id: str) -> dict:
     """One run with its persisted steps."""
