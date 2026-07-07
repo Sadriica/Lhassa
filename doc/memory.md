@@ -163,6 +163,39 @@ re-querying the grande on every touch.
 
 ---
 
+## The knowledge graph
+
+`lhassa/memory/graph.py` is a **deterministic read-model** over the grande —
+"what do I know about X?" answered from stored facts and episodes, at `$0`,
+with **no model call**. It builds nothing new to store; it computes entities
+and their co-occurrences on the fly from rows `load_facts`/
+`search_episodes`/`load_recent_episodes` already return.
+
+- **Entity extraction** (simple, honest limits): every fact **tag** is an
+  entity (the strongest signal); a regex over fact `contenido` and episode
+  text also pulls capitalized-multiword terms ("Ana Torres") and quoted
+  terms. This is **not NLP** — no lemmatization, no coreference ("my sister"
+  and "Ana" link only if a fact ties them together explicitly), and an
+  isolated capitalized word can slip in as a false positive. It's tuned to be
+  useful, not perfect.
+- **`what_do_i_know(instance_id, query, limit=10)`** — the flagship
+  primitive: returns the facts and episodes mentioning `query`, the
+  co-occurring `related_terms` (other entities appearing alongside it in the
+  same fact/episode), and the `first_seen`/`last_seen` time span. An empty or
+  unmatched query degrades to an empty result — it never raises.
+- **`entities(instance_id)`** — every distinct entity the brain tracks (tag-
+  or text-derived), each with a mention count, `last_seen`, and its `source`
+  (`"tag"` — the stronger signal — or `"text"`). A lone text-derived term
+  seen only once is dropped as noise.
+- **`timeline(instance_id, entity)`** — every fact and episode mentioning
+  `entity`, oldest first: the story of one thing.
+- **Reachable at:** `GET /api/memory/graph?q=<term>`, `GET
+  /api/memory/entities` (`lhassa/api/memory_routes.py`), and `lhassa memory
+  graph <query> [--json]` / `lhassa memory entities [--json]`
+  (`lhassa/cli/memory_cmds.py`).
+
+---
+
 ## Backups
 
 `lhassa/memory/backup.py` mirrors the grande using SQLite's **online backup
@@ -192,6 +225,9 @@ running, no manual checkpoint dance:
 - **`GET /api/memory/sessions`** — the 20 most recent legacy voice-session
   summaries (the `memory.db` lane, above), not the grande's episodes.
 - **`GET /api/episodes/search?q=...`** — episodic recall (layer 5, above).
+- **`lhassa memory graph <query>`** / **`GET /api/memory/graph?q=...`** —
+  "what do I know about X?", and **`lhassa memory entities`** / **`GET
+  /api/memory/entities`** — the entity map, both above.
 - Telegram **`/recall <text>`** — the LLM-free recall command, above.
 - The dashboard's Overview and Reports panels surface facts, recent episodes,
   and recall results without a dedicated "Memory" section of their own; the

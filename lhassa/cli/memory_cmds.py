@@ -117,6 +117,86 @@ def add_cmd(
 memory_app.command("add")(add_cmd)
 
 
+# ── graph / entities — the deterministic knowledge graph over the grande ─────
+
+
+def graph_cmd(
+    query: str = typer.Argument(..., help="Entity/term to look up, e.g. 'sezzle'."),
+    limit: int = typer.Option(10, "--limit", help="Max facts/episodes/terms to show."),
+    json_out: bool = typer.Option(False, "--json", help="Emit the raw result as JSON."),
+) -> None:
+    """Answer 'what do I know about X?' from stored facts/episodes — $0, no model."""
+    from lhassa.config import Config
+    from lhassa.memory import graph
+
+    result = asyncio.run(graph.what_do_i_know(Config.instance_id, query, limit=limit))
+
+    if json_out:
+        _commands._dump_json(result)
+        return
+
+    out = _out()
+    if not result["facts"] and not result["episodes"]:
+        out.print(f"[dim]Nothing known about[/] [model]{query}[/] [dim]yet.[/]")
+        return
+
+    out.print(f"[title]What I know about[/] [model]{query}[/]")
+    if result["first_seen"]:
+        span = result["first_seen"]
+        if result["last_seen"] and result["last_seen"] != result["first_seen"]:
+            span += f" → {result['last_seen']}"
+        out.print(f"[dim]seen: {span}[/]")
+
+    if result["facts"]:
+        out.print("\n[title]Facts:[/]")
+        for f in result["facts"]:
+            pin = " [warn]★[/]" if f.get("pinned") else ""
+            tags = ", ".join(f.get("tags") or [])
+            tags_s = f" [dim]({tags})[/]" if tags else ""
+            out.print(f"  - ({f['tipo']}) {f['contenido']}{tags_s}{pin}")
+
+    if result["episodes"]:
+        out.print("\n[title]Episodes:[/]")
+        for ep in result["episodes"]:
+            out.print(f"  - [{ep.get('creado_en', '')}] {ep.get('resultado', '')}")
+
+    if result["related_terms"]:
+        out.print("\n[title]Related:[/] " + ", ".join(result["related_terms"]))
+
+
+def entities_cmd(
+    json_out: bool = typer.Option(False, "--json", help="Emit the raw list as JSON."),
+) -> None:
+    """List the distinct entities the brain tracks — a map of what it knows."""
+    from lhassa.config import Config
+    from lhassa.memory import graph
+
+    rows = asyncio.run(graph.entities(Config.instance_id))
+
+    if json_out:
+        _commands._dump_json(rows)
+        return
+
+    out = _out()
+    if not rows:
+        out.print("[dim]No entities tracked yet.[/]")
+        return
+
+    from rich.table import Table
+    from lhassa.cli.theme import TABLE_KWARGS
+
+    table = Table(title="Entities", **TABLE_KWARGS)
+    for col in ("term", "mentions", "last_seen", "source"):
+        table.add_column(col)
+    for r in rows:
+        table.add_row(str(r["term"]), str(r["mentions"]), str(r["last_seen"] or "—"), str(r["source"]))
+    out.print(table)
+
+
+memory_app.command("graph")(graph_cmd)
+memory_app.command("entities")(entities_cmd)
+
+
 # ── onboard — a short guided questionnaire seeding the first owner facts ──────
 
 # Each entry: (prompt text, tipo, pinned).
