@@ -90,6 +90,98 @@ async def test_detect_repetition_no_patterns(brain):
     assert "no repeated patterns" in result
 
 
+# ── the consciousness: mint_memory / mint_schedule / seed_cache ──────────────────
+
+
+async def _seed_judgment_pattern(db, instance_id, *, despertar_por="telegram", accion="responder", n=4):
+    for _ in range(n):
+        ep = _FakeEpisode(
+            id=db._new_id("ep"),
+            instance_id=instance_id,
+            despertar_por=despertar_por,
+            accion=accion,
+            costo_usd=0.0,
+            creado_en=db._now(),
+        )
+        await db.append_episode(ep)
+
+
+@pytest.mark.asyncio
+async def test_detect_repetition_proposes_mint_memory_for_a_judgment_pattern(brain):
+    await _seed_judgment_pattern(brain, "inst_test")
+    with patch(
+        "lhassa.actionpack._selfimprove._notify", AsyncMock(return_value=True)
+    ) as mock_notify:
+        result = await detect_repetition({"instance_id": "inst_test", "days": 7})
+
+    assert "newly proposed" in result
+    mock_notify.assert_awaited()
+    pending = await brain.load_pending_approvals("inst_test")
+    mint_memory_rows = [a for a in pending if a["tipo"] == "mint_memory"]
+    assert len(mint_memory_rows) == 1
+    assert mint_memory_rows[0]["payload"]["despertar_por"] == "telegram"
+
+
+@pytest.mark.asyncio
+async def test_detect_repetition_does_not_reproprose_mint_memory(brain):
+    await _seed_judgment_pattern(brain, "inst_test")
+    with patch("lhassa.actionpack._selfimprove._notify", AsyncMock(return_value=True)):
+        await detect_repetition({"instance_id": "inst_test"})
+        result2 = await detect_repetition({"instance_id": "inst_test"})
+
+    assert "0 newly proposed" in result2
+    pending = await brain.load_pending_approvals("inst_test")
+    assert len([a for a in pending if a["tipo"] == "mint_memory"]) == 1
+
+
+@pytest.mark.asyncio
+async def test_detect_repetition_proposes_mint_schedule_for_a_cadence(brain):
+    from datetime import datetime, timedelta, timezone
+
+    base = datetime.now(timezone.utc) - timedelta(days=28)
+    for i in range(5):
+        ep = _FakeEpisode(
+            id=brain._new_id("ep"),
+            instance_id="inst_test",
+            despertar_por="weekly_report",
+            accion="think",
+            costo_usd=0.0,
+            creado_en=(base + timedelta(days=7 * i)).isoformat(),
+        )
+        await brain.append_episode(ep)
+
+    with patch("lhassa.actionpack._selfimprove._notify", AsyncMock(return_value=True)):
+        await detect_repetition({"instance_id": "inst_test", "days": 60})
+
+    pending = await brain.load_pending_approvals("inst_test")
+    mint_schedule_rows = [a for a in pending if a["tipo"] == "mint_schedule"]
+    assert len(mint_schedule_rows) == 1
+    assert mint_schedule_rows[0]["payload"]["interval_days"] == pytest.approx(7.0, abs=0.1)
+
+
+@pytest.mark.asyncio
+async def test_detect_repetition_proposes_seed_cache_for_a_cache_hit_pattern(brain):
+    cache_id = await brain.insert_answer_cache(
+        {
+            "instance_id": "inst_test",
+            "question": "what is the capital of France",
+            "answer": "Paris",
+            "embedding": [0.1, 0.2, 0.3],
+            "tags": [],
+        }
+    )
+    for _ in range(3):
+        await brain.bump_answer_cache_hit("inst_test", cache_id)
+
+    with patch("lhassa.actionpack._selfimprove._notify", AsyncMock(return_value=True)):
+        await detect_repetition({"instance_id": "inst_test", "days": 7})
+
+    pending = await brain.load_pending_approvals("inst_test")
+    seed_cache_rows = [a for a in pending if a["tipo"] == "seed_cache"]
+    assert len(seed_cache_rows) == 1
+    assert seed_cache_rows[0]["payload"]["question"] == "what is the capital of France"
+
+
 # ── review_tools ──────────────────────────────────────────────────────────────
 
 

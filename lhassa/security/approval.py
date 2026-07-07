@@ -142,8 +142,11 @@ def describe(row: dict) -> dict:
     Every surface that shows the queue (the Telegram ``/approvals`` command, the
     dashboard panels, the digest) renders through this ONE helper, so "what am I
     approving?" reads the same everywhere. It understands the payload shape each
-    ``request_approval`` caller writes (``mint_action``, ``tool_graduation``,
-    ``flow_gate``, ``org_task``, dispatch/remote tasks) and degrades to
+    ``request_approval`` caller writes (``mint_action``, ``mint_script``,
+    ``mint_memory``, ``mint_schedule``, ``seed_cache`` — the self-improvement
+    consciousness's :func:`lhassa.agents.repetition.recommend_intervention`
+    kinds — plus ``tool_graduation``, ``flow_gate``, ``org_task``, dispatch/
+    remote tasks) and degrades to
     ``tipo``+``accion`` for anything unknown. Never raises.
     """
     tipo = str((row or {}).get("tipo") or "?")
@@ -176,6 +179,41 @@ def describe(row: dict) -> dict:
             bits.append("running it still crosses the approval gate")
             return {
                 "title": f"Collapse the {label} chain into one script",
+                "detail": " · ".join(bits),
+            }
+        if tipo == "mint_memory":
+            subject = payload.get("despertar_por") or payload.get("pattern") or "?"
+            bits = []
+            if payload.get("count"):
+                bits.append(f"asked ×{payload['count']}")
+            if payload.get("total_cost_usd") is not None:
+                bits.append(f"~${float(payload['total_cost_usd']):.2f} saved")
+            bits.append("approving stores a durable $0 fact")
+            return {
+                "title": f"Remember the answer to '{subject}' so I stop re-deriving it",
+                "detail": " · ".join(bits),
+            }
+        if tipo == "mint_schedule":
+            subject = payload.get("despertar_por") or payload.get("pattern") or "?"
+            bits = []
+            interval = payload.get("interval_days")
+            if interval is not None:
+                bits.append(f"a ~{interval}-day cadence")
+            if payload.get("count"):
+                bits.append(f"seen ×{payload['count']}")
+            bits.append("approving schedules a $0 recurring action")
+            return {
+                "title": f"Answer '{subject}' on its cadence automatically",
+                "detail": " · ".join(bits),
+            }
+        if tipo == "seed_cache":
+            subject = payload.get("question") or payload.get("despertar_por") or "?"
+            bits = []
+            if payload.get("count"):
+                bits.append(f"already served from cache ×{payload['count']}")
+            bits.append("already $0 — nothing further to mint")
+            return {
+                "title": f"'{subject}' is already answered from the cache",
                 "detail": " · ".join(bits),
             }
         if tipo == "tool_graduation":
