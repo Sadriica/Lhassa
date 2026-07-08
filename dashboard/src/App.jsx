@@ -20,6 +20,7 @@ import QuarantinePanel from './components/QuarantinePanel'
 import ReportsPanel from './components/ReportsPanel'
 import ExecutionAnalyticsPanel from './components/ExecutionAnalyticsPanel'
 import FleetPanel from './components/FleetPanel'
+import CalendarPanel from './components/CalendarPanel'
 import HealthPanel from './components/HealthPanel'
 import SettingsPanel from './components/SettingsPanel'
 import ErrorBoundary from './components/ErrorBoundary'
@@ -99,6 +100,10 @@ export default function App() {
 
         {section === 'tools' && (
           <ErrorBoundary><QuarantinePanel /></ErrorBoundary>
+        )}
+
+        {section === 'calendar' && (
+          <ErrorBoundary><CalendarPanel /></ErrorBoundary>
         )}
 
         {section === 'reports' && (
