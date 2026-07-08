@@ -252,6 +252,23 @@ A time-less "acuérdame que…" is NOT a reminder — it falls through to the
 `remember:`/fact lanes (a fact, not an appointment); the ambiguity is
 resolved by the presence of a time phrase.
 
+#### Calendar events — `.ics`, one tap, any calendar
+
+`/remind` additionally generates a downloadable `.ics` for the same event and
+delivers it right after the reminder reply — the owner gets BOTH the internal
+reminder AND a tappable calendar file, one tap adds it to ANY calendar
+(institutional Outlook, Google, iPhone). No API, no admin, no permissions —
+it's a file, not an integration, so an institutional calendar that would never
+grant an app access still takes it. `/event <what> <when>` is the calendar-only
+sibling: same parser, no internal reminder task, just the `.ics`. Both degrade
+silently if `.ics` generation or delivery hiccups — `/remind`'s internal
+reminder is never affected. Delivery goes through the same
+`org/deliver.py` sender-of-record seam as everything else that reaches the
+owner, so it gets a per-brain ledger entry (`kind="calendar_event"`) for free.
+
+Reading the owner's OWN calendar back (subscribing to its `.ics` feed so
+`/today` can fold in real meetings) is a documented next step, not built yet.
+
 ---
 
 ## Free-text chat
