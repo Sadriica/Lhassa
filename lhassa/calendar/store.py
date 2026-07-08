@@ -66,7 +66,10 @@ def _read_list(config=None) -> list[dict]:
     out: list[dict] = []
     for item in raw:
         if isinstance(item, dict) and item.get("name") and item.get("url"):
-            out.append({"name": str(item["name"]), "url": str(item["url"])})
+            entry = {"name": str(item["name"]), "url": str(item["url"])}
+            if item.get("primary"):
+                entry["primary"] = True
+            out.append(entry)
     return out
 
 
@@ -120,8 +123,12 @@ def add_calendar(name: str, url: str, config=None) -> bool:
         return False
     try:
         items = _read_list(config)
+        was_primary = any(it["name"] == name and it.get("primary") for it in items)
         items = [it for it in items if it["name"] != name]
-        items.append({"name": name, "url": url})
+        new_entry = {"name": name, "url": url}
+        if was_primary:
+            new_entry["primary"] = True
+        items.append(new_entry)
         return _write_list(items, config)
     except Exception as exc:  # pragma: no cover — defensive, mirrors flows.store
         logger.warning("calendar: add_calendar({!r}) failed: {}", name, exc)
@@ -175,10 +182,52 @@ def all_feeds(config=None) -> list[dict]:
     return items
 
 
+def set_primary(name: str, config=None) -> bool:
+    """Mark the named calendar PRIMARY (the master); clears it on every other
+    stored calendar so exactly one ``primary: true`` survives. ``False`` if
+    ``name`` isn't a stored calendar, or on any I/O trouble. Never raises.
+
+    Only applies to STORED entries — the ``LHASSA_CALENDAR_ICS_URL`` shortcut
+    (merged in by :func:`all_feeds` under the implicit ``"default"`` name) is
+    never itself a candidate; an owner who wants that feed to be primary must
+    ``/calendar add`` it under a real name first.
+    """
+    name = (name or "").strip()
+    if not name:
+        return False
+    try:
+        items = _read_list(config)
+        if not any(it["name"] == name for it in items):
+            return False
+        out: list[dict] = []
+        for it in items:
+            entry = {"name": it["name"], "url": it["url"]}
+            if it["name"] == name:
+                entry["primary"] = True
+            out.append(entry)
+        return _write_list(out, config)
+    except Exception as exc:  # pragma: no cover — defensive
+        logger.warning("calendar: set_primary({!r}) failed: {}", name, exc)
+        return False
+
+
+def get_primary(config=None) -> "str | None":
+    """The primary calendar's name, or ``None`` if none is set. Never raises."""
+    try:
+        for it in _read_list(config):
+            if it.get("primary"):
+                return it["name"]
+    except Exception as exc:  # pragma: no cover — defensive
+        logger.warning("calendar: get_primary failed: {}", exc)
+    return None
+
+
 __all__ = [
     "add_calendar",
     "all_feeds",
+    "get_primary",
     "list_calendars",
     "load_calendars",
     "remove_calendar",
+    "set_primary",
 ]

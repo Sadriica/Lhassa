@@ -264,8 +264,11 @@ DESCRIPTIONS: dict[str, str] = {
     "checkin": "<text> — save a personal morning/evening note.",
     "remind": "<what> a las 5pm | in 30 min — a timed reminder + a calendar file.",
     "event": "<what> a las 5pm | in 30 min — just the calendar file, no reminder.",
-    "calendar": "add <name> <url> | remove <name> — manage your named calendars.",
-    "calendars": "List your configured calendars (name + masked url).",
+    "calendar": (
+        "add <name> <url> | remove <name> | primary <name> | sync — manage your "
+        "named calendars and the master-calendar reconcile."
+    ),
+    "calendars": "List your configured calendars (name + masked url; marks the primary).",
     "today": "Personal agenda for today.",
     "tomorrow": "Personal agenda for tomorrow.",
     "approvals": "List what's waiting on your decision.",
@@ -1458,9 +1461,12 @@ async def _cmd_calendars(args: str, *, config=None) -> str:
                 "No calendars configured yet. Use /calendar add <name> <url> to "
                 "subscribe one."
             )
+        primary = _cal_store.get_primary(cfg)
         lines = [f"Calendars ({len(items)}):"]
         for it in items:
-            lines.append(f"- {it.get('name')}: {_mask_url(it.get('url', ''))}")
+            name = it.get("name")
+            marker = " (primary)" if primary and name == primary else ""
+            lines.append(f"- {name}{marker}: {_mask_url(it.get('url', ''))}")
         return "\n".join(lines)
     except Exception as exc:
         logger.warning(f"commands: /calendars failed: {exc}")
@@ -1469,18 +1475,22 @@ async def _cmd_calendars(args: str, *, config=None) -> str:
 
 @register_command("calendar")
 async def _cmd_calendar(args: str, *, config=None) -> str:
-    """``/calendar add <name> <url> | remove <name>`` — manage named calendar feeds.
+    """``/calendar add <name> <url> | remove <name> | primary <name> | sync`` —
+    manage named calendar feeds and the master-calendar reconcile.
 
-    ``add`` validates the url starts with http(s) and dedupes by name (adding an
-    existing name replaces its url). Neither sub-command ever touches the
-    network — they only edit the JSON store (:mod:`lhassa.calendar.store`); the
-    feed is fetched lazily, the next time /today runs.
+    ``add``/``remove`` never touch the network — they only edit the JSON store
+    (:mod:`lhassa.calendar.store`); the feed is fetched lazily, the next time
+    /today (or /calendar sync) runs. ``primary`` designates the MASTER calendar
+    (see :mod:`lhassa.calendar.reconcile`); ``sync`` runs the $0 diff now and
+    reports what it found/delivered.
     """
     text = (args or "").strip()
     if not text:
         return (
             "Usage: /calendar add <name> <url> — subscribe a named calendar.\n"
             "       /calendar remove <name> — drop one.\n"
+            "       /calendar primary <name> — set your master calendar.\n"
+            "       /calendar sync — find events missing from the master.\n"
             "See /calendars to list what's configured."
         )
     parts = text.split(maxsplit=1)
@@ -1513,13 +1523,51 @@ async def _cmd_calendar(args: str, *, config=None) -> str:
                 return f"No calendar named {name!r}. See /calendars."
             return f"Calendar removed: {name}."
 
+        if sub == "primary":
+            name = rest.strip()
+            if not name:
+                return "Usage: /calendar primary <name>"
+            ok = _cal_store.set_primary(name, config=cfg)
+            if not ok:
+                return f"No calendar named {name!r}. See /calendars."
+            return f"Master calendar set: {name}. /calendar sync will diff every other calendar against it."
+
+        if sub == "sync":
+            from lhassa.actionpack._calendar_sync import calendar_sync
+
+            instance_id = getattr(cfg, "instance_id", None) or "inst_personal"
+            summary = await calendar_sync({"instance_id": instance_id, "config": cfg})
+            return _calendar_sync_reply(summary)
+
         return (
             f"Unknown /calendar sub-command {sub!r}. Usage: /calendar add <name> "
-            "<url> | remove <name>."
+            "<url> | remove <name> | primary <name> | sync."
         )
     except Exception as exc:
         logger.warning(f"commands: /calendar {sub} failed: {exc}")
         return _oops("manage your calendars")
+
+
+_CALENDAR_SYNC_RE = re.compile(
+    r"^calendar_sync: (\d+) unsynced event\(s\), (\d+) delivered$"
+)
+
+
+def _calendar_sync_reply(summary: str) -> str:
+    """Render :func:`lhassa.actionpack._calendar_sync.calendar_sync`'s plain
+    outcome string in the Telegram voice. Falls back to the raw string for the
+    "no primary" / "nothing to sync" / error outcomes — those already read
+    fine verbatim."""
+    m = _CALENDAR_SYNC_RE.match(summary or "")
+    if not m:
+        return summary
+    n, delivered = int(m.group(1)), int(m.group(2))
+    if n == 0:
+        return "Your other calendars are already in sync with your master calendar."
+    return (
+        f"I found {n} event(s) on your other calendars not in your master "
+        f"calendar — sent you {delivered} to add."
+    )
 
 
 @register_command("version")

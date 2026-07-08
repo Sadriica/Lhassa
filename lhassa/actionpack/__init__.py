@@ -38,6 +38,7 @@ def register_all() -> None:
     # Import sub-modules — this defines the functions without side-effects.
     from lhassa.actionpack import (  # noqa: F401
         _brain,
+        _calendar_sync,
         _curate,
         _digest,
         _llm,
@@ -87,6 +88,9 @@ def register_all() -> None:
 
     # ── Digest (Etapa 2 — operative day via Telegram) ─────────────────────────
     _reg("send_digest", _digest.send_digest)
+
+    # ── Master calendar reconcile ($0 set diff, no model) ─────────────────────
+    _reg("calendar_sync", _calendar_sync.calendar_sync)
 
     # ── Org — real delegation into the hierarchy (Etapa 3) ────────────────────
     _reg("org_run", _org.org_run)

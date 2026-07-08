@@ -1043,3 +1043,82 @@ def test_calendars_shows_env_shortcut_masked(tmp_path):
     reply = asyncio.run(commands.dispatch("/calendars", config=cfg))
     assert "default" in reply
     assert full_url not in reply  # the full secret url is never echoed back
+
+
+# ── /calendar primary + /calendar sync — master calendar reconcile ────────────
+
+
+def test_calendar_primary_sets_master(tmp_path):
+    cfg = _cal_cfg(tmp_path)
+    asyncio.run(commands.dispatch("/calendar add EAFIT https://example.edu/feed.ics", config=cfg))
+
+    reply = asyncio.run(commands.dispatch("/calendar primary EAFIT", config=cfg))
+    assert "Master calendar set: EAFIT" in reply
+
+    from lhassa.calendar import store as _cal_store
+
+    assert _cal_store.get_primary(config=cfg) == "EAFIT"
+
+
+def test_calendar_primary_unknown_name(tmp_path):
+    cfg = _cal_cfg(tmp_path)
+    reply = asyncio.run(commands.dispatch("/calendar primary Ghost", config=cfg))
+    assert "No calendar named" in reply
+
+
+def test_calendar_primary_missing_arg_usage_hint(tmp_path):
+    cfg = _cal_cfg(tmp_path)
+    reply = asyncio.run(commands.dispatch("/calendar primary", config=cfg))
+    assert "Usage" in reply
+
+
+def test_calendars_marks_the_primary(tmp_path):
+    cfg = _cal_cfg(tmp_path)
+    asyncio.run(commands.dispatch("/calendar add EAFIT https://example.edu/feed.ics", config=cfg))
+    asyncio.run(commands.dispatch("/calendar add Personal https://example.com/p.ics", config=cfg))
+    asyncio.run(commands.dispatch("/calendar primary EAFIT", config=cfg))
+
+    listed = asyncio.run(commands.dispatch("/calendars", config=cfg))
+    assert "EAFIT (primary)" in listed
+    assert "Personal (primary)" not in listed
+
+
+def test_calendar_sync_reports_no_primary(tmp_path):
+    cfg = _cal_cfg(tmp_path)
+    asyncio.run(commands.dispatch("/calendar add EAFIT https://example.edu/feed.ics", config=cfg))
+
+    reply = asyncio.run(commands.dispatch("/calendar sync", config=cfg))
+    assert "no primary" in reply.lower()
+
+
+def test_calendar_sync_reports_found_and_delivered(tmp_path, monkeypatch):
+    cfg = _cal_cfg(tmp_path, instance_id="inst_personal")
+    asyncio.run(commands.dispatch("/calendar add EAFIT https://example.edu/feed.ics", config=cfg))
+    asyncio.run(commands.dispatch("/calendar primary EAFIT", config=cfg))
+
+    from lhassa.actionpack import _calendar_sync
+
+    async def fake_sync(params):
+        return "calendar_sync: 2 unsynced event(s), 2 delivered"
+
+    monkeypatch.setattr(_calendar_sync, "calendar_sync", fake_sync)
+
+    reply = asyncio.run(commands.dispatch("/calendar sync", config=cfg))
+    assert "I found 2 event" in reply
+    assert "sent you 2" in reply
+
+
+def test_calendar_sync_reports_nothing_to_sync(tmp_path, monkeypatch):
+    cfg = _cal_cfg(tmp_path, instance_id="inst_personal")
+    asyncio.run(commands.dispatch("/calendar add EAFIT https://example.edu/feed.ics", config=cfg))
+    asyncio.run(commands.dispatch("/calendar primary EAFIT", config=cfg))
+
+    from lhassa.actionpack import _calendar_sync
+
+    async def fake_sync(params):
+        return "calendar_sync: 0 unsynced event(s), 0 delivered"
+
+    monkeypatch.setattr(_calendar_sync, "calendar_sync", fake_sync)
+
+    reply = asyncio.run(commands.dispatch("/calendar sync", config=cfg))
+    assert "already in sync" in reply.lower()

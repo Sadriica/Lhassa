@@ -127,3 +127,53 @@ def test_all_feeds_avoids_default_name_clash(tmp_path):
     names = [f["name"] for f in feeds]
     assert names.count("default") == 1
     assert "default2" in names
+
+
+# ── primary flag — exactly one master calendar ────────────────────────────────
+
+
+def test_get_primary_none_when_unset(tmp_path):
+    cfg = _cfg(tmp_path)
+    store.add_calendar("EAFIT", "https://example.edu/feed.ics", config=cfg)
+    assert store.get_primary(config=cfg) is None
+
+
+def test_set_primary_then_get_roundtrip(tmp_path):
+    cfg = _cfg(tmp_path)
+    store.add_calendar("EAFIT", "https://example.edu/feed.ics", config=cfg)
+    store.add_calendar("Personal", "https://example.com/p.ics", config=cfg)
+
+    assert store.set_primary("EAFIT", config=cfg) is True
+    assert store.get_primary(config=cfg) == "EAFIT"
+
+
+def test_set_primary_clears_it_on_others(tmp_path):
+    cfg = _cfg(tmp_path)
+    store.add_calendar("EAFIT", "https://example.edu/feed.ics", config=cfg)
+    store.add_calendar("Personal", "https://example.com/p.ics", config=cfg)
+
+    store.set_primary("EAFIT", config=cfg)
+    store.set_primary("Personal", config=cfg)
+
+    assert store.get_primary(config=cfg) == "Personal"
+    items = store.list_calendars(config=cfg)
+    primaries = [i for i in items if i.get("primary")]
+    assert len(primaries) == 1
+    assert primaries[0]["name"] == "Personal"
+
+
+def test_set_primary_unknown_name_fails(tmp_path):
+    cfg = _cfg(tmp_path)
+    store.add_calendar("EAFIT", "https://example.edu/feed.ics", config=cfg)
+    assert store.set_primary("Ghost", config=cfg) is False
+    assert store.get_primary(config=cfg) is None
+
+
+def test_set_primary_survives_a_later_url_replace(tmp_path):
+    cfg = _cfg(tmp_path)
+    store.add_calendar("EAFIT", "https://example.edu/old.ics", config=cfg)
+    store.set_primary("EAFIT", config=cfg)
+
+    # Re-adding EAFIT (e.g. updating its url) must not silently un-primary it.
+    store.add_calendar("EAFIT", "https://example.edu/new.ics", config=cfg)
+    assert store.get_primary(config=cfg) == "EAFIT"

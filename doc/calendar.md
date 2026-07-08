@@ -69,6 +69,31 @@ name, so nothing breaks for someone using only `.env`. Each feed keeps its OWN
 cache file (keyed by a hash of its url) so two calendars never clobber each
 other's cached copy; a single unreachable feed is skipped — the rest still show.
 
+### Master calendar
+
+With several calendars subscribed (see above), pick ONE as your **master** —
+the calendar everything else should agree with:
+
+```
+/calendar primary EAFIT   # designate the master calendar
+/calendar sync            # find events on your other calendars missing from it
+```
+
+`/calendar sync` runs a `$0`, deterministic diff (no model): it reads every
+subscribed feed, partitions by your master calendar, and looks for events on a
+*secondary* calendar that don't have a matching event on the master. A match is
+by normalized event name (case/whitespace-insensitive) **and** a start time
+within a few minutes — so a renamed event (same time, different title) reads as
+"unsynced" rather than being silently guessed at; you always get to review each
+candidate yourself. For every unsynced event, Lhassa sends you a tappable
+`.ics` — one tap adds it to your master calendar. Already-delivered events are
+never re-sent on a later sync.
+
+There is also a **daily automatic sync**: the `maintenance` seed schedules
+`calendar_sync` once a day (`lhassa seed apply maintenance`). It's a no-op
+until you set a master calendar, so it's safe to leave scheduled even before
+you've configured one.
+
 ## Path B — Microsoft Graph app (read + write via API)
 
 For accounts where you **can** register an app (personal Outlook.com, or an org
