@@ -13,6 +13,7 @@ export const SECTIONS = [
   { id: 'skills', label: 'Skills', group: 'Capability' },
   { id: 'brains', label: 'Brains', group: 'Capability' },
   { id: 'fleet', label: 'Readiness', group: 'Operations' },
+  { id: 'calendar', label: 'Calendar', group: 'Operations' },
   { id: 'reports', label: 'Analytics', group: 'Operations' },
   { id: 'activity', label: 'Activity', group: 'Operations' },
   { id: 'settings', label: 'Settings', group: 'System' },

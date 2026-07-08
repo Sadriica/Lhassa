@@ -16,6 +16,10 @@ os.environ.setdefault("LHASSA_QUARANTINE_ISOLATION", "none")
 # wins. The calendar feed URL especially must be blank — otherwise the agenda
 # would fetch the owner's real calendar over the network during unit tests.
 os.environ["LHASSA_CALENDAR_ICS_URL"] = ""
+# Same reason for the named-calendar store: a test must never read the owner's
+# real ~/.lhassa/calendars.json (which would fetch their real feeds over the
+# network). Point it at a path that does not exist so the store degrades to [].
+os.environ["LHASSA_CALENDARS_FILE"] = "/nonexistent/lhassa-test/calendars.json"
 
 import httpx  # noqa: E402
 import pytest  # noqa: E402
