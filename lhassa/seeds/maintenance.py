@@ -8,15 +8,25 @@ facts), ``review_tools`` (gate 4 — retire unused/failing graduated tools),
 archived, never deletes), and ``calendar_sync`` (the master-calendar reconcile —
 a $0 set diff that delivers a ``.ics`` for each event missing from the primary
 calendar; a clean no-op with no primary/feeds configured, so it's safe to
-schedule unconditionally). This seed mints them as recurring tasks via the same
-task-minting path everything else uses (:func:`lhassa.core.dispatch.mint_task`),
-so they show up in ``lhassa task list`` and fire on schedule through the
-ordinary watchlist/step loop — no new scheduler, no core edit.
+schedule unconditionally).
 
-Idempotent: a matching PENDING recurring task (same accion) is left alone rather
-than duplicated, so re-applying this seed on an already-seeded machine is a
-no-op. Never raises destructively — a single mint failing is recorded under
-``errors``, the others still proceed.
+Rather than minting each action bare (a task that used to dispatch straight to
+``core.actions.run`` with no org attribution), this seed mints ``temple_run``
+— see :mod:`lhassa.actionpack._temple` / :mod:`lhassa.org.temple` — with the
+real action name in its params. Each beat now runs the FULL down-execute-up
+loop: Lhassa delegates the action DOWN to the ``templo`` department (one
+``org-delegate`` Episode), templo EXECUTES it via the same deterministic
+action (its own ``dominio="templo"`` Episode; what the action DOES is
+unchanged), and the result travels back UP to Lhassa via ``org.deliver`` (the
+sender of record). This is still minted through the same
+:func:`lhassa.core.dispatch.mint_task` path everything else uses, so it shows
+up in ``lhassa task list`` and fires on schedule through the ordinary
+watchlist/step loop — no new scheduler, no core edit.
+
+Idempotent: a matching PENDING recurring ``temple_run`` task for the same
+wrapped action is left alone rather than duplicated, so re-applying this seed
+on an already-seeded machine is a no-op. Never raises destructively — a single
+mint failing is recorded under ``errors``, the others still proceed.
 """
 
 from __future__ import annotations
@@ -33,7 +43,9 @@ if TYPE_CHECKING:
 # accion -> recurrence in seconds. distill_memory/detect_repetition/calendar_sync
 # are daily hygiene passes; review_tools (gate 4) and curate_skills (Fase 2) run
 # less often — both need time to accrue real usage before "unused" means
-# anything.
+# anything. Each is minted as accion="temple_run" with the real action name
+# carried in params["action"] — see lhassa.actionpack._temple.TEMPLE_ACTIONS
+# (the closed set temple_run is allowed to front).
 _RECURRING_ACTIONS: tuple[tuple[str, int], ...] = (
     ("distill_memory", 86400),
     ("detect_repetition", 86400),
@@ -51,8 +63,24 @@ def _resolve_config(config: "Optional[Config]") -> "Config":
     return _Config()
 
 
+def _is_matching_temple_task(row: dict, accion: str) -> bool:
+    """Whether a pending row is already the ``temple_run`` wrapper for ``accion``."""
+    if row.get("accion") != "temple_run" or not row.get("recurrence"):
+        return False
+    params = row.get("params")
+    if isinstance(params, str):
+        import json
+
+        try:
+            params = json.loads(params)
+        except (json.JSONDecodeError, ValueError):
+            return False
+    return isinstance(params, dict) and params.get("action") == accion
+
+
 async def _ensure_recurring_task(instance_id: str, accion: str, recurrence: int) -> str:
-    """Mint ``accion`` as a recurring task unless a matching pending one exists.
+    """Mint ``accion`` (via the ``temple_run`` wrapper) as a recurring task,
+    unless a matching pending one already exists.
 
     Returns ``"created"`` or ``"existing"``.
     """
@@ -62,13 +90,14 @@ async def _ensure_recurring_task(instance_id: str, accion: str, recurrence: int)
 
     pending = await _db.load_pending_tasks(instance_id)
     for row in pending:
-        if row.get("accion") == accion and row.get("recurrence"):
+        if _is_matching_temple_task(row, accion):
             return "existing"
 
     origin = Origin(trust=TrustLevel.INTERNO, actor_id="seed:maintenance")
     task_id, estado = await mint_task(
         instance_id,
-        accion,
+        "temple_run",
+        params={"action": accion, "instruction": f"{accion} maintenance pass"},
         origin=origin,
         recurrence=str(recurrence),
     )

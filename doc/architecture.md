@@ -147,6 +147,24 @@ broken topology or a failed episode write degrades to a single root-attributed
 hop and is logged, never blocks the send; the only thing that can make `deliver()`
 report failure is the send itself.
 
+### The temple (`templo`) — Lhassa's inner workshop
+
+`templo` is a department seeded directly under Lhassa (`seeds/templo.py`, `lhassa
+seed apply templo`) — distinct from `interns` (the CV pipeline's workers) and
+`personal` (the owner's own department) — that owns Lhassa's INTERNAL functions:
+docs, internal creation (tools/skills/flows authoring, the consciousness
+proposals), synchronization (repo/calendar/memory), and self-maintenance.
+`org/temple.py:delegate_internal` runs the SAME down/up shape as the delivery
+chain above, but for internal work instead of a work product: one `org-delegate`
+Episode logs Lhassa delegating an action DOWN to `templo`, the action then
+EXECUTES via `core/actions.run` with its own Episode attributed `dominio="templo"`,
+and the result travels back UP via `deliver(origin_department="templo")`. The
+`maintenance` seed's five hygiene actions now mint `temple_run` (a closed
+allowlisted wrapper, `actionpack/_temple.py`) instead of running bare, so every
+beat carries the full hop instead of an unattributed heartbeat action. The
+Telegram `/temple <instruction>` door keyword-matches a known action (LLM-free)
+or falls through to `org_run(department="templo")` for free-form internal work.
+
 ## Beyond phase 7 — product/hardening
 
 Continuing past the phase plan: a keystone `Registry` + plugin loader adopted at

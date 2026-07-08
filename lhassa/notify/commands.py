@@ -249,7 +249,7 @@ _HELP_GROUPS: list[Tuple[str, list[str]]] = [
     ("Chat & memory", ["ai", "recall", "memory", "remind", "event", "checkin", "today", "tomorrow"]),
     ("Calendars", ["calendar", "calendars"]),
     ("Decisions", ["approvals", "approve", "deny"]),
-    ("Watch & goals", ["watch", "watches", "unwatch", "goal"]),
+    ("Watch & goals", ["watch", "watches", "unwatch", "goal", "temple"]),
     ("CV", ["cvnewbase", "cvbase"]),
     ("Coding", ["code"]),
     ("System", ["status", "report", "capabilities", "tools", "skills", "org", "fleet", "version"]),
@@ -279,6 +279,7 @@ DESCRIPTIONS: dict[str, str] = {
     "watches": "List configured watch rules.",
     "unwatch": "<index> — remove a watch rule.",
     "goal": "<text> [--every daily|hourly] — schedule a recurring think.",
+    "temple": "<instruction> — hand internal work to my own inner department.",
     "cvnewbase": "Arm a base-CV replacement.",
     "cvbase": "Show the base CV on file.",
     "code": "<task> — launch a coding agent on your files (asks for your approval first).",
@@ -823,6 +824,83 @@ async def _cmd_goal(args: str, *, config=None) -> str:
     if not task_id:
         return f"Could not schedule goal: {estado}"
     return f"Goal scheduled ({cadence}): {text} [task {task_id}]"
+
+
+# Free-form instruction -> a known templo action, LLM-free (a keyword match, not
+# NLP). Anything that doesn't match falls through to org_run(department="templo")
+# — the judgment door for internal work that isn't one of these fixed actions.
+_TEMPLE_KEYWORDS: tuple[tuple[str, str], ...] = (
+    ("distill", "distill_memory"),
+    ("repetition", "detect_repetition"),
+    ("repeat", "detect_repetition"),
+    ("review tool", "review_tools"),
+    ("curate", "curate_skills"),
+    ("skill", "curate_skills"),
+    ("calendar", "calendar_sync"),
+    ("sync", "calendar_sync"),
+)
+
+
+def _match_temple_action(text: str) -> Optional[str]:
+    """The known templo action ``text`` maps to, or ``None`` — LLM-free."""
+    lowered = text.lower()
+    for keyword, action in _TEMPLE_KEYWORDS:
+        if keyword in lowered:
+            return action
+    return None
+
+
+@register_command("temple")
+async def _cmd_temple(args: str, *, config=None) -> str:
+    """``/temple <instruction>`` — hand internal work to Lhassa's own inner
+    department (templo), the down-execute-up loop (see :mod:`lhassa.org.temple`).
+
+    LLM-free where the instruction keyword-matches a known deterministic
+    action (distill/repetition/review tools/curate skills/calendar sync) — runs
+    it immediately through :func:`lhassa.org.temple.delegate_internal` and
+    returns the result. Otherwise mints an ``org_run`` task with
+    ``department="templo"`` — the judgment door, resolved on the next tick.
+    """
+    text = (args or "").strip()
+    if not text:
+        return "Usage: /temple <instruction> (e.g. /temple distill recent episodes)"
+
+    cfg = _config(config)
+    action = _match_temple_action(text)
+    if action:
+        try:
+            from lhassa.org.temple import delegate_internal
+
+            record = await delegate_internal(action, {}, config=cfg, instruction=text)
+        except Exception as exc:
+            logger.warning(f"commands: /temple failed running {action}: {exc}")
+            return _oops("run that through templo")
+        result = str(record.get("result") or "")[:300]
+        return f"templo ran {action}: {result}"
+
+    # No fixed-action match — the judgment door: org_run(department="templo").
+    try:
+        from lhassa.core import db as _db
+        from lhassa.core.dispatch import mint_task
+        from lhassa.security.trust import Origin, TrustLevel
+
+        instance_id = getattr(cfg, "instance_id", None) or "inst_personal"
+        await _db.init_db()
+        origin = Origin(trust=TrustLevel.HUMANO, actor_id="telegram")
+        task_id, estado = await mint_task(
+            instance_id,
+            "org_run",
+            objetivo=text[:200],
+            params={"goal": text, "department": "templo"},
+            origin=origin,
+        )
+    except Exception as exc:
+        logger.warning(f"commands: /temple delegate failed: {exc}")
+        return _oops("hand that to templo")
+
+    if not task_id:
+        return f"Could not hand that to templo: {estado}"
+    return f"Handed to templo: {text} [task {task_id}]"
 
 
 # ── CLI parity batch — report / memory / capabilities / tools / skills ───────

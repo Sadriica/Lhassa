@@ -232,6 +232,15 @@ def build_allowlist(repos: "set[str] | str | None" = None) -> dict[str, ActionSp
             min_trust=TrustLevel.INTERNO,
             requires_approval=False,
         ),
+        # ── templo — internal hygiene routed down-execute-up (see
+        # lhassa.org.temple / lhassa.actionpack._temple) ─────────────────────
+        # A closed, deterministic front over 5 already-$0 actions (its own
+        # TEMPLE_ACTIONS set refuses anything else); no new HITL surface.
+        "temple_run": ActionSpec(
+            objetivos=WILDCARD,
+            min_trust=TrustLevel.INTERNO,
+            requires_approval=False,
+        ),
     }
 
 
