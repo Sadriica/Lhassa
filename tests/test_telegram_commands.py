@@ -962,3 +962,84 @@ def test_ai_without_question_gives_hint(tmp_path, monkeypatch):
     asyncio.run(_init_db(tmp_path, monkeypatch))
     reply = asyncio.run(commands.dispatch("/ai", config=_cfg()))
     assert "look something up" in reply
+
+
+# ── /calendar, /calendars ──────────────────────────────────────────────────────
+
+
+def _cal_cfg(tmp_path, **over):
+    return _cfg(
+        calendars_file=str(tmp_path / "calendars.json"),
+        calendar_ics_url="",
+        **over,
+    )
+
+
+def test_calendars_empty_gives_a_hint(tmp_path):
+    cfg = _cal_cfg(tmp_path)
+    reply = asyncio.run(commands.dispatch("/calendars", config=cfg))
+    assert "No calendars configured" in reply
+
+
+def test_calendar_add_list_remove_roundtrip(tmp_path):
+    cfg = _cal_cfg(tmp_path)
+
+    added = asyncio.run(
+        commands.dispatch("/calendar add EAFIT https://example.edu/feed.ics", config=cfg)
+    )
+    assert "Calendar added: EAFIT" in added
+
+    listed = asyncio.run(commands.dispatch("/calendars", config=cfg))
+    assert "EAFIT" in listed
+    # the url is masked, not echoed in full for a long url
+    long_url = "https://example.edu/" + "x" * 60 + ".ics"
+    asyncio.run(commands.dispatch(f"/calendar add Long {long_url}", config=cfg))
+    listed2 = asyncio.run(commands.dispatch("/calendars", config=cfg))
+    assert long_url not in listed2
+
+    removed = asyncio.run(commands.dispatch("/calendar remove EAFIT", config=cfg))
+    assert "Calendar removed: EAFIT" in removed
+
+    listed3 = asyncio.run(commands.dispatch("/calendars", config=cfg))
+    assert "EAFIT" not in listed3
+
+
+def test_calendar_add_rejects_bad_url(tmp_path):
+    cfg = _cal_cfg(tmp_path)
+    reply = asyncio.run(commands.dispatch("/calendar add Bad not-a-url", config=cfg))
+    assert "Couldn't add" in reply
+
+
+def test_calendar_add_missing_args_usage_hint(tmp_path):
+    cfg = _cal_cfg(tmp_path)
+    reply = asyncio.run(commands.dispatch("/calendar add OnlyName", config=cfg))
+    assert "Usage" in reply
+
+
+def test_calendar_remove_unknown_name(tmp_path):
+    cfg = _cal_cfg(tmp_path)
+    reply = asyncio.run(commands.dispatch("/calendar remove Ghost", config=cfg))
+    assert "No calendar named" in reply
+
+
+def test_calendar_no_args_usage_hint(tmp_path):
+    cfg = _cal_cfg(tmp_path)
+    reply = asyncio.run(commands.dispatch("/calendar", config=cfg))
+    assert "Usage" in reply
+
+
+def test_calendar_unknown_subcommand(tmp_path):
+    cfg = _cal_cfg(tmp_path)
+    reply = asyncio.run(commands.dispatch("/calendar frobnicate", config=cfg))
+    assert "Unknown /calendar sub-command" in reply
+
+
+def test_calendars_shows_env_shortcut_masked(tmp_path):
+    full_url = "https://example.com/shortcut-secret-feed-" + "z" * 30 + ".ics"
+    cfg = _cfg(
+        calendars_file=str(tmp_path / "calendars.json"),
+        calendar_ics_url=full_url,
+    )
+    reply = asyncio.run(commands.dispatch("/calendars", config=cfg))
+    assert "default" in reply
+    assert full_url not in reply  # the full secret url is never echoed back

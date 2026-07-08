@@ -20,13 +20,12 @@ from __future__ import annotations
 
 import time
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 from typing import Optional
 
 import httpx
 from loguru import logger
 
-from lhassa.calendar.paths import calendar_dir
+from lhassa.calendar.paths import feed_cache_path
 
 # Windows timezone names → fixed UTC offset in hours. Extend as needed; an
 # unknown TZID degrades to UTC (logged). Only fixed-offset zones are safe to
@@ -52,10 +51,6 @@ _DEFAULT_FEED_TTL = 3600.0  # seconds — /today shouldn't re-download 1MB each 
 _BYDAY = {"MO": 0, "TU": 1, "WE": 2, "TH": 3, "FR": 4, "SA": 5, "SU": 6}
 
 
-def _cache_path() -> Path:
-    return calendar_dir() / "feed_cache.ics"
-
-
 async def fetch_feed(
     url: str, *, ttl: Optional[float] = None, config=None
 ) -> Optional[str]:
@@ -64,6 +59,9 @@ async def fetch_feed(
     Returns the ICS body, or ``None`` when no URL is given and no cache exists.
     A network error degrades to the cached copy (stale-but-useful) rather than
     nothing. Never raises.
+
+    The cache is PER-FEED — keyed by a hash of ``url`` (:func:`feed_cache_path`)
+    — so two calendars fetched in the same window never clobber each other.
     """
     url = (url or "").strip()
     if not url:
@@ -71,7 +69,7 @@ async def fetch_feed(
         # cache (e.g. from a previous configured run) must not leak in.
         return None
 
-    cache = _cache_path()
+    cache = feed_cache_path(url)
     if ttl is None:
         ttl = float(getattr(config, "calendar_feed_ttl", _DEFAULT_FEED_TTL) or _DEFAULT_FEED_TTL)
 
@@ -294,22 +292,47 @@ def parse_events(ics_text: str, *, window_start: datetime, window_end: datetime)
 
 
 async def upcoming(instance_id: str, *, hours: int = 36, config=None) -> list[dict]:
-    """The owner's real calendar events over [now, now+hours]. $0, never raises.
+    """Every event over [now, now+hours] from ALL configured calendars.
 
-    The single call the personal agenda uses. Unconfigured feed / any failure →
-    ``[]`` (the agenda simply shows tasks only).
+    Iterates :func:`lhassa.calendar.store.all_feeds` (the named store PLUS the
+    ``LHASSA_CALENDAR_ICS_URL`` shortcut merged in as ``"default"``), fetching +
+    parsing each with its own PER-FEED cache (see :func:`fetch_feed`) and tagging
+    every event with ``"calendar": <name>``. Events from every feed are merged and
+    sorted by start. A single failing/unreachable feed is SKIPPED — the others
+    still show. $0, never raises; no feeds configured → ``[]``.
     """
     try:
         if config is None:
             from lhassa.config import Config
 
             config = Config
-        url = getattr(config, "calendar_ics_url", "") or ""
-        now = datetime.now(timezone.utc)
-        ics = await fetch_feed(url, config=config)
-        if not ics:
+
+        from lhassa.calendar import store as _store
+
+        feeds = _store.all_feeds(config)
+        if not feeds:
             return []
-        return parse_events(ics, window_start=now, window_end=now + timedelta(hours=hours))
+
+        now = datetime.now(timezone.utc)
+        window_end = now + timedelta(hours=hours)
+        events: list[dict] = []
+        for feed in feeds:
+            name = feed.get("name") or "calendar"
+            url = feed.get("url") or ""
+            try:
+                ics = await fetch_feed(url, config=config)
+                if not ics:
+                    continue
+                for ev in parse_events(ics, window_start=now, window_end=window_end):
+                    ev = dict(ev)
+                    ev["calendar"] = name
+                    events.append(ev)
+            except Exception as exc:  # a single bad feed must not sink the rest
+                logger.debug("calendar: feed {!r} failed — {}", name, exc)
+                continue
+
+        events.sort(key=lambda e: e["start"])
+        return events
     except Exception as exc:
         logger.debug("calendar: upcoming failed — {}", exc)
         return []

@@ -87,8 +87,9 @@ def test_malformed_never_raises():
 
 @pytest.mark.asyncio
 async def test_fetch_serves_fresh_cache_without_network(tmp_path, monkeypatch):
-    monkeypatch.setattr(feed, "calendar_dir", lambda: tmp_path)
-    (tmp_path / "feed_cache.ics").write_text("BEGIN:VCALENDAR\nEND:VCALENDAR")
+    cache = tmp_path / "feed_cache.ics"
+    monkeypatch.setattr(feed, "feed_cache_path", lambda url: cache)
+    cache.write_text("BEGIN:VCALENDAR\nEND:VCALENDAR")
 
     def _boom(*a, **k):
         raise AssertionError("must not hit the network when cache is fresh")
@@ -100,8 +101,8 @@ async def test_fetch_serves_fresh_cache_without_network(tmp_path, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_fetch_falls_back_to_stale_cache_on_error(tmp_path, monkeypatch):
-    monkeypatch.setattr(feed, "calendar_dir", lambda: tmp_path)
     cache = tmp_path / "feed_cache.ics"
+    monkeypatch.setattr(feed, "feed_cache_path", lambda url: cache)
     cache.write_text("STALE")
     import os
     old = __import__("time").time() - 10000
@@ -120,5 +121,147 @@ async def test_fetch_falls_back_to_stale_cache_on_error(tmp_path, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_unconfigured_url_returns_none(tmp_path, monkeypatch):
-    monkeypatch.setattr(feed, "calendar_dir", lambda: tmp_path)
+    monkeypatch.setattr(feed, "feed_cache_path", lambda url: tmp_path / "feed_cache.ics")
     assert await feed.fetch_feed("", ttl=1) is None
+
+
+# ── per-feed cache path ────────────────────────────────────────────────────────
+
+
+def test_feed_cache_path_differs_per_url(tmp_path, monkeypatch):
+    from lhassa.calendar import paths as _paths
+
+    monkeypatch.setattr(_paths, "calendar_dir", lambda: tmp_path)
+    p1 = _paths.feed_cache_path("https://example.com/a.ics")
+    p2 = _paths.feed_cache_path("https://example.com/b.ics")
+    assert p1 != p2
+    assert p1.parent == tmp_path == p2.parent
+
+
+def test_feed_cache_path_stable_for_same_url(tmp_path, monkeypatch):
+    from lhassa.calendar import paths as _paths
+
+    monkeypatch.setattr(_paths, "calendar_dir", lambda: tmp_path)
+    assert _paths.feed_cache_path("https://example.com/a.ics") == _paths.feed_cache_path(
+        "https://example.com/a.ics"
+    )
+
+
+# ── upcoming() across MULTIPLE named calendars ────────────────────────────────
+
+
+def _ev(summary: str, start: str) -> str:
+    return f"BEGIN:VEVENT\nSUMMARY:{summary}\nDTSTART:{start}Z\nEND:VEVENT"
+
+
+@pytest.mark.asyncio
+async def test_upcoming_tags_events_with_their_calendar_name(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+
+    from lhassa.calendar import store as _store
+
+    cfg = SimpleNamespace(
+        calendars_file=str(tmp_path / "calendars.json"),
+        calendar_ics_url="",
+        calendar_feed_ttl=3600.0,
+    )
+    _store.add_calendar("EAFIT", "https://example.edu/eafit.ics", config=cfg)
+    _store.add_calendar("Personal", "https://example.com/personal.ics", config=cfg)
+
+    fake_bodies = {
+        "https://example.edu/eafit.ics": _cal(_ev("Cálculo III", "20260709T150000")),
+        "https://example.com/personal.ics": _cal(_ev("Team sync", "20260709T190000")),
+    }
+
+    async def _fake_fetch(url, *, ttl=None, config=None):
+        return fake_bodies.get(url)
+
+    monkeypatch.setattr(feed, "fetch_feed", _fake_fetch)
+
+    events = await feed.upcoming("inst_x", hours=48, config=cfg)
+    by_summary = {e["summary"]: e["calendar"] for e in events}
+    assert by_summary == {"Cálculo III": "EAFIT", "Team sync": "Personal"}
+    # sorted by start
+    assert [e["summary"] for e in events] == ["Cálculo III", "Team sync"]
+
+
+@pytest.mark.asyncio
+async def test_upcoming_skips_a_failing_feed_others_still_show(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+
+    from lhassa.calendar import store as _store
+
+    cfg = SimpleNamespace(
+        calendars_file=str(tmp_path / "calendars.json"),
+        calendar_ics_url="",
+        calendar_feed_ttl=3600.0,
+    )
+    _store.add_calendar("Broken", "https://example.edu/broken.ics", config=cfg)
+    _store.add_calendar("Good", "https://example.com/good.ics", config=cfg)
+
+    async def _fake_fetch(url, *, ttl=None, config=None):
+        if "broken" in url:
+            raise RuntimeError("network down")
+        return _cal(_ev("Standup", "20260709T130000"))
+
+    monkeypatch.setattr(feed, "fetch_feed", _fake_fetch)
+
+    events = await feed.upcoming("inst_x", hours=48, config=cfg)
+    assert len(events) == 1
+    assert events[0]["calendar"] == "Good"
+
+
+@pytest.mark.asyncio
+async def test_upcoming_no_feeds_configured_is_empty(tmp_path):
+    from types import SimpleNamespace
+
+    cfg = SimpleNamespace(
+        calendars_file=str(tmp_path / "calendars.json"),
+        calendar_ics_url="",
+        calendar_feed_ttl=3600.0,
+    )
+    assert await feed.upcoming("inst_x", hours=48, config=cfg) == []
+
+
+@pytest.mark.asyncio
+async def test_upcoming_per_feed_caches_dont_collide(tmp_path, monkeypatch):
+    """Two feeds fetched for real (through fetch_feed, not stubbed) must write to
+    DIFFERENT cache files — proving the hash-keyed cache path actually varies."""
+    from lhassa.calendar import paths as _paths
+
+    monkeypatch.setattr(_paths, "calendar_dir", lambda: tmp_path)
+
+    class _Resp:
+        status_code = 200
+
+        def __init__(self, text):
+            self.text = text
+
+    class _Client:
+        def __init__(self, *a, **k):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return False
+
+        async def get(self, url):
+            body = {
+                "https://example.edu/a.ics": _cal(_ev("A", "20260709T100000")),
+                "https://example.com/b.ics": _cal(_ev("B", "20260709T110000")),
+            }[url]
+            return _Resp(body)
+
+    monkeypatch.setattr(feed.httpx, "AsyncClient", _Client)
+
+    await feed.fetch_feed("https://example.edu/a.ics", ttl=0)
+    await feed.fetch_feed("https://example.com/b.ics", ttl=0)
+
+    cache_a = _paths.feed_cache_path("https://example.edu/a.ics")
+    cache_b = _paths.feed_cache_path("https://example.com/b.ics")
+    assert cache_a != cache_b
+    assert cache_a.exists() and cache_b.exists()
+    assert "A" in cache_a.read_text()
+    assert "B" in cache_b.read_text()
