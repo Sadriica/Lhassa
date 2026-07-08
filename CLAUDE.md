@@ -317,6 +317,25 @@ kind, no self-edge) before it writes. `/api/org/relationships` (+ `/kinds`,
 overlay (legend + toggles) and the inspector adds/removes them. Multi-person approval:
 proposer ≠ approver for high-risk.
 
+**The temple (`templo`) — Lhassa's own inner department.** Distinct from `interns`
+(CV workers) and `personal` (the owner's own department): `templo` is a DIRECT
+child of Lhassa, seeded by `seeds/templo.py` (`lhassa seed apply templo`), that owns
+Lhassa's INTERNAL functions — docs, internal creation (tools/skills/flows authoring,
+the consciousness proposals), synchronization (repo/calendar/memory), and
+self-maintenance. `org/temple.py:delegate_internal(action, params, config, instruction)`
+is the down-execute-up loop: it logs ONE `org-delegate` Episode delegating the action
+DOWN to `templo` (mirrors `org/delegate.py`), EXECUTES it via `core/actions.run` with
+its own Episode attributed `dominio="templo"`, then delivers the result UP via
+`org/deliver.py:deliver(origin_department="templo", ...)` — Lhassa is the sender of
+record. A broken topology degrades to a direct run; the whole loop never raises. The
+`maintenance` seed's five hygiene actions (`distill_memory`/`detect_repetition`/
+`review_tools`/`curate_skills`/`calendar_sync`) are minted as `temple_run` (a closed,
+allowlisted wrapper, `actionpack/_temple.py`) instead of running bare, so every beat
+now carries the full down-execute-up hop and `dominio="templo"` attribution — what
+each action DOES is unchanged. The Telegram `/temple <instruction>` door
+keyword-matches a known deterministic action (LLM-free) or falls through to
+`org_run(department="templo")` — the judgment door for free-form internal work.
+
 ## Work-flows (`flows/`)
 
 `flows/model.py` (`Flow`/`FlowNode`/`FlowEdge`, a validated DAG — closed `NodeKind`:

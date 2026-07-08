@@ -50,6 +50,7 @@ def register_all() -> None:
         _script,
         _selfimprove,
         _system,
+        _temple,
     )
 
     # Defensive guard: skip any action that is already in the registry.
@@ -107,6 +108,10 @@ def register_all() -> None:
 
     # ── Skills curator (deterministic lifecycle sweep) ─────────────────────────
     _reg("curate_skills", _curate.curate_skills)
+
+    # ── Templo — internal hygiene work routed down-execute-up through the
+    # templo department (see lhassa.org.temple / lhassa.seeds.templo) ────────
+    _reg("temple_run", _temple.temple_run)
 
     # ── PTC — Programmatic Tool Calling (script-over-RPC in quarantine) ────────
     _reg("run_script", _script.run_script)
