@@ -213,6 +213,13 @@ def build_allowlist(repos: "set[str] | str | None" = None) -> dict[str, ActionSp
             min_trust=TrustLevel.INTERNO,
             requires_approval=False,
         ),
+        # ── Master calendar reconcile — deterministic $0 diff + a delivered
+        # .ics per unsynced event; never writes to any calendar directly.
+        "calendar_sync": ActionSpec(
+            objetivos=WILDCARD,
+            min_trust=TrustLevel.INTERNO,
+            requires_approval=False,
+        ),
         # ── Etapa 3 — real delegation into the org hierarchy ─────────────────
         # ``requires_approval`` stays False here: org_run's OWN high-risk gate
         # lives in params (see actionpack._org.org_run / org.coordinator.run_goal)
