@@ -1034,6 +1034,34 @@ def test_calendar_unknown_subcommand(tmp_path):
     assert "Unknown /calendar sub-command" in reply
 
 
+def test_calendar_view_no_when_usage_hint(tmp_path):
+    cfg = _cal_cfg(tmp_path)
+    reply = asyncio.run(commands.dispatch("/calendar view", config=cfg))
+    assert "Usage" in reply
+
+
+def test_calendar_view_unparseable_when(tmp_path):
+    cfg = _cal_cfg(tmp_path)
+    reply = asyncio.run(commands.dispatch("/calendar view blorp", config=cfg))
+    assert "Couldn't work out a time reference" in reply
+
+
+def test_calendar_view_forces_a_deterministic_answer(tmp_path, monkeypatch):
+    """``/calendar view friday`` answers even though a bare 'friday' has no
+    calendar keyword — the command itself is the intent signal."""
+    cfg = _cal_cfg(tmp_path)
+
+    from lhassa.calendar import feed as feed_mod
+
+    async def _fake_upcoming(instance_id, *, hours=36, config=None):
+        return []
+
+    monkeypatch.setattr(feed_mod, "upcoming", _fake_upcoming)
+
+    reply = asyncio.run(commands.dispatch("/calendar view friday", config=cfg))
+    assert reply == "Friday you don't have anything on your calendar."
+
+
 def test_calendars_shows_env_shortcut_masked(tmp_path):
     full_url = "https://example.com/shortcut-secret-feed-" + "z" * 30 + ".ics"
     cfg = _cfg(

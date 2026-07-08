@@ -36,6 +36,17 @@ network is down), parsed with no model. Recurring weekly classes, Windows
 timezones (e.g. `SA Pacific Standard Time` = Bogotá) and all-day events are
 handled; exotic monthly/yearly recurrences are best-effort.
 
+### Asking about it in chat
+
+Once a feed is connected, just ask — "¿qué hay en mi calendario el viernes?" /
+"what do I have tomorrow?" is answered **deterministically, $0, no model, no
+web search** by `lhassa/calendar/query.py`: a date parse (hoy/mañana/pasado
+mañana, a weekday name, esta semana/este fin de semana/la próxima semana, and
+their English equivalents) + an event lookup over `calendar.feed.upcoming` +
+a grouped template reply, grounded ONLY in your own events. It short-circuits
+in Telegram before any model or the research bridge could run (see
+`doc/telegram.md`), and `/calendar view <when>` triggers it explicitly.
+
 ### Multiple calendars
 
 `LHASSA_CALENDAR_ICS_URL` above is a convenience shortcut for the common case of

@@ -252,6 +252,47 @@ A time-less "acuérdame que…" is NOT a reminder — it falls through to the
 `remember:`/fact lanes (a fact, not an appointment); the ambiguity is
 resolved by the presence of a time phrase.
 
+### "What's on my calendar Friday?" — deterministic $0 calendar queries
+
+A message asking about the calendar is answered straight from the calendar
+seam (`lhassa/calendar/query.py`) — a date parse + an event lookup + a
+template reply. **No model, no web search, $0**, and it runs BEFORE the
+tool-less brain think (and before the `[[research: …]]` bridge could ever
+fire), so a question like "what's on my calendar Friday?" can no longer be
+mistaken for a live-data lookup:
+
+```
+> ¿qué hay en mi calendario el viernes?
+El viernes 11 tienes 3 cosas:
+📅 09:00 Cálculo III · Bloque 19
+📅 13:30 Vento Datos · Sala 19-527
+📅 18:00 Reunión
+```
+
+`is_calendar_query()` requires either an explicit calendar keyword
+(calendario/calendar/agenda/evento(s)/schedule) or a "have"/"tengo"/"hay"
+question that ALSO carries a time reference `parse_window()` can read — so
+"¿qué hay de nuevo?" or "noticias de hoy" are never swallowed; they still
+reach the normal chat path. `parse_window()` understands Spanish and English:
+hoy/today, mañana/tomorrow, pasado mañana/day after tomorrow, a weekday name
+(the NEXT occurrence), esta semana/this week, este fin de semana/this
+weekend, la próxima semana/next week — always resolved against LOCAL-day
+boundaries. The reply groups events by time, tags the source when more than
+one calendar is configured, and matches the question's language (Spanish in →
+Spanish out). Grounded ONLY in the owner's own calendar data (`calendar.feed.
+upcoming`) — never invents an event. An empty window gets a plain "nothing
+scheduled" reply, still $0.
+
+Every calendar-query turn logs a `despertar_por="telegram"` episode
+(`accion="calendar_view"`, `costo_usd=0.0`) — same audit trail as any other
+turn, at no token cost. Force it explicitly (bypassing the chat heuristics
+entirely) with `/calendar view <when>`:
+
+```
+> /calendar view friday
+Friday you don't have anything on your calendar.
+```
+
 #### Calendar events — `.ics`, one tap, any calendar
 
 `/remind` additionally generates a downloadable `.ics` for the same event and

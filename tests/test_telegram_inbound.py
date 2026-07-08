@@ -8,6 +8,7 @@ brain think runs (``provider.complete`` called) and that the 26-tool agent
 """
 
 import asyncio
+from datetime import timedelta
 from types import SimpleNamespace
 
 from lhassa.llm.provider import ProviderNotConfigured
@@ -1088,3 +1089,104 @@ def test_natural_acuerdame_without_time_falls_through(monkeypatch):
     asyncio.run(telegram_inbound.poll_once(_cfg(), offset=None))
     assert called == []
     assert sent  # answered by a later path (remember hook or the brain)
+
+
+# ── Deterministic calendar-query routing hook ────────────────────────────────
+
+
+def test_calendar_query_answered_without_provider(monkeypatch):
+    """A calendar question is answered from lhassa.calendar.query — deterministic,
+    $0 — and NEVER reaches the tool-less brain think (no provider.complete call).
+    An episode is logged through the calendar seam."""
+    payload = {
+        "ok": True,
+        "result": [
+            {
+                "update_id": 400,
+                "message": {
+                    "chat": {"id": 123},
+                    "text": "¿qué hay en mi calendario el viernes?",
+                },
+            }
+        ],
+    }
+    monkeypatch.setattr(
+        telegram_inbound.httpx, "AsyncClient", _client_returning(payload)
+    )
+    provider = _patch_brain(monkeypatch)
+    sent = _patch_send(monkeypatch)
+
+    from lhassa.calendar import feed as feed_mod
+    from lhassa.calendar import query as query_mod
+    from lhassa.core import episode as episode_mod
+
+    fixed_window = query_mod.parse_window("el viernes")
+    assert fixed_window is not None
+    start, _end, _label = fixed_window
+
+    async def _fake_upcoming(instance_id, *, hours=36, config=None):
+        return [
+            {
+                "summary": "Cálculo III",
+                "start": start + timedelta(hours=9),
+                "end": start + timedelta(hours=10),
+                "location": "Bloque 19",
+                "all_day": False,
+                "calendar": "default",
+            }
+        ]
+
+    monkeypatch.setattr(feed_mod, "upcoming", _fake_upcoming)
+
+    logged_episodes = []
+
+    async def _capture_append(self):
+        logged_episodes.append(self)
+        return "ep"
+
+    monkeypatch.setattr(episode_mod.Episode, "append", _capture_append)
+
+    asyncio.run(telegram_inbound.poll_once(_cfg(), offset=None))
+
+    assert provider.calls == []  # never reached the tool-less think
+    assert sent and sent[0].startswith("El viernes")
+    assert "Cálculo III" in sent[0]
+
+    assert len(logged_episodes) == 1
+    ep = logged_episodes[0]
+    assert ep.despertar_por == "telegram"
+    assert ep.decision.startswith("calendar-query:")
+    assert ep.accion == "calendar_view"
+    assert ep.costo_usd == 0.0
+    assert ep.resultado == sent[0]
+
+
+def test_calendar_query_falls_through_for_normal_message(monkeypatch):
+    """A normal message (no calendar keyword, no time reference) is unaffected —
+    it still reaches the tool-less brain think exactly as before."""
+    payload = {
+        "ok": True,
+        "result": [
+            {
+                "update_id": 401,
+                "message": {"chat": {"id": 123}, "text": "cómo estás?"},
+            }
+        ],
+    }
+    monkeypatch.setattr(
+        telegram_inbound.httpx, "AsyncClient", _client_returning(payload)
+    )
+    provider = _patch_brain(monkeypatch, reply="Muy bien, gracias.")
+    sent = _patch_send(monkeypatch)
+
+    from lhassa.calendar import feed as feed_mod
+
+    async def _boom(*a, **k):
+        raise AssertionError("a non-calendar message must never touch the feed")
+
+    monkeypatch.setattr(feed_mod, "upcoming", _boom)
+
+    asyncio.run(telegram_inbound.poll_once(_cfg(), offset=None))
+
+    assert len(provider.calls) == 1
+    assert sent == ["Muy bien, gracias."]
