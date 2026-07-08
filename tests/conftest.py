@@ -11,6 +11,11 @@ import json
 
 os.environ.setdefault("LHASSA_NO_RUNTIME_OVERRIDES", "1")
 os.environ.setdefault("LHASSA_QUARANTINE_ISOLATION", "none")
+# Neutralize any real external endpoints from the owner's .env: config.py's
+# load_dotenv uses override=False, so a value set here BEFORE the lhassa import
+# wins. The calendar feed URL especially must be blank — otherwise the agenda
+# would fetch the owner's real calendar over the network during unit tests.
+os.environ["LHASSA_CALENDAR_ICS_URL"] = ""
 
 import httpx  # noqa: E402
 import pytest  # noqa: E402
