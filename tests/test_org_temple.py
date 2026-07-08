@@ -28,13 +28,26 @@ from lhassa.org.topology import BrainNode, Topology
 
 
 def _topology() -> Topology:
-    """lhassa (root admin) → templo (a leaf department)."""
+    """lhassa (root admin) → templo (a leaf department, no workers)."""
     return Topology(
         [
             BrainNode(id="lhassa", role="administrator"),
             BrainNode(id="templo", role="internal-operations", department="templo", parent="lhassa"),
         ]
     )
+
+
+def _topology_with_workers() -> Topology:
+    """lhassa → templo → the five worker brains (the "monks")."""
+    nodes = [
+        BrainNode(id="lhassa", role="administrator"),
+        BrainNode(id="templo", role="internal-operations", department="templo", parent="lhassa"),
+    ]
+    for worker_id in temple.TEMPLE_WORKERS:
+        nodes.append(
+            BrainNode(id=worker_id, role="monk", department="templo", parent="templo")
+        )
+    return Topology(nodes)
 
 
 def _cfg(tmp_path):
@@ -210,3 +223,142 @@ async def test_delegate_internal_unknown_action(tmp_path, monkeypatch):
 
     assert record["ok"] is True
     assert "unknown action" in record["result"]
+
+
+# ── worker resolution (the monks) ────────────────────────────────────────────────
+
+
+def test_resolve_worker_maps_each_maintenance_action_to_its_monk():
+    topo = _topology_with_workers()
+    assert temple.resolve_worker("curate_skills", topo) == "guardian"
+    assert temple.resolve_worker("review_tools", topo) == "guardian"
+    assert temple.resolve_worker("distill_memory", topo) == "guardian"
+    assert temple.resolve_worker("detect_repetition", topo) == "oraculo"
+    assert temple.resolve_worker("calendar_sync", topo) == "sincronizador"
+
+
+def test_resolve_worker_falls_back_to_templo_when_unmapped():
+    topo = _topology_with_workers()
+    assert temple.resolve_worker("some_unmapped_action", topo) == "templo"
+
+
+def test_resolve_worker_falls_back_to_templo_when_worker_missing_from_topology():
+    # Mapped to "guardian" in ACTION_OWNERS, but this topology has no workers.
+    topo = _topology()
+    assert temple.resolve_worker("curate_skills", topo) == "templo"
+
+
+# ── the full chain: curate_skills routes through its owning monk (guardian) ─────
+
+
+@pytest.mark.asyncio
+async def test_delegate_internal_attributes_curate_skills_to_guardian(tmp_path, monkeypatch):
+    monkeypatch.setattr(db, "DB_PATH", tmp_path / "brain.db")
+    await db.init_db()
+
+    from lhassa.org import topology as topo_mod
+
+    monkeypatch.setattr(topo_mod, "load_topology", lambda config=None: _topology_with_workers())
+
+    from lhassa.notify import dispatch as notify_dispatch
+
+    async def fake_notify(text, *, level="info", config=None, **kwargs):
+        return True
+
+    monkeypatch.setattr(notify_dispatch, "notify", fake_notify)
+
+    # Mock the real curate_skills action — nothing should actually spend/touch disk.
+    core_actions.register_action(
+        "curate_skills", lambda params: "3 stale skills archived", override=True
+    )
+
+    cfg = _cfg(tmp_path)
+    record = await temple.delegate_internal("curate_skills", {}, config=cfg)
+
+    assert record["ok"] is True
+    assert record["result"] == "3 stale skills archived"
+
+    # DOWN hop — the path names the owning monk.
+    down = await _episodes("inst_personal", "org-delegate")
+    assert len(down) == 1
+    assert down[0]["accion"] == "delegate:lhassa→templo→guardian"
+    assert "down to guardian" in down[0]["decision"]
+
+    # EXECUTE hop — attributed to the monk, reporting up through templo.
+    exec_eps = await _episodes("inst_personal", "templo-execute")
+    assert len(exec_eps) == 1
+    assert exec_eps[0]["dominio"] == "guardian"
+    assert exec_eps[0]["accion"] == "curate_skills"
+    assert "3 stale skills archived" in exec_eps[0]["resultado"]
+    assert "reports ↑ templo" in exec_eps[0]["resultado"]
+
+    # UP hop — walks guardian → templo → lhassa, one episode per brain.
+    up = await _episodes("inst_personal", "org-deliver")
+    dominios = [e["dominio"] for e in up]
+    # One hop per brain on the chain (guardian produces, templo forwards,
+    # lhassa receives) plus lhassa's own final send-confirmation episode.
+    assert dominios == ["guardian", "templo", "lhassa", "lhassa"]
+
+
+@pytest.mark.asyncio
+async def test_delegate_internal_unmapped_action_still_attributes_to_templo(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setattr(db, "DB_PATH", tmp_path / "brain.db")
+    await db.init_db()
+
+    from lhassa.org import topology as topo_mod
+
+    monkeypatch.setattr(topo_mod, "load_topology", lambda config=None: _topology_with_workers())
+
+    from lhassa.notify import dispatch as notify_dispatch
+
+    async def fake_notify(text, *, level="info", config=None, **kwargs):
+        return True
+
+    monkeypatch.setattr(notify_dispatch, "notify", fake_notify)
+
+    cfg = _cfg(tmp_path)
+    record = await temple.delegate_internal("temple_test_action", {}, config=cfg)
+
+    assert record["ok"] is True
+    exec_eps = await _episodes("inst_personal", "templo-execute")
+    assert exec_eps[-1]["dominio"] == "templo"
+
+    up = await _episodes("inst_personal", "org-deliver")
+    assert up[0]["dominio"] == "templo"
+
+
+@pytest.mark.asyncio
+async def test_delegate_internal_degrades_to_templo_when_workers_missing(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setattr(db, "DB_PATH", tmp_path / "brain.db")
+    await db.init_db()
+
+    from lhassa.org import topology as topo_mod
+
+    # A topology WITHOUT the worker brains — curate_skills is mapped to
+    # "guardian" but it does not exist here, so it must degrade to templo.
+    monkeypatch.setattr(topo_mod, "load_topology", lambda config=None: _topology())
+
+    from lhassa.notify import dispatch as notify_dispatch
+
+    async def fake_notify(text, *, level="info", config=None, **kwargs):
+        return True
+
+    monkeypatch.setattr(notify_dispatch, "notify", fake_notify)
+
+    core_actions.register_action(
+        "curate_skills", lambda params: "3 stale skills archived", override=True
+    )
+
+    cfg = _cfg(tmp_path)
+    record = await temple.delegate_internal("curate_skills", {}, config=cfg)
+
+    assert record["ok"] is True
+    exec_eps = await _episodes("inst_personal", "templo-execute")
+    assert exec_eps[-1]["dominio"] == "templo"  # degraded, still executed
+
+    up = await _episodes("inst_personal", "org-deliver")
+    assert up[0]["dominio"] == "templo"
