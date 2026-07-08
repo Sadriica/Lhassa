@@ -348,6 +348,25 @@ def test_describe_seed_cache():
     assert "nothing further to mint" in desc["detail"]
 
 
+def test_describe_mint_route():
+    desc = approval.describe(
+        {
+            "tipo": "mint_route",
+            "payload": {
+                "accion": "mint_route",
+                "capability": "calendar_view",
+                "count": 7,
+                "total_cost_usd": 0.03,
+            },
+        }
+    )
+    assert desc["title"] == "Route calendar_view questions to the $0 handler"
+    assert "×7" in desc["detail"]
+    assert "going to a think/research" in desc["detail"]
+    assert "$0.03" in desc["detail"]
+    assert "approving handles them free" in desc["detail"]
+
+
 def test_describe_tool_graduation():
     desc = approval.describe(
         {"tipo": "tool_graduation", "payload": {"accion": "tool_graduation", "tool": "csv_summarize", "branch": "cand/1"}}

@@ -38,12 +38,13 @@ async def brain(tmp_path, monkeypatch):
     return db
 
 
-async def _seed_episode(db, *, instance_id, despertar_por, accion, cost, when=None):
+async def _seed_episode(db, *, instance_id, despertar_por, accion, cost, when=None, decision=""):
     ep = _FakeEpisode(
         id=db._new_id("ep"),
         instance_id=instance_id,
         despertar_por=despertar_por,
         accion=accion,
+        decision=decision,
         costo_usd=cost,
         creado_en=when or db._now(),
     )
@@ -434,3 +435,101 @@ def test_recommend_intervention_never_raises_on_malformed_finding():
     rec = recommend_intervention({})
     assert rec["kind"] == "tool"
     assert "rationale" in rec and "payload" in rec
+
+
+# ── detect_routable: the self-routing consciousness ──────────────────────────
+
+
+_ROUTABLE_DECISION = "think: provider=x model=y [routable:calendar_view]"
+
+
+@pytest.mark.asyncio
+async def test_detect_routable_finds_tagged_capability(brain):
+    from lhassa.agents.repetition import detect_routable
+
+    for _ in range(6):
+        await _seed_episode(
+            brain, instance_id="inst_test", despertar_por="telegram", accion="responder",
+            cost=0.01, decision=_ROUTABLE_DECISION,
+        )
+
+    findings = await detect_routable("inst_test", days=7, min_count=5)
+    assert len(findings) == 1
+    f = findings[0]
+    assert f["capability"] == "calendar_view"
+    assert f["count"] == 6
+    assert f["total_cost_usd"] == pytest.approx(0.06)
+    assert f["pattern"] == "routable::calendar_view"
+
+
+@pytest.mark.asyncio
+async def test_detect_routable_below_min_count_is_not_reported(brain):
+    from lhassa.agents.repetition import detect_routable
+
+    for _ in range(2):
+        await _seed_episode(
+            brain, instance_id="inst_test", despertar_por="telegram", accion="responder",
+            cost=0.0, decision=_ROUTABLE_DECISION,
+        )
+
+    findings = await detect_routable("inst_test", days=7, min_count=5)
+    assert findings == []
+
+
+@pytest.mark.asyncio
+async def test_detect_routable_ignores_untagged_episodes(brain):
+    from lhassa.agents.repetition import detect_routable
+
+    for _ in range(6):
+        await _seed_episode(
+            brain, instance_id="inst_test", despertar_por="telegram", accion="responder",
+            cost=0.01,
+        )
+    findings = await detect_routable("inst_test", days=7, min_count=5)
+    assert findings == []
+
+
+@pytest.mark.asyncio
+async def test_detect_routable_respects_denied_patterns(brain):
+    from lhassa.agents.repetition import detect_routable
+
+    for _ in range(6):
+        await _seed_episode(
+            brain, instance_id="inst_test", despertar_por="telegram", accion="responder",
+            cost=0.01, decision=_ROUTABLE_DECISION,
+        )
+
+    ap_id = await brain.add_approval(
+        "inst_test", "mint_route",
+        {"accion": "mint_route", "pattern": "routable::calendar_view"},
+    )
+    await brain.resolve_approval("inst_test", ap_id, "rechazada")
+
+    findings = await detect_routable("inst_test", days=7, min_count=5)
+    assert findings == []
+
+
+@pytest.mark.asyncio
+async def test_detect_routable_never_raises_on_missing_table(brain, monkeypatch):
+    import lhassa.core.db as db
+    from lhassa.agents.repetition import detect_routable
+
+    monkeypatch.setattr(db, "DB_PATH", "/nonexistent/path/does-not-exist.db")
+    findings = await detect_routable("inst_test", days=7, min_count=5)
+    assert findings == []
+
+
+def test_recommend_intervention_picks_route_for_a_routable_finding():
+    from lhassa.agents.repetition import recommend_intervention
+
+    finding = {
+        "pattern": "routable::calendar_view",
+        "capability": "calendar_view",
+        "count": 7,
+        "total_cost_usd": 0.03,
+    }
+    rec = recommend_intervention(finding)
+    assert rec["kind"] == "route"
+    assert rec["payload"]["capability"] == "calendar_view"
+    assert "calendar_view" in rec["rationale"]
+    assert "×7" in rec["rationale"]

@@ -141,7 +141,35 @@ async def detect_repetition(params: dict) -> str:
             await _db.set_watch_state(instance_id, key, "1")
             proposed += 1
 
-        total = len(findings) + len(chains) + len(recurring)
+        # Fourth signal: the self-routing consciousness — a message class a
+        # deterministic capability already recognises (see
+        # lhassa.notify.capabilities) but that still paid for a think/research
+        # because no route is on yet. Same once-only dedupe; approving turns
+        # DATA on (adds a route-table entry), never generates code.
+        routable = await _repetition.detect_routable(instance_id, days=days)
+        for f in routable:
+            key = _SEEN_PREFIX + f["pattern"]
+            if await _db.get_watch_state(instance_id, key):
+                continue
+
+            rec = _repetition.recommend_intervention(f)
+            if rec["kind"] != "route":
+                continue  # a malformed finding degraded elsewhere — skip it
+
+            payload = dict(rec["payload"])
+            payload["accion"] = "mint_route"
+            payload["rationale"] = rec["rationale"]
+            title = f"Route {f['capability']} questions to the $0 handler"
+            payload["title"] = title
+
+            await _approval.request_approval(
+                instance_id, tipo="mint_route", payload=payload
+            )
+            await _notify(f"{title} — {rec['rationale']}", level="info")
+            await _db.set_watch_state(instance_id, key, "1")
+            proposed += 1
+
+        total = len(findings) + len(chains) + len(recurring) + len(routable)
         if not total:
             return "detect_repetition: no repeated patterns found"
         return (

@@ -587,6 +587,17 @@ async def _resolve_from_chat(args: str, *, config, approved: bool) -> str:
         await _approval.resolve(
             instance_id, ap_id, approved=approved, by_actor="telegram"
         )
+
+        # A resolved mint_route approval TURNS ON that capability's route —
+        # same approval->apply connection as the inline-keyboard callback path
+        # in lhassa.notify.telegram_inbound._handle_callback_query.
+        if approved and existing.get("tipo") == "mint_route":
+            from lhassa.notify import capabilities as _capabilities
+
+            _capabilities.apply_approved_route(
+                existing.get("payload") or {}, config=cfg
+            )
+
         return f"Approval {ap_id} {'approved' if approved else 'denied'}."
     except Exception as exc:
         logger.warning(f"commands: /{verb} {ap_id} failed: {exc}")
