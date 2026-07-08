@@ -310,6 +310,28 @@ owner, so it gets a per-brain ledger entry (`kind="calendar_event"`) for free.
 Reading the owner's OWN calendar back (subscribing to its `.ics` feed so
 `/today` can fold in real meetings) is a documented next step, not built yet.
 
+#### Follow-ups keep the thread
+
+After a calendar (or other deterministic-capability) answer, the chat
+remembers what it just answered for a short while (~15 min, process-memory,
+`lhassa/notify/telegram_inbound.py`'s `_CHAT_TOPIC`). A connector-led
+follow-up — "y el sábado?", "¿y en marzo?", "and Saturday?", "what about
+Monday?" — is recognised as a CONTINUATION of that topic
+(`lhassa.notify.capabilities.is_followup`, pure regex/word-list, $0) and is
+answered straight from the SAME capability again, never a web search:
+
+```
+> ¿qué hay en mi calendario el viernes?
+El viernes 11 tienes 3 cosas: ...
+> Y el sabado?
+El sábado 12 no tienes nada en tu calendario.
+```
+
+No provider call happens on this path — the follow-up's own time reference
+is re-parsed directly against the calendar feed. A connector-led message that
+turns out NOT to continue the topic (no parseable date in it, say) just falls
+through to the normal chat path unchanged, same as if no topic were active.
+
 ---
 
 ## Free-text chat

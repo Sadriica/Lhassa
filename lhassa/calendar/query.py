@@ -270,15 +270,36 @@ async def answer(instance_id: str, text: str, *, config=None) -> Optional[str]:
 
     ``None`` when the message isn't a calendar query (or has no parseable time
     reference) — the caller should fall through to the normal chat path in
-    that case. Otherwise fetches events via
-    :func:`lhassa.calendar.feed.upcoming` (a real network/cache read, but
-    itself $0/deterministic/never-raising) over a window wide enough to cover
-    the parsed range, filters to ``[start, end)``, and renders a grouped
-    reply. Never raises — any trouble degrades to ``None`` (fall through).
+    that case. Gates on :func:`is_calendar_query` then delegates the actual
+    window resolution to :func:`answer_window` (shared with the elliptical
+    follow-up continuation path — see :mod:`lhassa.notify.capabilities`).
+    Never raises — any trouble degrades to ``None`` (fall through).
     """
     try:
         if not is_calendar_query(text):
             return None
+        return await answer_window(instance_id, text, config=config)
+    except Exception:
+        return None
+
+
+async def answer_window(instance_id: str, text: str, *, config=None) -> Optional[str]:
+    """Answer straight from ``text``'s own parsed time window — deterministic,
+    $0 — WITHOUT the :func:`is_calendar_query` keyword/have-word gate.
+
+    Factored out of :func:`answer` for the sticky-topic follow-up continuation:
+    an elliptical "Y el sábado?" carries no calendar keyword and no have/
+    tengo/hay word, so ``is_calendar_query`` alone would refuse it — but once
+    the conversation's STICKY topic is already ``calendar_view``, the
+    follow-up's own time reference (parsed here) is enough. Fetches events via
+    :func:`lhassa.calendar.feed.upcoming` (a real network/cache read, but
+    itself $0/deterministic/never-raising) over a window wide enough to cover
+    the parsed range, filters to ``[start, end)``, and renders a grouped
+    reply. ``None`` when ``text`` has no parseable time reference (or the feed
+    lookup fails) — the caller then falls through to its normal path. Never
+    raises.
+    """
+    try:
         window = parse_window(text)
         if window is None:
             return None
