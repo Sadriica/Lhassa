@@ -123,6 +123,56 @@ def _history_key(config) -> str:
     return str(getattr(config, "telegram_chat_id", "") or "owner")
 
 
+# ── sticky conversation topic (process-memory only, mirrors _CHAT_HISTORY) ──
+# After ANY deterministic capability answers a message (the calendar
+# short-circuit, an active ``apply_route``), the thread's TOPIC is recorded
+# here — capability name + a small carried-over context — so a connector-led
+# elliptical follow-up ("Y el sabado?") can be re-routed to THAT capability's
+# own :attr:`lhassa.notify.capabilities.Capability.continue_followup` instead
+# of falling to a tool-less think + the research bridge. TTL'd on read exactly
+# like the chat history (a stale topic never leaks into an unrelated later
+# message); restarting the poller clears it — deliberate, nothing durable
+# lives here.
+_CHAT_TOPIC: dict = {}
+_CHAT_TOPIC_TTL_DEFAULT = 900.0  # 15 min
+
+
+def _topic_key(config, chat: str = "") -> str:
+    return str(chat) if chat else _history_key(config)
+
+
+def _topic_set(
+    config, chat: str, capability: str, context: Optional[dict] = None
+) -> None:
+    """Record ``capability`` as the chat's current sticky topic. Never raises."""
+    try:
+        _CHAT_TOPIC[_topic_key(config, chat)] = {
+            "capability": capability,
+            "context": dict(context or {}),
+            "ts": time.time(),
+        }
+    except Exception:
+        pass
+
+
+def _topic_get(config, chat: str = "") -> Optional[dict]:
+    """The chat's still-fresh sticky topic (``{capability, context, ts}``), or
+    ``None`` if there is none / it expired. TTL-checked on read; never raises."""
+    try:
+        entry = _CHAT_TOPIC.get(_topic_key(config, chat))
+        if not entry:
+            return None
+        ttl = float(
+            getattr(config, "chat_topic_ttl", _CHAT_TOPIC_TTL_DEFAULT)
+            or _CHAT_TOPIC_TTL_DEFAULT
+        )
+        if time.time() - entry.get("ts", 0) > ttl:
+            return None
+        return entry
+    except Exception:
+        return None
+
+
 def _history_messages(config) -> list[dict]:
     """The still-fresh history as ``[{role, content}, …]``, oldest first.
 
@@ -991,6 +1041,9 @@ async def _answer(text: str, *, config, chat_id: str = "") -> None:
     if not stripped.startswith("/"):
         calendar_reply = await _answer_calendar_query(stripped, config=config)
         if calendar_reply is not None:
+            # This turn IS the calendar topic now — a connector-led follow-up
+            # ("Y el sabado?") should stay here rather than fall to the think.
+            _topic_set(config, chat_id, "calendar_view")
             await telegram.send(calendar_reply, config=config)
             return
 
@@ -1029,10 +1082,71 @@ async def _answer(text: str, *, config, chat_id: str = "") -> None:
     if not stripped.startswith("/"):
         from lhassa.notify import capabilities as _capabilities
 
+        matched_cap = _capabilities.match(stripped)
         routed_reply = await _capabilities.apply_route(stripped, config=config)
         if routed_reply is not None:
+            if matched_cap:
+                _topic_set(config, chat_id, matched_cap)
             await telegram.send(routed_reply, config=config)
             return
+
+    # The follow-up thread-continuity hook — a connector-led elliptical
+    # follow-up ("Y el sabado?", "and Saturday?") continues the STICKY topic
+    # left by the last capability that answered above (calendar today, more
+    # later), instead of falling through to a tool-less think + the research
+    # bridge. $0, deterministic: only fires when (a) the message itself reads
+    # as a follow-up (capabilities.is_followup), (b) a fresh topic exists, and
+    # (c) that capability actually declares a continue_followup. Any "no"
+    # (including the capability's own continuation declining with None —
+    # e.g. no parseable time reference in the follow-up) degrades straight
+    # through to the unchanged think below.
+    if not stripped.startswith("/"):
+        from lhassa.notify import capabilities as _capabilities
+
+        if _capabilities.is_followup(stripped):
+            topic = _topic_get(config, chat_id)
+            if topic is not None:
+                cap = _capabilities.get_capability(topic.get("capability", ""))
+                if cap is not None and cap.continue_followup is not None:
+                    try:
+                        followup_reply = await cap.continue_followup(
+                            stripped, topic.get("context") or {}, config=config
+                        )
+                    except Exception as exc:
+                        logger.warning(
+                            f"Telegram inbound: thread-continue {cap.name!r} "
+                            f"failed: {exc}"
+                        )
+                        followup_reply = None
+                    if followup_reply is not None:
+                        try:
+                            from lhassa.core import db as _db_topic
+                            from lhassa.core.episode import Episode as _TopicEpisode
+
+                            instance_id = (
+                                getattr(config, "instance_id", None) or "inst_personal"
+                            )
+                            await _db_topic.init_db()
+                            ep = _TopicEpisode.begin(
+                                despertar_por="telegram", instance_id=instance_id
+                            )
+                            ep.finish(
+                                decision=f"thread-continue: {cap.name}",
+                                accion=cap.name,
+                                resultado=followup_reply,
+                                costo_usd=0.0,
+                            )
+                            await ep.append()
+                        except Exception as exc:
+                            logger.warning(
+                                "Telegram inbound: thread-continue episode "
+                                f"logging failed: {exc}"
+                            )
+                        _history_record(config, "user", stripped)
+                        _history_record(config, "assistant", followup_reply)
+                        _topic_set(config, chat_id, cap.name, topic.get("context"))
+                        await telegram.send(followup_reply, config=config)
+                        return
 
     # Watch-rule matching: check rules BEFORE the command/brain fallback. A match
     # mints a task and confirms with the task id, then returns (does not fall through).

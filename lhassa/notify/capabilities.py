@@ -50,6 +50,12 @@ from loguru import logger
 
 Recognizer = Callable[[str], bool]
 Handler = Callable[..., Awaitable[Optional[str]]]
+# ``(followup_text, context, *, config) -> str | None`` — re-interprets an
+# elliptical follow-up ("Y el sábado?") FOR this one capability, given the
+# sticky-topic context the previous turn recorded. ``None`` when the
+# capability can't resolve the follow-up either — the caller then falls
+# through to the normal chat path, exactly like a Handler miss.
+ContinueFollowup = Callable[..., Awaitable[Optional[str]]]
 
 
 async def _calendar_handler(text: str, *, config=None) -> Optional[str]:
@@ -72,23 +78,55 @@ def _calendar_recognizer(text: str) -> bool:
     return is_calendar_query(text)
 
 
+async def _calendar_continue_followup(
+    followup_text: str, context: dict, *, config=None
+) -> Optional[str]:
+    """The ``calendar_view`` follow-up continuation — $0, no model.
+
+    "Y el sábado?" carries no calendar keyword and no have/tengo/hay word, so
+    :func:`lhassa.calendar.query.is_calendar_query` (and therefore the plain
+    ``calendar_view`` handler above) would refuse it. Once the STICKY topic
+    says the thread is already about the calendar, though, the follow-up's
+    OWN time reference is enough: this goes straight to :func:`lhassa.
+    calendar.query.answer_window`, which parses/answers WITHOUT that keyword
+    gate. ``context`` isn't needed for calendar (the fresh window comes
+    entirely from ``followup_text``); accepted for signature parity with
+    capabilities that DO need carried-over state. ``None`` when the follow-up
+    itself has no parseable time reference — the caller then falls through to
+    the normal chat path. Never raises.
+    """
+    from lhassa.calendar import query as _cal_query
+
+    instance_id = getattr(config, "instance_id", None) or "inst_personal"
+    return await _cal_query.answer_window(instance_id, followup_text, config=config)
+
+
 class Capability:
     """One entry in the catalog: a name, a $0 recognizer, and its handler."""
 
-    __slots__ = ("name", "recognizer", "description", "handler")
+    __slots__ = ("name", "recognizer", "description", "handler", "continue_followup")
 
     def __init__(
-        self, name: str, recognizer: Recognizer, description: str, handler: Handler
+        self,
+        name: str,
+        recognizer: Recognizer,
+        description: str,
+        handler: Handler,
+        continue_followup: Optional[ContinueFollowup] = None,
     ) -> None:
         self.name = name
         self.recognizer = recognizer
         self.description = description
         self.handler = handler
+        self.continue_followup = continue_followup
 
 
 # The catalog. Structured so a future capability (e.g. "remind_view") is a
 # one-line addition — no core edit, and (per the standing "every swap point is
-# a registry" principle) new entries only ever get APPENDED here.
+# a registry" principle) new entries only ever get APPENDED here. A capability
+# with no ``continue_followup`` simply can't be continued — an elliptical
+# follow-up sticking to its topic falls through to the normal chat path,
+# exactly as if no topic were set at all.
 CAPABILITIES: list[Capability] = [
     Capability(
         "calendar_view",
@@ -96,6 +134,7 @@ CAPABILITIES: list[Capability] = [
         "Answer 'what's on my calendar' style questions straight from the "
         "calendar feed — $0, no model, no web search.",
         _calendar_handler,
+        continue_followup=_calendar_continue_followup,
     ),
 ]
 
@@ -148,6 +187,90 @@ def tag_intent(text: str) -> str:
     """
     cap = match(text)
     return f" [routable:{cap}]" if cap else ""
+
+
+# ── is_followup() — the connector / elliptical-fragment detector ────────────
+#
+# Pure $0, no model: this is the deterministic signal the sticky-topic thread-
+# continuity hook (:mod:`lhassa.notify.telegram_inbound`) uses to decide
+# whether an incoming message is trying to CONTINUE the previous capability's
+# topic rather than opening something new. Two rules, checked on the
+# accent-stripped, lower-cased, punctuation-stripped word list:
+#
+#   1. The message STARTS WITH a connector word ("y"/"e"/"o"/"u"/"también"/
+#      "and"/"or"/"also") or connector phrase ("what about", "and the") — this
+#      alone covers every example in the brief ("Y el sabado?", "¿y en
+#      marzo?", "también el lunes", "and Saturday?").
+#   2. OR the message is very short (≤4 words) AND doesn't open like a full
+#      new utterance: its first word isn't a question-starter (qué/como/
+#      cuándo/... or what/how/when/...) or a greeting/interjection (hola/hi/
+#      thanks/...), and it contains no common verb ("es"/"tengo"/"have"/...).
+#      This is intentionally conservative — a bare "hola" or "cómo estás" must
+#      NOT read as a follow-up, and any full sentence over 4 words never
+#      reaches this branch at all.
+#
+# ``is_followup`` is deliberately loose beyond that: it does NOT check whether
+# the fragment is semantically about the topic's subject (a date, a place,
+# ...) — that judgment belongs to the capability's own ``continue_followup``
+# (e.g. the calendar continuation declines with ``None`` when the follow-up
+# carries no parseable time reference, even though it read as a followup).
+_CONNECTOR_WORDS = {"y", "e", "o", "u", "tambien", "and", "or", "also"}
+_CONNECTOR_PHRASES = ("what about", "and the")
+_QUESTION_STARTERS = {
+    "que", "como", "cuando", "donde", "quien", "cual", "cuanto",
+    "why", "how", "when", "where", "who", "which", "what",
+    "is", "are", "do", "does", "did", "would", "could", "can", "will",
+}
+_GREETING_WORDS = {
+    "hola", "hi", "hello", "hey", "buenas", "gracias", "thanks",
+    "bye", "adios", "chau", "ok", "vale",
+}
+_VERB_DENYLIST = {
+    "es", "esta", "soy", "estoy", "tengo", "tienes", "quiero", "necesito",
+    "hay", "voy", "puedo", "sabes", "have", "want", "need", "am", "was",
+}
+_WORD_RE = re.compile(r"[a-z]+")
+
+
+def _followup_words(text: str) -> list[str]:
+    """Lowercase, accent-stripped word tokens (matching-only; never displayed)."""
+    import unicodedata
+
+    decomposed = unicodedata.normalize("NFKD", text or "")
+    stripped = "".join(ch for ch in decomposed if not unicodedata.combining(ch))
+    return _WORD_RE.findall(stripped.lower())
+
+
+def is_followup(text: Any) -> bool:
+    """Is ``text`` a connector-led / elliptical follow-up? See module comment
+    above for the exact rules. Pure, $0, never raises."""
+    try:
+        stripped = (text or "").strip()
+    except Exception:
+        return False
+    if not stripped:
+        return False
+    try:
+        words = _followup_words(stripped)
+    except Exception:
+        return False
+    if not words:
+        return False
+
+    if words[0] in _CONNECTOR_WORDS:
+        return True
+    joined = " ".join(words)
+    if any(joined.startswith(phrase) for phrase in _CONNECTOR_PHRASES):
+        return True
+
+    if len(words) <= 4:
+        first = words[0]
+        if first in _QUESTION_STARTERS or first in _GREETING_WORDS:
+            return False
+        if any(w in _VERB_DENYLIST for w in words):
+            return False
+        return True
+    return False
 
 
 # ── the route table — DATA, not code ─────────────────────────────────────────

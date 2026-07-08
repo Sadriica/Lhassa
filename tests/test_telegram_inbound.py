@@ -25,9 +25,11 @@ def _fresh_chat_state():
 
     _ti._CHAT_HISTORY.clear()
     _ti._CHAT_TURNS.clear()
+    _ti._CHAT_TOPIC.clear()
     yield
     _ti._CHAT_HISTORY.clear()
     _ti._CHAT_TURNS.clear()
+    _ti._CHAT_TOPIC.clear()
 
 
 
@@ -1341,3 +1343,194 @@ def test_callback_query_deny_mint_route_does_not_turn_on_the_route(tmp_path, mon
 
     assert any("Denied" in s for s in sent)
     assert not capabilities.is_routed("calendar_view", config=cfg)
+
+
+# ── sticky topic + follow-up thread continuity ───────────────────────────────
+
+
+def test_topic_set_then_get(monkeypatch):
+    cfg = _cfg()
+    assert telegram_inbound._topic_get(cfg, "123") is None
+    telegram_inbound._topic_set(cfg, "123", "calendar_view", {"foo": "bar"})
+    topic = telegram_inbound._topic_get(cfg, "123")
+    assert topic is not None
+    assert topic["capability"] == "calendar_view"
+    assert topic["context"] == {"foo": "bar"}
+
+
+def test_topic_expires_after_ttl(monkeypatch):
+    cfg = _cfg(chat_topic_ttl=1.0)
+    telegram_inbound._topic_set(cfg, "123", "calendar_view")
+
+    real_time = telegram_inbound.time.time
+
+    monkeypatch.setattr(
+        telegram_inbound.time, "time", lambda: real_time() + 10.0
+    )
+    assert telegram_inbound._topic_get(cfg, "123") is None
+
+
+def _payload_for(text, update_id=500):
+    return {
+        "ok": True,
+        "result": [
+            {"update_id": update_id, "message": {"chat": {"id": 123}, "text": text}}
+        ],
+    }
+
+
+def test_calendar_followup_served_from_calendar_without_provider(monkeypatch):
+    """The exact owner-reported bug: a calendar question sets the sticky topic,
+    then a connector-led follow-up ("Y el sabado?") is served straight from the
+    calendar seam — the provider is NEVER called for the follow-up turn, and
+    the episode is tagged 'thread-continue: calendar_view' at $0."""
+    provider = _patch_brain(monkeypatch)
+    sent = _patch_send(monkeypatch)
+
+    from lhassa.calendar import feed as feed_mod
+    from lhassa.calendar import query as query_mod
+    from lhassa.core import episode as episode_mod
+
+    friday_window = query_mod.parse_window("el viernes")
+    saturday_window = query_mod.parse_window("el sabado")
+    assert friday_window is not None and saturday_window is not None
+    fri_start, _, _ = friday_window
+    sat_start, _, _ = saturday_window
+
+    async def _fake_upcoming(instance_id, *, hours=36, config=None):
+        return [
+            {
+                "summary": "Cálculo III",
+                "start": fri_start + timedelta(hours=9),
+                "end": fri_start + timedelta(hours=10),
+                "location": None,
+                "all_day": False,
+                "calendar": "default",
+            },
+            {
+                "summary": "Mercado",
+                "start": sat_start + timedelta(hours=10),
+                "end": sat_start + timedelta(hours=11),
+                "location": None,
+                "all_day": False,
+                "calendar": "default",
+            },
+        ]
+
+    monkeypatch.setattr(feed_mod, "upcoming", _fake_upcoming)
+
+    logged = []
+
+    async def _capture_append(self):
+        logged.append(self)
+        return "ep"
+
+    monkeypatch.setattr(episode_mod.Episode, "append", _capture_append)
+
+    cfg = _cfg()
+
+    # Turn 1: the calendar question — answered directly, sets the topic.
+    monkeypatch.setattr(
+        telegram_inbound.httpx,
+        "AsyncClient",
+        _client_returning(_payload_for("¿qué hay en mi calendario el viernes?", 500)),
+    )
+    asyncio.run(telegram_inbound.poll_once(cfg, offset=None))
+    assert provider.calls == []
+    assert len(sent) == 1
+    assert "Cálculo III" in sent[0]
+
+    # Turn 2: the elliptical follow-up — must be served from the calendar too,
+    # NOT the tool-less think.
+    monkeypatch.setattr(
+        telegram_inbound.httpx,
+        "AsyncClient",
+        _client_returning(_payload_for("Y el sabado?", 501)),
+    )
+    asyncio.run(telegram_inbound.poll_once(cfg, offset=None))
+
+    assert provider.calls == []  # still never reached the brain think
+    assert len(sent) == 2
+    assert "Mercado" in sent[1]
+
+    thread_episodes = [ep for ep in logged if ep.decision == "thread-continue: calendar_view"]
+    assert len(thread_episodes) == 1
+    assert thread_episodes[0].accion == "calendar_view"
+    assert thread_episodes[0].costo_usd == 0.0
+
+
+def test_followup_with_no_active_topic_falls_through_to_think(monkeypatch):
+    """A connector-led message with NO prior sticky topic falls through to the
+    normal tool-less think — is_followup alone is never enough."""
+    provider = _patch_brain(monkeypatch, reply="Sure, what about it?")
+    sent = _patch_send(monkeypatch)
+
+    monkeypatch.setattr(
+        telegram_inbound.httpx,
+        "AsyncClient",
+        _client_returning(_payload_for("y el sabado?", 502)),
+    )
+    asyncio.run(telegram_inbound.poll_once(_cfg(), offset=None))
+
+    assert len(provider.calls) == 1
+    assert sent == ["Sure, what about it?"]
+
+
+def test_connector_message_that_is_not_really_a_followup_falls_through(monkeypatch):
+    """A connector-led message that doesn't carry a resolvable continuation for
+    the active capability (no date reference at all) declines (continue_followup
+    returns None) and falls through to the normal think — it must not force a
+    wrong calendar answer."""
+    provider = _patch_brain(monkeypatch, reply="Got it, noted.")
+    sent = _patch_send(monkeypatch)
+
+    from lhassa.calendar import feed as feed_mod
+    from lhassa.calendar import query as query_mod
+    from lhassa.core import episode as episode_mod
+
+    friday_window = query_mod.parse_window("el viernes")
+    assert friday_window is not None
+    fri_start, _, _ = friday_window
+
+    async def _fake_upcoming(instance_id, *, hours=36, config=None):
+        return [
+            {
+                "summary": "Cálculo III",
+                "start": fri_start + timedelta(hours=9),
+                "end": fri_start + timedelta(hours=10),
+                "location": None,
+                "all_day": False,
+                "calendar": "default",
+            }
+        ]
+
+    monkeypatch.setattr(feed_mod, "upcoming", _fake_upcoming)
+
+    logged = []
+
+    async def _capture_append(self):
+        logged.append(self)
+        return "ep"
+
+    monkeypatch.setattr(episode_mod.Episode, "append", _capture_append)
+
+    cfg = _cfg()
+
+    monkeypatch.setattr(
+        telegram_inbound.httpx,
+        "AsyncClient",
+        _client_returning(_payload_for("¿qué hay en mi calendario el viernes?", 503)),
+    )
+    asyncio.run(telegram_inbound.poll_once(cfg, offset=None))
+    assert provider.calls == []
+
+    monkeypatch.setattr(
+        telegram_inbound.httpx,
+        "AsyncClient",
+        _client_returning(_payload_for("y además necesito comprar leche", 504)),
+    )
+    asyncio.run(telegram_inbound.poll_once(cfg, offset=None))
+
+    assert len(provider.calls) == 1  # the continuation declined; fell through
+    assert sent[-1] == "Got it, noted."
+    assert not any(ep.decision == "thread-continue: calendar_view" for ep in logged)
