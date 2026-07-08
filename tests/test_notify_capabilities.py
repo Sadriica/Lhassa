@@ -1,0 +1,156 @@
+"""Tests for lhassa.notify.capabilities — the self-routing consciousness's
+shell half: the capability catalog, the [[routable:...]] marker, and the
+route table (DATA, not code). Fully offline: no LLM, no network.
+"""
+
+from types import SimpleNamespace
+
+import pytest
+
+from lhassa.notify import capabilities
+
+
+def _cfg(tmp_path, **over):
+    base = dict(
+        instance_id="inst_test",
+        routes_file=str(tmp_path / "routes.json"),
+    )
+    base.update(over)
+    return SimpleNamespace(**base)
+
+
+# ── match() / tag_intent() ────────────────────────────────────────────────────
+
+
+def test_match_recognises_calendar_view():
+    assert capabilities.match("what's on my calendar tomorrow?") == "calendar_view"
+
+
+def test_match_returns_none_for_unrecognised_text():
+    assert capabilities.match("tell me a joke") is None
+
+
+def test_match_never_raises_on_malformed_input():
+    assert capabilities.match(None) is None
+    assert capabilities.match("") is None
+    assert capabilities.match(123) is None  # type: ignore[arg-type]
+
+
+def test_tag_intent_appends_marker_for_a_recognised_capability():
+    assert capabilities.tag_intent("any events on my calendar?") == " [routable:calendar_view]"
+
+
+def test_tag_intent_is_empty_for_an_unrecognised_message():
+    assert capabilities.tag_intent("how's the weather feeling today, existentially") == ""
+
+
+def test_get_capability_returns_none_for_unknown_name():
+    assert capabilities.get_capability("does_not_exist") is None
+    assert capabilities.get_capability("calendar_view") is not None
+
+
+# ── the route table (DATA) ────────────────────────────────────────────────────
+
+
+def test_add_route_refuses_unknown_capability(tmp_path):
+    cfg = _cfg(tmp_path)
+    assert capabilities.add_route("not_a_real_capability", config=cfg) is False
+    assert capabilities.load_routes(cfg) == {}
+
+
+def test_add_route_then_is_routed(tmp_path):
+    cfg = _cfg(tmp_path)
+    assert capabilities.is_routed("calendar_view", config=cfg) is False
+    assert capabilities.add_route("calendar_view", config=cfg) is True
+    assert capabilities.is_routed("calendar_view", config=cfg) is True
+
+
+def test_remove_route(tmp_path):
+    cfg = _cfg(tmp_path)
+    capabilities.add_route("calendar_view", config=cfg)
+    assert capabilities.remove_route("calendar_view", config=cfg) is True
+    assert capabilities.is_routed("calendar_view", config=cfg) is False
+    # removing an already-absent route reports False, doesn't raise.
+    assert capabilities.remove_route("calendar_view", config=cfg) is False
+
+
+def test_load_routes_degrades_to_empty_on_malformed_file(tmp_path):
+    path = tmp_path / "routes.json"
+    path.write_text("not valid json {{{", encoding="utf-8")
+    cfg = _cfg(tmp_path)
+    assert capabilities.load_routes(cfg) == {}
+
+
+def test_apply_approved_route_applies_the_capability_from_a_payload(tmp_path):
+    cfg = _cfg(tmp_path)
+    ok = capabilities.apply_approved_route({"capability": "calendar_view"}, config=cfg)
+    assert ok is True
+    assert capabilities.is_routed("calendar_view", config=cfg)
+
+
+def test_apply_approved_route_refuses_a_missing_capability(tmp_path):
+    cfg = _cfg(tmp_path)
+    assert capabilities.apply_approved_route({}, config=cfg) is False
+    assert capabilities.load_routes(cfg) == {}
+
+
+# ── apply_route(): the $0 serving path ────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_apply_route_returns_none_when_unrecognised(tmp_path):
+    cfg = _cfg(tmp_path)
+    assert await capabilities.apply_route("tell me a joke", config=cfg) is None
+
+
+@pytest.mark.asyncio
+async def test_apply_route_returns_none_when_recognised_but_not_routed(tmp_path):
+    cfg = _cfg(tmp_path)
+    # is_calendar_query recognises it, but no route has been turned on yet.
+    result = await capabilities.apply_route("any events on my calendar?", config=cfg)
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_apply_route_serves_a_routed_capability(tmp_path, monkeypatch):
+    """Once routed, apply_route calls the capability's own handler and serves
+    its answer — $0, no model. The handler is monkeypatched so this test stays
+    a pure unit test of the routing mechanism, not the calendar seam itself."""
+    cfg = _cfg(tmp_path)
+    capabilities.add_route("calendar_view", config=cfg)
+
+    async def _fake_handler(text, *, config=None):
+        return "You have nothing on your calendar."
+
+    cap = capabilities.get_capability("calendar_view")
+    monkeypatch.setattr(cap, "handler", _fake_handler)
+
+    result = await capabilities.apply_route("what's on my calendar today?", config=cfg)
+    assert result == "You have nothing on your calendar."
+
+
+@pytest.mark.asyncio
+async def test_apply_route_degrades_to_none_when_handler_raises(tmp_path, monkeypatch):
+    cfg = _cfg(tmp_path)
+    capabilities.add_route("calendar_view", config=cfg)
+
+    async def _boom(text, *, config=None):
+        raise RuntimeError("boom")
+
+    cap = capabilities.get_capability("calendar_view")
+    monkeypatch.setattr(cap, "handler", _boom)
+
+    result = await capabilities.apply_route("what's on my calendar today?", config=cfg)
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_apply_route_degrades_to_none_when_handler_cannot_resolve(tmp_path):
+    """A recognised-and-routed capability whose handler still can't answer
+    (e.g. the calendar seam has no parseable time reference) degrades to None
+    — the caller falls through to its normal path, exactly as before routing."""
+    cfg = _cfg(tmp_path)
+    capabilities.add_route("calendar_view", config=cfg)
+
+    result = await capabilities.apply_route("any events on my calendar?", config=cfg)
+    assert result is None

@@ -1190,3 +1190,154 @@ def test_calendar_query_falls_through_for_normal_message(monkeypatch):
 
     assert len(provider.calls) == 1
     assert sent == ["Muy bien, gracias."]
+
+
+# ── the self-routing consciousness (lhassa.notify.capabilities) ─────────────────
+
+
+def test_recognized_but_unrouted_capability_tags_the_think_episode(monkeypatch):
+    """A message a capability recognises (calendar keyword, no time reference —
+    the calendar seam itself can't resolve it) still falls through to the brain
+    think, but the episode's decision is tagged '[routable:calendar_view]' so
+    the consciousness (agents.repetition.detect_routable) can find it later."""
+    payload = {
+        "ok": True,
+        "result": [
+            {
+                "update_id": 402,
+                "message": {"chat": {"id": 123}, "text": "any events on my calendar?"},
+            }
+        ],
+    }
+    monkeypatch.setattr(
+        telegram_inbound.httpx, "AsyncClient", _client_returning(payload)
+    )
+    provider = _patch_brain(monkeypatch, reply="Nothing pinned down yet.")
+    sent = _patch_send(monkeypatch)
+
+    from lhassa.calendar import query as query_mod
+
+    # This message HAS the calendar keyword (so is_calendar_query is True) but
+    # no parseable time reference — the calendar seam itself returns None.
+    assert query_mod.is_calendar_query("any events on my calendar?")
+    assert query_mod.parse_window("any events on my calendar?") is None
+
+    import lhassa.core.episode as episode_mod
+
+    logged = []
+
+    async def _capture_append(self):
+        logged.append(self)
+        return "ep"
+
+    monkeypatch.setattr(episode_mod.Episode, "append", _capture_append)
+
+    asyncio.run(telegram_inbound.poll_once(_cfg(), offset=None))
+
+    assert len(provider.calls) == 1  # it DID reach the think — no route is on
+    assert sent == ["Nothing pinned down yet."]
+    assert len(logged) == 1
+    assert "[routable:calendar_view]" in logged[0].decision
+
+
+def test_unrecognized_message_is_not_tagged(monkeypatch):
+    payload = {
+        "ok": True,
+        "result": [
+            {"update_id": 403, "message": {"chat": {"id": 123}, "text": "tell me a joke"}},
+        ],
+    }
+    monkeypatch.setattr(
+        telegram_inbound.httpx, "AsyncClient", _client_returning(payload)
+    )
+    _patch_brain(monkeypatch, reply="Why did the chicken...")
+    _patch_send(monkeypatch)
+
+    import lhassa.core.episode as episode_mod
+
+    logged = []
+
+    async def _capture_append(self):
+        logged.append(self)
+        return "ep"
+
+    monkeypatch.setattr(episode_mod.Episode, "append", _capture_append)
+
+    asyncio.run(telegram_inbound.poll_once(_cfg(), offset=None))
+
+    assert len(logged) == 1
+    assert "[routable:" not in logged[0].decision
+
+
+def test_callback_query_approve_mint_route_turns_on_the_route(tmp_path, monkeypatch):
+    """Approving a mint_route proposal via the inline keyboard applies it —
+    the SAME approval->apply pattern as an approved code_run launching."""
+    db = asyncio.run(_init_approval_db(tmp_path, monkeypatch))
+    ap_id = asyncio.run(
+        db.add_approval(
+            "inst_personal",
+            "mint_route",
+            {"accion": "mint_route", "capability": "calendar_view", "count": 6},
+        )
+    )
+
+    payload = {
+        "ok": True,
+        "result": [
+            {
+                "update_id": 220,
+                "callback_query": {
+                    "id": "cbq_route",
+                    "data": f"approve:{ap_id}",
+                    "message": {"chat": {"id": 123}},
+                },
+            }
+        ],
+    }
+    monkeypatch.setattr(telegram_inbound.httpx, "AsyncClient", _client_returning(payload))
+    _patch_answer_callback(monkeypatch)
+    sent = _patch_send(monkeypatch)
+
+    from lhassa.notify import capabilities
+
+    cfg = _cfg(instance_id="inst_personal", routes_file=str(tmp_path / "routes.json"))
+    asyncio.run(_poll_and_drain(cfg))
+
+    assert any("Approved" in s for s in sent)
+    assert capabilities.is_routed("calendar_view", config=cfg)
+
+
+def test_callback_query_deny_mint_route_does_not_turn_on_the_route(tmp_path, monkeypatch):
+    db = asyncio.run(_init_approval_db(tmp_path, monkeypatch))
+    ap_id = asyncio.run(
+        db.add_approval(
+            "inst_personal",
+            "mint_route",
+            {"accion": "mint_route", "capability": "calendar_view", "count": 6},
+        )
+    )
+
+    payload = {
+        "ok": True,
+        "result": [
+            {
+                "update_id": 221,
+                "callback_query": {
+                    "id": "cbq_route2",
+                    "data": f"deny:{ap_id}",
+                    "message": {"chat": {"id": 123}},
+                },
+            }
+        ],
+    }
+    monkeypatch.setattr(telegram_inbound.httpx, "AsyncClient", _client_returning(payload))
+    _patch_answer_callback(monkeypatch)
+    sent = _patch_send(monkeypatch)
+
+    from lhassa.notify import capabilities
+
+    cfg = _cfg(instance_id="inst_personal", routes_file=str(tmp_path / "routes.json"))
+    asyncio.run(_poll_and_drain(cfg))
+
+    assert any("Denied" in s for s in sent)
+    assert not capabilities.is_routed("calendar_view", config=cfg)

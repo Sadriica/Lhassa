@@ -213,3 +213,49 @@ async def test_review_tools_keeps_healthy_tool(brain):
 async def test_review_tools_no_tools(brain):
     result = await review_tools({"instance_id": "inst_test"})
     assert "0 tool(s) checked" in result
+
+
+# ── the self-routing consciousness: mint_route ───────────────────────────────
+
+
+async def _seed_routable_pattern(db, instance_id, *, capability="calendar_view", n=6):
+    for _ in range(n):
+        ep = _FakeEpisode(
+            id=db._new_id("ep"),
+            instance_id=instance_id,
+            despertar_por="telegram",
+            accion="responder",
+            decision=f"think: provider=x model=y [routable:{capability}]",
+            costo_usd=0.01,
+            creado_en=db._now(),
+        )
+        await db.append_episode(ep)
+
+
+@pytest.mark.asyncio
+async def test_detect_repetition_proposes_mint_route_for_a_routable_pattern(brain):
+    await _seed_routable_pattern(brain, "inst_test")
+    with patch(
+        "lhassa.actionpack._selfimprove._notify", AsyncMock(return_value=True)
+    ) as mock_notify:
+        result = await detect_repetition({"instance_id": "inst_test", "days": 7})
+
+    assert "newly proposed" in result
+    mock_notify.assert_awaited()
+    pending = await brain.load_pending_approvals("inst_test")
+    mint_route_rows = [a for a in pending if a["tipo"] == "mint_route"]
+    assert len(mint_route_rows) == 1
+    assert mint_route_rows[0]["payload"]["capability"] == "calendar_view"
+    assert mint_route_rows[0]["payload"]["count"] == 6
+
+
+@pytest.mark.asyncio
+async def test_detect_repetition_does_not_reprose_mint_route(brain):
+    await _seed_routable_pattern(brain, "inst_test")
+    with patch("lhassa.actionpack._selfimprove._notify", AsyncMock(return_value=True)):
+        await detect_repetition({"instance_id": "inst_test"})
+        result2 = await detect_repetition({"instance_id": "inst_test"})
+
+    assert "0 newly proposed" in result2
+    pending = await brain.load_pending_approvals("inst_test")
+    assert len([a for a in pending if a["tipo"] == "mint_route"]) == 1

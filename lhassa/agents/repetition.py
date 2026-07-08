@@ -70,7 +70,19 @@ _PROPOSAL_TIPOS = (
     "mint_memory",
     "mint_schedule",
     "seed_cache",
+    "mint_route",
 )
+
+# detect_routable defaults — how many times a `[routable:<cap>]`-tagged episode
+# (a message a deterministic capability recognises, that STILL paid for a
+# think/research) must repeat before it is worth proposing a route.
+DEFAULT_ROUTABLE_THRESHOLD = 5
+
+# The exact marker lhassa.notify.capabilities.tag_intent writes onto an
+# episode's `decision` text — read back here with a plain regex, never a
+# Python import of notify/ (agents/ stays shell-free; see the module docstring
+# and lhassa.notify.capabilities's own docstring for the layering rationale).
+_ROUTABLE_RE = re.compile(r"\[routable:([a-z0-9_]+)\]", re.IGNORECASE)
 
 # Candidate action names that are ALWAYS a judgment, never automatable — see the
 # module docstring for the real denied proposals this encodes.
@@ -409,6 +421,83 @@ async def detect_recurring(
     return out
 
 
+async def detect_routable(
+    instance_id: str,
+    *,
+    days: int = DEFAULT_DAYS,
+    min_count: Optional[int] = None,
+) -> list[dict[str, Any]]:
+    """The self-routing consciousness: capabilities that keep paying for a
+    think/research that a $0 deterministic handler could already serve.
+
+    :mod:`lhassa.notify.telegram_inbound` (the SHELL) tags an episode's
+    ``decision`` with ``"[routable:<capability>]"`` (see
+    :func:`lhassa.notify.capabilities.tag_intent`) whenever a message a
+    capability recognises still fell through to a real think or the research
+    bridge. This is the pure-SQL read-back half of that seam: group the
+    window's tagged episodes by capability, count them, and sum their cost.
+
+    Only capabilities seen at least ``min_count`` times are returned (a single
+    miss isn't a pattern) — cost is NOT required to be positive here (unlike
+    :func:`detect_repetition`): even a $0 deferred/free-provider think that
+    still went through the judgment path is worth routing away, since the
+    point is to stop spending JUDGMENT (tokens, latency, risk of drift), not
+    only dollars. Each item: ``{"pattern", "capability", "count",
+    "total_cost_usd"}``. Pure SQL + regex, $0, never raises (degrades to
+    ``[]``) — this NEVER imports :mod:`lhassa.notify` (agents/ stays
+    shell-free); it only reads the plain text another layer already wrote.
+    """
+    min_count = min_count if min_count is not None else DEFAULT_ROUTABLE_THRESHOLD
+    if min_count < 1:
+        min_count = DEFAULT_ROUTABLE_THRESHOLD
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+
+    try:
+        async with aiosqlite.connect(_db.DB_PATH) as conn:
+            conn.row_factory = aiosqlite.Row
+            async with conn.execute(
+                """SELECT decision, COALESCE(costo_usd, 0) AS cost
+                   FROM episodes
+                   WHERE instance_id = ? AND creado_en >= ?
+                     AND decision LIKE '%[routable:%'""",
+                (instance_id, cutoff),
+            ) as cur:
+                rows = [dict(r) for r in await cur.fetchall()]
+    except Exception:
+        # A missing/corrupt table degrades to "nothing detected" — this is a
+        # cheap sense, not a critical path; it must never crash a caller.
+        return []
+
+    stats: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        m = _ROUTABLE_RE.search(str(row.get("decision") or ""))
+        if not m:
+            continue
+        cap = m.group(1).lower()
+        entry = stats.setdefault(cap, {"count": 0, "total_cost_usd": 0.0})
+        entry["count"] += 1
+        entry["total_cost_usd"] += float(row.get("cost") or 0.0)
+
+    denied = await denied_patterns(instance_id)
+    out: list[dict[str, Any]] = []
+    for cap, entry in stats.items():
+        if entry["count"] < min_count:
+            continue
+        pattern = f"routable::{cap}"
+        if pattern in denied:
+            continue  # the owner already said no to routing this capability
+        out.append(
+            {
+                "pattern": pattern,
+                "capability": cap,
+                "count": entry["count"],
+                "total_cost_usd": entry["total_cost_usd"],
+            }
+        )
+    out.sort(key=lambda f: -f["count"])
+    return out
+
+
 def recommend_intervention(finding: dict[str, Any]) -> dict[str, Any]:
     """The "consciousness" reasoning: pick the CHEAPEST fix for one finding.
 
@@ -417,6 +506,10 @@ def recommend_intervention(finding: dict[str, Any]) -> dict[str, Any]:
     :func:`detect_mechanical_chains`; this looks only at its SHAPE (never at
     outside state) to decide which intervention is cheapest, in priority order:
 
+      0. a ``capability`` key (a :func:`detect_routable` finding) →
+         ``kind="route"`` — a deterministic $0 handler for this class of
+         message ALREADY EXISTS (see :mod:`lhassa.notify.capabilities`); the fix
+         is not to mint anything new, just to switch its route on.
       1. a ``chain`` key → ``kind="script"`` — the existing PTC path
          (:func:`draft_script_for_chain`) collapses a mechanical action chain.
       2. a ``cadence`` key (regular gaps, see :func:`_cadence_stats`) →
@@ -444,6 +537,23 @@ def recommend_intervention(finding: dict[str, Any]) -> dict[str, Any]:
         cost = float(finding.get("total_cost_usd") or 0.0)
         despertar_por = finding.get("despertar_por") or "?"
         accion = finding.get("accion") or "?"
+
+        capability = finding.get("capability")
+        if capability:
+            return {
+                "kind": "route",
+                "rationale": (
+                    f"'{capability}' questions went to a think/research ×{count} "
+                    f"(${cost:.4f} spent) even though a $0 deterministic handler "
+                    "already exists — approving routes them there for good"
+                ),
+                "payload": {
+                    "pattern": pattern,
+                    "capability": capability,
+                    "count": count,
+                    "total_cost_usd": cost,
+                },
+            }
 
         chain = finding.get("chain")
         if chain:

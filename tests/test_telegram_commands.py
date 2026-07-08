@@ -273,6 +273,44 @@ def test_approve_requires_id():
     assert "Usage" in reply
 
 
+def test_approve_mint_route_turns_on_the_route(tmp_path, monkeypatch):
+    """Approving a mint_route proposal from chat applies it — the approval->apply
+    connection point (mirrors the code_run launch-on-approve pattern)."""
+    from lhassa.notify import capabilities
+
+    db = asyncio.run(_init_db(tmp_path, monkeypatch))
+    ap_id = asyncio.run(
+        db.add_approval(
+            "inst_personal",
+            "mint_route",
+            {"accion": "mint_route", "capability": "calendar_view", "count": 7},
+        )
+    )
+    cfg = _cfg(instance_id="inst_personal", routes_file=str(tmp_path / "routes.json"))
+    reply = asyncio.run(commands.dispatch(f"/approve {ap_id}", config=cfg))
+
+    assert "approved" in reply
+    assert capabilities.is_routed("calendar_view", config=cfg)
+
+
+def test_deny_mint_route_does_not_turn_on_the_route(tmp_path, monkeypatch):
+    from lhassa.notify import capabilities
+
+    db = asyncio.run(_init_db(tmp_path, monkeypatch))
+    ap_id = asyncio.run(
+        db.add_approval(
+            "inst_personal",
+            "mint_route",
+            {"accion": "mint_route", "capability": "calendar_view", "count": 7},
+        )
+    )
+    cfg = _cfg(instance_id="inst_personal", routes_file=str(tmp_path / "routes.json"))
+    reply = asyncio.run(commands.dispatch(f"/deny {ap_id}", config=cfg))
+
+    assert "denied" in reply
+    assert not capabilities.is_routed("calendar_view", config=cfg)
+
+
 # ── /watch, /watches, /unwatch ─────────────────────────────────────────────────
 
 

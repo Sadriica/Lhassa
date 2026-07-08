@@ -216,6 +216,18 @@ def describe(row: dict) -> dict:
                 "title": f"'{subject}' is already answered from the cache",
                 "detail": " · ".join(bits),
             }
+        if tipo == "mint_route":
+            capability = payload.get("capability") or payload.get("pattern") or "?"
+            bits = []
+            if payload.get("count"):
+                bits.append(f"seen ×{payload['count']} going to a think/research")
+            if payload.get("total_cost_usd") is not None:
+                bits.append(f"${float(payload['total_cost_usd']):.2f} spent")
+            bits.append("approving handles them free")
+            return {
+                "title": f"Route {capability} questions to the $0 handler",
+                "detail": " · ".join(bits),
+            }
         if tipo == "tool_graduation":
             tool = payload.get("tool") or "?"
             detail = "passed the gates in quarantine — approving activates it"

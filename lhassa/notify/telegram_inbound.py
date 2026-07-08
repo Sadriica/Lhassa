@@ -547,8 +547,20 @@ async def _brain_reply(text: str, *, config) -> str:
             # episode label that names the wrong provider poisons every later
             # read (spend analysis, the repetition detector, /recall).
             actual = getattr(prov, "name", "?")
+            # The self-routing consciousness's marker: this turn actually spent
+            # (a real think, and — via the [[research: …]] marker above — maybe
+            # a minted research task too) on a message a deterministic
+            # capability ALSO recognises but no route is on for yet. Tagging it
+            # here is the router-side half of the seam; the consciousness
+            # (agents.repetition.detect_routable) reads it back with plain SQL,
+            # never a Python import — agents/ stays shell-free.
+            from lhassa.notify import capabilities as _capabilities
+
             ep.finish(
-                decision=f"think: provider={actual} model={mdl or 'provider-default'}",
+                decision=(
+                    f"think: provider={actual} model={mdl or 'provider-default'}"
+                    f"{_capabilities.tag_intent(text)}"
+                ),
                 accion="responder",
                 resultado=reply,
                 costo_usd=result.cost_usd,
@@ -869,6 +881,17 @@ async def _handle_callback_query(
         # (and the poll loop) is never blocked on the CLI's runtime.
         if existing is not None and approved and existing.get("tipo") == "code_run":
             asyncio.ensure_future(_launch_code_run(existing, config=config))
+
+        # A resolved mint_route approval TURNS ON that capability's route — the
+        # self-routing consciousness's approval->apply connection. Deterministic,
+        # $0, DATA only (no code is generated or executed); see
+        # lhassa.notify.capabilities.apply_approved_route.
+        if existing is not None and approved and existing.get("tipo") == "mint_route":
+            from lhassa.notify import capabilities as _capabilities
+
+            _capabilities.apply_approved_route(
+                existing.get("payload") or {}, config=config
+            )
     except Exception as exc:  # a malformed callback_query must never crash the poller
         logger.warning(f"Telegram inbound: callback_query handling failed: {exc}")
         with contextlib.suppress(Exception):
@@ -995,6 +1018,20 @@ async def _answer(text: str, *, config, chat_id: str = "") -> None:
                 logger.warning(f"Telegram inbound: remember failed: {_exc}")
                 with contextlib.suppress(Exception):
                     await telegram.send("Failed to remember that.", config=config)
+            return
+
+    # The self-routing consciousness: an APPROVED capability route is served
+    # here for $0, before the command/brain fallback. calendar_view already has
+    # its own dedicated short-circuit above regardless of this table (so it
+    # never regresses today), so this mostly guards OTHER capabilities /
+    # research mis-routes once an owner turns one on via an approved
+    # "mint_route" proposal. See lhassa.notify.capabilities.
+    if not stripped.startswith("/"):
+        from lhassa.notify import capabilities as _capabilities
+
+        routed_reply = await _capabilities.apply_route(stripped, config=config)
+        if routed_reply is not None:
+            await telegram.send(routed_reply, config=config)
             return
 
     # Watch-rule matching: check rules BEFORE the command/brain fallback. A match

@@ -684,6 +684,17 @@ class Config:
         str(Path.home() / ".lhassa" / "watch_rules.json"),
     )
 
+    # JSON file of the self-routing "capability -> deterministic handler" table
+    # (the self-routing consciousness — see lhassa.notify.capabilities). An
+    # approved "mint_route" self-improvement proposal adds an entry here (DATA,
+    # not code); lhassa.notify.capabilities.apply_route reads it to serve a
+    # recognised message for $0 instead of a think/research. Missing/malformed
+    # file -> no routes configured (feature silently off).
+    routes_file: str = os.getenv(
+        "LHASSA_ROUTES_FILE",
+        str(Path.home() / ".lhassa" / "routes.json"),
+    )
+
     # ── Etapa 2 — scheduled operative digest (the "digest" seed) ─────────────
     # Local hours (0-23) the twice-daily "send_digest" task is scheduled for by
     # the ``digest`` seed (``lhassa seed apply digest``). Two knobs rather than one
