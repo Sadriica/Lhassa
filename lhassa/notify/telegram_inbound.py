@@ -351,6 +351,46 @@ async def _apply_research_marker(reply: str, *, instance_id: str, config) -> str
     )
 
 
+async def _answer_calendar_query(text: str, *, config) -> Optional[str]:
+    """Deterministic calendar-query answer, through the calendar seam — logs a
+    ``despertar_por="telegram"`` episode ($0, ``accion="calendar_view"``) and
+    records the turn in chat history exactly like a normal reply. ``None``
+    when :mod:`lhassa.calendar.query` doesn't recognise ``text`` as a calendar
+    question, so the caller falls through to the unchanged path. Never raises.
+    """
+    from lhassa.calendar import query as _cal_query
+    from lhassa.core import db as _db_cal
+    from lhassa.core.episode import Episode
+
+    instance_id = getattr(config, "instance_id", None) or "inst_personal"
+    try:
+        reply = await _cal_query.answer(instance_id, text, config=config)
+    except Exception as exc:  # belt-and-braces; query.answer already never raises
+        logger.warning(f"Telegram inbound: calendar query failed: {exc}")
+        return None
+    if reply is None:
+        return None
+
+    try:
+        window = _cal_query.parse_window(text)
+        label = window[2] if window else "?"
+        await _db_cal.init_db()
+        ep = Episode.begin(despertar_por="telegram", instance_id=instance_id)
+        ep.finish(
+            decision=f"calendar-query: {label}",
+            accion="calendar_view",
+            resultado=reply,
+            costo_usd=0.0,
+        )
+        await ep.append()
+    except Exception as exc:  # a logging failure must not swallow a good reply
+        logger.warning(f"Telegram inbound: calendar-query episode logging failed: {exc}")
+
+    _history_record(config, "user", text)
+    _history_record(config, "assistant", reply)
+    return reply
+
+
 async def _brain_reply(text: str, *, config) -> str:
     """Answer one message via a tool-less brain think. Never raises.
 
@@ -916,6 +956,20 @@ async def _answer(text: str, *, config, chat_id: str = "") -> None:
                     reply = await handler(rest, config=config)
                     await telegram.send(reply, config=config)
                     return
+
+    # Deterministic calendar-query shortcut — "¿qué hay en mi calendario el
+    # viernes?" / "what do I have tomorrow?" is answered straight from the
+    # calendar seam: a date parse + an event lookup + a template reply, $0, NO
+    # model, NEVER the tool-less think below (and never the [[research: …]]
+    # bridge, since it runs before that think is even attempted). Only fires
+    # for a message :func:`lhassa.calendar.query.is_calendar_query` actually
+    # recognises AND that parses a time reference — anything else (including a
+    # bare "hay"/"have" with no time reference) falls through unchanged.
+    if not stripped.startswith("/"):
+        calendar_reply = await _answer_calendar_query(stripped, config=config)
+        if calendar_reply is not None:
+            await telegram.send(calendar_reply, config=config)
+            return
 
     # Deterministic "remember" shortcut — $0, no LLM, no task.
     # Handled before watch-rules so it short-circuits cleanly.

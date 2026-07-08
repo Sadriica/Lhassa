@@ -265,8 +265,9 @@ DESCRIPTIONS: dict[str, str] = {
     "remind": "<what> a las 5pm | in 30 min — a timed reminder + a calendar file.",
     "event": "<what> a las 5pm | in 30 min — just the calendar file, no reminder.",
     "calendar": (
-        "add <name> <url> | remove <name> | primary <name> | sync — manage your "
-        "named calendars and the master-calendar reconcile."
+        "add <name> <url> | remove <name> | primary <name> | sync | view <when> — "
+        "manage your named calendars, the master-calendar reconcile, and a "
+        "$0 deterministic 'what's on my calendar' lookup."
     ),
     "calendars": "List your configured calendars (name + masked url; marks the primary).",
     "today": "Personal agenda for today.",
@@ -1491,6 +1492,7 @@ async def _cmd_calendar(args: str, *, config=None) -> str:
             "       /calendar remove <name> — drop one.\n"
             "       /calendar primary <name> — set your master calendar.\n"
             "       /calendar sync — find events missing from the master.\n"
+            "       /calendar view <when> — e.g. 'friday', 'esta semana', 'hoy'.\n"
             "See /calendars to list what's configured."
         )
     parts = text.split(maxsplit=1)
@@ -1539,9 +1541,28 @@ async def _cmd_calendar(args: str, *, config=None) -> str:
             summary = await calendar_sync({"instance_id": instance_id, "config": cfg})
             return _calendar_sync_reply(summary)
 
+        if sub in ("view", "on", "when"):
+            when = rest.strip()
+            if not when:
+                return "Usage: /calendar view <when> — e.g. 'friday', 'esta semana', 'hoy'."
+            from lhassa.calendar import query as _cal_query
+
+            instance_id = getattr(cfg, "instance_id", None) or "inst_personal"
+            # Force a calendar answer even for a bare time phrase with no
+            # calendar keyword ("/calendar view friday") — the command itself
+            # already establishes intent, so route straight past
+            # is_calendar_query's stricter chat-message heuristic.
+            reply = await _cal_query.answer(instance_id, f"calendar {when}", config=cfg)
+            if reply is None:
+                return (
+                    f"Couldn't work out a time reference in {when!r}. Try "
+                    "'friday', 'tomorrow', 'esta semana', 'hoy'…"
+                )
+            return reply
+
         return (
             f"Unknown /calendar sub-command {sub!r}. Usage: /calendar add <name> "
-            "<url> | remove <name> | primary <name> | sync."
+            "<url> | remove <name> | primary <name> | sync | view <when>."
         )
     except Exception as exc:
         logger.warning(f"commands: /calendar {sub} failed: {exc}")
