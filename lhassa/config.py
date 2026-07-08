@@ -359,6 +359,14 @@ class Config:
     ms_tenant_id: str = os.getenv("MS_TENANT_ID", "")
     ms_client_id: str = os.getenv("MS_CLIENT_ID", "")
 
+    # ── Calendar ICS feed (read-only, no admin/API) ──────────────────────────
+    # A published calendar's secret ICS URL — subscribing makes /today and the
+    # briefing show your real events. Read-only; needs no app registration
+    # (works for institutional calendars an admin would otherwise gate). SECRET.
+    calendar_ics_url: str = os.getenv("LHASSA_CALENDAR_ICS_URL", "")
+    # How long a fetched feed is cached before re-download (seconds; 1h default).
+    calendar_feed_ttl: float = _safe_float(os.getenv("LHASSA_CALENDAR_FEED_TTL", "3600"), 3600.0)
+
     # ── Web search ────────────────────────────────────────────────────────────
     # Brave Search API key — optional, falls back to DuckDuckGo if not set.
     brave_api_key: str = os.getenv("BRAVE_API_KEY", "")

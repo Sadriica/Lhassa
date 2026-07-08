@@ -26,10 +26,15 @@ class PersonalAgenda:
     approvals: list[str] = field(default_factory=list)
     latest_checkin: str = ""
     spend_today_usd: Optional[float] = None
+    # Real calendar events (from the ICS feed, if configured) as "HH:MM Summary"
+    # strings in local time, already windowed + sorted. Empty when unconfigured.
+    events: list[str] = field(default_factory=list)
 
     @property
     def priorities(self) -> list[str]:
         out: list[str] = []
+        for ev in self.events[:3]:
+            out.append(f"📅 {ev}")
         for title in self.approvals[:2]:
             out.append(f"Resolve approval: {title}")
         for task in self.pending_tasks[:3]:
@@ -37,7 +42,7 @@ class PersonalAgenda:
             if task.due_at:
                 label += f" ({task.due_at})"
             out.append(label)
-        return out[:3]
+        return out[:5]
 
 
 def _instance(config) -> str:
@@ -112,6 +117,20 @@ async def build(config, *, slot: str | None = None, horizon_hours: int = 36) -> 
 
     latest = await checkins.latest(instance_id, within_hours=48.0)
 
+    # Real calendar events from the ICS feed (if configured) — additive, $0,
+    # never breaks the agenda if the feed is absent or unreachable.
+    events: list[str] = []
+    try:
+        from lhassa.calendar.feed import _local_hhmm, upcoming
+
+        for e in await upcoming(instance_id, hours=horizon_hours, config=config):
+            label = f"{_local_hhmm(e['start'])} {e['summary']}"
+            if e.get("location"):
+                label += f" · {e['location']}"
+            events.append(label)
+    except Exception:
+        events = []
+
     return PersonalAgenda(
         instance_id=instance_id,
         slot=_slot(slot),
@@ -119,6 +138,7 @@ async def build(config, *, slot: str | None = None, horizon_hours: int = 36) -> 
         approvals=approval_titles,
         latest_checkin=latest.content if latest else "",
         spend_today_usd=await _today_spend(config),
+        events=events,
     )
 
 
