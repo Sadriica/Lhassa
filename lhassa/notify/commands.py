@@ -247,6 +247,7 @@ async def _cmd_start(args: str, *, config=None) -> str:
 # "also available" line — so a drop-in command can never vanish from /help.
 _HELP_GROUPS: list[Tuple[str, list[str]]] = [
     ("Chat & memory", ["ai", "recall", "memory", "remind", "event", "checkin", "today", "tomorrow"]),
+    ("Calendars", ["calendar", "calendars"]),
     ("Decisions", ["approvals", "approve", "deny"]),
     ("Watch & goals", ["watch", "watches", "unwatch", "goal"]),
     ("CV", ["cvnewbase", "cvbase"]),
@@ -263,6 +264,8 @@ DESCRIPTIONS: dict[str, str] = {
     "checkin": "<text> — save a personal morning/evening note.",
     "remind": "<what> a las 5pm | in 30 min — a timed reminder + a calendar file.",
     "event": "<what> a las 5pm | in 30 min — just the calendar file, no reminder.",
+    "calendar": "add <name> <url> | remove <name> — manage your named calendars.",
+    "calendars": "List your configured calendars (name + masked url).",
     "today": "Personal agenda for today.",
     "tomorrow": "Personal agenda for tomorrow.",
     "approvals": "List what's waiting on your decision.",
@@ -1419,6 +1422,104 @@ async def _cmd_event(args: str, *, config=None) -> str:
     except Exception as exc:
         logger.warning(f"commands: /event failed: {exc}")
         return _oops("build and send that calendar event")
+
+
+# ── /calendar, /calendars — multiple NAMED calendar feeds ─────────────────────
+#
+# An owner can subscribe several calendars (institutional, personal, a project
+# one), each with a name, so /today shows which calendar an event is from (see
+# lhassa.calendar.store). These commands never touch the network — they only
+# edit the JSON store; the next /today simply picks up the new list.
+
+
+def _mask_url(url: str) -> str:
+    """A short, non-secret preview of a feed url — never the full thing.
+
+    Calendar URLs carry read access to the owner's calendar, so /calendars must
+    never echo one back in full. Shows scheme+host plus a short prefix of the
+    path, elided.
+    """
+    url = (url or "").strip()
+    if len(url) <= 40:
+        return url
+    return url[:40] + "…"
+
+
+@register_command("calendars")
+async def _cmd_calendars(args: str, *, config=None) -> str:
+    """``/calendars`` — list configured named calendars (name + a masked url)."""
+    try:
+        cfg = _config(config)
+        from lhassa.calendar import store as _cal_store
+
+        items = _cal_store.all_feeds(cfg)
+        if not items:
+            return (
+                "No calendars configured yet. Use /calendar add <name> <url> to "
+                "subscribe one."
+            )
+        lines = [f"Calendars ({len(items)}):"]
+        for it in items:
+            lines.append(f"- {it.get('name')}: {_mask_url(it.get('url', ''))}")
+        return "\n".join(lines)
+    except Exception as exc:
+        logger.warning(f"commands: /calendars failed: {exc}")
+        return _oops("list your calendars")
+
+
+@register_command("calendar")
+async def _cmd_calendar(args: str, *, config=None) -> str:
+    """``/calendar add <name> <url> | remove <name>`` — manage named calendar feeds.
+
+    ``add`` validates the url starts with http(s) and dedupes by name (adding an
+    existing name replaces its url). Neither sub-command ever touches the
+    network — they only edit the JSON store (:mod:`lhassa.calendar.store`); the
+    feed is fetched lazily, the next time /today runs.
+    """
+    text = (args or "").strip()
+    if not text:
+        return (
+            "Usage: /calendar add <name> <url> — subscribe a named calendar.\n"
+            "       /calendar remove <name> — drop one.\n"
+            "See /calendars to list what's configured."
+        )
+    parts = text.split(maxsplit=1)
+    sub = parts[0].lower()
+    rest = parts[1].strip() if len(parts) > 1 else ""
+
+    cfg = _config(config)
+    try:
+        from lhassa.calendar import store as _cal_store
+
+        if sub == "add":
+            add_parts = rest.split(maxsplit=1)
+            if len(add_parts) < 2:
+                return "Usage: /calendar add <name> <url>"
+            name, url = add_parts[0], add_parts[1].strip()
+            ok = _cal_store.add_calendar(name, url, config=cfg)
+            if not ok:
+                return (
+                    "Couldn't add that — check the name isn't empty and the url "
+                    "starts with http:// or https://."
+                )
+            return f"Calendar added: {name}. See /calendars, /today."
+
+        if sub == "remove":
+            name = rest.strip()
+            if not name:
+                return "Usage: /calendar remove <name>"
+            ok = _cal_store.remove_calendar(name, config=cfg)
+            if not ok:
+                return f"No calendar named {name!r}. See /calendars."
+            return f"Calendar removed: {name}."
+
+        return (
+            f"Unknown /calendar sub-command {sub!r}. Usage: /calendar add <name> "
+            "<url> | remove <name>."
+        )
+    except Exception as exc:
+        logger.warning(f"commands: /calendar {sub} failed: {exc}")
+        return _oops("manage your calendars")
 
 
 @register_command("version")

@@ -123,8 +123,16 @@ async def build(config, *, slot: str | None = None, horizon_hours: int = 36) -> 
     try:
         from lhassa.calendar.feed import _local_hhmm, upcoming
 
-        for e in await upcoming(instance_id, hours=horizon_hours, config=config):
+        raw_events = await upcoming(instance_id, hours=horizon_hours, config=config)
+        # Show the calendar name (e.g. "· EAFIT") only when the owner has MORE
+        # than one calendar configured — with a single calendar it's redundant
+        # noise, so keep that line clean.
+        calendar_names = {e.get("calendar") for e in raw_events if e.get("calendar")}
+        multi = len(calendar_names) > 1
+        for e in raw_events:
             label = f"{_local_hhmm(e['start'])} {e['summary']}"
+            if multi and e.get("calendar"):
+                label += f" · {e['calendar']}"
             if e.get("location"):
                 label += f" · {e['location']}"
             events.append(label)

@@ -36,6 +36,39 @@ network is down), parsed with no model. Recurring weekly classes, Windows
 timezones (e.g. `SA Pacific Standard Time` = Bogotá) and all-day events are
 handled; exotic monthly/yearly recurrences are best-effort.
 
+### Multiple calendars
+
+`LHASSA_CALENDAR_ICS_URL` above is a convenience shortcut for the common case of
+**one** calendar. If you have several — an institutional one, a personal one, a
+project one — subscribe each with a **name** so `/today` shows which calendar
+each event is from:
+
+```
+/calendar add EAFIT   <your institutional secret .ics link>
+/calendar add Personal <your personal secret .ics link>
+/calendars               # list what's configured (name + a masked url)
+/calendar remove EAFIT   # drop one
+```
+
+(the CLI equivalent is `lhassa calendar add|list|remove`). Once more than one
+calendar is configured, `/today` tags each event with its source:
+
+```
+📅 15:00 Cálculo III · EAFIT · Bloque 19
+📅 19:00 Team sync · Personal
+```
+
+With a single calendar configured (the env var alone, or exactly one added
+entry) the name is omitted — it would just be redundant noise.
+
+Under the hood: the named calendars live in a small JSON store
+(`~/.lhassa/calendars.json`, `LHASSA_CALENDARS_FILE`) — a list of
+`{"name", "url"}`. The env var is merged in automatically as an implicit
+`"default"` feed whenever it's set and its url isn't already stored under a
+name, so nothing breaks for someone using only `.env`. Each feed keeps its OWN
+cache file (keyed by a hash of its url) so two calendars never clobber each
+other's cached copy; a single unreachable feed is skipped — the rest still show.
+
 ## Path B — Microsoft Graph app (read + write via API)
 
 For accounts where you **can** register an app (personal Outlook.com, or an org

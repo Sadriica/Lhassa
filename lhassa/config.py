@@ -366,6 +366,13 @@ class Config:
     calendar_ics_url: str = os.getenv("LHASSA_CALENDAR_ICS_URL", "")
     # How long a fetched feed is cached before re-download (seconds; 1h default).
     calendar_feed_ttl: float = _safe_float(os.getenv("LHASSA_CALENDAR_FEED_TTL", "3600"), 3600.0)
+    # Multiple NAMED calendars (institutional/personal/project/...) — a JSON list
+    # of {"name", "url"} at this path; see lhassa/calendar/store.py. The single
+    # LHASSA_CALENDAR_ICS_URL above stays a convenience shortcut merged in as an
+    # implicit "default" feed — the store is for anyone with MORE than one.
+    calendars_file: str = os.getenv(
+        "LHASSA_CALENDARS_FILE", str(Path.home() / ".lhassa" / "calendars.json")
+    )
 
     # ── Web search ────────────────────────────────────────────────────────────
     # Brave Search API key — optional, falls back to DuckDuckGo if not set.
