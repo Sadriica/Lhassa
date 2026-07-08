@@ -7,8 +7,10 @@ heartbeat — a task minted with the action's own name, dispatched straight to
 the down-execute-up seam :mod:`lhassa.org.temple` implements: ``temple_run`` is
 itself a registered action (so it can be minted like any other), and its body
 routes the REAL action through :func:`lhassa.org.temple.delegate_internal` —
-Lhassa delegates DOWN to templo, templo executes (its own ``dominio="templo"``
-episode), and the result travels back UP via ``org.deliver``.
+Lhassa delegates DOWN to templo, the OWNING monk (e.g. ``guardian`` for
+``curate_skills`` -- see :data:`lhassa.org.temple.ACTION_OWNERS`) executes (its
+own ``dominio=<worker>`` episode, reporting up through templo), and the result
+travels back UP via ``org.deliver``.
 
 ``_TEMPLE_ACTIONS`` is a closed set on purpose: ``temple_run`` is a thin,
 deterministic, $0 front for the maintenance seed's own five actions, NOT a

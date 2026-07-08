@@ -322,19 +322,34 @@ proposer ≠ approver for high-risk.
 child of Lhassa, seeded by `seeds/templo.py` (`lhassa seed apply templo`), that owns
 Lhassa's INTERNAL functions — docs, internal creation (tools/skills/flows authoring,
 the consciousness proposals), synchronization (repo/calendar/memory), and
-self-maintenance. `org/temple.py:delegate_internal(action, params, config, instruction)`
-is the down-execute-up loop: it logs ONE `org-delegate` Episode delegating the action
-DOWN to `templo` (mirrors `org/delegate.py`), EXECUTES it via `core/actions.run` with
-its own Episode attributed `dominio="templo"`, then delivers the result UP via
-`org/deliver.py:deliver(origin_department="templo", ...)` — Lhassa is the sender of
-record. A broken topology degrades to a direct run; the whole loop never raises. The
-`maintenance` seed's five hygiene actions (`distill_memory`/`detect_repetition`/
-`review_tools`/`curate_skills`/`calendar_sync`) are minted as `temple_run` (a closed,
-allowlisted wrapper, `actionpack/_temple.py`) instead of running bare, so every beat
-now carries the full down-execute-up hop and `dominio="templo"` attribution — what
-each action DOES is unchanged. The Telegram `/temple <instruction>` door
-keyword-matches a known deterministic action (LLM-free) or falls through to
-`org_run(department="templo")` — the judgment door for free-form internal work.
+self-maintenance. `templo` has five leaf WORKER brains under it — its "monks" — each
+owning a sub-domain: `escriba` (docs), `artifice` (internal creation), `sincronizador`
+(sync), `guardian` (self-maintenance) and `oraculo` (the consciousness — repetition
+detection, self-routing proposals); the same seed creates all five, idempotently.
+`org/temple.py:ACTION_OWNERS` is the deterministic action→monk ownership map for the
+maintenance seed's five actions: `distill_memory`/`review_tools`/`curate_skills` →
+`guardian`, `detect_repetition` → `oraculo`, `calendar_sync` → `sincronizador`; an
+unmapped action, or a topology missing the resolved worker, falls back to `templo`
+itself. `org/temple.py:delegate_internal(action, params, config, instruction)` is the
+down-execute-up loop: it resolves the owning worker (`resolve_worker`), logs ONE
+`org-delegate` Episode delegating the action DOWN the path `lhassa → templo → <worker>`
+(mirrors `org/delegate.py`), EXECUTES it via `core/actions.run` with its own Episode
+attributed `dominio=<worker>` (the monk that did it, reporting to templo), then
+delivers the result UP via `org/deliver.py:deliver(origin_department=<worker>, ...)` —
+the per-brain hops walk worker → templo → Lhassa, the sender of record. A broken
+topology (or a missing worker) degrades to `templo` itself; the whole loop never
+raises. **Tool→brain reporting** — the org-wide "every tool reports to its brain"
+pattern is born here: the worker's execution Episode names the tool (`accion`) and its
+outcome (`resultado`), and when a real monk (not the bare department) ran it, the
+`resultado` also states it reports up through `templo` — the trail reads "guardian ran
+curate_skills → 3 stale skills archived → reports ↑ templo" end to end from the tool's
+own log line, before the deliver seam's per-brain hops even start. The `maintenance`
+seed's five hygiene actions are minted as `temple_run` (a closed, allowlisted wrapper,
+`actionpack/_temple.py`) instead of running bare, so every beat now carries the full
+down-execute-up hop and worker attribution — what each action DOES is unchanged. The
+Telegram `/temple <instruction>` door keyword-matches a known deterministic action
+(LLM-free) or falls through to `org_run(department="templo")` — the judgment door for
+free-form internal work.
 
 ## Work-flows (`flows/`)
 

@@ -46,17 +46,38 @@ def test_apply_templo_creates_department_under_lhassa(cfg):
     assert node.department == "templo"
     assert node.role == templo_seed.TEMPLO_ROLE
     assert set(templo_seed.TEMPLO_SKILLS) <= set(node.skills)
-    assert top.is_leaf("templo")
+    assert not top.is_leaf("templo")  # it now has 5 worker brains under it
+
+
+def test_apply_templo_creates_the_five_worker_brains(cfg):
+    summary = seeds.apply_seed("templo", cfg)
+
+    assert summary["errors"] == []
+    assert set(summary["workers_created"]) == set(templo_seed.TEMPLO_WORKERS)
+    assert summary["workers_existing"] == []
+
+    top = load_topology(cfg)
+    child_ids = {c.id for c in top.children_of("templo")}
+    assert child_ids == set(templo_seed.TEMPLO_WORKERS)
+    for worker_id in templo_seed.TEMPLO_WORKERS:
+        node = top.node(worker_id)
+        assert node.parent == "templo"
+        assert node.department == "templo"
+        assert node.role == templo_seed.TEMPLO_WORKER_ROLE
+        assert top.is_leaf(worker_id)
 
 
 def test_apply_templo_is_idempotent(cfg):
     first = seeds.apply_seed("templo", cfg)
     assert first["created"] is True
+    assert set(first["workers_created"]) == set(templo_seed.TEMPLO_WORKERS)
 
     before = {n.id for n in load_topology(cfg).nodes()}
     second = seeds.apply_seed("templo", cfg)
     assert second["created"] is False
     assert second["existing"] is True
+    assert second["workers_created"] == []
+    assert set(second["workers_existing"]) == set(templo_seed.TEMPLO_WORKERS)
     after = {n.id for n in load_topology(cfg).nodes()}
     assert after == before  # no duplicate brains
 
