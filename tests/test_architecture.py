@@ -29,6 +29,7 @@ from typing import Iterator
 #   interfaces    : memory, security, llm                     (mid layers / contracts)
 #   adapters      : harness, tools, agents, remote, health    (the rentable "hands")
 #   cv seam       : cv                                         (leaf file-I/O used by flows)
+#   calendar seam : calendar                                   (leaf .ics file-I/O used by notify)
 #   leaf infra    : registry.py, plugins.py                   (keystone — depend on nothing)
 #
 # The forbidden directions encode "inner layers must not reach out to shells",
@@ -79,6 +80,11 @@ RULES: tuple[Rule, ...] = (
     # on a base CV, export a tailored .tex" foundation). Like the other inner layers
     # it must never reach out to a shell — it depends only on the standard library.
     Rule("cv-infra-isolation", frozenset({"cv"}), frozenset(SHELLS)),
+    # The calendar file-I/O seam (RFC5545 ``.ics`` generation) is leaf
+    # infrastructure exactly like ``cv``: pure stdlib, used BY a shell
+    # (``notify/commands.py``'s ``/remind`` and ``/event``) but never reaching
+    # back into one itself.
+    Rule("calendar-infra-isolation", frozenset({"calendar"}), frozenset(SHELLS)),
 )
 
 # Keystone leaf-infrastructure files: pure generic infrastructure that must not

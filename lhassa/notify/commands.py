@@ -246,7 +246,7 @@ async def _cmd_start(args: str, *, config=None) -> str:
 # registered by a plugin but missing here still appears — see _cmd_help's final
 # "also available" line — so a drop-in command can never vanish from /help.
 _HELP_GROUPS: list[Tuple[str, list[str]]] = [
-    ("Chat & memory", ["ai", "recall", "memory", "remind", "checkin", "today", "tomorrow"]),
+    ("Chat & memory", ["ai", "recall", "memory", "remind", "event", "checkin", "today", "tomorrow"]),
     ("Decisions", ["approvals", "approve", "deny"]),
     ("Watch & goals", ["watch", "watches", "unwatch", "goal"]),
     ("CV", ["cvnewbase", "cvbase"]),
@@ -261,7 +261,8 @@ DESCRIPTIONS: dict[str, str] = {
     "recall": "<text> — search past episodes.",
     "memory": "<query> — search durable facts.",
     "checkin": "<text> — save a personal morning/evening note.",
-    "remind": "<what> a las 5pm | in 30 min — a timed reminder.",
+    "remind": "<what> a las 5pm | in 30 min — a timed reminder + a calendar file.",
+    "event": "<what> a las 5pm | in 30 min — just the calendar file, no reminder.",
     "today": "Personal agenda for today.",
     "tomorrow": "Personal agenda for tomorrow.",
     "approvals": "List what's waiting on your decision.",
@@ -1307,11 +1308,54 @@ def parse_remind(text: str, *, now=None):
     return (run_at.astimezone(timezone.utc), what[:300], when)
 
 
+async def _deliver_calendar_event(what: str, when: str, run_at, *, config=None) -> bool:
+    """Build + deliver a ``.ics`` for ``what``/``run_at`` — best-effort, never
+    raises. Returns whether the delivery send succeeded (``False`` on ANY
+    trouble — .ics generation, write, or delivery — so a caller can degrade
+    silently without breaking its own reply).
+
+    Lazy shell→shell import of :mod:`lhassa.org.deliver` (same pattern as
+    ``/cvbase`` reaching into :mod:`lhassa.cv`): the calendar leaf package
+    itself never sends anything, this is the one caller that hands the file to
+    the sender-of-record seam. ``origin_department=""`` — a calendar event is
+    Lhassa's own hand, not delegated work, same as ``send_reminder``.
+    """
+    try:
+        from lhassa.calendar import build_event, write_ics
+
+        content = build_event(what, run_at)
+        if not content:
+            return False
+        ics_path = write_ics(content, name=what)
+
+        from lhassa.org.deliver import deliver
+
+        delivered, _artifact_id = await deliver(
+            document=ics_path,
+            caption=f"📅 {what} — {when}",
+            kind="calendar_event",
+            metadata={"summary": what, "when": when},
+            origin_department="",
+            config=config,
+        )
+        return bool(delivered)
+    except Exception as exc:
+        logger.warning(f"commands: calendar event delivery failed: {exc}")
+        return False
+
+
 @register_command("remind")
 async def _cmd_remind(args: str, *, config=None) -> str:
     """``/remind <what> a las 5pm | at 17:00 | in 30 min [mañana]`` — a timed
     reminder through the one clock (a ``send_reminder`` task the heartbeat
-    delivers). Deterministic parse, $0; the think never gets involved."""
+    delivers). Deterministic parse, $0; the think never gets involved.
+
+    ADDITIVELY also generates a ``.ics`` for the same event and delivers it
+    (a tappable calendar file, on top of the internal reminder) — see
+    :func:`_deliver_calendar_event`. Best-effort: the internal reminder is
+    minted and its reply returned regardless of whether the ``.ics`` step
+    succeeds, so a calendar hiccup never breaks ``/remind``.
+    """
     try:
         parsed = parse_remind(args)
         if parsed is None:
@@ -1338,11 +1382,43 @@ async def _cmd_remind(args: str, *, config=None) -> str:
         )
         if not task_id:
             return _oops(f"schedule that reminder ({estado})")
+
+        try:
+            await _deliver_calendar_event(what, when, run_at, config=cfg)
+        except Exception as exc:  # never let the .ics step break /remind
+            logger.warning(f"commands: /remind calendar delivery failed: {exc}")
+
         local = run_at.astimezone().strftime("%a %H:%M")
         return f"⏰ Noted — I'll remind you {when} ({local}): {what}"
     except Exception as exc:
         logger.warning(f"commands: /remind failed: {exc}")
         return _oops("schedule that reminder")
+
+
+@register_command("event")
+async def _cmd_event(args: str, *, config=None) -> str:
+    """``/event <what> a las 5pm | at 17:00 | in 30 min [mañana]`` — calendar-only:
+    generates and delivers a ``.ics`` for the event, no internal reminder task
+    (see ``/remind`` for both). Same deterministic ``parse_remind``, $0."""
+    try:
+        parsed = parse_remind(args)
+        if parsed is None:
+            return (
+                "Tell me what and when — e.g. /event dentist appointment at 3pm, "
+                "/event flight in 2 hours, /event standup mañana 9am."
+            )
+        run_at, what, when = parsed
+        cfg = _config(config)
+
+        ok = await _deliver_calendar_event(what, when, run_at, config=cfg)
+        if not ok:
+            return _oops("build and send that calendar event")
+
+        local = run_at.astimezone().strftime("%a %H:%M")
+        return f"📅 Sent — calendar event for {when} ({local}): {what}"
+    except Exception as exc:
+        logger.warning(f"commands: /event failed: {exc}")
+        return _oops("build and send that calendar event")
 
 
 @register_command("version")

@@ -791,6 +791,130 @@ def test_remind_without_time_gives_usage_hint(tmp_path, monkeypatch):
     assert "what and when" in reply
 
 
+# ── /remind + /event — the additive .ics calendar delivery ────────────────────
+
+
+def _fake_deliver(calls):
+    async def fake(*, document=None, caption="", kind="message", metadata=None,
+                    origin_department="", config=None, **kwargs):
+        calls.append(
+            {
+                "document": document,
+                "caption": caption,
+                "kind": kind,
+                "metadata": metadata,
+                "origin_department": origin_department,
+            }
+        )
+        return True, "art_fake"
+
+    return fake
+
+
+def test_remind_also_delivers_a_calendar_event(tmp_path, monkeypatch):
+    from lhassa.org import deliver as deliver_mod
+
+    monkeypatch.setenv("LHASSA_CALENDAR_DIR", str(tmp_path / "cal"))
+    db = asyncio.run(_init_db(tmp_path, monkeypatch))
+    calls: list = []
+    monkeypatch.setattr(deliver_mod, "deliver", _fake_deliver(calls))
+
+    reply = asyncio.run(
+        commands.dispatch(
+            "/remind llamar al banco a las 5pm", config=_cfg(instance_id="inst_personal")
+        )
+    )
+
+    # the internal reminder UX is unchanged
+    assert reply.startswith("⏰ Noted")
+    assert "llamar al banco" in reply
+    tasks = asyncio.run(db.list_tasks("inst_personal", estado="pendiente", limit=10))
+    match = [t for t in tasks if t.get("accion") == "send_reminder"]
+    assert len(match) == 1
+
+    # AND a calendar_event was delivered
+    assert len(calls) == 1
+    call = calls[0]
+    assert call["kind"] == "calendar_event"
+    assert str(call["document"]).endswith(".ics")
+    assert call["metadata"]["summary"] == "llamar al banco"
+    assert call["origin_department"] == ""
+
+
+def test_remind_survives_calendar_delivery_failure(tmp_path, monkeypatch):
+    monkeypatch.setenv("LHASSA_CALENDAR_DIR", str(tmp_path / "cal"))
+    db = asyncio.run(_init_db(tmp_path, monkeypatch))
+
+    async def boom(**kwargs):
+        raise RuntimeError("deliver is down")
+
+    from lhassa.org import deliver as deliver_mod
+
+    monkeypatch.setattr(deliver_mod, "deliver", boom)
+
+    reply = asyncio.run(
+        commands.dispatch(
+            "/remind llamar al banco a las 5pm", config=_cfg(instance_id="inst_personal")
+        )
+    )
+    # the reminder still works even though the .ics delivery blew up
+    assert reply.startswith("⏰ Noted")
+    tasks = asyncio.run(db.list_tasks("inst_personal", estado="pendiente", limit=10))
+    match = [t for t in tasks if t.get("accion") == "send_reminder"]
+    assert len(match) == 1
+
+
+def test_event_command_delivers_ics_with_no_reminder_task(tmp_path, monkeypatch):
+    from lhassa.org import deliver as deliver_mod
+
+    monkeypatch.setenv("LHASSA_CALENDAR_DIR", str(tmp_path / "cal"))
+    db = asyncio.run(_init_db(tmp_path, monkeypatch))
+    calls: list = []
+    monkeypatch.setattr(deliver_mod, "deliver", _fake_deliver(calls))
+
+    reply = asyncio.run(
+        commands.dispatch(
+            "/event dentist appointment at 3pm", config=_cfg(instance_id="inst_personal")
+        )
+    )
+
+    assert reply.startswith("📅 Sent")
+    assert "dentist appointment" in reply
+
+    assert len(calls) == 1
+    assert calls[0]["kind"] == "calendar_event"
+    assert str(calls[0]["document"]).endswith(".ics")
+
+    tasks = asyncio.run(db.list_tasks("inst_personal", estado="pendiente", limit=10))
+    match = [t for t in tasks if t.get("accion") == "send_reminder"]
+    assert match == []
+
+
+def test_event_command_degrades_when_delivery_fails(tmp_path, monkeypatch):
+    monkeypatch.setenv("LHASSA_CALENDAR_DIR", str(tmp_path / "cal"))
+    asyncio.run(_init_db(tmp_path, monkeypatch))
+
+    async def fails(**kwargs):
+        return False, None
+
+    from lhassa.org import deliver as deliver_mod
+
+    monkeypatch.setattr(deliver_mod, "deliver", fails)
+
+    reply = asyncio.run(
+        commands.dispatch(
+            "/event dentist appointment at 3pm", config=_cfg(instance_id="inst_personal")
+        )
+    )
+    assert "couldn't" in reply.lower()
+
+
+def test_event_without_time_gives_usage_hint(tmp_path, monkeypatch):
+    asyncio.run(_init_db(tmp_path, monkeypatch))
+    reply = asyncio.run(commands.dispatch("/event algo sin hora", config=_cfg()))
+    assert "what and when" in reply
+
+
 # ── /ai — search + model synthesis (a specific answer, not links) ──────────────────
 
 
