@@ -24,14 +24,14 @@ def _use_tmp(tmp_path, monkeypatch):
 def test_cli_calendar_add_and_list(tmp_path, monkeypatch):
     _use_tmp(tmp_path, monkeypatch)
 
-    res = runner.invoke(app, ["calendar", "add", "EAFIT", "https://example.edu/feed.ics"])
+    res = runner.invoke(app, ["calendar", "add", "Work", "https://example.edu/feed.ics"])
     assert res.exit_code == 0, res.output
-    assert "EAFIT" in res.output
+    assert "Work" in res.output
 
     res_list = runner.invoke(app, ["calendar", "list", "--json"])
     assert res_list.exit_code == 0, res_list.output
     data = json.loads(res_list.output)
-    assert data == [{"name": "EAFIT", "url": "https://example.edu/feed.ics"}]
+    assert data == [{"name": "Work", "url": "https://example.edu/feed.ics"}]
 
 
 def test_cli_calendar_add_rejects_bad_url(tmp_path, monkeypatch):
@@ -42,9 +42,9 @@ def test_cli_calendar_add_rejects_bad_url(tmp_path, monkeypatch):
 
 def test_cli_calendar_remove(tmp_path, monkeypatch):
     _use_tmp(tmp_path, monkeypatch)
-    runner.invoke(app, ["calendar", "add", "EAFIT", "https://example.edu/feed.ics"])
+    runner.invoke(app, ["calendar", "add", "Work", "https://example.edu/feed.ics"])
 
-    res = runner.invoke(app, ["calendar", "remove", "EAFIT"])
+    res = runner.invoke(app, ["calendar", "remove", "Work"])
     assert res.exit_code == 0, res.output
 
     res_list = runner.invoke(app, ["calendar", "list", "--json"])

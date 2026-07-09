@@ -50,7 +50,7 @@ def _mask_url(url: str) -> str:
 
 
 def add_cmd(
-    name: str = typer.Argument(..., help="A short name for this calendar, e.g. EAFIT."),
+    name: str = typer.Argument(..., help="A short name for this calendar, e.g. Work."),
     url: str = typer.Argument(..., help="Its published .ics feed url."),
     json_out: bool = typer.Option(False, "--json", help="Emit the result as JSON."),
 ) -> None:

@@ -115,6 +115,12 @@ def _parse_csv_set(raw: str) -> "set[str]":
     return {item.strip() for item in (raw or "").split(",") if item.strip()}
 
 
+def _parse_csv_list(raw: str, default: "list[str]") -> "list[str]":
+    """Parse a CSV env var into an ORDER-PRESERVING list; empty → default."""
+    items = [item.strip() for item in (raw or "").split(",") if item.strip()]
+    return items or default
+
+
 def _parse_repos(raw: str) -> "set[str] | str":
     """Parse LHASSA_ALLOWLIST_REPOS (CSV) into a set, or "*" for "allow any".
 
@@ -240,6 +246,14 @@ class Config:
     # auto-promoted by the autonomy knob. CSV → set.
     always_approve_actions: "set[str]" = _parse_csv_set(
         os.getenv("LHASSA_ALWAYS_APPROVE_ACTIONS", "move_money,delete_data")
+    )
+
+    # ── Health checks ──────────────────────────────────────────────────────────
+    # Directory NAMES under $HOME that `health/checks.py:git_repos_under` scans
+    # for git repos to report on (uncommitted/unpushed work). CSV, order-preserving;
+    # default is just the one generic project root every dev box has.
+    watch_repo_dirs: "list[str]" = _parse_csv_list(
+        os.getenv("LHASSA_WATCH_REPO_DIRS", "Code"), ["Code"]
     )
 
     # ── Integrations: MCP (§2.11) — "plug in, don't program" ──────────────────

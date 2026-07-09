@@ -18,18 +18,18 @@ def _cal(*vevents):
 
 def test_parse_tzid_bogota_to_utc():
     ev = (
-        "BEGIN:VEVENT\nSUMMARY:Cálculo III\n"
+        "BEGIN:VEVENT\nSUMMARY:Algorithms 201\n"
         "DTSTART;TZID=SA Pacific Standard Time:20260709T150000\n"
         "DTEND;TZID=SA Pacific Standard Time:20260709T163000\n"
-        "LOCATION:Bloque 19\nEND:VEVENT"
+        "LOCATION:Room 204\nEND:VEVENT"
     )
     ws, we = _win()
     out = feed.parse_events(_cal(ev), window_start=ws, window_end=we)
     assert len(out) == 1
     # 15:00 Bogotá (UTC-5) → 20:00 UTC
     assert out[0]["start"] == datetime(2026, 7, 9, 20, 0, tzinfo=timezone.utc)
-    assert out[0]["summary"] == "Cálculo III"
-    assert out[0]["location"] == "Bloque 19"
+    assert out[0]["summary"] == "Algorithms 201"
+    assert out[0]["location"] == "Room 204"
 
 
 def test_parse_utc_and_all_day():
@@ -165,11 +165,11 @@ async def test_upcoming_tags_events_with_their_calendar_name(tmp_path, monkeypat
         calendar_ics_url="",
         calendar_feed_ttl=3600.0,
     )
-    _store.add_calendar("EAFIT", "https://example.edu/eafit.ics", config=cfg)
+    _store.add_calendar("Work", "https://example.edu/work.ics", config=cfg)
     _store.add_calendar("Personal", "https://example.com/personal.ics", config=cfg)
 
     fake_bodies = {
-        "https://example.edu/eafit.ics": _cal(_ev("Cálculo III", "20260709T150000")),
+        "https://example.edu/work.ics": _cal(_ev("Algorithms 201", "20260709T150000")),
         "https://example.com/personal.ics": _cal(_ev("Team sync", "20260709T190000")),
     }
 
@@ -180,9 +180,9 @@ async def test_upcoming_tags_events_with_their_calendar_name(tmp_path, monkeypat
 
     events = await feed.upcoming("inst_x", hours=48, config=cfg)
     by_summary = {e["summary"]: e["calendar"] for e in events}
-    assert by_summary == {"Cálculo III": "EAFIT", "Team sync": "Personal"}
+    assert by_summary == {"Algorithms 201": "Work", "Team sync": "Personal"}
     # sorted by start
-    assert [e["summary"] for e in events] == ["Cálculo III", "Team sync"]
+    assert [e["summary"] for e in events] == ["Algorithms 201", "Team sync"]
 
 
 @pytest.mark.asyncio

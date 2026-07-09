@@ -29,7 +29,7 @@ async def test_agenda_shows_calendar_name_with_multiple_calendars(monkeypatch):
 
     async def _fake_upcoming(instance_id, *, hours=36, config=None):
         return [
-            _event("Cálculo III", 15, "EAFIT"),
+            _event("Algorithms 201", 15, "Work"),
             _event("Team sync", 19, "Personal"),
         ]
 
@@ -48,7 +48,7 @@ async def test_agenda_shows_calendar_name_with_multiple_calendars(monkeypatch):
         instance_id = "inst_personal"
 
     summary = await agenda.build(_Cfg())
-    assert any("EAFIT" in e for e in summary.events)
+    assert any("Work" in e for e in summary.events)
     assert any("Personal" in e for e in summary.events)
 
 
@@ -57,7 +57,7 @@ async def test_agenda_omits_calendar_name_with_a_single_calendar(monkeypatch):
     from lhassa.calendar import feed as _feed
 
     async def _fake_upcoming(instance_id, *, hours=36, config=None):
-        return [_event("Cálculo III", 15, "EAFIT")]
+        return [_event("Algorithms 201", 15, "Work")]
 
     monkeypatch.setattr(_feed, "upcoming", _fake_upcoming)
 
@@ -75,8 +75,8 @@ async def test_agenda_omits_calendar_name_with_a_single_calendar(monkeypatch):
 
     summary = await agenda.build(_Cfg())
     assert len(summary.events) == 1
-    assert summary.events[0].endswith("Cálculo III")
-    assert "EAFIT" not in summary.events[0]
+    assert summary.events[0].endswith("Algorithms 201")
+    assert "Work" not in summary.events[0]
 
 
 def _async_return(value):

@@ -29,7 +29,7 @@ def _cfg(tmp_path, **over):
 _NOW = datetime(2026, 7, 8, 12, 0, tzinfo=timezone.utc)
 
 
-def _candidate(summary="Reunión Vento", start=None, source="Vento"):
+def _candidate(summary="Team meeting", start=None, source="Personal"):
     return {
         "summary": summary,
         "start": start or (_NOW + timedelta(hours=3)),
@@ -59,7 +59,7 @@ def _fake_deliver(calls):
 def test_no_primary_is_a_clean_noop(tmp_path, monkeypatch):
     monkeypatch.setenv("LHASSA_CALENDAR_DIR", str(tmp_path / "cal"))
     cfg = _cfg(tmp_path)
-    store.add_calendar("EAFIT", "https://example.edu/feed.ics", config=cfg)
+    store.add_calendar("Work", "https://example.edu/feed.ics", config=cfg)
     # no primary set
 
     out = asyncio.run(_calendar_sync.calendar_sync({"config": cfg}))
@@ -69,8 +69,8 @@ def test_no_primary_is_a_clean_noop(tmp_path, monkeypatch):
 def test_no_candidates_is_a_clean_noop(tmp_path, monkeypatch):
     monkeypatch.setenv("LHASSA_CALENDAR_DIR", str(tmp_path / "cal"))
     cfg = _cfg(tmp_path)
-    store.add_calendar("EAFIT", "https://example.edu/feed.ics", config=cfg)
-    store.set_primary("EAFIT", config=cfg)
+    store.add_calendar("Work", "https://example.edu/feed.ics", config=cfg)
+    store.set_primary("Work", config=cfg)
 
     async def fake_find_unsynced(instance_id, *, hours=168, config=None):
         return []
@@ -84,10 +84,10 @@ def test_no_candidates_is_a_clean_noop(tmp_path, monkeypatch):
 def test_delivers_each_candidate_via_deliver(tmp_path, monkeypatch):
     monkeypatch.setenv("LHASSA_CALENDAR_DIR", str(tmp_path / "cal"))
     cfg = _cfg(tmp_path)
-    store.add_calendar("EAFIT", "https://example.edu/feed.ics", config=cfg)
-    store.set_primary("EAFIT", config=cfg)
+    store.add_calendar("Work", "https://example.edu/feed.ics", config=cfg)
+    store.set_primary("Work", config=cfg)
 
-    candidates = [_candidate("Reunión Vento"), _candidate("Standup", source="Work")]
+    candidates = [_candidate("Team meeting"), _candidate("Standup", source="Work")]
 
     async def fake_find_unsynced(instance_id, *, hours=168, config=None):
         return candidates
@@ -107,16 +107,16 @@ def test_delivers_each_candidate_via_deliver(tmp_path, monkeypatch):
     for call in calls:
         assert call["kind"] == "calendar_event"
         assert str(call["document"]).endswith(".ics")
-        assert call["metadata"]["primary"] == "EAFIT"
+        assert call["metadata"]["primary"] == "Work"
 
 
 def test_second_run_dedupes_via_watch_state(tmp_path, monkeypatch):
     monkeypatch.setenv("LHASSA_CALENDAR_DIR", str(tmp_path / "cal"))
     cfg = _cfg(tmp_path)
-    store.add_calendar("EAFIT", "https://example.edu/feed.ics", config=cfg)
-    store.set_primary("EAFIT", config=cfg)
+    store.add_calendar("Work", "https://example.edu/feed.ics", config=cfg)
+    store.set_primary("Work", config=cfg)
 
-    candidates = [_candidate("Reunión Vento")]
+    candidates = [_candidate("Team meeting")]
 
     async def fake_find_unsynced(instance_id, *, hours=168, config=None):
         return candidates
@@ -141,10 +141,10 @@ def test_second_run_dedupes_via_watch_state(tmp_path, monkeypatch):
 def test_delivery_failure_does_not_mark_delivered(tmp_path, monkeypatch):
     monkeypatch.setenv("LHASSA_CALENDAR_DIR", str(tmp_path / "cal"))
     cfg = _cfg(tmp_path)
-    store.add_calendar("EAFIT", "https://example.edu/feed.ics", config=cfg)
-    store.set_primary("EAFIT", config=cfg)
+    store.add_calendar("Work", "https://example.edu/feed.ics", config=cfg)
+    store.set_primary("Work", config=cfg)
 
-    candidates = [_candidate("Reunión Vento")]
+    candidates = [_candidate("Team meeting")]
 
     async def fake_find_unsynced(instance_id, *, hours=168, config=None):
         return candidates
@@ -165,8 +165,8 @@ def test_delivery_failure_does_not_mark_delivered(tmp_path, monkeypatch):
 def test_never_raises_on_reconcile_error(tmp_path, monkeypatch):
     monkeypatch.setenv("LHASSA_CALENDAR_DIR", str(tmp_path / "cal"))
     cfg = _cfg(tmp_path)
-    store.add_calendar("EAFIT", "https://example.edu/feed.ics", config=cfg)
-    store.set_primary("EAFIT", config=cfg)
+    store.add_calendar("Work", "https://example.edu/feed.ics", config=cfg)
+    store.set_primary("Work", config=cfg)
 
     async def boom(instance_id, *, hours=168, config=None):
         raise RuntimeError("boom")

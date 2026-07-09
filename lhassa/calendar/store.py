@@ -2,7 +2,7 @@
 
 An owner can have several calendars (institutional, personal, a project one) —
 each subscribed with a *name* so ``/today`` can show which calendar an event
-came from (``📅 15:00 Cálculo III · EAFIT``). This module is the small,
+came from (``📅 15:00 Algorithms 201 · Work``). This module is the small,
 self-contained store for that list, mirroring :mod:`lhassa.flows.store` /
 :mod:`lhassa.org.topology`'s "JSON file under ``~/.lhassa``" pattern: a list of
 ``{"name": str, "url": str}`` dicts at ``config.calendars_file``

@@ -19,14 +19,14 @@ Matching heuristic (and its honest limits)
 Two events are considered "the same" when:
 
   1. their ``summary`` matches after :func:`_normalize` (casefold + collapse
-     internal whitespace to single spaces + strip) — so "Reunión  Vento" and
-     "reunión vento" are the same event; and
+     internal whitespace to single spaces + strip) — so "Team  meeting" and
+     "team meeting" are the same event; and
   2. their ``start`` times are within :data:`MATCH_TOLERANCE_MINUTES` of each
      other (default 5 minutes) — so a feed that rounds to the minute or a
      institutional export off by a couple of minutes still matches.
 
 This is intentionally simple and has known false negatives: a RENAMED event
-(same time, different title — e.g. "Reunión Vento" → "Vento sync") reads as
+(same time, different title — e.g. "Team meeting" → "Team sync") reads as
 unsynced even though a human would recognize it as the same meeting, and an
 event moved by more than the tolerance also reads as unsynced. Both are
 ACCEPTABLE by design — the owner reviews and taps each candidate rather than

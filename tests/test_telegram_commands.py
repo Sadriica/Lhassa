@@ -1023,23 +1023,23 @@ def test_calendar_add_list_remove_roundtrip(tmp_path):
     cfg = _cal_cfg(tmp_path)
 
     added = asyncio.run(
-        commands.dispatch("/calendar add EAFIT https://example.edu/feed.ics", config=cfg)
+        commands.dispatch("/calendar add Work https://example.edu/feed.ics", config=cfg)
     )
-    assert "Calendar added: EAFIT" in added
+    assert "Calendar added: Work" in added
 
     listed = asyncio.run(commands.dispatch("/calendars", config=cfg))
-    assert "EAFIT" in listed
+    assert "Work" in listed
     # the url is masked, not echoed in full for a long url
     long_url = "https://example.edu/" + "x" * 60 + ".ics"
     asyncio.run(commands.dispatch(f"/calendar add Long {long_url}", config=cfg))
     listed2 = asyncio.run(commands.dispatch("/calendars", config=cfg))
     assert long_url not in listed2
 
-    removed = asyncio.run(commands.dispatch("/calendar remove EAFIT", config=cfg))
-    assert "Calendar removed: EAFIT" in removed
+    removed = asyncio.run(commands.dispatch("/calendar remove Work", config=cfg))
+    assert "Calendar removed: Work" in removed
 
     listed3 = asyncio.run(commands.dispatch("/calendars", config=cfg))
-    assert "EAFIT" not in listed3
+    assert "Work" not in listed3
 
 
 def test_calendar_add_rejects_bad_url(tmp_path):
@@ -1116,14 +1116,14 @@ def test_calendars_shows_env_shortcut_masked(tmp_path):
 
 def test_calendar_primary_sets_master(tmp_path):
     cfg = _cal_cfg(tmp_path)
-    asyncio.run(commands.dispatch("/calendar add EAFIT https://example.edu/feed.ics", config=cfg))
+    asyncio.run(commands.dispatch("/calendar add Work https://example.edu/feed.ics", config=cfg))
 
-    reply = asyncio.run(commands.dispatch("/calendar primary EAFIT", config=cfg))
-    assert "Master calendar set: EAFIT" in reply
+    reply = asyncio.run(commands.dispatch("/calendar primary Work", config=cfg))
+    assert "Master calendar set: Work" in reply
 
     from lhassa.calendar import store as _cal_store
 
-    assert _cal_store.get_primary(config=cfg) == "EAFIT"
+    assert _cal_store.get_primary(config=cfg) == "Work"
 
 
 def test_calendar_primary_unknown_name(tmp_path):
@@ -1140,18 +1140,18 @@ def test_calendar_primary_missing_arg_usage_hint(tmp_path):
 
 def test_calendars_marks_the_primary(tmp_path):
     cfg = _cal_cfg(tmp_path)
-    asyncio.run(commands.dispatch("/calendar add EAFIT https://example.edu/feed.ics", config=cfg))
+    asyncio.run(commands.dispatch("/calendar add Work https://example.edu/feed.ics", config=cfg))
     asyncio.run(commands.dispatch("/calendar add Personal https://example.com/p.ics", config=cfg))
-    asyncio.run(commands.dispatch("/calendar primary EAFIT", config=cfg))
+    asyncio.run(commands.dispatch("/calendar primary Work", config=cfg))
 
     listed = asyncio.run(commands.dispatch("/calendars", config=cfg))
-    assert "EAFIT (primary)" in listed
+    assert "Work (primary)" in listed
     assert "Personal (primary)" not in listed
 
 
 def test_calendar_sync_reports_no_primary(tmp_path):
     cfg = _cal_cfg(tmp_path)
-    asyncio.run(commands.dispatch("/calendar add EAFIT https://example.edu/feed.ics", config=cfg))
+    asyncio.run(commands.dispatch("/calendar add Work https://example.edu/feed.ics", config=cfg))
 
     reply = asyncio.run(commands.dispatch("/calendar sync", config=cfg))
     assert "no primary" in reply.lower()
@@ -1159,8 +1159,8 @@ def test_calendar_sync_reports_no_primary(tmp_path):
 
 def test_calendar_sync_reports_found_and_delivered(tmp_path, monkeypatch):
     cfg = _cal_cfg(tmp_path, instance_id="inst_personal")
-    asyncio.run(commands.dispatch("/calendar add EAFIT https://example.edu/feed.ics", config=cfg))
-    asyncio.run(commands.dispatch("/calendar primary EAFIT", config=cfg))
+    asyncio.run(commands.dispatch("/calendar add Work https://example.edu/feed.ics", config=cfg))
+    asyncio.run(commands.dispatch("/calendar primary Work", config=cfg))
 
     from lhassa.actionpack import _calendar_sync
 
@@ -1176,8 +1176,8 @@ def test_calendar_sync_reports_found_and_delivered(tmp_path, monkeypatch):
 
 def test_calendar_sync_reports_nothing_to_sync(tmp_path, monkeypatch):
     cfg = _cal_cfg(tmp_path, instance_id="inst_personal")
-    asyncio.run(commands.dispatch("/calendar add EAFIT https://example.edu/feed.ics", config=cfg))
-    asyncio.run(commands.dispatch("/calendar primary EAFIT", config=cfg))
+    asyncio.run(commands.dispatch("/calendar add Work https://example.edu/feed.ics", config=cfg))
+    asyncio.run(commands.dispatch("/calendar primary Work", config=cfg))
 
     from lhassa.actionpack import _calendar_sync
 
