@@ -93,6 +93,40 @@ against the same allowlist.
 
 ## Quickstart
 
+Talking to Lhassa in about two minutes, no systemd, no Docker:
+
+```bash
+git clone https://github.com/Sadriica/Lhassa.git
+cd Lhassa
+make quickstart
+```
+
+`make quickstart` resolves the venv (`uv sync`, no dashboard build needed yet),
+makes sure a `.env` exists, and checks whether it can find a brain to think
+with. **Bring your own** — either a free/cheap API key (**[Groq's free
+tier](https://console.groq.com)** is the easiest start; Anthropic/OpenAI/
+OpenRouter/Cerebras all work too, one key is enough) dropped into `.env`, or go
+**fully local and $0** with **[Ollama](https://ollama.com)** — no key at all.
+Re-run `make quickstart` once you've added one; it'll tell you what's next:
+`uv run lhassa onboard` (a short questionnaire that seeds its first facts about
+you) and then `uv run lhassa` — you're talking to it.
+
+First things to try:
+
+- just talk to it, plain language, no special syntax
+- `lhassa recall <text>` — search its own past episodes (FTS5)
+- `lhassa memory <query>` — search its durable facts
+- `lhassa capabilities` — what's wired, what's on/off
+
+Want it **always-on** — a heartbeat that keeps ticking while you sleep,
+Telegram, systemd + Docker? That's the next section below
+(`bash scripts/install.sh`), or the full walkthrough in
+[`doc/install.md`](doc/install.md).
+
+---
+
+## Full install (always-on)
+
 ### Requirements
 
 System dependencies (install these first):
