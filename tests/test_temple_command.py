@@ -1,6 +1,6 @@
-"""Tests for the /temple Telegram command — the owner's door into templo.
+"""Tests for the /temple Telegram command — the owner's door into temple.
 
-Offline + $0: a tmp brain DB, a seeded lhassa->templo topology, and a fake
+Offline + $0: a tmp brain DB, a seeded lhassa->temple topology, and a fake
 ``notify.dispatch.notify`` so the up-hop send never touches the network.
 """
 
@@ -16,7 +16,7 @@ from lhassa.notify import commands
 def _cfg(tmp_path, **over):
     topo = tmp_path / "org.json"
     topo.write_text(
-        '[{"id":"templo","role":"internal-operations","department":"templo","parent":null}]',
+        '[{"id":"temple","role":"internal-operations","department":"temple","parent":null}]',
         encoding="utf-8",
     )
     base = dict(
@@ -60,7 +60,7 @@ def test_temple_keyword_match_runs_deterministic_action(tmp_path, monkeypatch):
         lambda config=None: Topology(
             [
                 BrainNode(id="lhassa", role="administrator"),
-                BrainNode(id="templo", role="internal-operations", department="templo", parent="lhassa"),
+                BrainNode(id="temple", role="internal-operations", department="temple", parent="lhassa"),
             ]
         ),
     )
@@ -68,22 +68,22 @@ def test_temple_keyword_match_runs_deterministic_action(tmp_path, monkeypatch):
     reply = asyncio.run(
         commands.dispatch("/temple distill recent episodes into facts", config=_cfg(tmp_path))
     )
-    assert "templo ran distill_memory" in reply
+    assert "temple ran distill_memory" in reply
 
     rows = asyncio.run(db.load_recent_episodes("inst_personal", n=50))
-    assert any(r["despertar_por"] == "templo-execute" for r in rows)
+    assert any(r["despertar_por"] == "temple-execute" for r in rows)
 
 
 def test_temple_free_form_instruction_mints_org_run(tmp_path):
     reply = asyncio.run(
         commands.dispatch("/temple draft the internal onboarding doc", config=_cfg(tmp_path))
     )
-    assert "Handed to templo" in reply
+    assert "Handed to temple" in reply
 
     tasks = asyncio.run(db.list_tasks("inst_personal", estado="pendiente"))
     org_runs = [t for t in tasks if t["accion"] == "org_run"]
     assert len(org_runs) == 1
-    assert org_runs[0]["params"]["department"] == "templo"
+    assert org_runs[0]["params"]["department"] == "temple"
 
 
 # ── /temple schedule — the temple's own clock ─────────────────────────────────────
@@ -115,7 +115,7 @@ def test_temple_schedule_lists_recurring_jobs_with_cadence_and_monk(tmp_path, mo
     reply = asyncio.run(go())
     assert "temple's clock" in reply
     assert "curate_skills — weekly · guardian" in reply
-    assert "detect_repetition — daily · oraculo" in reply
+    assert "detect_repetition — daily · oracle" in reply
     assert "send_digest" not in reply  # owner-facing, not the temple's
 
 

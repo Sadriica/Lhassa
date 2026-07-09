@@ -114,8 +114,8 @@ def register_all() -> None:
     # ── Skills curator (deterministic lifecycle sweep) ─────────────────────────
     _reg("curate_skills", _curate.curate_skills)
 
-    # ── Templo — internal hygiene work routed down-execute-up through the
-    # templo department (see lhassa.org.temple / lhassa.seeds.templo) ────────
+    # ── Temple — internal hygiene work routed down-execute-up through the
+    # temple department (see lhassa.org.temple / lhassa.seeds.temple) ────────
     _reg("temple_run", _temple.temple_run)
 
     # ── PTC — Programmatic Tool Calling (script-over-RPC in quarantine) ────────

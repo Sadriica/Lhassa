@@ -1,14 +1,14 @@
-"""Tests for lhassa.org.temple — the templo down-execute-up internal loop.
+"""Tests for lhassa.org.temple — the temple down-execute-up internal loop.
 
 Offline + $0: a tmp brain DB (monkeypatched ``db.DB_PATH``), a seeded topology
-(lhassa → templo, mirroring tests/test_org_delegate.py's shape), a fake
+(lhassa → temple, mirroring tests/test_org_delegate.py's shape), a fake
 deterministic action registered under core.actions, and a fake ``deliver`` so
 nothing touches the network. LHASSA_ORG_LIVE is left off (the deterministic
 action path never needs it). Covers:
 
   * the full loop — a DOWN org-delegate episode, an execution episode
-    attributed dominio="templo", a deliver() call with origin_department=
-    "templo", and {"ok": True, ...} returned;
+    attributed dominio="temple", a deliver() call with origin_department=
+    "temple", and {"ok": True, ...} returned;
   * a topology failure degrades to a direct run — the action still executes
     and the result still comes back "ok";
   * a failing action still returns ok (delegate_internal never raises) with
@@ -28,24 +28,24 @@ from lhassa.org.topology import BrainNode, Topology
 
 
 def _topology() -> Topology:
-    """lhassa (root admin) → templo (a leaf department, no workers)."""
+    """lhassa (root admin) → temple (a leaf department, no workers)."""
     return Topology(
         [
             BrainNode(id="lhassa", role="administrator"),
-            BrainNode(id="templo", role="internal-operations", department="templo", parent="lhassa"),
+            BrainNode(id="temple", role="internal-operations", department="temple", parent="lhassa"),
         ]
     )
 
 
 def _topology_with_workers() -> Topology:
-    """lhassa → templo → the five worker brains (the "monks")."""
+    """lhassa → temple → the five worker brains (the "monks")."""
     nodes = [
         BrainNode(id="lhassa", role="administrator"),
-        BrainNode(id="templo", role="internal-operations", department="templo", parent="lhassa"),
+        BrainNode(id="temple", role="internal-operations", department="temple", parent="lhassa"),
     ]
     for worker_id in temple.TEMPLE_WORKERS:
         nodes.append(
-            BrainNode(id=worker_id, role="monk", department="templo", parent="templo")
+            BrainNode(id=worker_id, role="monk", department="temple", parent="temple")
         )
     return Topology(nodes)
 
@@ -53,7 +53,7 @@ def _topology_with_workers() -> Topology:
 def _cfg(tmp_path):
     topo = tmp_path / "org.json"
     topo.write_text(
-        '[{"id":"templo","role":"internal-operations","department":"templo","parent":null}]',
+        '[{"id":"temple","role":"internal-operations","department":"temple","parent":null}]',
         encoding="utf-8",
     )
     return SimpleNamespace(
@@ -116,21 +116,21 @@ async def test_delegate_internal_full_loop(tmp_path, monkeypatch):
     # DOWN hop — one org-delegate episode.
     down = await _episodes("inst_personal", "org-delegate")
     assert len(down) == 1
-    assert down[0]["accion"] == "delegate:lhassa→templo"
-    assert "down to templo" in down[0]["decision"]
+    assert down[0]["accion"] == "delegate:lhassa→temple"
+    assert "down to temple" in down[0]["decision"]
     assert float(down[0]["costo_usd"]) == 0.0
 
-    # EXECUTE hop — one templo-execute episode, dominio="templo".
-    exec_eps = await _episodes("inst_personal", "templo-execute")
+    # EXECUTE hop — one temple-execute episode, dominio="temple".
+    exec_eps = await _episodes("inst_personal", "temple-execute")
     assert len(exec_eps) == 1
-    assert exec_eps[0]["dominio"] == "templo"
+    assert exec_eps[0]["dominio"] == "temple"
     assert exec_eps[0]["resultado"] == "fake-result"
     assert exec_eps[0]["accion"] == "temple_test_action"
 
-    # UP hop — org-deliver episodes, originating at templo.
+    # UP hop — org-deliver episodes, originating at temple.
     up = await _episodes("inst_personal", "org-deliver")
     assert up, "expected org-deliver episodes for the up hop"
-    assert up[0]["dominio"] == "templo"
+    assert up[0]["dominio"] == "temple"
 
 
 # ── degrade path: broken topology still executes ──────────────────────────────
@@ -164,7 +164,7 @@ async def test_delegate_internal_degrades_on_broken_topology(tmp_path, monkeypat
 
     down = await _episodes("inst_personal", "org-delegate")
     assert down == []  # the down-hop episode itself was skipped
-    exec_eps = await _episodes("inst_personal", "templo-execute")
+    exec_eps = await _episodes("inst_personal", "temple-execute")
     assert len(exec_eps) == 1  # execution still happened
 
 
@@ -233,19 +233,19 @@ def test_resolve_worker_maps_each_maintenance_action_to_its_monk():
     assert temple.resolve_worker("curate_skills", topo) == "guardian"
     assert temple.resolve_worker("review_tools", topo) == "guardian"
     assert temple.resolve_worker("distill_memory", topo) == "guardian"
-    assert temple.resolve_worker("detect_repetition", topo) == "oraculo"
-    assert temple.resolve_worker("calendar_sync", topo) == "sincronizador"
+    assert temple.resolve_worker("detect_repetition", topo) == "oracle"
+    assert temple.resolve_worker("calendar_sync", topo) == "synchronizer"
 
 
-def test_resolve_worker_falls_back_to_templo_when_unmapped():
+def test_resolve_worker_falls_back_to_temple_when_unmapped():
     topo = _topology_with_workers()
-    assert temple.resolve_worker("some_unmapped_action", topo) == "templo"
+    assert temple.resolve_worker("some_unmapped_action", topo) == "temple"
 
 
-def test_resolve_worker_falls_back_to_templo_when_worker_missing_from_topology():
+def test_resolve_worker_falls_back_to_temple_when_worker_missing_from_topology():
     # Mapped to "guardian" in ACTION_OWNERS, but this topology has no workers.
     topo = _topology()
-    assert temple.resolve_worker("curate_skills", topo) == "templo"
+    assert temple.resolve_worker("curate_skills", topo) == "temple"
 
 
 # ── the full chain: curate_skills routes through its owning monk (guardian) ─────
@@ -281,27 +281,27 @@ async def test_delegate_internal_attributes_curate_skills_to_guardian(tmp_path, 
     # DOWN hop — the path names the owning monk.
     down = await _episodes("inst_personal", "org-delegate")
     assert len(down) == 1
-    assert down[0]["accion"] == "delegate:lhassa→templo→guardian"
+    assert down[0]["accion"] == "delegate:lhassa→temple→guardian"
     assert "down to guardian" in down[0]["decision"]
 
-    # EXECUTE hop — attributed to the monk, reporting up through templo.
-    exec_eps = await _episodes("inst_personal", "templo-execute")
+    # EXECUTE hop — attributed to the monk, reporting up through temple.
+    exec_eps = await _episodes("inst_personal", "temple-execute")
     assert len(exec_eps) == 1
     assert exec_eps[0]["dominio"] == "guardian"
     assert exec_eps[0]["accion"] == "curate_skills"
     assert "3 stale skills archived" in exec_eps[0]["resultado"]
-    assert "reports ↑ templo" in exec_eps[0]["resultado"]
+    assert "reports ↑ temple" in exec_eps[0]["resultado"]
 
-    # UP hop — walks guardian → templo → lhassa, one episode per brain.
+    # UP hop — walks guardian → temple → lhassa, one episode per brain.
     up = await _episodes("inst_personal", "org-deliver")
     dominios = [e["dominio"] for e in up]
-    # One hop per brain on the chain (guardian produces, templo forwards,
+    # One hop per brain on the chain (guardian produces, temple forwards,
     # lhassa receives) plus lhassa's own final send-confirmation episode.
-    assert dominios == ["guardian", "templo", "lhassa", "lhassa"]
+    assert dominios == ["guardian", "temple", "lhassa", "lhassa"]
 
 
 @pytest.mark.asyncio
-async def test_delegate_internal_unmapped_action_still_attributes_to_templo(
+async def test_delegate_internal_unmapped_action_still_attributes_to_temple(
     tmp_path, monkeypatch
 ):
     monkeypatch.setattr(db, "DB_PATH", tmp_path / "brain.db")
@@ -322,15 +322,15 @@ async def test_delegate_internal_unmapped_action_still_attributes_to_templo(
     record = await temple.delegate_internal("temple_test_action", {}, config=cfg)
 
     assert record["ok"] is True
-    exec_eps = await _episodes("inst_personal", "templo-execute")
-    assert exec_eps[-1]["dominio"] == "templo"
+    exec_eps = await _episodes("inst_personal", "temple-execute")
+    assert exec_eps[-1]["dominio"] == "temple"
 
     up = await _episodes("inst_personal", "org-deliver")
-    assert up[0]["dominio"] == "templo"
+    assert up[0]["dominio"] == "temple"
 
 
 @pytest.mark.asyncio
-async def test_delegate_internal_degrades_to_templo_when_workers_missing(
+async def test_delegate_internal_degrades_to_temple_when_workers_missing(
     tmp_path, monkeypatch
 ):
     monkeypatch.setattr(db, "DB_PATH", tmp_path / "brain.db")
@@ -339,7 +339,7 @@ async def test_delegate_internal_degrades_to_templo_when_workers_missing(
     from lhassa.org import topology as topo_mod
 
     # A topology WITHOUT the worker brains — curate_skills is mapped to
-    # "guardian" but it does not exist here, so it must degrade to templo.
+    # "guardian" but it does not exist here, so it must degrade to temple.
     monkeypatch.setattr(topo_mod, "load_topology", lambda config=None: _topology())
 
     from lhassa.notify import dispatch as notify_dispatch
@@ -357,8 +357,8 @@ async def test_delegate_internal_degrades_to_templo_when_workers_missing(
     record = await temple.delegate_internal("curate_skills", {}, config=cfg)
 
     assert record["ok"] is True
-    exec_eps = await _episodes("inst_personal", "templo-execute")
-    assert exec_eps[-1]["dominio"] == "templo"  # degraded, still executed
+    exec_eps = await _episodes("inst_personal", "temple-execute")
+    assert exec_eps[-1]["dominio"] == "temple"  # degraded, still executed
 
     up = await _episodes("inst_personal", "org-deliver")
-    assert up[0]["dominio"] == "templo"
+    assert up[0]["dominio"] == "temple"

@@ -1,4 +1,4 @@
-"""Templo wiring for ``derive_world_facts`` — the calendar-derived world model.
+"""Temple wiring for ``derive_world_facts`` — the calendar-derived world model.
 
 Offline + $0. Trusts tests/test_org_temple.py for the generic down-execute-up
 loop mechanics (a topology failure degrading to a direct run, dominio
@@ -26,23 +26,23 @@ def test_derive_world_facts_is_in_the_closed_action_set():
 def test_resolve_worker_attributes_derive_to_guardian():
     nodes = [
         BrainNode(id="lhassa", role="administrator"),
-        BrainNode(id="templo", role="internal-operations", department="templo", parent="lhassa"),
+        BrainNode(id="temple", role="internal-operations", department="temple", parent="lhassa"),
     ]
     for worker_id in temple.TEMPLE_WORKERS:
-        nodes.append(BrainNode(id=worker_id, role="monk", department="templo", parent="templo"))
+        nodes.append(BrainNode(id=worker_id, role="monk", department="temple", parent="temple"))
     topology = Topology(nodes)
 
     assert temple.resolve_worker("derive_world_facts", topology) == temple.GUARDIAN
 
 
-def test_resolve_worker_degrades_to_templo_when_guardian_missing():
+def test_resolve_worker_degrades_to_temple_when_guardian_missing():
     topology = Topology(
         [
             BrainNode(id="lhassa", role="administrator"),
-            BrainNode(id="templo", role="internal-operations", department="templo", parent="lhassa"),
+            BrainNode(id="temple", role="internal-operations", department="temple", parent="lhassa"),
         ]
     )
-    assert temple.resolve_worker("derive_world_facts", topology) == temple.TEMPLO_DEPARTMENT
+    assert temple.resolve_worker("derive_world_facts", topology) == temple.TEMPLE_DEPARTMENT
 
 
 @pytest.mark.parametrize("text", ["derive", "derive my world", "learn calendar", "world model"])
@@ -59,7 +59,7 @@ def test_temple_keyword_calendar_alone_still_routes_to_sync():
 def _cfg(tmp_path):
     topo = tmp_path / "org.json"
     topo.write_text(
-        '[{"id":"templo","role":"internal-operations","department":"templo","parent":null}]',
+        '[{"id":"temple","role":"internal-operations","department":"temple","parent":null}]',
         encoding="utf-8",
     )
     return SimpleNamespace(

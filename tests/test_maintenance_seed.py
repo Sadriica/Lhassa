@@ -1,4 +1,4 @@
-"""Tests for the ``maintenance`` seed's routing through templo (temple_run).
+"""Tests for the ``maintenance`` seed's routing through temple (temple_run).
 
 Offline + $0: monkeypatches ``lhassa.core.db.DB_PATH`` to a tmp file so the
 seed's minted tasks land in an isolated DB, exactly like tests/test_cv_seed.py.
@@ -8,7 +8,7 @@ Covers:
     real action name carried in ``params["action"]``;
   * re-applying the seed is idempotent (no duplicate temple_run tasks);
   * a temple_run task, when actually run, executes the wrapped action AND
-    logs the templo down-execute-up episode chain (dominio="templo").
+    logs the temple down-execute-up episode chain (dominio="temple").
 """
 
 import asyncio
@@ -60,7 +60,7 @@ def test_maintenance_seed_is_idempotent(_db):
 
 
 @pytest.mark.asyncio
-async def test_a_wrapped_maintenance_task_runs_through_templo(tmp_path, monkeypatch):
+async def test_a_wrapped_maintenance_task_runs_through_temple(tmp_path, monkeypatch):
     monkeypatch.setattr(db, "DB_PATH", tmp_path / "brain.db")
     await db.init_db()
 
@@ -73,7 +73,7 @@ async def test_a_wrapped_maintenance_task_runs_through_templo(tmp_path, monkeypa
         return Topology(
             [
                 BrainNode(id="lhassa", role="administrator"),
-                BrainNode(id="templo", role="internal-operations", department="templo", parent="lhassa"),
+                BrainNode(id="temple", role="internal-operations", department="temple", parent="lhassa"),
             ]
         )
 
@@ -87,7 +87,7 @@ async def test_a_wrapped_maintenance_task_runs_through_templo(tmp_path, monkeypa
     monkeypatch.setattr(notify_dispatch, "notify", fake_notify)
 
     # distill_memory with no episodes to distill degrades to a cheap no-op string
-    # — we only care that it ran and the templo chain logged, not its content.
+    # — we only care that it ran and the temple chain logged, not its content.
     from lhassa.actionpack._temple import temple_run
 
     cfg = SimpleNamespace(
@@ -99,8 +99,8 @@ async def test_a_wrapped_maintenance_task_runs_through_templo(tmp_path, monkeypa
     rows = await db.load_recent_episodes("inst_personal", n=50)
     domains = {r["despertar_por"] for r in rows}
     assert "org-delegate" in domains
-    assert "templo-execute" in domains
-    assert any(r["dominio"] == "templo" for r in rows if r["despertar_por"] == "templo-execute")
+    assert "temple-execute" in domains
+    assert any(r["dominio"] == "temple" for r in rows if r["despertar_por"] == "temple-execute")
 
 
 def test_unwrapped_action_is_refused():
@@ -109,4 +109,4 @@ def test_unwrapped_action_is_refused():
     from lhassa.actionpack._temple import temple_run
 
     result = _asyncio.run(temple_run({"action": "run_command"}))
-    assert "not routed through templo" in result
+    assert "not routed through temple" in result

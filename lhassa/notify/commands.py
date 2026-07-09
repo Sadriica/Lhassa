@@ -829,8 +829,8 @@ async def _cmd_goal(args: str, *, config=None) -> str:
     return f"Goal scheduled ({cadence}): {text} [task {task_id}]"
 
 
-# Free-form instruction -> a known templo action, LLM-free (a keyword match, not
-# NLP). Anything that doesn't match falls through to org_run(department="templo")
+# Free-form instruction -> a known temple action, LLM-free (a keyword match, not
+# NLP). Anything that doesn't match falls through to org_run(department="temple")
 # — the judgment door for internal work that isn't one of these fixed actions.
 _TEMPLE_KEYWORDS: tuple[tuple[str, str], ...] = (
     ("distill", "distill_memory"),
@@ -852,7 +852,7 @@ _TEMPLE_KEYWORDS: tuple[tuple[str, str], ...] = (
 
 
 def _match_temple_action(text: str) -> Optional[str]:
-    """The known templo action ``text`` maps to, or ``None`` — LLM-free."""
+    """The known temple action ``text`` maps to, or ``None`` — LLM-free."""
     lowered = text.lower()
     for keyword, action in _TEMPLE_KEYWORDS:
         if keyword in lowered:
@@ -904,7 +904,7 @@ async def _temple_schedule(config) -> str:
     """
     try:
         from lhassa.core import db as _db
-        from lhassa.org.temple import ACTION_OWNERS, TEMPLO_DEPARTMENT
+        from lhassa.org.temple import ACTION_OWNERS, TEMPLE_DEPARTMENT
 
         cfg = _config(config)
         instance_id = getattr(cfg, "instance_id", None) or "inst_personal"
@@ -926,7 +926,7 @@ async def _temple_schedule(config) -> str:
                 cadence = _cadence_label(int(rec))
             except (TypeError, ValueError):
                 cadence = "recurring"
-            worker = ACTION_OWNERS.get(action, TEMPLO_DEPARTMENT)
+            worker = ACTION_OWNERS.get(action, TEMPLE_DEPARTMENT)
             due = _short_local_due(str(row.get("due_at") or ""))
             jobs.append((action, cadence, worker, due))
 
@@ -950,7 +950,7 @@ async def _temple_schedule(config) -> str:
 @register_command("temple")
 async def _cmd_temple(args: str, *, config=None) -> str:
     """``/temple <instruction>`` — hand internal work to Lhassa's own inner
-    department (templo), the down-execute-up loop (see :mod:`lhassa.org.temple`).
+    department (temple), the down-execute-up loop (see :mod:`lhassa.org.temple`).
 
     ``/temple schedule`` (or ``jobs``) shows the temple's own clock — its
     recurring internal work with each job's cadence and owning monk, $0.
@@ -959,7 +959,7 @@ async def _cmd_temple(args: str, *, config=None) -> str:
     action (distill/repetition/review tools/curate skills/calendar sync/
     derive world) — runs it immediately through
     :func:`lhassa.org.temple.delegate_internal` and returns the result.
-    Otherwise mints an ``org_run`` task with ``department="templo"`` — the
+    Otherwise mints an ``org_run`` task with ``department="temple"`` — the
     judgment door, resolved on the next tick.
     """
     text = (args or "").strip()
@@ -978,11 +978,11 @@ async def _cmd_temple(args: str, *, config=None) -> str:
             record = await delegate_internal(action, {}, config=cfg, instruction=text)
         except Exception as exc:
             logger.warning(f"commands: /temple failed running {action}: {exc}")
-            return _oops("run that through templo")
+            return _oops("run that through temple")
         result = str(record.get("result") or "")[:300]
-        return f"templo ran {action}: {result}"
+        return f"temple ran {action}: {result}"
 
-    # No fixed-action match — the judgment door: org_run(department="templo").
+    # No fixed-action match — the judgment door: org_run(department="temple").
     try:
         from lhassa.core import db as _db
         from lhassa.core.dispatch import mint_task
@@ -995,16 +995,16 @@ async def _cmd_temple(args: str, *, config=None) -> str:
             instance_id,
             "org_run",
             objetivo=text[:200],
-            params={"goal": text, "department": "templo"},
+            params={"goal": text, "department": "temple"},
             origin=origin,
         )
     except Exception as exc:
         logger.warning(f"commands: /temple delegate failed: {exc}")
-        return _oops("hand that to templo")
+        return _oops("hand that to temple")
 
     if not task_id:
-        return f"Could not hand that to templo: {estado}"
-    return f"Handed to templo: {text} [task {task_id}]"
+        return f"Could not hand that to temple: {estado}"
+    return f"Handed to temple: {text} [task {task_id}]"
 
 
 # ── CLI parity batch — report / memory / capabilities / tools / skills ───────
