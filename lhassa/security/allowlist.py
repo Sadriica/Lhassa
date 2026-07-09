@@ -241,6 +241,14 @@ def build_allowlist(repos: "set[str] | str | None" = None) -> dict[str, ActionSp
             min_trust=TrustLevel.INTERNO,
             requires_approval=False,
         ),
+        # ── Calendar-derived world model — read-only calendar derivation +
+        # a fact write, no external send, no HITL-worthy surface (mirrors
+        # calendar_sync/add_fact, both also requires_approval=False).
+        "derive_world_facts": ActionSpec(
+            objetivos=WILDCARD,
+            min_trust=TrustLevel.INTERNO,
+            requires_approval=False,
+        ),
     }
 
 

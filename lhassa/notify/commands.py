@@ -279,7 +279,10 @@ DESCRIPTIONS: dict[str, str] = {
     "watches": "List configured watch rules.",
     "unwatch": "<index> — remove a watch rule.",
     "goal": "<text> [--every daily|hourly] — schedule a recurring think.",
-    "temple": "<instruction> | schedule — internal work / the temple's own clock.",
+    "temple": (
+        "<instruction> | schedule — internal work / the temple's own clock "
+        "(e.g. 'distill', 'curate skills', 'sync calendar', 'derive world')."
+    ),
     "cvnewbase": "Arm a base-CV replacement.",
     "cvbase": "Show the base CV on file.",
     "code": "<task> — launch a coding agent on your files (asks for your approval first).",
@@ -836,6 +839,13 @@ _TEMPLE_KEYWORDS: tuple[tuple[str, str], ...] = (
     ("review tool", "review_tools"),
     ("curate", "curate_skills"),
     ("skill", "curate_skills"),
+    # Checked BEFORE the bare "calendar"/"sync" keywords below so a phrase
+    # like "learn calendar" or "derive world" routes to the world-model
+    # derivation, not the master-calendar reconcile.
+    ("derive", "derive_world_facts"),
+    ("world model", "derive_world_facts"),
+    ("world", "derive_world_facts"),
+    ("learn calendar", "derive_world_facts"),
     ("calendar", "calendar_sync"),
     ("sync", "calendar_sync"),
 )
@@ -946,10 +956,11 @@ async def _cmd_temple(args: str, *, config=None) -> str:
     recurring internal work with each job's cadence and owning monk, $0.
 
     LLM-free where the instruction keyword-matches a known deterministic
-    action (distill/repetition/review tools/curate skills/calendar sync) — runs
-    it immediately through :func:`lhassa.org.temple.delegate_internal` and
-    returns the result. Otherwise mints an ``org_run`` task with
-    ``department="templo"`` — the judgment door, resolved on the next tick.
+    action (distill/repetition/review tools/curate skills/calendar sync/
+    derive world) — runs it immediately through
+    :func:`lhassa.org.temple.delegate_internal` and returns the result.
+    Otherwise mints an ``org_run`` task with ``department="templo"`` — the
+    judgment door, resolved on the next tick.
     """
     text = (args or "").strip()
     if not text:

@@ -105,6 +105,44 @@ There is also a **daily automatic sync**: the `maintenance` seed schedules
 until you set a master calendar, so it's safe to leave scheduled even before
 you've configured one.
 
+### Calendar-derived world model
+
+Lhassa also **learns your world from your calendar** — no asking, no
+spending. `lhassa/calendar/derive.py` reads the same feed(s) `/today` already
+reads and, `$0` and deterministic (no model, stdlib only), derives:
+
+- **Courses / recurring commitments** — a summary that repeats at least 3
+  times on a regular weekly-ish cadence becomes a durable fact, e.g. a
+  Tuesday 15:00 "Cálculo III" in "Bloque 19" → *"Has a recurring weekly
+  commitment 'Cálculo III' (Tue 15:00, Bloque 19) — likely a course or class
+  this term."* A room/building-looking location (sala/bloque/aula/room/...)
+  is what upgrades the phrasing to "likely a course"; without that signal
+  it's phrased as a plain commitment. A small denylist (lunch/breaks/coffee)
+  is filtered out — a recurring "Almuerzo" is never mistaken for a course.
+- **Rhythm** — one fact like *"Your calendar is busiest on Mon mornings."*,
+  only when one weekday+time-of-day bucket clearly dominates the window
+  (weak/uniform signal yields no rhythm fact at all).
+- **People** — deliberately skipped for now: the feed parser doesn't capture
+  ORGANIZER/ATTENDEE fields, so a "you meet often with X" fact would be
+  fabricated rather than derived. A documented future extension.
+
+Each derived fact is written to the grande as a `dato` (`procedencia
+calendar-derived`) via `derive_world_facts` — deduped against existing facts
+(a case-insensitive substring overlap skips the write, same idiom as the
+Telegram `[[remember: …]]` marker) so re-running it as the calendar
+reshuffles week to week never piles up duplicates. Once written, these facts
+are ordinary grande facts: `/recall`, `/memory`, and the knowledge graph
+(`/api/memory/graph`) surface them exactly like any other fact — the brain's
+world-model grounding, not a separate store.
+
+It runs through the temple, like every other internal hygiene action:
+`guardian` (the self-maintenance monk, same domain as `distill_memory`) owns
+it, and the `maintenance` seed schedules it weekly (`lhassa seed apply
+maintenance`) — a clean no-op with no calendar configured, so it's safe to
+leave scheduled unconditionally. On demand: `/temple derive` (or `/temple
+learn calendar`) runs it immediately; `/temple schedule` shows its cadence
+alongside the other temple jobs.
+
 ## Path B — Microsoft Graph app (read + write via API)
 
 For accounts where you **can** register an app (personal Outlook.com, or an org

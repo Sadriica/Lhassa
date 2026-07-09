@@ -40,6 +40,7 @@ def register_all() -> None:
         _brain,
         _calendar_sync,
         _curate,
+        _derive,
         _digest,
         _llm,
         _memory,
@@ -92,6 +93,10 @@ def register_all() -> None:
 
     # ── Master calendar reconcile ($0 set diff, no model) ─────────────────────
     _reg("calendar_sync", _calendar_sync.calendar_sync)
+
+    # ── Calendar-derived world model ($0, deterministic — courses/commitments/
+    # rhythm bootstrapped from the calendar feed into durable facts) ──────────
+    _reg("derive_world_facts", _derive.derive_world_facts)
 
     # ── Org — real delegation into the hierarchy (Etapa 3) ────────────────────
     _reg("org_run", _org.org_run)
