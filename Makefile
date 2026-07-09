@@ -1,4 +1,4 @@
-.PHONY: install install-health install-heartbeat install-telegram install-monitor install-privileged dashboard run dev check test lint clean
+.PHONY: install quickstart install-health install-heartbeat install-telegram install-monitor install-privileged dashboard run dev check test lint clean
 
 # First-time setup: install Python deps + build the dashboard.
 # Installs the `voice` extra (pipecat/torch) — this is the laptop dev workflow
@@ -7,6 +7,12 @@
 install:
 	uv sync --extra voice
 	cd dashboard && npm install && npm run build
+
+# The 2-minute on-ramp: uv sync (no dashboard, no voice extra), ensure .env,
+# detect a model backend (API key or Ollama), and print the next commands.
+# This is the LIGHT path — `bash scripts/install.sh` is the always-on one.
+quickstart:
+	bash scripts/quickstart.sh
 
 # Install + enable the LLM-free PC-state health timer (user unit, no sudo)
 install-health:
