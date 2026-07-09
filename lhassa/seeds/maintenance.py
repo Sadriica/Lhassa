@@ -16,9 +16,9 @@ Rather than minting each action bare (a task that used to dispatch straight to
 ``core.actions.run`` with no org attribution), this seed mints ``temple_run``
 — see :mod:`lhassa.actionpack._temple` / :mod:`lhassa.org.temple` — with the
 real action name in its params. Each beat now runs the FULL down-execute-up
-loop: Lhassa delegates the action DOWN to the ``templo`` department (one
-``org-delegate`` Episode), templo EXECUTES it via the same deterministic
-action (its own ``dominio="templo"`` Episode; what the action DOES is
+loop: Lhassa delegates the action DOWN to the ``temple`` department (one
+``org-delegate`` Episode), temple EXECUTES it via the same deterministic
+action (its own ``dominio="temple"`` Episode; what the action DOES is
 unchanged), and the result travels back UP to Lhassa via ``org.deliver`` (the
 sender of record). This is still minted through the same
 :func:`lhassa.core.dispatch.mint_task` path everything else uses, so it shows

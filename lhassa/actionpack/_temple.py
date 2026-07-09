@@ -1,4 +1,4 @@
-"""temple_run — the fixed action that routes internal hygiene work THROUGH templo.
+"""temple_run — the fixed action that routes internal hygiene work THROUGH temple.
 
 Six deterministic actions (``distill_memory``, ``detect_repetition``,
 ``review_tools``, ``curate_skills``, ``calendar_sync``, ``derive_world_facts``)
@@ -8,14 +8,14 @@ module is the OTHER end of
 the down-execute-up seam :mod:`lhassa.org.temple` implements: ``temple_run`` is
 itself a registered action (so it can be minted like any other), and its body
 routes the REAL action through :func:`lhassa.org.temple.delegate_internal` —
-Lhassa delegates DOWN to templo, the OWNING monk (e.g. ``guardian`` for
+Lhassa delegates DOWN to temple, the OWNING monk (e.g. ``guardian`` for
 ``curate_skills`` -- see :data:`lhassa.org.temple.ACTION_OWNERS`) executes (its
-own ``dominio=<worker>`` episode, reporting up through templo), and the result
+own ``dominio=<worker>`` episode, reporting up through temple), and the result
 travels back UP via ``org.deliver``.
 
 ``_TEMPLE_ACTIONS`` is a closed set on purpose: ``temple_run`` is a thin,
 deterministic, $0 front for the maintenance seed's own five actions, NOT a
-generic "run any action via templo" bypass — an action that carries its OWN
+generic "run any action via temple" bypass — an action that carries its OWN
 approval gate (e.g. ``run_script``, ``run_command``) stays OUT of this set, so
 wrapping never becomes a way to dodge an existing HITL frontier.
 """
@@ -36,7 +36,7 @@ TEMPLE_ACTIONS: frozenset[str] = frozenset(
 
 
 async def temple_run(params: dict) -> str:
-    """Delegate one internal action to templo: down-hop, execute, deliver up.
+    """Delegate one internal action to temple: down-hop, execute, deliver up.
 
     params:
         action        (required) — one of :data:`TEMPLE_ACTIONS`.
@@ -54,7 +54,7 @@ async def temple_run(params: dict) -> str:
             params = {}
         action = str(params.get("action") or "").strip()
         if action not in TEMPLE_ACTIONS:
-            return f"temple_run: action {action!r} is not routed through templo"
+            return f"temple_run: action {action!r} is not routed through temple"
 
         inner_params = params.get("params") or {}
         if not isinstance(inner_params, dict):

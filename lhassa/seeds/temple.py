@@ -1,17 +1,17 @@
-"""The ``templo`` seed — Lhassa's own inner workshop for INTERNAL functions.
+"""The ``temple`` seed — Lhassa's own inner workshop for INTERNAL functions.
 
 Mirrors :mod:`lhassa.seeds.cv`'s topology-provisioning shape (idempotent, goes
-through the validated org management API): a single department, ``templo``, a
+through the validated org management API): a single department, ``temple``, a
 DIRECT child of Lhassa (``config.root_admin_id``) — distinct from ``interns``
 (the CV pipeline's workers) and ``personal`` (the owner's own department) —
 plus its five leaf WORKER brains (the "monks"), each owning a sub-domain:
 
-  - ``escriba``       — docs (documentation upkeep).
-  - ``artifice``       — internal creation (tools/skills/flows authoring, the
+  - ``scribe``       — docs (documentation upkeep).
+  - ``artificer``       — internal creation (tools/skills/flows authoring, the
     self-improvement author).
-  - ``sincronizador`` — sync (repo/calendar/memory).
+  - ``synchronizer`` — sync (repo/calendar/memory).
   - ``guardian``       — self-maintenance (curate/review/distill).
-  - ``oraculo``         — the consciousness (repetition detection, the
+  - ``oracle``         — the consciousness (repetition detection, the
     self-routing/self-improvement proposals).
 
 :mod:`lhassa.org.temple` owns the ACTION→WORKER ownership map
@@ -33,33 +33,33 @@ from typing import TYPE_CHECKING, Optional
 from loguru import logger
 
 from lhassa.org import management
-from lhassa.org.temple import TEMPLE_WORKERS
+from lhassa.org.temple import TEMPLE_WORKERS as _TEMPLE_WORKERS
 from lhassa.org.topology import load_topology
 from lhassa.seeds import register_seed
 
 if TYPE_CHECKING:
     from lhassa.config import Config
 
-#: The templo brain id + the department name/identity it owns.
-TEMPLO_ID = "templo"
-TEMPLO_DEPARTMENT = "templo"
+#: The temple brain id + the department name/identity it owns.
+TEMPLE_ID = "temple"
+TEMPLE_DEPARTMENT = "temple"
 #: A distinct role label — Lhassa's inner temple, not a generic "department".
-TEMPLO_ROLE = "internal-operations"
-#: The domains templo handles — docs, internal creation, sync, self-maintenance.
-TEMPLO_SKILLS: tuple[str, ...] = (
+TEMPLE_ROLE = "internal-operations"
+#: The domains temple handles — docs, internal creation, sync, self-maintenance.
+TEMPLE_SKILLS: tuple[str, ...] = (
     "docs",
     "internal-creation",
     "sync",
     "self-maintenance",
 )
 
-#: The five worker brains ("monks") created under templo — the single source
+#: The five worker brains ("monks") created under temple — the single source
 #: of truth for their ids is lhassa.org.temple (which also owns the ACTION→
 #: WORKER ownership map that routes work to them).
-TEMPLO_WORKERS: tuple[str, ...] = TEMPLE_WORKERS
+TEMPLE_WORKERS: tuple[str, ...] = _TEMPLE_WORKERS
 #: A distinct role label for a worker brain — a leaf that executes, not a
 #: coordinating department.
-TEMPLO_WORKER_ROLE = "monk"
+TEMPLE_WORKER_ROLE = "monk"
 
 
 def _ensure_brain(
@@ -97,13 +97,13 @@ def _resolve_config(config: "Optional[Config]") -> "Config":
     return _Config()
 
 
-def seed_templo(config: "Optional[Config]" = None) -> dict:
-    """Create the ``templo`` department AND its five worker brains. Idempotent.
+def seed_temple(config: "Optional[Config]" = None) -> dict:
+    """Create the ``temple`` department AND its five worker brains. Idempotent.
 
     Returns::
 
         {
-          "brain": "templo", "created": bool, "existing": bool,
+          "brain": "temple", "created": bool, "existing": bool,
           "workers_created": [...], "workers_existing": [...], "errors": [],
         }
 
@@ -116,7 +116,7 @@ def seed_templo(config: "Optional[Config]" = None) -> dict:
     """
     cfg = _resolve_config(config)
     summary: dict = {
-        "brain": TEMPLO_ID,
+        "brain": TEMPLE_ID,
         "created": False,
         "existing": False,
         "workers_created": [],
@@ -124,56 +124,56 @@ def seed_templo(config: "Optional[Config]" = None) -> dict:
         "errors": [],
     }
     try:
-        if load_topology(cfg).has(TEMPLO_ID):
+        if load_topology(cfg).has(TEMPLE_ID):
             summary["existing"] = True
         else:
             management.add_brain(
-                TEMPLO_ID,
-                role=TEMPLO_ROLE,
+                TEMPLE_ID,
+                role=TEMPLE_ROLE,
                 # parent=None attaches directly under the permanent administrator
-                # (Lhassa) via the org management API — templo is Lhassa's OWN
+                # (Lhassa) via the org management API — temple is Lhassa's OWN
                 # inner department, a sibling of interns/personal, not nested
                 # under either.
                 parent=None,
-                department=TEMPLO_DEPARTMENT,
-                skills=TEMPLO_SKILLS,
+                department=TEMPLE_DEPARTMENT,
+                skills=TEMPLE_SKILLS,
                 config=cfg,
             )
             summary["created"] = True
     except Exception as exc:  # a partial failure is reported, not fatal
-        logger.warning("seed[templo]: {}", exc)
+        logger.warning("seed[temple]: {}", exc)
         summary["errors"].append(f"{type(exc).__name__}: {exc}")
         return summary  # no department to hang workers under — stop here
 
-    # The five monks — each a leaf under templo, sharing its department label
+    # The five monks — each a leaf under temple, sharing its department label
     # (mirrors lhassa.seeds.cv's worker brains, which share INTERNS_DEPARTMENT
     # too); lhassa.org.temple resolves a SPECIFIC monk by its own id, not by
     # this shared department string, so the sharing is harmless.
-    for worker_id in TEMPLO_WORKERS:
+    for worker_id in TEMPLE_WORKERS:
         try:
             created = _ensure_brain(
                 worker_id,
-                role=TEMPLO_WORKER_ROLE,
-                parent=TEMPLO_ID,
-                department=TEMPLO_DEPARTMENT,
+                role=TEMPLE_WORKER_ROLE,
+                parent=TEMPLE_ID,
+                department=TEMPLE_DEPARTMENT,
                 config=cfg,
             )
             key = "workers_created" if created else "workers_existing"
             summary[key].append(worker_id)
         except Exception as exc:  # a partial failure is reported, not fatal
-            logger.warning("seed[templo]: worker {} failed: {}", worker_id, exc)
+            logger.warning("seed[temple]: worker {} failed: {}", worker_id, exc)
             summary["errors"].append(f"{worker_id}: {type(exc).__name__}: {exc}")
 
     return summary
 
 
 @register_seed(
-    "templo",
-    "Create the 'templo' department and its five worker brains (escriba/"
-    "artifice/sincronizador/guardian/oraculo) — Lhassa's own inner workshop for "
+    "temple",
+    "Create the 'temple' department and its five worker brains (scribe/"
+    "artificer/synchronizer/guardian/oracle) — Lhassa's own inner workshop for "
     "internal functions (docs, internal creation, synchronization, "
     "self-maintenance), a direct child of Lhassa in the topology.",
 )
 def apply(config: "Optional[Config]" = None) -> dict:
-    """The ``templo`` seed entry point — see :func:`seed_templo`."""
-    return seed_templo(config)
+    """The ``temple`` seed entry point — see :func:`seed_temple`."""
+    return seed_temple(config)

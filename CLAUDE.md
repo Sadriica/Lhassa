@@ -317,38 +317,38 @@ kind, no self-edge) before it writes. `/api/org/relationships` (+ `/kinds`,
 overlay (legend + toggles) and the inspector adds/removes them. Multi-person approval:
 proposer ≠ approver for high-risk.
 
-**The temple (`templo`) — Lhassa's own inner department.** Distinct from `interns`
-(CV workers) and `personal` (the owner's own department): `templo` is a DIRECT
-child of Lhassa, seeded by `seeds/templo.py` (`lhassa seed apply templo`), that owns
+**The temple (`temple`) — Lhassa's own inner department.** Distinct from `interns`
+(CV workers) and `personal` (the owner's own department): `temple` is a DIRECT
+child of Lhassa, seeded by `seeds/temple.py` (`lhassa seed apply temple`), that owns
 Lhassa's INTERNAL functions — docs, internal creation (tools/skills/flows authoring,
 the consciousness proposals), synchronization (repo/calendar/memory), and
-self-maintenance. `templo` has five leaf WORKER brains under it — its "monks" — each
-owning a sub-domain: `escriba` (docs), `artifice` (internal creation), `sincronizador`
-(sync), `guardian` (self-maintenance) and `oraculo` (the consciousness — repetition
+self-maintenance. `temple` has five leaf WORKER brains under it — its "monks" — each
+owning a sub-domain: `scribe` (docs), `artificer` (internal creation), `synchronizer`
+(sync), `guardian` (self-maintenance) and `oracle` (the consciousness — repetition
 detection, self-routing proposals); the same seed creates all five, idempotently.
 `org/temple.py:ACTION_OWNERS` is the deterministic action→monk ownership map for the
 maintenance seed's five actions: `distill_memory`/`review_tools`/`curate_skills` →
-`guardian`, `detect_repetition` → `oraculo`, `calendar_sync` → `sincronizador`; an
-unmapped action, or a topology missing the resolved worker, falls back to `templo`
+`guardian`, `detect_repetition` → `oracle`, `calendar_sync` → `synchronizer`; an
+unmapped action, or a topology missing the resolved worker, falls back to `temple`
 itself. `org/temple.py:delegate_internal(action, params, config, instruction)` is the
 down-execute-up loop: it resolves the owning worker (`resolve_worker`), logs ONE
-`org-delegate` Episode delegating the action DOWN the path `lhassa → templo → <worker>`
+`org-delegate` Episode delegating the action DOWN the path `lhassa → temple → <worker>`
 (mirrors `org/delegate.py`), EXECUTES it via `core/actions.run` with its own Episode
-attributed `dominio=<worker>` (the monk that did it, reporting to templo), then
+attributed `dominio=<worker>` (the monk that did it, reporting to temple), then
 delivers the result UP via `org/deliver.py:deliver(origin_department=<worker>, ...)` —
-the per-brain hops walk worker → templo → Lhassa, the sender of record. A broken
-topology (or a missing worker) degrades to `templo` itself; the whole loop never
+the per-brain hops walk worker → temple → Lhassa, the sender of record. A broken
+topology (or a missing worker) degrades to `temple` itself; the whole loop never
 raises. **Tool→brain reporting** — the org-wide "every tool reports to its brain"
 pattern is born here: the worker's execution Episode names the tool (`accion`) and its
 outcome (`resultado`), and when a real monk (not the bare department) ran it, the
-`resultado` also states it reports up through `templo` — the trail reads "guardian ran
-curate_skills → 3 stale skills archived → reports ↑ templo" end to end from the tool's
+`resultado` also states it reports up through `temple` — the trail reads "guardian ran
+curate_skills → 3 stale skills archived → reports ↑ temple" end to end from the tool's
 own log line, before the deliver seam's per-brain hops even start. The `maintenance`
 seed's five hygiene actions are minted as `temple_run` (a closed, allowlisted wrapper,
 `actionpack/_temple.py`) instead of running bare, so every beat now carries the full
 down-execute-up hop and worker attribution — what each action DOES is unchanged. The
 Telegram `/temple <instruction>` door keyword-matches a known deterministic action
-(LLM-free) or falls through to `org_run(department="templo")` — the judgment door for
+(LLM-free) or falls through to `org_run(department="temple")` — the judgment door for
 free-form internal work.
 
 ## Work-flows (`flows/`)
