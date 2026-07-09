@@ -84,3 +84,50 @@ def test_temple_free_form_instruction_mints_org_run(tmp_path):
     org_runs = [t for t in tasks if t["accion"] == "org_run"]
     assert len(org_runs) == 1
     assert org_runs[0]["params"]["department"] == "templo"
+
+
+# ── /temple schedule — the temple's own clock ─────────────────────────────────────
+
+
+def test_temple_schedule_lists_recurring_jobs_with_cadence_and_monk(tmp_path, monkeypatch):
+    import lhassa.core.db as _db
+    from lhassa.notify import commands
+
+    monkeypatch.setattr(_db, "DB_PATH", tmp_path / "brain.db")
+
+    async def go():
+        await _db.init_db()
+        from lhassa.core.dispatch import mint_task
+        from lhassa.security.trust import Origin, TrustLevel
+        origin = Origin(trust=TrustLevel.INTERNO, actor_id="seed")
+        # Two internal cronjobs owned by different monks + one owner-facing task
+        # (send_digest) that must NOT appear — it isn't the temple's.
+        await mint_task("inst_personal", "temple_run", objetivo="curate",
+                        params={"action": "curate_skills"}, origin=origin,
+                        recurrence="604800")
+        await mint_task("inst_personal", "temple_run", objetivo="detect",
+                        params={"action": "detect_repetition"}, origin=origin,
+                        recurrence="86400")
+        await mint_task("inst_personal", "send_digest", objetivo="digest",
+                        origin=origin, recurrence="43200")
+        return await commands.dispatch("/temple schedule", config=_cfg(tmp_path))
+
+    reply = asyncio.run(go())
+    assert "temple's clock" in reply
+    assert "curate_skills — weekly · guardian" in reply
+    assert "detect_repetition — daily · oraculo" in reply
+    assert "send_digest" not in reply  # owner-facing, not the temple's
+
+
+def test_temple_schedule_empty(tmp_path, monkeypatch):
+    import lhassa.core.db as _db
+    from lhassa.notify import commands
+
+    monkeypatch.setattr(_db, "DB_PATH", tmp_path / "brain.db")
+
+    async def go():
+        await _db.init_db()
+        return await commands.dispatch("/temple schedule", config=_cfg(tmp_path))
+
+    reply = asyncio.run(go())
+    assert "clock is empty" in reply

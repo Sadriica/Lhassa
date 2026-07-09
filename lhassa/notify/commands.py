@@ -279,7 +279,7 @@ DESCRIPTIONS: dict[str, str] = {
     "watches": "List configured watch rules.",
     "unwatch": "<index> — remove a watch rule.",
     "goal": "<text> [--every daily|hourly] — schedule a recurring think.",
-    "temple": "<instruction> — hand internal work to my own inner department.",
+    "temple": "<instruction> | schedule — internal work / the temple's own clock.",
     "cvnewbase": "Arm a base-CV replacement.",
     "cvbase": "Show the base CV on file.",
     "code": "<task> — launch a coding agent on your files (asks for your approval first).",
@@ -850,10 +850,100 @@ def _match_temple_action(text: str) -> Optional[str]:
     return None
 
 
+def _cadence_label(seconds: int) -> str:
+    """A human cadence from a recurrence interval in seconds ($0)."""
+    if seconds <= 0:
+        return "once"
+    day = 86400
+    if seconds % (7 * day) == 0:
+        n = seconds // (7 * day)
+        return "weekly" if n == 1 else f"every {n} weeks"
+    if seconds % day == 0:
+        n = seconds // day
+        return "daily" if n == 1 else f"every {n} days"
+    if seconds % 3600 == 0:
+        n = seconds // 3600
+        return "hourly" if n == 1 else f"every {n}h"
+    return f"every {seconds}s"
+
+
+def _short_local_due(raw: str) -> str:
+    """An ISO due timestamp → a short local 'Wed 08:00', or '' if unparseable ($0)."""
+    raw = (raw or "").strip()
+    if not raw:
+        return ""
+    try:
+        from datetime import datetime, timezone
+
+        dt = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone().strftime("%a %H:%M")
+    except (TypeError, ValueError):
+        return ""
+
+
+async def _temple_schedule(config) -> str:
+    """The temple's internal clock — its recurring work, each job's cadence and
+    the monk that owns it. Deterministic, $0, never an LLM call.
+
+    Reads the pending recurring ``temple_run`` tasks (the internal cronjobs the
+    ``maintenance`` seed mints) and enriches each with its cadence and owning
+    worker from :data:`lhassa.org.temple.ACTION_OWNERS`. Owner-facing recurring
+    work (digest, reminders) is NOT the temple's and is deliberately excluded.
+    """
+    try:
+        from lhassa.core import db as _db
+        from lhassa.org.temple import ACTION_OWNERS, TEMPLO_DEPARTMENT
+
+        cfg = _config(config)
+        instance_id = getattr(cfg, "instance_id", None) or "inst_personal"
+        await _db.init_db()
+        rows = await _db.list_tasks(instance_id, estado="pendiente", limit=200)
+
+        jobs: list[tuple[str, str, str, str]] = []
+        for row in rows:
+            if row.get("accion") != "temple_run":
+                continue
+            rec = row.get("recurrence")
+            if not rec:
+                continue
+            params = row.get("params") or {}
+            action = params.get("action") if isinstance(params, dict) else None
+            if not action:
+                continue
+            try:
+                cadence = _cadence_label(int(rec))
+            except (TypeError, ValueError):
+                cadence = "recurring"
+            worker = ACTION_OWNERS.get(action, TEMPLO_DEPARTMENT)
+            due = _short_local_due(str(row.get("due_at") or ""))
+            jobs.append((action, cadence, worker, due))
+
+        if not jobs:
+            return (
+                "The temple's clock is empty — no recurring internal work is "
+                "scheduled. Run `lhassa seed apply maintenance` (or /temple <task>) "
+                "to give it a rhythm."
+            )
+        jobs.sort(key=lambda j: (j[2], j[0]))
+        lines = ["🛕 The temple's clock — recurring internal work:"]
+        for action, cadence, worker, due in jobs:
+            tail = f" · next {due}" if due else ""
+            lines.append(f"• {action} — {cadence} · {worker}{tail}")
+        return "\n".join(lines)
+    except Exception as exc:
+        logger.warning(f"commands: /temple schedule failed: {exc}")
+        return _oops("read the temple's schedule")
+
+
 @register_command("temple")
 async def _cmd_temple(args: str, *, config=None) -> str:
     """``/temple <instruction>`` — hand internal work to Lhassa's own inner
     department (templo), the down-execute-up loop (see :mod:`lhassa.org.temple`).
+
+    ``/temple schedule`` (or ``jobs``) shows the temple's own clock — its
+    recurring internal work with each job's cadence and owning monk, $0.
 
     LLM-free where the instruction keyword-matches a known deterministic
     action (distill/repetition/review tools/curate skills/calendar sync) — runs
@@ -863,7 +953,10 @@ async def _cmd_temple(args: str, *, config=None) -> str:
     """
     text = (args or "").strip()
     if not text:
-        return "Usage: /temple <instruction> (e.g. /temple distill recent episodes)"
+        return "Usage: /temple <instruction> (e.g. /temple distill recent episodes) · /temple schedule"
+
+    if text.lower() in ("schedule", "jobs", "clock", "reloj", "agenda"):
+        return await _temple_schedule(config)
 
     cfg = _config(config)
     action = _match_temple_action(text)
