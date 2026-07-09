@@ -34,6 +34,29 @@ the whole thesis: **build the brain, rent the body.**
 > state lives on disk, a heartbeat advances it one deterministic tick every two
 > minutes, and thinking — an actual model call — is the exception, not the rule.
 
+## Who it's for
+
+Lhassa is for you if you want an assistant you **own** — one that runs on your
+own machine, remembers you across every session, costs nothing to keep awake,
+and answers to an audit log *you* control. One radical bet drives the whole
+design: **thinking is the exception.** A deterministic, $0 plane handles almost
+everything; a model is touched only when judgment truly can't be avoided.
+Everything else — the sovereignty, the memory, the self-forged tools, the
+org of brains — follows from that.
+
+It is, on purpose, **not** a few things:
+
+- **not a hosted chatbot** — it lives on your disk, not someone else's cloud;
+- **not plug-and-play magic** — you bring your own brain (one API key, or a
+  fully local model — nothing is rented from us, because there is no *us*);
+- **not a framework to build on** — it's a complete, opinionated brain, not a
+  toolkit of parts.
+
+If "sovereign, ambient, and $0 by default" is the trade you'd take over
+"zero-setup magic in someone else's cloud," this was built for you. If you just
+want to open an app and chat, a hosted assistant will serve you better — and
+that's fine.
+
 ## Why Lhassa
 
 | | |
