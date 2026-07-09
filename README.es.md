@@ -30,6 +30,28 @@ cirugía. Esa es toda la tesis: **construye el cerebro, alquila el cuerpo.**
 > minutos, y pensar — una llamada real a un modelo — es la excepción, no la
 > regla.
 
+## Para quién es
+
+Lhassa es para ti si quieres un asistente que **es tuyo** — que corre en tu
+propia máquina, te recuerda entre cada sesión, no cuesta nada mantener
+despierto, y responde a un registro auditable que *tú* controlas. Una apuesta
+radical guía todo el diseño: **pensar es la excepción.** Un plano determinista
+de $0 resuelve casi todo; solo se toca un modelo cuando el juicio de verdad no
+se puede evitar. Todo lo demás — la soberanía, la memoria, las herramientas que
+se forja solo, el org de cerebros — sale de ahí.
+
+A propósito, **no** es varias cosas:
+
+- **no es un chatbot hospedado** — vive en tu disco, no en la nube de otro;
+- **no es magia lista-para-usar** — traes tu propio cerebro (una llave de API,
+  o un modelo 100% local — nada se alquila de nosotros, porque no hay *nosotros*);
+- **no es un framework para construir encima** — es un cerebro completo y
+  opinionado, no un kit de piezas.
+
+Si "soberano, ambiente y $0 por defecto" es el trato que prefieres sobre "magia
+sin setup en la nube de otro", esto se hizo para ti. Si solo quieres abrir una
+app y chatear, un asistente hospedado te servirá mejor — y está bien.
+
 ## Por qué Lhassa
 
 | | |
