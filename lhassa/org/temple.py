@@ -92,6 +92,13 @@ ACTION_OWNERS: dict[str, str] = {
     "curate_skills": GUARDIAN,
     "detect_repetition": ORACULO,
     "calendar_sync": SINCRONIZADOR,
+    # Memory enrichment — bootstrapping durable facts (courses, commitments,
+    # rhythm) from the calendar feed is the same domain as distill_memory
+    # (turning a raw signal into durable grande facts), so it sits with
+    # guardian rather than sincronizador (which owns the calendar SYNC/deliver
+    # loop, not fact-writing) or oraculo (pattern detection over episodes, not
+    # calendar-derived world knowledge).
+    "derive_world_facts": GUARDIAN,
 }
 
 #: The trigger label for the worker's OWN execution episode — a distinct, greppable

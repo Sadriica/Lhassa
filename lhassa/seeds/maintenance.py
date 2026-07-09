@@ -5,10 +5,12 @@ schedules them repeatedly: ``distill_memory`` (turn recent episodes into durable
 facts), ``review_tools`` (gate 4 — retire unused/failing graduated tools),
 ``detect_repetition`` (spot a repeated-judgment pattern worth automating),
 ``curate_skills`` (Fase 2 — the skill usage lifecycle sweep: active -> stale ->
-archived, never deletes), and ``calendar_sync`` (the master-calendar reconcile —
+archived, never deletes), ``calendar_sync`` (the master-calendar reconcile —
 a $0 set diff that delivers a ``.ics`` for each event missing from the primary
 calendar; a clean no-op with no primary/feeds configured, so it's safe to
-schedule unconditionally).
+schedule unconditionally), and ``derive_world_facts`` (the calendar-derived
+world model — bootstraps durable facts about courses/commitments/rhythm from
+the calendar feed; also a clean no-op with no calendar configured).
 
 Rather than minting each action bare (a task that used to dispatch straight to
 ``core.actions.run`` with no org attribution), this seed mints ``temple_run``
@@ -43,15 +45,19 @@ if TYPE_CHECKING:
 # accion -> recurrence in seconds. distill_memory/detect_repetition/calendar_sync
 # are daily hygiene passes; review_tools (gate 4) and curate_skills (Fase 2) run
 # less often — both need time to accrue real usage before "unused" means
-# anything. Each is minted as accion="temple_run" with the real action name
-# carried in params["action"] — see lhassa.actionpack._temple.TEMPLE_ACTIONS
-# (the closed set temple_run is allowed to front).
+# anything. derive_world_facts is a gentler weekly cadence too — the owner's
+# courses/commitments/rhythm don't change day to day, so a daily re-derive
+# would just re-check dedup for nothing. Each is minted as accion="temple_run"
+# with the real action name carried in params["action"] — see
+# lhassa.actionpack._temple.TEMPLE_ACTIONS (the closed set temple_run is
+# allowed to front).
 _RECURRING_ACTIONS: tuple[tuple[str, int], ...] = (
     ("distill_memory", 86400),
     ("detect_repetition", 86400),
     ("review_tools", 604800),
     ("curate_skills", 604800),
     ("calendar_sync", 86400),
+    ("derive_world_facts", 604800),
 )
 
 
@@ -147,7 +153,7 @@ def seed_maintenance(config: "Optional[Config]" = None) -> dict:
     "maintenance",
     "Mint the recurring self-improvement/hygiene tasks: distill_memory (daily), "
     "detect_repetition (daily), review_tools (weekly), curate_skills (weekly), "
-    "calendar_sync (daily).",
+    "calendar_sync (daily), derive_world_facts (weekly).",
 )
 def apply(config: "Optional[Config]" = None) -> dict:
     """The ``maintenance`` seed entry point — see :func:`seed_maintenance`."""

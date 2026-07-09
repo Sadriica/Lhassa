@@ -1,9 +1,10 @@
 """temple_run — the fixed action that routes internal hygiene work THROUGH templo.
 
-Five deterministic actions (``distill_memory``, ``detect_repetition``,
-``review_tools``, ``curate_skills``, ``calendar_sync``) used to run bare on the
-heartbeat — a task minted with the action's own name, dispatched straight to
-``core.actions.run`` with no org attribution. This module is the OTHER end of
+Six deterministic actions (``distill_memory``, ``detect_repetition``,
+``review_tools``, ``curate_skills``, ``calendar_sync``, ``derive_world_facts``)
+used to run bare on the heartbeat — a task minted with the action's own name,
+dispatched straight to ``core.actions.run`` with no org attribution. This
+module is the OTHER end of
 the down-execute-up seam :mod:`lhassa.org.temple` implements: ``temple_run`` is
 itself a registered action (so it can be minted like any other), and its body
 routes the REAL action through :func:`lhassa.org.temple.delegate_internal` —
@@ -29,6 +30,7 @@ TEMPLE_ACTIONS: frozenset[str] = frozenset(
         "review_tools",
         "curate_skills",
         "calendar_sync",
+        "derive_world_facts",
     }
 )
 
