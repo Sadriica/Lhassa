@@ -231,9 +231,13 @@ def git_repos_under(base: Path) -> list[Path]:
 
 
 def _default_project_dirs() -> list[Path]:
-    """Default roots to scan for repos; non-existent ones are skipped."""
+    """Default roots to scan for repos: ``$HOME/<name>`` for each configured
+    watch dir (``Config.watch_repo_dirs`` / ``LHASSA_WATCH_REPO_DIRS``, a CSV of
+    directory names, default just ``"Code"``); non-existent ones are skipped."""
+    from lhassa.config import Config
+
     home = Path.home()
-    return [d for d in (home / "Code", home / "per", home / "Vento") if d.exists()]
+    return [d for name in Config.watch_repo_dirs if (d := home / name).exists()]
 
 
 def check_git_status(project_dirs: list[Path] | None = None) -> dict:

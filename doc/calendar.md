@@ -28,7 +28,7 @@ approval. Ideal for **institutional calendars** an admin would otherwise gate.
    LHASSA_CALENDAR_ICS_URL=<your secret .ics link>
    ```
 3. `/today`, `/tomorrow` and the briefing now show your real events alongside
-   tasks — e.g. `📅 15:00 Cálculo III · Bloque 19`.
+   tasks — e.g. `📅 15:00 Algorithms 201 · Room 204`.
 
 Read-only, `$0`, deterministic (`lhassa/calendar/feed.py`): the feed is fetched
 and cached (`LHASSA_CALENDAR_FEED_TTL`, 1h default; a stale copy is served if the
@@ -55,17 +55,17 @@ project one — subscribe each with a **name** so `/today` shows which calendar
 each event is from:
 
 ```
-/calendar add EAFIT   <your institutional secret .ics link>
+/calendar add Work   <your institutional secret .ics link>
 /calendar add Personal <your personal secret .ics link>
 /calendars               # list what's configured (name + a masked url)
-/calendar remove EAFIT   # drop one
+/calendar remove Work   # drop one
 ```
 
 (the CLI equivalent is `lhassa calendar add|list|remove`). Once more than one
 calendar is configured, `/today` tags each event with its source:
 
 ```
-📅 15:00 Cálculo III · EAFIT · Bloque 19
+📅 15:00 Algorithms 201 · Work · Room 204
 📅 19:00 Team sync · Personal
 ```
 
@@ -86,7 +86,7 @@ With several calendars subscribed (see above), pick ONE as your **master** —
 the calendar everything else should agree with:
 
 ```
-/calendar primary EAFIT   # designate the master calendar
+/calendar primary Work   # designate the master calendar
 /calendar sync            # find events on your other calendars missing from it
 ```
 
@@ -113,8 +113,8 @@ reads and, `$0` and deterministic (no model, stdlib only), derives:
 
 - **Courses / recurring commitments** — a summary that repeats at least 3
   times on a regular weekly-ish cadence becomes a durable fact, e.g. a
-  Tuesday 15:00 "Cálculo III" in "Bloque 19" → *"Has a recurring weekly
-  commitment 'Cálculo III' (Tue 15:00, Bloque 19) — likely a course or class
+  Tuesday 15:00 "Algorithms 201" in "Room 204" → *"Has a recurring weekly
+  commitment 'Algorithms 201' (Tue 15:00, Room 204) — likely a course or class
   this term."* A room/building-looking location (sala/bloque/aula/room/...)
   is what upgrades the phrasing to "likely a course"; without that signal
   it's phrased as a plain commitment. A small denylist (lunch/breaks/coffee)

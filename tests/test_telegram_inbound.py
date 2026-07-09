@@ -1129,10 +1129,10 @@ def test_calendar_query_answered_without_provider(monkeypatch):
     async def _fake_upcoming(instance_id, *, hours=36, config=None):
         return [
             {
-                "summary": "Cálculo III",
+                "summary": "Algorithms 201",
                 "start": start + timedelta(hours=9),
                 "end": start + timedelta(hours=10),
-                "location": "Bloque 19",
+                "location": "Room 204",
                 "all_day": False,
                 "calendar": "default",
             }
@@ -1152,7 +1152,7 @@ def test_calendar_query_answered_without_provider(monkeypatch):
 
     assert provider.calls == []  # never reached the tool-less think
     assert sent and sent[0].startswith("El viernes")
-    assert "Cálculo III" in sent[0]
+    assert "Algorithms 201" in sent[0]
 
     assert len(logged_episodes) == 1
     ep = logged_episodes[0]
@@ -1400,7 +1400,7 @@ def test_calendar_followup_served_from_calendar_without_provider(monkeypatch):
     async def _fake_upcoming(instance_id, *, hours=36, config=None):
         return [
             {
-                "summary": "Cálculo III",
+                "summary": "Algorithms 201",
                 "start": fri_start + timedelta(hours=9),
                 "end": fri_start + timedelta(hours=10),
                 "location": None,
@@ -1438,7 +1438,7 @@ def test_calendar_followup_served_from_calendar_without_provider(monkeypatch):
     asyncio.run(telegram_inbound.poll_once(cfg, offset=None))
     assert provider.calls == []
     assert len(sent) == 1
-    assert "Cálculo III" in sent[0]
+    assert "Algorithms 201" in sent[0]
 
     # Turn 2: the elliptical follow-up — must be served from the calendar too,
     # NOT the tool-less think.
@@ -1495,7 +1495,7 @@ def test_connector_message_that_is_not_really_a_followup_falls_through(monkeypat
     async def _fake_upcoming(instance_id, *, hours=36, config=None):
         return [
             {
-                "summary": "Cálculo III",
+                "summary": "Algorithms 201",
                 "start": fri_start + timedelta(hours=9),
                 "end": fri_start + timedelta(hours=10),
                 "location": None,

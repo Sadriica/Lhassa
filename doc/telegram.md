@@ -264,8 +264,8 @@ mistaken for a live-data lookup:
 ```
 > ¿qué hay en mi calendario el viernes?
 El viernes 11 tienes 3 cosas:
-📅 09:00 Cálculo III · Bloque 19
-📅 13:30 Vento Datos · Sala 19-527
+📅 09:00 Algorithms 201 · Room 204
+📅 13:30 Team Sync · Bldg A
 📅 18:00 Reunión
 ```
 

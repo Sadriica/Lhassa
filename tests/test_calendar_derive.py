@@ -45,14 +45,14 @@ def test_no_events_yields_no_facts(monkeypatch):
 
 
 def test_recurring_weekly_course_becomes_a_fact(monkeypatch):
-    events = _weekly("Cálculo III", n=4, location="Bloque 19")
+    events = _weekly("Algorithms 201", n=4, location="Room 204")
     _patch_upcoming(monkeypatch, events)
 
     out = asyncio.run(derive.derive_world("inst", days=45))
     course_facts = [f for f in out if "course" in f["tags"]]
     assert len(course_facts) == 1
     fact = course_facts[0]
-    assert "Cálculo III" in fact["contenido"]
+    assert "Algorithms 201" in fact["contenido"]
     assert "course" in fact["contenido"] or "class" in fact["contenido"]
     assert fact["procedencia"] == "calendar-derived"
     assert "calendar" in fact["tags"]

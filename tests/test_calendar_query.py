@@ -171,18 +171,18 @@ def _fake_events(start_utc):
     # would set the UTC hour instead and drift under a non-UTC local offset).
     return [
         {
-            "summary": "Cálculo III",
+            "summary": "Algorithms 201",
             "start": start_utc + timedelta(hours=9),
             "end": start_utc + timedelta(hours=10),
-            "location": "Bloque 19",
+            "location": "Room 204",
             "all_day": False,
             "calendar": "default",
         },
         {
-            "summary": "Vento Datos",
+            "summary": "Team Sync",
             "start": start_utc + timedelta(hours=13, minutes=30),
             "end": start_utc + timedelta(hours=15),
-            "location": "Sala 19-527",
+            "location": "Bldg A",
             "all_day": False,
             "calendar": "default",
         },
@@ -213,8 +213,8 @@ async def test_answer_grouped_reply_for_friday_with_events(monkeypatch):
     reply = await query.answer("inst_test", "qué hay en mi calendario el viernes")
     assert reply is not None
     assert reply.startswith(f"El viernes {start.astimezone().day} tienes 3 cosas:")
-    assert "📅 09:00 Cálculo III · Bloque 19" in reply
-    assert "📅 13:30 Vento Datos · Sala 19-527" in reply
+    assert "📅 09:00 Algorithms 201 · Room 204" in reply
+    assert "📅 13:30 Team Sync · Bldg A" in reply
     assert "📅 18:00 Reunión" in reply
 
 
