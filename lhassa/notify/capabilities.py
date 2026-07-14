@@ -87,18 +87,28 @@ async def _calendar_continue_followup(
     :func:`lhassa.calendar.query.is_calendar_query` (and therefore the plain
     ``calendar_view`` handler above) would refuse it. Once the STICKY topic
     says the thread is already about the calendar, though, the follow-up's
-    OWN time reference is enough: this goes straight to :func:`lhassa.
-    calendar.query.answer_window`, which parses/answers WITHOUT that keyword
-    gate. ``context`` isn't needed for calendar (the fresh window comes
-    entirely from ``followup_text``); accepted for signature parity with
-    capabilities that DO need carried-over state. ``None`` when the follow-up
-    itself has no parseable time reference — the caller then falls through to
-    the normal chat path. Never raises.
+    OWN reference is enough. Two shapes are handled, in order:
+
+      1. A DAY follow-up ("Y el sábado?") → :func:`lhassa.calendar.query.
+         answer_window`, which parses/answers WITHOUT the keyword gate.
+      2. A bare TIME follow-up ("¿y a las 6am?") → :func:`lhassa.calendar.
+         query.answer_time_of_day`, resolved against the sticky day carried in
+         ``context["date"]`` (the last calendar answer's day; today by
+         default) — so it never again denies an event that exists.
+
+    ``None`` only when the follow-up carries NEITHER a parseable day nor a
+    time — the caller then falls through to the normal chat path. Never raises.
     """
     from lhassa.calendar import query as _cal_query
 
     instance_id = getattr(config, "instance_id", None) or "inst_personal"
-    return await _cal_query.answer_window(instance_id, followup_text, config=config)
+    reply = await _cal_query.answer_window(instance_id, followup_text, config=config)
+    if reply is not None:
+        return reply
+    day_iso = (context or {}).get("date")
+    return await _cal_query.answer_time_of_day(
+        instance_id, followup_text, day_iso=day_iso, config=config
+    )
 
 
 class Capability:

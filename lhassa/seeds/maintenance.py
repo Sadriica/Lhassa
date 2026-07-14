@@ -94,7 +94,11 @@ async def _ensure_recurring_task(instance_id: str, accion: str, recurrence: int)
     from lhassa.core.dispatch import mint_task
     from lhassa.security.trust import Origin, TrustLevel
 
-    pending = await _db.load_pending_tasks(instance_id)
+    # ALL pending tasks, not load_pending_tasks() — that one is DUE-AWARE and
+    # hides a task whose due_at is still in the future, so a recurring wrapper
+    # already scheduled for tomorrow would be invisible here and re-minted every
+    # apply (the real cause of the temple_run pile-up). list_tasks sees them.
+    pending = await _db.list_tasks(instance_id, estado="pendiente", limit=500)
     for row in pending:
         if _is_matching_temple_task(row, accion):
             return "existing"

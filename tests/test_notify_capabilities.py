@@ -218,7 +218,7 @@ async def test_calendar_continue_followup_parses_and_answers(monkeypatch):
     assert window is not None
     start, _end, _label = window
 
-    async def _fake_upcoming(instance_id, *, hours=36, config=None):
+    async def _fake_upcoming(instance_id, *, hours=36, since=None, config=None):
         return [
             {
                 "summary": "Mercado",
@@ -248,3 +248,41 @@ async def test_calendar_continue_followup_declines_with_no_time_reference():
     cap = capabilities.get_capability("calendar_view")
     reply = await cap.continue_followup("y además necesito comprar leche", {}, config=None)
     assert reply is None
+
+
+@pytest.mark.asyncio
+async def test_calendar_continue_followup_bare_time_uses_sticky_day(monkeypatch):
+    """A bare-time follow-up ("¿y a las 6am?") has no DAY reference, so
+    answer_window declines — the continuation must fall back to
+    answer_time_of_day, resolved against the sticky day in context, and find
+    the morning event instead of falling through to a think."""
+    from datetime import datetime, timezone
+
+    from lhassa.calendar import feed as feed_mod
+
+    local_now = datetime.now(timezone.utc).astimezone()
+    day_start = datetime(
+        local_now.year, local_now.month, local_now.day, tzinfo=local_now.tzinfo
+    )
+    six_utc = (day_start.replace(hour=6)).astimezone(timezone.utc)
+
+    async def _fake_upcoming(instance_id, *, hours=36, since=None, config=None):
+        return [
+            {
+                "summary": "Algorithms 201",
+                "start": six_utc,
+                "end": six_utc + timedelta(hours=2),
+                "location": "Room 204",
+                "all_day": False,
+                "calendar": "default",
+            }
+        ]
+
+    monkeypatch.setattr(feed_mod, "upcoming", _fake_upcoming)
+
+    cap = capabilities.get_capability("calendar_view")
+    ctx = {"date": local_now.date().isoformat()}
+    reply = await cap.continue_followup("¿y a las 6am?", ctx, config=None)
+    assert reply is not None
+    assert "Algorithms 201" in reply
+    assert reply.startswith("A las 06:00 tienes:")

@@ -154,6 +154,15 @@ def _ev(summary: str, start: str) -> str:
     return f"BEGIN:VEVENT\nSUMMARY:{summary}\nDTSTART:{start}Z\nEND:VEVENT"
 
 
+def _soon(hours_ahead: int) -> str:
+    """A UTC ``YYYYMMDDTHHMMSS`` stamp ``hours_ahead`` from real now — keeps the
+    ``upcoming()`` window tests (which fetch [now, now+hours]) from rotting as
+    the calendar's hardcoded dates slide into the past."""
+    return (datetime.now(timezone.utc) + timedelta(hours=hours_ahead)).strftime(
+        "%Y%m%dT%H%M%S"
+    )
+
+
 @pytest.mark.asyncio
 async def test_upcoming_tags_events_with_their_calendar_name(tmp_path, monkeypatch):
     from types import SimpleNamespace
@@ -169,8 +178,8 @@ async def test_upcoming_tags_events_with_their_calendar_name(tmp_path, monkeypat
     _store.add_calendar("Personal", "https://example.com/personal.ics", config=cfg)
 
     fake_bodies = {
-        "https://example.edu/work.ics": _cal(_ev("Algorithms 201", "20260709T150000")),
-        "https://example.com/personal.ics": _cal(_ev("Team sync", "20260709T190000")),
+        "https://example.edu/work.ics": _cal(_ev("Algorithms 201", _soon(3))),
+        "https://example.com/personal.ics": _cal(_ev("Team sync", _soon(7))),
     }
 
     async def _fake_fetch(url, *, ttl=None, config=None):
@@ -202,7 +211,7 @@ async def test_upcoming_skips_a_failing_feed_others_still_show(tmp_path, monkeyp
     async def _fake_fetch(url, *, ttl=None, config=None):
         if "broken" in url:
             raise RuntimeError("network down")
-        return _cal(_ev("Standup", "20260709T130000"))
+        return _cal(_ev("Standup", _soon(4)))
 
     monkeypatch.setattr(feed, "fetch_feed", _fake_fetch)
 

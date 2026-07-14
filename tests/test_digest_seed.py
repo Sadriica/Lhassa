@@ -73,13 +73,53 @@ def test_apply_is_idempotent_no_duplicate_schedule(cfg):
     assert second["skipped"] is True
     assert second["minted"] == []
 
+
+def test_idempotency_is_per_slot_not_count(cfg):
+    """A DOUBLED morning slot must not mask a missing evening one — the seed is
+    per-hour, so re-applying against two same-hour tasks still mints the absent
+    evening (the real "two morning digests, no evening" bug)."""
+    import asyncio
+
+    import lhassa.core.db as db
+    from lhassa.core.dispatch import mint_task
+    from lhassa.security.trust import Origin, TrustLevel
+
+    async def _seed_two_mornings():
+        await db.init_db()
+        origin = Origin(trust=TrustLevel.HUMANO, actor_id="seed:digest")
+        due = digest_seed._next_local_occurrence(8, 0).isoformat()
+        for _ in range(2):  # two tasks at the SAME (morning) hour
+            await mint_task(
+                "inst_personal", "send_digest", objetivo="operative digest",
+                params={}, origin=origin, due_at=due, recurrence="86400",
+            )
+
+    asyncio.run(_seed_two_mornings())
+
+    # Count-based idempotency (2 >= 2) would skip; per-slot must add the evening.
+    summary = seeds.apply_seed("digest", cfg)
+    assert summary["skipped"] is False
+    assert len(summary["minted"]) == 1
+    evening_hour = digest_seed._next_local_occurrence(21, 0).astimezone().hour
+    minted_hour = datetime.fromisoformat(
+        summary["minted"][0]["due_at"]
+    ).astimezone().hour
+    assert minted_hour == evening_hour
+
     import asyncio
 
     import lhassa.core.db as db
 
+    # The seed is non-destructive, so the pre-existing duplicate morning stays
+    # (that's for a cleanup to remove, not a seed) — but BOTH scheduled hours are
+    # now covered: the point is that the evening slot got healed.
     tasks = asyncio.run(db.list_tasks("inst_personal", estado="pendiente"))
-    send_digest_tasks = [t for t in tasks if t["accion"] == "send_digest"]
-    assert len(send_digest_tasks) == 2  # still exactly two, no pile-up
+    hours = {
+        datetime.fromisoformat(t["due_at"]).astimezone().hour
+        for t in tasks if t["accion"] == "send_digest"
+    }
+    morning_hour = digest_seed._next_local_occurrence(8, 0).astimezone().hour
+    assert hours == {morning_hour, evening_hour}
 
 
 def test_next_local_occurrence_rolls_to_tomorrow_if_past():

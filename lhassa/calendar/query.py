@@ -229,6 +229,28 @@ def _day_phrase(label: str, start_local: datetime, *, has_events: bool, spanish:
     return phrase
 
 
+def _event_lines(events: list[dict], *, spanish: bool) -> list[str]:
+    """The ``📅 HH:MM Summary · cal · loc`` lines for a list of events.
+
+    Shared by the grouped window reply and the time-of-day reply so both render
+    an event identically. Shows the calendar name only when more than one feed
+    is in play. Assumes ``events`` is non-empty and pre-sorted by start.
+    """
+    lines: list[str] = []
+    multi_cal = len({e.get("calendar") for e in events if e.get("calendar")}) > 1
+    for ev in events:
+        from lhassa.calendar.feed import _local_hhmm
+
+        if ev.get("all_day"):
+            when = "Todo el día" if spanish else "All day"
+        else:
+            when = _local_hhmm(ev["start"])
+        cal = f" · {ev['calendar']}" if multi_cal and ev.get("calendar") else ""
+        loc = f" · {ev['location']}" if ev.get("location") else ""
+        lines.append(f"📅 {when} {ev.get('summary', '')}{cal}{loc}")
+    return lines
+
+
 def _format_reply(
     events: list[dict], *, label: str, start_utc: datetime
 ) -> str:
@@ -250,18 +272,7 @@ def _format_reply(
         noun = "thing" if n == 1 else "things"
         lines = [f"{phrase} you have {n} {noun}:"]
 
-    multi_cal = len({e.get("calendar") for e in events if e.get("calendar")}) > 1
-    for ev in events:
-        from lhassa.calendar.feed import _local_hhmm
-
-        if ev.get("all_day"):
-            when = "Todo el día" if spanish else "All day"
-        else:
-            when = _local_hhmm(ev["start"])
-        cal = f" · {ev['calendar']}" if multi_cal and ev.get("calendar") else ""
-        loc = f" · {ev['location']}" if ev.get("location") else ""
-        lines.append(f"📅 {when} {ev.get('summary', '')}{cal}{loc}")
-
+    lines.extend(_event_lines(events, spanish=spanish))
     return "\n".join(lines)
 
 
@@ -311,12 +322,178 @@ async def answer_window(instance_id: str, text: str, *, config=None) -> Optional
         span_hours = (end_utc - now).total_seconds() / 3600.0
         hours = max(24, int(span_hours) + 6)  # a little slack past the window edge
 
-        events = await _feed.upcoming(instance_id, hours=hours, config=config)
+        # Reach BACK to the window's own start so a single-day query ("hoy")
+        # includes events that already happened today — otherwise "hoy" asked
+        # mid-morning silently drops the 08:00 class and then flatly denies it
+        # exists when the owner follows up "¿y a las 8?".
+        events = await _feed.upcoming(
+            instance_id, hours=hours, since=min(start_utc, now), config=config
+        )
         filtered = [
             e for e in events
             if e.get("start") is not None and start_utc <= e["start"] < end_utc
         ]
         filtered.sort(key=lambda e: e["start"])
         return _format_reply(filtered, label=label, start_utc=start_utc)
+    except Exception:
+        return None
+
+
+# ── time-of-day follow-ups ("¿y a las 6am?") ─────────────────────────────────
+#
+# A day window (parse_window) answers "what do I have today?". Its natural
+# elliptical follow-up is a bare TIME — "¿y a las 6am?", "and at 5pm?" — which
+# carries NO day reference, so parse_window declines and the message used to
+# fall to a tool-less think that hallucinated "no hay nada". These two helpers
+# resolve the time against the conversation's sticky calendar DAY instead.
+#
+# Only fires as a follow-up (see lhassa.notify.capabilities): the sticky topic
+# is already calendar_view, and this runs AFTER answer_window declined. It
+# demands an explicit time signal — a meridiem (am/pm), a colon (6:30), or an
+# "a las"/"at" lead — so a bare number in ordinary chat ("sala 6") never trips
+# it. A bare 1–12 with no meridiem is AMBIGUOUS, so both readings are checked
+# (6 → 06:00 AND 18:00): whichever the calendar actually has wins.
+_TOD_RE = re.compile(
+    r"(?:\b(a\s+las?|at)\s+)?(\d{1,2})(?::(\d{2}))?\s*(a\.?\s*m\.?|p\.?\s*m\.?)?",
+)
+
+
+def parse_time_of_day(text: str) -> Optional[list[tuple[int, int]]]:
+    """A bare time reference → candidate ``(hour24, minute)`` tuples, or ``None``.
+
+    Returns EVERY plausible 24h reading: an unambiguous one (meridiem or 24h
+    value → a single tuple), or both AM and PM for a bare 1–12. ``None`` when
+    there is no time, or no explicit time signal (meridiem / colon / "a las" /
+    "at") — so ordinary chat never matches. Never raises.
+    """
+    try:
+        norm = _normalize(text or "")
+        m = _TOD_RE.search(norm)
+        if not m:
+            return None
+        lead, hh, mm, mer = m.group(1), m.group(2), m.group(3), m.group(4)
+        mer = (mer or "").replace(".", "").replace(" ", "")
+        # Require an explicit time signal — a lone number is not a time.
+        if not (lead or mer or mm):
+            return None
+        hour = int(hh)
+        minute = int(mm) if mm else 0
+        if hour > 23 or minute > 59:
+            return None
+        if mer == "am":
+            return [(0 if hour == 12 else hour, minute)]
+        if mer == "pm":
+            return [(hour if hour == 12 else (hour + 12) % 24, minute)]
+        # No meridiem: a 0 or 13–23 value is already unambiguous 24h.
+        if hour == 0 or hour > 12:
+            return [(hour, minute)]
+        # Ambiguous 1–12 → check both readings; the calendar disambiguates.
+        cands = {(hour, minute), ((hour + 12) % 24, minute)}
+        return sorted(cands)
+    except Exception:
+        return None
+
+
+def resolved_date(text: str, *, now: Optional[datetime] = None) -> Optional[str]:
+    """The local ISO date a calendar message's window starts on, or ``None``.
+
+    Used by the chat layer to remember WHICH day the sticky calendar topic is
+    on, so a later bare-time follow-up ("¿y a las 6am?") resolves against the
+    right day (today after "hoy", tomorrow after "mañana"). Never raises.
+    """
+    try:
+        window = parse_window(text, now=now)
+        if window is None:
+            return None
+        start_utc, _end, _label = window
+        return start_utc.astimezone().date().isoformat()
+    except Exception:
+        return None
+
+
+def _is_spanish_tod(text: str) -> bool:
+    """Language of a time-of-day follow-up — Spanish unless it clearly reads
+    English ("at 6pm" with no Spanish "las"). Defaults Spanish (the owner)."""
+    norm = _normalize(text)
+    if re.search(r"\blas\b", norm):
+        return True
+    if re.search(r"\bat\b", norm):
+        return False
+    return True
+
+
+async def answer_time_of_day(
+    instance_id: str, text: str, *, day_iso: Optional[str] = None, config=None
+) -> Optional[str]:
+    """Answer a bare-time follow-up against a specific DAY — deterministic, $0.
+
+    Resolves ``text``'s time (:func:`parse_time_of_day`) against ``day_iso``
+    (the sticky calendar day; defaults to today), fetches that FULL local day's
+    events (reaching back past ``now`` so a morning slot still shows) and
+    reports the events at/around that time. ``None`` when ``text`` carries no
+    parseable time — the caller falls through to its normal path. A day with
+    nothing at that time answers honestly ("no tienes nada a las …") rather
+    than falling through to a model that would guess. Never raises.
+    """
+    try:
+        cands = parse_time_of_day(text)
+        if not cands:
+            return None
+
+        local_now = datetime.now(timezone.utc).astimezone()
+        target_date = None
+        if day_iso:
+            try:
+                target_date = datetime.fromisoformat(day_iso).date()
+            except (ValueError, TypeError):
+                target_date = None
+        if target_date is None:
+            target_date = local_now.date()
+
+        tz = local_now.tzinfo
+        day_start_local = datetime(
+            target_date.year, target_date.month, target_date.day, tzinfo=tz
+        )
+        day_start_utc = day_start_local.astimezone(timezone.utc)
+        day_end_utc = (day_start_local + timedelta(days=1)).astimezone(timezone.utc)
+
+        from lhassa.calendar import feed as _feed
+
+        now = datetime.now(timezone.utc)
+        span_hours = (day_end_utc - now).total_seconds() / 3600.0
+        hours = max(24, int(span_hours) + 6)
+        events = await _feed.upcoming(
+            instance_id, hours=hours, since=min(day_start_utc, now), config=config
+        )
+        day_events = [
+            e for e in events
+            if e.get("start") is not None and day_start_utc <= e["start"] < day_end_utc
+        ]
+
+        matched: list[dict] = []
+        for ev in day_events:
+            start_local = ev["start"].astimezone()
+            end_local = (ev.get("end") or ev["start"]).astimezone()
+            for hour, minute in cands:
+                target = day_start_local.replace(hour=hour, minute=minute)
+                covers = start_local <= target < end_local
+                starts_at = start_local.hour == hour and (
+                    minute == 0 or start_local.minute == minute
+                )
+                if covers or starts_at:
+                    matched.append(ev)
+                    break
+        matched.sort(key=lambda e: e["start"])
+
+        spanish = _is_spanish_tod(text)
+        hour0, minute0 = cands[0]
+        tlabel = f"{hour0:02d}:{minute0:02d}"
+        if not matched:
+            if spanish:
+                return f"No tienes nada a las {tlabel}."
+            return f"You don't have anything at {tlabel}."
+
+        header = f"A las {tlabel} tienes:" if spanish else f"At {tlabel} you have:"
+        return "\n".join([header, *_event_lines(matched, spanish=spanish)])
     except Exception:
         return None

@@ -1091,7 +1091,7 @@ def test_calendar_view_forces_a_deterministic_answer(tmp_path, monkeypatch):
 
     from lhassa.calendar import feed as feed_mod
 
-    async def _fake_upcoming(instance_id, *, hours=36, config=None):
+    async def _fake_upcoming(instance_id, *, hours=36, since=None, config=None):
         return []
 
     monkeypatch.setattr(feed_mod, "upcoming", _fake_upcoming)

@@ -59,6 +59,33 @@ def test_maintenance_seed_is_idempotent(_db):
     assert len(after) == len(before)
 
 
+def test_idempotent_even_when_existing_task_is_future_due(_db):
+    """The subtle pile-up bug: once step.py re-mints a recurring wrapper with a
+    FUTURE due_at, a due-aware lookup (load_pending_tasks) can't see it, so the
+    seed re-mints a duplicate every apply. The check must use ALL pending tasks."""
+    maint_seed.seed_maintenance(_Cfg())
+
+    # Simulate the post-fire state: push every wrapper's due_at into the future.
+    import sqlite3
+
+    conn = sqlite3.connect(db.DB_PATH)
+    conn.execute(
+        "UPDATE tasks SET due_at = '2099-01-01T00:00:00+00:00' "
+        "WHERE accion = 'temple_run' AND estado = 'pendiente'"
+    )
+    conn.commit()
+    conn.close()
+
+    # None of these are "due" now, but the seed must still recognise them.
+    second = maint_seed.seed_maintenance(_Cfg())
+    assert second["created"] == []
+    assert set(second["existing"]) == {a for a, _ in maint_seed._RECURRING_ACTIONS}
+
+    all_pending = asyncio.run(db.list_tasks("inst_personal", estado="pendiente", limit=500))
+    temple = [t for t in all_pending if t["accion"] == "temple_run"]
+    assert len(temple) == len(maint_seed._RECURRING_ACTIONS)  # no pile-up
+
+
 @pytest.mark.asyncio
 async def test_a_wrapped_maintenance_task_runs_through_temple(tmp_path, monkeypatch):
     monkeypatch.setattr(db, "DB_PATH", tmp_path / "brain.db")
