@@ -1126,7 +1126,7 @@ def test_calendar_query_answered_without_provider(monkeypatch):
     assert fixed_window is not None
     start, _end, _label = fixed_window
 
-    async def _fake_upcoming(instance_id, *, hours=36, config=None):
+    async def _fake_upcoming(instance_id, *, hours=36, since=None, config=None):
         return [
             {
                 "summary": "Algorithms 201",
@@ -1397,7 +1397,7 @@ def test_calendar_followup_served_from_calendar_without_provider(monkeypatch):
     fri_start, _, _ = friday_window
     sat_start, _, _ = saturday_window
 
-    async def _fake_upcoming(instance_id, *, hours=36, config=None):
+    async def _fake_upcoming(instance_id, *, hours=36, since=None, config=None):
         return [
             {
                 "summary": "Algorithms 201",
@@ -1492,7 +1492,7 @@ def test_connector_message_that_is_not_really_a_followup_falls_through(monkeypat
     assert friday_window is not None
     fri_start, _, _ = friday_window
 
-    async def _fake_upcoming(instance_id, *, hours=36, config=None):
+    async def _fake_upcoming(instance_id, *, hours=36, since=None, config=None):
         return [
             {
                 "summary": "Algorithms 201",

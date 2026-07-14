@@ -213,6 +213,69 @@ async def test_chain_needs_distinct_actions_and_threshold(brain):
     assert chains == []
 
 
+def test_is_infrastructure_recognizes_own_machinery():
+    from lhassa.agents.repetition import is_infrastructure
+
+    # Org hops, the monitor, and scheduled maintenance beats are infra.
+    assert is_infrastructure("org-deliver")
+    assert is_infrastructure("org-delegate")
+    assert is_infrastructure("temple-execute")
+    assert is_infrastructure("templo-execute")  # legacy Spanish spelling
+    assert is_infrastructure("monitor")
+    assert is_infrastructure("task:temple_run")
+    assert is_infrastructure("task:distill_memory")
+    assert is_infrastructure("task:detect_repetition")
+    assert is_infrastructure("task:send_digest")
+    # Owner-driven wakes are NOT infra — real repeated work must still surface.
+    assert not is_infrastructure("telegram")
+    assert not is_infrastructure("task:send_reminder")
+    assert not is_infrastructure("task:research_reply")
+    assert not is_infrastructure("cron")
+
+
+@pytest.mark.asyncio
+async def test_chain_detector_ignores_temple_machinery(brain):
+    """The real-world flood: the temple's own $0 hygiene chain fired every beat
+    and drowned the owner in mint_script proposals. It must be ignored now."""
+    from lhassa.agents.repetition import detect_mechanical_chains
+
+    # The exact machinery seen in production: a maintenance chain under an infra
+    # wake, three times, plus the org delegation/delivery hops.
+    for _ in range(3):
+        for acc in ("calendar_sync", "distill_memory", "detect_repetition"):
+            await _seed_episode(
+                brain, instance_id="inst_personal",
+                despertar_por="temple-execute", accion=acc, cost=0.0,
+            )
+        for acc in ("delegate:lhassa→temple→synchronizer",
+                    "delegate:lhassa→temple→guardian"):
+            await _seed_episode(
+                brain, instance_id="inst_personal",
+                despertar_por="org-delegate", accion=acc, cost=0.0,
+            )
+
+    chains = await detect_mechanical_chains("inst_personal", days=7, threshold=3)
+    assert chains == []  # no proposals for Lhassa's own machinery
+
+
+@pytest.mark.asyncio
+async def test_chain_detector_still_finds_real_owner_chains(brain):
+    """Infra exclusion must not silence a genuine repeated OWNER chain."""
+    from lhassa.agents.repetition import detect_mechanical_chains
+
+    for _ in range(3):
+        await _seed_episode(
+            brain, instance_id="inst_personal", despertar_por="cron",
+            accion="web_fetch", cost=0.01,
+        )
+        await _seed_episode(
+            brain, instance_id="inst_personal", despertar_por="cron",
+            accion="export_report", cost=0.0,
+        )
+    chains = await detect_mechanical_chains("inst_personal", days=7, threshold=3)
+    assert any(f["chain"] == ["web_fetch", "export_report"] for f in chains)
+
+
 # ── detect_recurring: recurring regardless of cost, + temporal cadence ──────────
 
 

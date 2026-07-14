@@ -32,7 +32,7 @@ def _weekly(summary, n=4, *, start=_BASE, location=""):
 
 
 def _patch_upcoming(monkeypatch, events):
-    async def fake_upcoming(instance_id, *, hours=36, config=None):
+    async def fake_upcoming(instance_id, *, hours=36, since=None, config=None):
         return events
 
     monkeypatch.setattr(feed_mod, "upcoming", fake_upcoming)
@@ -135,7 +135,7 @@ def test_all_day_events_are_excluded_from_commitments_and_rhythm(monkeypatch):
 
 
 def test_never_raises_on_feed_error(monkeypatch):
-    async def boom(instance_id, *, hours=36, config=None):
+    async def boom(instance_id, *, hours=36, since=None, config=None):
         raise RuntimeError("boom")
 
     monkeypatch.setattr(feed_mod, "upcoming", boom)

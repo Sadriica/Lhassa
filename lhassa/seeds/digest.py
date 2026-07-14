@@ -73,12 +73,31 @@ def _next_local_occurrence(hour: int, minute: int = 0, *, now_local=None) -> dat
     return target.astimezone(timezone.utc)
 
 
-async def _existing_digest_task_count(instance_id: str) -> int:
-    """How many pending ``send_digest`` tasks already exist (the idempotency check)."""
+async def _existing_digest_hours(instance_id: str) -> set[int]:
+    """Local hours already covered by a pending ``send_digest`` task.
+
+    Idempotency is per-SLOT, not a bare count: two tasks at the SAME hour must
+    not satisfy a schedule that wants two DIFFERENT hours (morning + evening) —
+    a count-based check (``existing >= len(schedule)``) let a doubled morning
+    slot mask a missing evening one, so the evening digest was never minted and
+    the owner got two morning digests and no evening. Keying on the local hour
+    of each pending task makes the seed self-healing: it mints exactly the slots
+    that are actually absent. Never raises — an unparseable ``due_at`` is skipped."""
     from lhassa.core import db
 
     tasks = await db.list_tasks(instance_id, estado="pendiente", limit=200)
-    return sum(1 for t in tasks if t.get("accion") == _ACTION)
+    hours: set[int] = set()
+    for t in tasks:
+        if t.get("accion") != _ACTION:
+            continue
+        due = t.get("due_at")
+        if not due:
+            continue
+        try:
+            hours.add(datetime.fromisoformat(due).astimezone().hour)
+        except (ValueError, TypeError):
+            continue
+    return hours
 
 
 async def seed_digest_schedule(config: "Optional[Config]" = None) -> dict:
@@ -105,15 +124,14 @@ async def seed_digest_schedule(config: "Optional[Config]" = None) -> dict:
 
         await db.init_db()
 
-        existing = await _existing_digest_task_count(instance_id)
-        if existing >= len(schedule):
-            summary["skipped"] = True
-            return summary
+        existing_hours = await _existing_digest_hours(instance_id)
 
         # HUMANO origin, actor "seed:digest" — a deliberate, human-authored bootstrap,
         # not a model judgment, so it needs no approval (send_digest is INTERNO/no-HITL).
         origin = Origin(trust=TrustLevel.HUMANO, actor_id="seed:digest")
         for hour, minute in schedule:
+            if hour in existing_hours:
+                continue  # this slot is already scheduled — never duplicate it
             due_at = _next_local_occurrence(hour, minute).isoformat()
             task_id, estado = await mint_task(
                 instance_id,
@@ -132,6 +150,8 @@ async def seed_digest_schedule(config: "Optional[Config]" = None) -> dict:
                 summary["errors"].append(
                     f"mint failed for {hour:02d}:{minute:02d}: {estado}"
                 )
+        if not summary["minted"]:
+            summary["skipped"] = True  # every wanted slot already existed
     except Exception as exc:  # partial failure is reported, not fatal
         logger.warning("seed[digest]: scheduling failed: {}", exc)
         summary["errors"].append(f"{type(exc).__name__}: {exc}")

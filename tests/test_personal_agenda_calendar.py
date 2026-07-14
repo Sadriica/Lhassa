@@ -27,7 +27,7 @@ def _event(summary: str, hour: int, calendar: str | None = None) -> dict:
 async def test_agenda_shows_calendar_name_with_multiple_calendars(monkeypatch):
     from lhassa.calendar import feed as _feed
 
-    async def _fake_upcoming(instance_id, *, hours=36, config=None):
+    async def _fake_upcoming(instance_id, *, hours=36, since=None, config=None):
         return [
             _event("Algorithms 201", 15, "Work"),
             _event("Team sync", 19, "Personal"),
@@ -56,7 +56,7 @@ async def test_agenda_shows_calendar_name_with_multiple_calendars(monkeypatch):
 async def test_agenda_omits_calendar_name_with_a_single_calendar(monkeypatch):
     from lhassa.calendar import feed as _feed
 
-    async def _fake_upcoming(instance_id, *, hours=36, config=None):
+    async def _fake_upcoming(instance_id, *, hours=36, since=None, config=None):
         return [_event("Algorithms 201", 15, "Work")]
 
     monkeypatch.setattr(_feed, "upcoming", _fake_upcoming)

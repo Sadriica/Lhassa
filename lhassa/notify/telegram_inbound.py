@@ -1043,7 +1043,16 @@ async def _answer(text: str, *, config, chat_id: str = "") -> None:
         if calendar_reply is not None:
             # This turn IS the calendar topic now — a connector-led follow-up
             # ("Y el sabado?") should stay here rather than fall to the think.
-            _topic_set(config, chat_id, "calendar_view")
+            # Remember the DAY too, so a bare-time follow-up ("¿y a las 6am?")
+            # resolves against the right day instead of hallucinating.
+            from lhassa.calendar import query as _cal_query_topic
+
+            _topic_set(
+                config,
+                chat_id,
+                "calendar_view",
+                {"date": _cal_query_topic.resolved_date(stripped)},
+            )
             await telegram.send(calendar_reply, config=config)
             return
 
@@ -1144,7 +1153,17 @@ async def _answer(text: str, *, config, chat_id: str = "") -> None:
                             )
                         _history_record(config, "user", stripped)
                         _history_record(config, "assistant", followup_reply)
-                        _topic_set(config, chat_id, cap.name, topic.get("context"))
+                        # Keep the sticky topic, refreshing the calendar day if
+                        # THIS follow-up moved it ("y el sábado?") so the next
+                        # bare-time follow-up targets the right day.
+                        new_ctx = dict(topic.get("context") or {})
+                        if cap.name == "calendar_view":
+                            from lhassa.calendar import query as _cal_query_ctx
+
+                            moved = _cal_query_ctx.resolved_date(stripped)
+                            if moved:
+                                new_ctx["date"] = moved
+                        _topic_set(config, chat_id, cap.name, new_ctx)
                         await telegram.send(followup_reply, config=config)
                         return
 

@@ -291,8 +291,14 @@ def parse_events(ics_text: str, *, window_start: datetime, window_end: datetime)
         return []
 
 
-async def upcoming(instance_id: str, *, hours: int = 36, config=None) -> list[dict]:
-    """Every event over [now, now+hours] from ALL configured calendars.
+async def upcoming(
+    instance_id: str,
+    *,
+    hours: int = 36,
+    since: Optional[datetime] = None,
+    config=None,
+) -> list[dict]:
+    """Every event over [start, now+hours] from ALL configured calendars.
 
     Iterates :func:`lhassa.calendar.store.all_feeds` (the named store PLUS the
     ``LHASSA_CALENDAR_ICS_URL`` shortcut merged in as ``"default"``), fetching +
@@ -300,6 +306,13 @@ async def upcoming(instance_id: str, *, hours: int = 36, config=None) -> list[di
     every event with ``"calendar": <name>``. Events from every feed are merged and
     sorted by start. A single failing/unreachable feed is SKIPPED — the others
     still show. $0, never raises; no feeds configured → ``[]``.
+
+    The window STARTS at ``now`` by default (an agenda only cares about what's
+    still ahead), but a caller may pass ``since`` to reach back — a "what do I
+    have today?" query asked mid-morning must still surface the 08:00 class it
+    already sat through, so :func:`lhassa.calendar.query.answer_window` passes
+    ``since=min(window_start, now)``. ``since`` in the future is clamped to
+    ``now`` (never an empty backwards window).
     """
     try:
         if config is None:
@@ -314,6 +327,7 @@ async def upcoming(instance_id: str, *, hours: int = 36, config=None) -> list[di
             return []
 
         now = datetime.now(timezone.utc)
+        window_start = now if since is None else min(since, now)
         window_end = now + timedelta(hours=hours)
         events: list[dict] = []
         for feed in feeds:
@@ -323,7 +337,7 @@ async def upcoming(instance_id: str, *, hours: int = 36, config=None) -> list[di
                 ics = await fetch_feed(url, config=config)
                 if not ics:
                     continue
-                for ev in parse_events(ics, window_start=now, window_end=window_end):
+                for ev in parse_events(ics, window_start=window_start, window_end=window_end):
                     ev = dict(ev)
                     ev["calendar"] = name
                     events.append(ev)

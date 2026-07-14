@@ -204,7 +204,7 @@ async def test_answer_grouped_reply_for_friday_with_events(monkeypatch):
     start, _end, _label = window
     events = _fake_events(start)
 
-    async def _fake_upcoming(instance_id, *, hours=36, config=None):
+    async def _fake_upcoming(instance_id, *, hours=36, since=None, config=None):
         return events
 
     monkeypatch.setattr("lhassa.calendar.feed.upcoming", _fake_upcoming)
@@ -222,7 +222,7 @@ async def test_answer_grouped_reply_for_friday_with_events(monkeypatch):
 async def test_answer_empty_window_message_spanish(monkeypatch):
     window = query.parse_window("qué hay en mi calendario el viernes", now=_NOW)
 
-    async def _fake_upcoming(instance_id, *, hours=36, config=None):
+    async def _fake_upcoming(instance_id, *, hours=36, since=None, config=None):
         return []
 
     monkeypatch.setattr("lhassa.calendar.feed.upcoming", _fake_upcoming)
@@ -236,7 +236,7 @@ async def test_answer_empty_window_message_spanish(monkeypatch):
 async def test_answer_language_match_english(monkeypatch):
     window = query.parse_window("what do I have friday", now=_NOW)
 
-    async def _fake_upcoming(instance_id, *, hours=36, config=None):
+    async def _fake_upcoming(instance_id, *, hours=36, since=None, config=None):
         return []
 
     monkeypatch.setattr("lhassa.calendar.feed.upcoming", _fake_upcoming)
@@ -256,3 +256,120 @@ async def test_answer_none_for_non_calendar_message(monkeypatch):
     reply = await query.answer("inst_test", "cómo estás hoy en la mañana sin planes")
     # "cómo estás" isn't a calendar query at all (no keyword, no have/tengo/hay).
     assert reply is None
+
+
+# ── answer_window reaches back to the whole day (the "missing 06:00" bug) ─────
+
+
+@pytest.mark.asyncio
+async def test_answer_window_today_reaches_back_past_now(monkeypatch):
+    # The real bug: "hoy" asked mid-morning must still surface an already-passed
+    # early event. answer_window must fetch with since=<day start>, not now.
+    window = query.parse_window("hoy", now=_NOW)
+    assert window is not None
+    start, _end, _label = window
+    early = {
+        "summary": "Algorithms 201",
+        "start": start + timedelta(hours=6),   # 06:00 local — before a mid-morning "now"
+        "end": start + timedelta(hours=8),
+        "location": "Room 204",
+        "all_day": False,
+        "calendar": "default",
+    }
+    captured = {}
+
+    async def _fake_upcoming(instance_id, *, hours=36, since=None, config=None):
+        captured["since"] = since
+        # Emulate feed.upcoming's own window filter: only events >= since show.
+        return [e for e in [early] if since is None or e["start"] >= since]
+
+    monkeypatch.setattr("lhassa.calendar.feed.upcoming", _fake_upcoming)
+    monkeypatch.setattr(query, "parse_window", lambda text, **kw: window)
+
+    reply = await query.answer_window("inst_test", "hoy")
+    assert reply is not None
+    assert "Algorithms 201" in reply
+    # It reached back to the day's start rather than only from "now".
+    assert captured["since"] == start
+
+
+# ── time-of-day parsing + answering (the "¿y a las 6am?" follow-up bug) ───────
+
+
+@pytest.mark.parametrize(
+    "text, expected",
+    [
+        ("6am", [(6, 0)]),
+        ("a las 6 am", [(6, 0)]),
+        ("6pm", [(18, 0)]),
+        ("a las 5pm", [(17, 0)]),
+        ("at 17:00", [(17, 0)]),
+        ("a las 6:30", [(6, 30), (18, 30)]),   # ambiguous → both readings
+        ("a las 6", [(6, 0), (18, 0)]),
+        ("12am", [(0, 0)]),
+        ("12pm", [(12, 0)]),
+    ],
+)
+def test_parse_time_of_day(text, expected):
+    assert query.parse_time_of_day(text) == expected
+
+
+@pytest.mark.parametrize("text", ["hola", "sala 6", "tengo 6 cosas", "el lunes", "6"])
+def test_parse_time_of_day_none_without_time_signal(text):
+    assert query.parse_time_of_day(text) is None
+
+
+def test_resolved_date_hoy_and_manana():
+    assert query.resolved_date("hoy", now=_NOW) == _NOW.astimezone().date().isoformat()
+    tomorrow = (_NOW.astimezone().date() + timedelta(days=1)).isoformat()
+    assert query.resolved_date("mañana", now=_NOW) == tomorrow
+    assert query.resolved_date("cómo estás", now=_NOW) is None
+
+
+@pytest.mark.asyncio
+async def test_answer_time_of_day_finds_the_morning_event(monkeypatch):
+    # The exact reported failure: "hoy" then "¿y a las 6am?" must find the 06:00
+    # event, not deny it. Resolve against today's date.
+    today = _NOW.astimezone().date().isoformat()
+    day_start_local = datetime(
+        _NOW.astimezone().year, _NOW.astimezone().month, _NOW.astimezone().day,
+        tzinfo=_NOW.astimezone().tzinfo,
+    )
+    six = (day_start_local + timedelta(hours=6)).astimezone(timezone.utc)
+    event = {
+        "summary": "Algorithms 201", "start": six, "end": six + timedelta(hours=2),
+        "location": "Room 204", "all_day": False, "calendar": "default",
+    }
+
+    async def _fake_upcoming(instance_id, *, hours=36, since=None, config=None):
+        return [event]
+
+    monkeypatch.setattr("lhassa.calendar.feed.upcoming", _fake_upcoming)
+
+    reply = await query.answer_time_of_day("inst_test", "¿y a las 6am?", day_iso=today)
+    assert reply is not None
+    assert reply.startswith("A las 06:00 tienes:")
+    assert "Algorithms 201" in reply
+
+
+@pytest.mark.asyncio
+async def test_answer_time_of_day_honest_when_nothing(monkeypatch):
+    async def _fake_upcoming(instance_id, *, hours=36, since=None, config=None):
+        return []
+
+    monkeypatch.setattr("lhassa.calendar.feed.upcoming", _fake_upcoming)
+
+    reply = await query.answer_time_of_day("inst_test", "¿y a las 6am?")
+    assert reply == "No tienes nada a las 06:00."
+
+    reply_en = await query.answer_time_of_day("inst_test", "and at 6am?")
+    assert reply_en == "You don't have anything at 06:00."
+
+
+@pytest.mark.asyncio
+async def test_answer_time_of_day_none_without_time(monkeypatch):
+    async def _boom(*a, **k):
+        raise AssertionError("feed.upcoming must not be called without a parsed time")
+
+    monkeypatch.setattr("lhassa.calendar.feed.upcoming", _boom)
+    assert await query.answer_time_of_day("inst_test", "y el sábado") is None

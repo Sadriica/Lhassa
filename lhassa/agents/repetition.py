@@ -90,6 +90,37 @@ _EXCLUDED_ACCIONES = {"responder"}
 # An org department's judgment think, e.g. "dept:interns think".
 _DEPT_THINK_RE = re.compile(r"^dept:.+ think$")
 
+# ── infrastructure (Lhassa's OWN machinery) ──────────────────────────────────
+#
+# The self-improvement loop exists to find repeated OWNER-facing work worth
+# automating. It must NOT find Lhassa's own deterministic scheduled/org
+# machinery: the org delegation+delivery hops and the maintenance-seed beats
+# fire every heartbeat, always $0, and "optimizing" them is the snake eating
+# its own tail — the chain detector would even propose collapsing chains that
+# CONTAIN detect_repetition itself. Left unfiltered this floods the owner with
+# near-duplicate mint_script proposals (every rotation of the same 3-4 hygiene
+# actions is a distinct "chain"). Keyed on despertar_por: every real infra
+# episode carries an infra wake (an org hop, the monitor, or a scheduled
+# maintenance `task:<action>`). Owner-driven wakes — telegram, a
+# reminder/research/goal/org_run task — are deliberately absent, so genuine
+# repeated owner work still surfaces.
+_INFRA_WAKE = {
+    "org-deliver", "org-delegate", "temple-execute", "templo-execute", "monitor",
+}
+_INFRA_TASK_WAKES = {
+    "task:temple_run", "task:distill_memory", "task:detect_repetition",
+    "task:review_tools", "task:curate_skills", "task:calendar_sync",
+    "task:consolidate_memory", "task:send_digest", "task:sync_repo",
+}
+
+
+def is_infrastructure(despertar_por: str, accion: str = "") -> bool:
+    """True when an episode is Lhassa's OWN scheduled/org machinery — never an
+    intervention target (see the block comment above). Keyed on the wake source;
+    ``accion`` is accepted for signature parity but not required. Never raises."""
+    dp = (despertar_por or "").strip()
+    return dp in _INFRA_WAKE or dp in _INFRA_TASK_WAKES
+
 
 def pattern_key(despertar_por: str, accion: str) -> str:
     """Normalized grouping key for one repeated-think pattern."""
@@ -221,6 +252,8 @@ async def detect_repetition(
         accion = row.get("accion") or ""
         if is_excluded(accion, str(row.get("decision_sample") or "")):
             continue  # a judgment can never become a deterministic action
+        if is_infrastructure(despertar_por, accion):
+            continue  # Lhassa's own scheduled/org machinery — not owner work
         pattern = pattern_key(despertar_por, accion)
         if pattern in denied:
             continue  # the owner already said no to this exact automation
@@ -369,6 +402,8 @@ async def detect_recurring(
     for row in rows:
         despertar_por = row.get("despertar_por") or ""
         accion = row.get("accion") or ""
+        if is_infrastructure(despertar_por, accion):
+            continue  # Lhassa's own scheduled/org machinery — not owner work
         pattern = pattern_key(despertar_por, accion)
         if pattern in denied:
             continue
@@ -714,9 +749,10 @@ async def detect_mechanical_chains(
     sequences: dict[str, list[str]] = {}
     for row in rows:
         accion = str(row.get("accion") or "")
-        if is_excluded(accion):
-            continue
-        sequences.setdefault(str(row.get("despertar_por") or ""), []).append(accion)
+        despertar_por = str(row.get("despertar_por") or "")
+        if is_excluded(accion) or is_infrastructure(despertar_por, accion):
+            continue  # a judgment, or Lhassa's own $0 machinery — never a chain
+        sequences.setdefault(despertar_por, []).append(accion)
 
     counts: dict[tuple[str, tuple[str, ...]], int] = {}
     for despertar_por, seq in sequences.items():
