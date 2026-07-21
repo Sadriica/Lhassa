@@ -1534,3 +1534,56 @@ def test_connector_message_that_is_not_really_a_followup_falls_through(monkeypat
     assert len(provider.calls) == 1  # the continuation declined; fell through
     assert sent[-1] == "Got it, noted."
     assert not any(ep.decision == "thread-continue: calendar_view" for ep in logged)
+
+
+def test_callback_query_approve_mint_task_runs_now_and_reports(tmp_path, monkeypatch):
+    """Approving a parked mint_task (e.g. a protected-root read) fires the same
+    early-runner+report the [[action:]] marker uses — the owner's tap is
+    followed by the result, not by a wait for the next beat."""
+    db = asyncio.run(_init_approval_db(tmp_path, monkeypatch))
+    asyncio.run(
+        db.add_task(
+            "inst_personal", "read_file", params={"path": "/vault/nota.md"},
+            origen_actor="telegram", origen_trust=2,
+            estado="esperando_aprobacion", task_id="t_prot",
+        )
+    )
+    ap_id = asyncio.run(
+        db.add_approval(
+            "inst_personal", "task",
+            {"accion": "read_file", "params": {"path": "/vault/nota.md"},
+             "task_id": "t_prot", "source": "mint_task", "actor_id": "telegram"},
+        )
+    )
+
+    ran = []
+
+    async def _fake_run_report(instance_id, task_id, name, params, config):
+        ran.append({"task_id": task_id, "name": name, "params": params})
+
+    monkeypatch.setattr(telegram_inbound, "_run_action_and_report", _fake_run_report)
+
+    payload = {
+        "ok": True,
+        "result": [
+            {
+                "update_id": 400,
+                "callback_query": {
+                    "id": "cbq_p",
+                    "data": f"approve:{ap_id}",
+                    "message": {"chat": {"id": 123}},
+                },
+            }
+        ],
+    }
+    monkeypatch.setattr(telegram_inbound.httpx, "AsyncClient", _client_returning(payload))
+    _patch_answer_callback(monkeypatch)
+    _patch_send(monkeypatch)
+
+    asyncio.run(_poll_and_drain(_cfg(instance_id="inst_personal"), offset=None))
+
+    assert ran == [{"task_id": "t_prot", "name": "read_file",
+                    "params": {"path": "/vault/nota.md"}}]
+    # resolve() released the task; the (patched-out) runner would pick it up.
+    pending = asyncio.run(db.load_pending_tasks("inst_personal"))
+    assert [t["id"] for t in pending] == ["t_prot"]

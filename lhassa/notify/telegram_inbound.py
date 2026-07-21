@@ -1083,6 +1083,23 @@ async def _handle_callback_query(
         if existing is not None and approved and existing.get("tipo") == "code_run":
             asyncio.ensure_future(_launch_code_run(existing, config=config))
 
+        # An approved mint_task (e.g. a protected-root read) runs NOW and
+        # reports back over the chat — resolve() just released the task to
+        # 'pendiente', so this is the same early-runner+report the [[action:]]
+        # marker uses; if it fails, the task stays pending for the heartbeat.
+        if existing is not None and approved and existing.get("tipo") == "task":
+            _pl = existing.get("payload") or {}
+            if _pl.get("source") == "mint_task" and _pl.get("task_id") and _pl.get("accion"):
+                asyncio.ensure_future(
+                    _run_action_and_report(
+                        instance_id,
+                        str(_pl["task_id"]),
+                        str(_pl["accion"]),
+                        dict(_pl.get("params") or {}),
+                        config,
+                    )
+                )
+
         # A resolved mint_route approval TURNS ON that capability's route — the
         # self-routing consciousness's approval->apply connection. Deterministic,
         # $0, DATA only (no code is generated or executed); see
