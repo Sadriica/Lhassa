@@ -32,6 +32,7 @@ human reviews once instead of N separate fixed-action episodes.
 from __future__ import annotations
 
 import json
+import math
 import re
 import statistics
 from datetime import datetime, timedelta, timezone
@@ -62,6 +63,11 @@ CADENCE_MAX_CV = 0.35
 # A mean gap below this (in days) is just "close together in a burst", not a
 # cadence worth scheduling — floors out sub-day noise (e.g. a rapid retry loop).
 CADENCE_MIN_INTERVAL_DAYS = 0.5
+
+# The floor every adaptive threshold relaxes toward (see effective_threshold) —
+# a single or double occurrence is still coincidence, never a "pattern" worth
+# surfacing, no matter how small the window's population is.
+ADAPTIVE_THRESHOLD_FLOOR = 2
 # tipos the denied-patterns query recognizes — every self-improvement proposal
 # kind this module (and actionpack._selfimprove) can park an approval for.
 _PROPOSAL_TIPOS = (
@@ -125,6 +131,60 @@ def is_infrastructure(despertar_por: str, accion: str = "") -> bool:
 def pattern_key(despertar_por: str, accion: str) -> str:
     """Normalized grouping key for one repeated-think pattern."""
     return f"{(despertar_por or '').strip()}::{(accion or '').strip()}"
+
+
+def effective_threshold(
+    base: int, population: int, *, floor: int = ADAPTIVE_THRESHOLD_FLOOR
+) -> int:
+    """The adaptive repeat threshold — sensitivity that SCALES with data volume.
+
+    A YOUNG brain (few episodes total) has no chance of ever hitting a static
+    ``base`` threshold (e.g. 5 repeats) inside a 7-day window; a MATURE brain
+    with thousands of episodes should keep the strict ``base`` bar so it isn't
+    flooded with noise. This is the one rule every detector in this module
+    applies to bridge the two:
+
+        threshold = max(floor, min(base, ceil(population / base)))
+
+    Read as: treat ``base`` as this pattern's own natural denominator. The
+    threshold only reaches its full, strict ``base`` value once ``population``
+    is at least ``base`` groups' worth of ``base`` occurrences each — i.e.
+    ``population >= base * base``. Below that the window is sparse/young and
+    the bar relaxes proportionally (``ceil(population / base)``), down to
+    ``floor``. ``floor`` guards the other end: the threshold never drops below
+    it, because a single or double occurrence is still coincidence, not a
+    pattern (mirrors :data:`CADENCE_MIN_OCCURRENCES`'s own floor of 2 for
+    cadence detection — a cadence needs at least 2 gaps to mean anything).
+
+    Monotonic (non-decreasing) in ``population`` by construction: ``ceil`` is
+    non-decreasing in its argument, and clamping with fixed constants
+    (``min``/``max``) preserves monotonicity — a bigger window NEVER makes
+    detection stricter than a smaller one.
+
+    Defensive, never raises: a non-numeric/zero/negative ``base`` degrades to
+    ``1``; ``floor`` is clamped to ``[1, base]`` so it can never exceed the
+    value it is supposed to relax toward; a non-numeric/negative ``population``
+    degrades to ``0``.
+    """
+    try:
+        base = int(base)
+    except (TypeError, ValueError):
+        base = 1
+    if base < 1:
+        base = 1
+    try:
+        floor = int(floor)
+    except (TypeError, ValueError):
+        floor = 1
+    floor = max(1, min(floor, base))
+    try:
+        population = int(population)
+    except (TypeError, ValueError):
+        population = 0
+    if population < 0:
+        population = 0
+    scaled = math.ceil(population / base)
+    return max(floor, min(base, scaled))
 
 
 def chain_pattern_key(despertar_por: str, chain: list[str]) -> str:
@@ -207,26 +267,44 @@ async def detect_repetition(
     days: int = DEFAULT_DAYS,
     threshold: Optional[int] = None,
 ) -> list[dict[str, Any]]:
-    """Find (despertar_por, accion) patterns repeated >= ``threshold`` times.
+    """Find (despertar_por, accion) patterns repeated >= an effective threshold.
 
     Pure SQL aggregation over the last ``days`` of episodes for ``instance_id`` —
     no LLM, no cost, never raises destructively. Only patterns that both repeat
-    at least ``threshold`` times AND have spent real money (``total_cost_usd >
-    0``) are returned — a pattern that already costs nothing is not worth
-    automating further. Sorted by repeat count descending.
+    enough times AND have spent real money (``total_cost_usd > 0``) are
+    returned — a pattern that already costs nothing is not worth automating
+    further. Sorted by repeat count descending.
 
-    Each item: ``{"pattern", "despertar_por", "accion", "count", "total_cost_usd"}``.
+    An explicit ``threshold`` (or ``Config.repetition_threshold``, when set)
+    ALWAYS wins unchanged. Otherwise the base (:data:`DEFAULT_THRESHOLD`)
+    adapts to the window's population — see :func:`effective_threshold` — so a
+    young brain with few episodes still gets real findings instead of "no
+    repeated patterns found" forever.
+
+    Each item: ``{"pattern", "despertar_por", "accion", "count",
+    "total_cost_usd", "threshold_used"}``.
     """
-    threshold = (
-        threshold if threshold is not None else int(Config.repetition_threshold)
-    )
-    if threshold < 1:
-        threshold = DEFAULT_THRESHOLD
+    explicit = threshold is not None
+    base_threshold = threshold if explicit else int(Config.repetition_threshold)
+    if base_threshold < 1:
+        base_threshold = DEFAULT_THRESHOLD
     cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
 
     try:
         async with aiosqlite.connect(_db.DB_PATH) as conn:
             conn.row_factory = aiosqlite.Row
+            async with conn.execute(
+                """SELECT COUNT(*) AS n FROM episodes
+                   WHERE instance_id = ? AND creado_en >= ?""",
+                (instance_id, cutoff),
+            ) as pcur:
+                prow = await pcur.fetchone()
+            population = int((prow["n"] if prow else 0) or 0)
+            used_threshold = (
+                base_threshold
+                if explicit
+                else effective_threshold(base_threshold, population)
+            )
             async with conn.execute(
                 """SELECT despertar_por, accion,
                           COUNT(*) AS n,
@@ -237,7 +315,7 @@ async def detect_repetition(
                    GROUP BY despertar_por, accion
                    HAVING COUNT(*) >= ? AND SUM(COALESCE(costo_usd, 0)) > 0
                    ORDER BY n DESC""",
-                (instance_id, cutoff, threshold),
+                (instance_id, cutoff, used_threshold),
             ) as cur:
                 rows = [dict(r) for r in await cur.fetchall()]
     except Exception:
@@ -264,18 +342,25 @@ async def detect_repetition(
                 "accion": accion,
                 "count": int(row.get("n") or 0),
                 "total_cost_usd": float(row.get("cost") or 0.0),
+                "threshold_used": used_threshold,
             }
         )
     return out
 
 
-def _cadence_stats(timestamps: list[str]) -> Optional[dict[str, Any]]:
+def _cadence_stats(
+    timestamps: list[str], *, min_occurrences: int = CADENCE_MIN_OCCURRENCES
+) -> Optional[dict[str, Any]]:
     """Gaps-between-occurrences cadence check — a HEURISTIC, not a real scheduler.
 
     Parses ``timestamps`` (ISO-8601, any order), sorts them, and computes the
     gaps between consecutive occurrences in days. With fewer than
-    :data:`CADENCE_MIN_OCCURRENCES` timestamps there aren't enough gaps to say
-    anything about regularity, so this returns ``None``. Otherwise it returns
+    ``min_occurrences`` timestamps there aren't enough gaps to say anything
+    about regularity, so this returns ``None``. ``min_occurrences`` defaults to
+    :data:`CADENCE_MIN_OCCURRENCES` but callers may relax it (down to a floor of
+    2 — see :func:`effective_threshold`) for a small window; a single
+    occurrence is never a cadence, no matter how sparse the window. Otherwise
+    it returns
     ``{"interval_days", "cv", "occurrences"}`` when the coefficient of variation
     (population stdev / mean of the gaps) is at or below :data:`CADENCE_MAX_CV`
     — "low variance" meaning the gaps cluster tightly around one interval (e.g.
@@ -295,7 +380,8 @@ def _cadence_stats(timestamps: list[str]) -> Optional[dict[str, Any]]:
                 dt = dt.replace(tzinfo=timezone.utc)
             parsed.append(dt)
         parsed.sort()
-        if len(parsed) < CADENCE_MIN_OCCURRENCES:
+        min_occurrences = max(2, int(min_occurrences))  # never treat 1 as a cadence
+        if len(parsed) < min_occurrences:
             return None
         gaps_days = [
             (b - a).total_seconds() / 86400.0 for a, b in zip(parsed, parsed[1:])
@@ -346,15 +432,23 @@ async def detect_recurring(
 
     On top of the episodes-based patterns, this also surfaces entries from the
     answer cache (:mod:`lhassa.memory.answer_cache`) that have been hit at
-    least ``min_count`` times — a REAL repeated question with REAL text
-    (``question``/``answer`` keys on the finding), already served for $0. These
-    are tagged ``"in_cache": True``.
+    least the effective ``min_count`` times — a REAL repeated question with
+    REAL text (``question``/``answer`` keys on the finding), already served
+    for $0. These are tagged ``"in_cache": True``.
+
+    An explicit ``min_count`` ALWAYS wins unchanged. Otherwise the base
+    (:data:`DEFAULT_RECURRING_THRESHOLD`) adapts to the window's population
+    (total episodes in the window) via :func:`effective_threshold` — same
+    reasoning as :func:`detect_repetition`. The cadence minimum
+    (:data:`CADENCE_MIN_OCCURRENCES`) adapts the same way, floored at 2 (a
+    single occurrence is never a cadence).
 
     Pure SQL + Python, $0, never raises (degrades to ``[]``).
     """
-    min_count = min_count if min_count is not None else DEFAULT_RECURRING_THRESHOLD
-    if min_count < 1:
-        min_count = DEFAULT_RECURRING_THRESHOLD
+    explicit = min_count is not None
+    base_min_count = min_count if explicit else DEFAULT_RECURRING_THRESHOLD
+    if base_min_count < 1:
+        base_min_count = DEFAULT_RECURRING_THRESHOLD
     cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
 
     rows: list[dict[str, Any]] = []
@@ -362,6 +456,25 @@ async def detect_recurring(
     try:
         async with aiosqlite.connect(_db.DB_PATH) as conn:
             conn.row_factory = aiosqlite.Row
+            async with conn.execute(
+                """SELECT COUNT(*) AS n FROM episodes
+                   WHERE instance_id = ? AND creado_en >= ?""",
+                (instance_id, cutoff),
+            ) as pcur:
+                prow = await pcur.fetchone()
+            population = int((prow["n"] if prow else 0) or 0)
+            used_min_count = (
+                base_min_count
+                if explicit
+                else effective_threshold(base_min_count, population)
+            )
+            cadence_min = (
+                CADENCE_MIN_OCCURRENCES
+                if explicit
+                else effective_threshold(
+                    CADENCE_MIN_OCCURRENCES, population, floor=2
+                )
+            )
             async with conn.execute(
                 """SELECT despertar_por, accion,
                           COUNT(*) AS n,
@@ -372,12 +485,12 @@ async def detect_recurring(
                    GROUP BY despertar_por, accion
                    HAVING COUNT(*) >= ?
                    ORDER BY n DESC""",
-                (instance_id, cutoff, min_count),
+                (instance_id, cutoff, used_min_count),
             ) as cur:
                 rows = [dict(r) for r in await cur.fetchall()]
 
             for row in rows:
-                if int(row.get("n") or 0) < CADENCE_MIN_OCCURRENCES:
+                if int(row.get("n") or 0) < cadence_min:
                     continue
                 despertar_por = row.get("despertar_por") or ""
                 accion = row.get("accion") or ""
@@ -407,7 +520,10 @@ async def detect_recurring(
         pattern = pattern_key(despertar_por, accion)
         if pattern in denied:
             continue
-        cadence = _cadence_stats(timestamps_by_pattern.get((despertar_por, accion), []))
+        cadence = _cadence_stats(
+            timestamps_by_pattern.get((despertar_por, accion), []),
+            min_occurrences=cadence_min,
+        )
         out.append(
             {
                 "pattern": pattern,
@@ -418,6 +534,7 @@ async def detect_recurring(
                 "judgment": is_excluded(accion, str(row.get("decision_sample") or "")),
                 "cadence": cadence,
                 "in_cache": False,
+                "threshold_used": used_min_count,
             }
         )
 
@@ -432,7 +549,7 @@ async def detect_recurring(
         # hits starts at 0 on the row that was actually stored — +1 counts the
         # original turn that seeded the cache as one occurrence too.
         count = int(row.get("hits") or 0) + 1
-        if count < min_count:
+        if count < used_min_count:
             continue
         pattern = f"answer_cache::{row.get('id')}"
         if pattern in denied:
@@ -449,6 +566,7 @@ async def detect_recurring(
                 "in_cache": True,
                 "question": row.get("question"),
                 "answer": row.get("answer"),
+                "threshold_used": used_min_count,
             }
         )
 
@@ -472,19 +590,24 @@ async def detect_routable(
     bridge. This is the pure-SQL read-back half of that seam: group the
     window's tagged episodes by capability, count them, and sum their cost.
 
-    Only capabilities seen at least ``min_count`` times are returned (a single
-    miss isn't a pattern) — cost is NOT required to be positive here (unlike
-    :func:`detect_repetition`): even a $0 deferred/free-provider think that
-    still went through the judgment path is worth routing away, since the
-    point is to stop spending JUDGMENT (tokens, latency, risk of drift), not
-    only dollars. Each item: ``{"pattern", "capability", "count",
-    "total_cost_usd"}``. Pure SQL + regex, $0, never raises (degrades to
-    ``[]``) — this NEVER imports :mod:`lhassa.notify` (agents/ stays
-    shell-free); it only reads the plain text another layer already wrote.
+    Only capabilities seen at least the effective ``min_count`` times are
+    returned (a single miss isn't a pattern) — cost is NOT required to be
+    positive here (unlike :func:`detect_repetition`): even a $0
+    deferred/free-provider think that still went through the judgment path is
+    worth routing away, since the point is to stop spending JUDGMENT (tokens,
+    latency, risk of drift), not only dollars. An explicit ``min_count``
+    ALWAYS wins unchanged; otherwise the base (:data:`DEFAULT_ROUTABLE_THRESHOLD`)
+    adapts to the window's population (the tagged episodes already scanned,
+    before grouping by capability) via :func:`effective_threshold`. Each item:
+    ``{"pattern", "capability", "count", "total_cost_usd", "threshold_used"}``.
+    Pure SQL + regex, $0, never raises (degrades to ``[]``) — this NEVER
+    imports :mod:`lhassa.notify` (agents/ stays shell-free); it only reads the
+    plain text another layer already wrote.
     """
-    min_count = min_count if min_count is not None else DEFAULT_ROUTABLE_THRESHOLD
-    if min_count < 1:
-        min_count = DEFAULT_ROUTABLE_THRESHOLD
+    explicit = min_count is not None
+    base_min_count = min_count if explicit else DEFAULT_ROUTABLE_THRESHOLD
+    if base_min_count < 1:
+        base_min_count = DEFAULT_ROUTABLE_THRESHOLD
     cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
 
     try:
@@ -503,6 +626,13 @@ async def detect_routable(
         # cheap sense, not a critical path; it must never crash a caller.
         return []
 
+    # Population = the tagged episodes already scanned above, before grouping
+    # by capability — the same "candidates it already scans" rule the other
+    # two detectors use.
+    used_min_count = (
+        base_min_count if explicit else effective_threshold(base_min_count, len(rows))
+    )
+
     stats: dict[str, dict[str, Any]] = {}
     for row in rows:
         m = _ROUTABLE_RE.search(str(row.get("decision") or ""))
@@ -516,7 +646,7 @@ async def detect_routable(
     denied = await denied_patterns(instance_id)
     out: list[dict[str, Any]] = []
     for cap, entry in stats.items():
-        if entry["count"] < min_count:
+        if entry["count"] < used_min_count:
             continue
         pattern = f"routable::{cap}"
         if pattern in denied:
@@ -527,6 +657,7 @@ async def detect_routable(
                 "capability": cap,
                 "count": entry["count"],
                 "total_cost_usd": entry["total_cost_usd"],
+                "threshold_used": used_min_count,
             }
         )
     out.sort(key=lambda f: -f["count"])
