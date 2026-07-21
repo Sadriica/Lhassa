@@ -36,6 +36,7 @@ class _CfgHashing:
     """Config that forces the offline hashing embedder (no embeddings_model set)."""
     instance_id = "inst_test"
     embeddings_model = ""
+    embedder_backend = "hash"  # hermetic: never probe a live local Ollama
     embeddings_url = ""
     embeddings_api_key = ""
     embedding_model = ""
@@ -208,6 +209,7 @@ async def test_remember_regex_variants(tmp_path, monkeypatch):
         telegram_chat_id = "123"
         # Disable everything else.
         embeddings_model = ""
+        embedder_backend = "hash"  # hermetic: never probe a live local Ollama
         embeddings_url = ""
         embeddings_api_key = ""
         embedding_model = ""

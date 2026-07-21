@@ -91,6 +91,9 @@ ACTION_OWNERS: dict[str, str] = {
     "review_tools": GUARDIAN,
     "curate_skills": GUARDIAN,
     "detect_repetition": ORACLE,
+    # Feedback→autonomy is the consciousness reading its own reception — the
+    # oracle's domain, like repetition detection.
+    "apply_feedback": ORACLE,
     "calendar_sync": SYNCHRONIZER,
     # Memory enrichment — bootstrapping durable facts (courses, commitments,
     # rhythm) from the calendar feed is the same domain as distill_memory

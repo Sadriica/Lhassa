@@ -1,5 +1,38 @@
 # Lhassa — decisions log
 
+## 2026-07-21 (noche) — Olas 2+3: la consciencia siente, la jerarquía sin deuda
+
+- **2.1 adaptive thresholds** (`9010114`): `effective_threshold(base, population,
+  floor=2)` = `max(floor, min(base, ceil(population/base)))` — full strictness
+  only at population ≥ base²; a young brain fires on 3 repeats, a mature one
+  stays strict; explicit args still win; findings carry `threshold_used`;
+  cadence can relax to 2 occurrences, never 1.
+- **2.2 feedback → autonomy**: `security/autonomy.apply_feedback` — ≥2 negative
+  signals/window reset an accion's streak (like a denial); positive reinforces
+  at most +1 and only where a human already started trust (streak ≥1); negative
+  wins conflicts; high-risk + protected-root actions untouchable; idempotent per
+  UTC day via watch_state. Attribution: signals name only responder episodes, so
+  the nearest concrete accion within ±30min is used; unattributable → skipped,
+  never guessed. Registered as the `apply_feedback` action (allowlist no-approval
+  hygiene tier), daily in the maintenance seed, owned by the ORACLE monk.
+- **2.3 forge drill**: `lhassa tools propose disk_report` ran the WHOLE pipe
+  live — DeepSeek authored tool+test, quarantine (unshare) ran it, segura ✅,
+  correcta ✅ (its test passed), mejor ✗ (no baseline). Deliberate outcome: the
+  gate was NOT weakened — a net-new CLI proposal has nothing to prove "better"
+  than; the first real graduation must come from the repetition detector, which
+  knows the pattern's cost (the baseline). Pipeline proven, door stays strict.
+- **3.1 deliver seam** (`0b8abf6`): chat action results go through
+  `org/deliver.py` (kind="action-result", root hop logged; degrade to plain send
+  only if the seam fails). Last work-product surface-direct send gone.
+- **3.2 ORG_LIVE pilot**: one live delegation through `temple` answered with a
+  real think and exposed a LEDGER BUG: the claude/codex CLIs report an
+  API-equivalent cost estimate that was recorded as real spend ($0.57/hop).
+  Fixed in the same commit: subscription CLI completions cost $0.0 BY DESIGN;
+  tokens kept as observability.
+- **Test hermeticity**: embedding tests pinned `embedder_backend="hash"` — a
+  LIVE local Ollama must never change test outcomes.
+
+
 ## 2026-07-21 (tarde) — Plan "kilometraje", Ola 0+1 (subagentes en paralelo)
 
 `doc/plan.md` adopted: the audit showed the architecture is mature but the

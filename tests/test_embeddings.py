@@ -83,6 +83,7 @@ def test_cosine_orthogonal_and_degenerate():
 class _Cfg:
     embedding_model = ""
     local_model_url = ""
+    embedder_backend = "hash"  # hermetic: never probe a live local Ollama
 
 
 def test_get_embedder_defaults_to_hashing_offline():
