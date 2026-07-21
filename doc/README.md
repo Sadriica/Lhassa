@@ -18,7 +18,8 @@ you are trying to do, not by subsystem.
 - [`narrative.md`](narrative.md) — the narrative & voice book (the flag, the pillars, tone, vocabulary).
 - [`lhassa-brief.md`](lhassa-brief.md) — the implementation spec, in Spanish.
 - [`decisions.md`](decisions.md) — the running decisions log, phase by phase.
-- [`roadmap.md`](roadmap.md) — what's next.
+- [`plan.md`](plan.md) — the CURRENT plan (the "mileage" waves) and what remains.
+- [`roadmap.md`](roadmap.md) — archived pre-brain plan (archaeology only).
 
 ## Use it
 
