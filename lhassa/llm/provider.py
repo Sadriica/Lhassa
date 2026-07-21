@@ -784,6 +784,12 @@ class ClaudeCodeProvider:
         text, cost, in_tok, out_tok, ran_model = _parse_claude_json(stdout)
         if not text.strip():
             raise ProviderNotConfigured("claude unavailable: empty output")
+        if cost:
+            # The CLI reports what the call WOULD cost by API; the subscription's
+            # marginal cash cost is $0 BY DESIGN (see gateway PRICING) — recording
+            # the estimate as spend poisons the ledger and the router's budget
+            # signal. Tokens stay: they are real observability.
+            logger.debug(f"claude-cli: dropping API-equivalent cost estimate ${cost:.4f}")
 
         return Completion(
             # Report the ACTUAL model the CLI ran (parsed from its JSON), else the
@@ -793,7 +799,7 @@ class ClaudeCodeProvider:
             model=ran_model or model or "claude-cli",
             input_tokens=in_tok,
             output_tokens=out_tok,
-            cost_usd=cost,
+            cost_usd=0.0,
         )
 
 
@@ -865,6 +871,10 @@ class CodexProvider:
         text, cost, in_tok, out_tok, ran_model = _parse_codex_jsonl(stdout)
         if not text.strip():
             raise ProviderNotConfigured("codex unavailable: empty output")
+        if cost:
+            # Same as claude-cli: the subscription's marginal cost is $0 BY
+            # DESIGN; the CLI's API-equivalent estimate must not enter the ledger.
+            logger.debug(f"codex-cli: dropping API-equivalent cost estimate ${cost:.4f}")
 
         return Completion(
             # ACTUAL model the CLI reported, else the forwarded model, else a
@@ -873,7 +883,7 @@ class CodexProvider:
             model=ran_model or model or "codex-cli",
             input_tokens=in_tok,
             output_tokens=out_tok,
-            cost_usd=cost,
+            cost_usd=0.0,
         )
 
 
