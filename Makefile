@@ -52,6 +52,14 @@ install-monitor:
 
 # Install the scoped NOPASSWD sudoers drop-in so lhassa can run admin commands as
 # root (allowlist only). Needs sudo — you'll be prompted for your password.
+install-ollama:
+	mkdir -p $(HOME)/.config/systemd/user
+	cp scripts/systemd/ollama.service $(HOME)/.config/systemd/user/
+	systemctl --user daemon-reload
+	systemctl --user enable --now ollama.service
+	@echo "Ollama server enabled. Pull the embedding model with: ollama pull nomic-embed-text"
+	@echo "Then re-embed stored memory with: uv run lhassa memory reindex"
+
 install-privileged:
 	sudo bash scripts/install-privileged.sh
 

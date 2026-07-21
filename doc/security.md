@@ -94,6 +94,36 @@ execute until a human resolves it (`/approve <id>` / `/deny <id>` over Telegram,
 dashboard). Do-and-sleep applies here too: nothing blocks waiting for the human, a later
 tick just picks up the resolved state.
 
+`security/approval.py:resolve()` also **releases** the minted task the approval was
+parked for: approving flips it back to `pendiente` (the next heartbeat, or the
+early runner, picks it up); denying closes it `rechazada` directly. Before this
+fix a tap only resolved the *queue row* — the underlying task waited forever;
+now an approve genuinely unblocks the work, and Telegram's inline-keyboard
+handler additionally runs a resolved `mint_task` approval immediately (the
+same early-runner+report path the `[[action: …]]` marker uses), rather than
+waiting for the next beat.
+
+### The protected-roots tier — per-access approval on a path, not an action
+
+A second, stricter tier sits on top of the ordinary allowlist for the
+deterministic file-perception actions (`list_dir`/`read_file`,
+`lhassa/actionpack/_files.py`): `LHASSA_PROTECTED_ROOTS` names a set of
+directories the owner considers "careful" — separate from, and may overlap,
+`LHASSA_KNOWLEDGE_ROOTS`. `needs_approval()`'s input (d) checks whether a file
+action's `path` param resolves inside one:
+
+- **Per access, not per action.** The frontier is the PATH being touched, not
+  the action name — `read_file` against an ordinary knowledge root runs
+  no-approval; the exact same action against a protected root always parks.
+- **Fail-closed.** Any error resolving the path (a bad string, a symlink
+  loop, …) counts as protected — "when we can't tell whether a path is
+  protected, the human decides."
+- **Never lowered by the autonomy knob.** Unlike an ordinary repeated action,
+  a protected-root read is never auto-approved by a streak — "the tap IS the
+  verification," same standing as the high-risk always-approve set.
+- **`approval.describe()` surfaces the `path`** for these rows, so the owner
+  approving one sees WHICH file is being read, never a bare action name.
+
 `security/autonomy.py` is the streak knob: `should_auto_approve()` tracks, **per
 `(accion, actor_id)`** — never globally — the count of consecutive human approvals; once
 it reaches `Config.autonomy_threshold` (default 3), that specific action from that
@@ -105,6 +135,31 @@ specific actor auto-approves. Three hard rules keep this from becoming a loophol
   how long the streak;
 - a denial resets the streak to zero, and the knob never raises `TrustLevel` itself —
   it only lowers HITL friction for actions a human has *already* repeatedly approved.
+
+### Feedback → autonomy — the streak also learns from lived behavior, not only explicit taps
+
+`security/autonomy.apply_feedback()` feeds `core/feedback.py`'s inferred
+signals (re-asks, corrections, silent acceptance) into the same streak, on a
+daily sweep (idempotent per UTC day via `watch_state`):
+
+- **≥2 negative signals** for an action in the window reset its streak to
+  zero — treated exactly like an explicit denial.
+- **Positive/silence evidence acts weakly**: it advances the streak by AT MOST
+  **+1** per action per window, and only for actors who **already hold a
+  streak ≥ 1** (a human has to have started the trust first — feedback alone
+  never originates a streak from zero).
+- **Negative always wins** a conflict within the same window.
+- **High-risk actions and the protected-root file actions are untouchable** —
+  `apply_feedback` excludes them the same way `needs_approval` does; lived
+  feedback can never promote what a human tap can't lower.
+- **Attribution is conservative, never guessed**: a signal names only the
+  `responder` episode it was inferred from, so `apply_feedback` looks for the
+  nearest concrete (non-"responder") action within ±30 minutes; if none is
+  found the signal is skipped, not force-attributed to the wrong action.
+
+Registered as the `apply_feedback` action (allowlist, no-approval, the
+hygiene tier), scheduled daily by the `maintenance` seed, owned by the
+`oracle` monk under the temple department.
 
 `approval.describe()` is the one function every surface (Telegram `/approvals`, the
 dashboard panels, the digest) renders the queue through, so "what am I approving?" reads

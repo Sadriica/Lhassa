@@ -75,11 +75,41 @@ All units are **USER** units (under `systemctl --user`, never system-wide):
 | `lhassa-telegram.service` | simple | Telegram inbound poller. Enabled only when `LHASSA_TELEGRAM_BOT_TOKEN` is set in `.env`; otherwise installed-but-disabled. |
 
 Individual units can also be installed via `make`: `make install-heartbeat`,
-`make install-health`, `make install-telegram`, `make install-monitor`.
+`make install-health`, `make install-telegram`, `make install-monitor`,
+`make install-ollama`.
 
 The voice pipeline (`make run` / `main.py`) is **not** run as a service — it
 needs host audio and the Deepgram/Cartesia keys. The always-on path is API-only
 by design.
+
+### Ollama (optional, real semantic memory)
+
+Layer 4 (semantic fact retrieval) and document perception both work $0 and
+offline out of the box via the deterministic `HashingEmbedder`. Installing
+Ollama upgrades them to REAL embeddings without changing anything else about
+how memory is used:
+
+```bash
+# 1. Install Ollama itself (see https://ollama.com for your distro's method)
+
+# 2. Install + enable the systemd user unit that runs the Ollama server
+make install-ollama
+
+# 3. Pull the embedding model
+ollama pull nomic-embed-text
+
+# 4. Re-embed everything already stored under the offline hashing embedder
+lhassa memory reindex
+```
+
+`make install-ollama` copies `scripts/systemd/ollama.service` into
+`~/.config/systemd/user/` and enables it — same USER-unit pattern as every
+other Lhassa service. `LHASSA_EMBEDDER_BACKEND=auto` (the default) then
+detects the running daemon automatically; no other config is needed unless
+you want to force it (`LHASSA_EMBEDDER_BACKEND=ollama`) or pin a different
+model (`LHASSA_EMBEDDER_MODEL`). If Ollama is ever stopped or unreachable,
+every embedder call degrades silently back to the offline hashing embedder —
+nothing breaks, it just stops being semantic.
 
 ### Operational seeds
 

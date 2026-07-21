@@ -39,6 +39,7 @@ TELEGRAM_UNIT="lhassa-telegram.service"
 HEALTH_SERVICE="lhassa-health.service"
 HEALTH_TIMER="lhassa-health.timer"
 MONITOR_UNIT="lhassa-monitor.service"
+OLLAMA_UNIT="ollama.service"
 
 # ── Flags ─────────────────────────────────────────────────────────────────────
 DO_DOCKER=1
@@ -150,7 +151,7 @@ install_services() {
     mkdir -p "$SYSTEMD_DST"
 
     local units=("$APP_UNIT" "$HEARTBEAT_SERVICE" "$HEARTBEAT_TIMER" "$TELEGRAM_UNIT" \
-                 "$HEALTH_SERVICE" "$HEALTH_TIMER" "$MONITOR_UNIT")
+                 "$HEALTH_SERVICE" "$HEALTH_TIMER" "$MONITOR_UNIT" "$OLLAMA_UNIT")
     local u
     for u in "${units[@]}"; do
         if [ -f "$SYSTEMD_SRC/$u" ]; then
@@ -177,6 +178,19 @@ install_services() {
     # always-on $0 "ear" on. Idle ticks cost zero tokens.
     systemctl --user enable --now "$MONITOR_UNIT"
     ok "enabled --now $MONITOR_UNIT"
+
+    # Real semantic embeddings (optional): only when the ollama binary exists.
+    # Best-effort — a host without Ollama still installs fine (memory degrades
+    # to the offline hashing embedder by design).
+    if command -v ollama >/dev/null 2>&1; then
+        log "Services — ollama binary detected, enabling the local model server"
+        systemctl --user enable --now "$OLLAMA_UNIT" && ok "enabled --now $OLLAMA_UNIT" \
+            || warn "could not enable $OLLAMA_UNIT (continuing)"
+        echo "  → pull the embedding model once: ollama pull nomic-embed-text"
+        echo "  → then re-embed stored memory:   uv run lhassa memory reindex"
+    else
+        warn "ollama not installed — semantic memory will use the offline hashing embedder"
+    fi
 
     if telegram_configured; then
         log "Services — Telegram token detected, enabling the poller"

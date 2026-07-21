@@ -79,7 +79,8 @@ priority order (`PRIORITY = ["pinned", "recent", "tags", "semantic",
    `LHASSA_MEMORY_LAYER4` is set **and** a `query` string is supplied **and**
    facts have been indexed (`memory.load.index_facts` / `reindex`). Vectors
    are only ever compared if they were produced by the same embedder model —
-   mixed-model comparisons are skipped, not guessed at.
+   mixed-model comparisons are skipped, not guessed at. See "Real embeddings"
+   below for how the embedder itself is chosen.
 5. **Episodic recall (layer 5).** The top few past episodes whose text
    matches the active `query`, via the FTS5 index over `episodes` (see
    below) — `$0`, no model call, fully defensive (any failure degrades to an
@@ -124,6 +125,60 @@ last time…" at `$0`, no model call, BM25-ranked.
 - It was the lowest-priority context layer until document perception (below)
   landed beneath it: a think only spends the tokens on it when a `query` is
   actually supplied.
+
+---
+
+## Real embeddings — the pluggable Embedder (layer 4)
+
+`lhassa/memory/embeddings.py:get_embedder()` chooses which embedder backs
+layer 4 (and document perception, below) — nothing about the layer's logic
+changes, only whether its vectors carry real semantic meaning or a
+deterministic offline hash:
+
+- **`HashingEmbedder`** — pure-stdlib, hashed token n-grams, no model, no
+  network. The default when nothing else is reachable; deterministic (same
+  text → same vector), which is why the test suite pins
+  `embedder_backend="hash"` — a live local Ollama must never change a test's
+  outcome.
+- **`RemoteEmbedder`** — speaks Ollama's native `/api/embed` (with a fallback
+  to the older singular `/api/embeddings`) or an OpenAI-compatible
+  `/v1/embeddings` endpoint, resolved PER CALL; any failure degrades silently
+  (and logs at most once per process) to `HashingEmbedder` — a down daemon
+  never blocks a think.
+- **`LHASSA_EMBEDDER_BACKEND`** gates resolution (`auto` — the pre-existing
+  explicit knobs win first, else probe a local Ollama and fall back to
+  hashing; `ollama` — force the native backend, degrade to hashing if
+  unreachable; `hash` — always offline). `LHASSA_EMBEDDER_MODEL` (default
+  `nomic-embed-text`) names the Ollama model.
+- **The fingerprint guard.** Mixing vectors from different embedders makes
+  cosine comparisons garbage, so every embedder exposes a stable
+  `fingerprint` (the CONFIGURED backend+model, e.g. `ollama:nomic-embed-text`)
+  distinct from `name` (the backend that ACTUALLY answered the last call —
+  what gets stamped onto stored vectors). `needs_reindex(stored_model,
+  embedder)` is the cheap per-row check the semantic-query filter already
+  uses to skip stale-stamped vectors rather than compare them.
+- **`lhassa memory reindex [--json]`** — re-embeds every fact and every
+  cached answer-cache question with the CURRENT embedder
+  (`embeddings.reindex_all`), best-effort per row. Run it after switching
+  backend/model (e.g. turning on a local Ollama) so previously hash-stamped
+  vectors become comparable again.
+
+Known gap: `answer_cache` rows carry no per-row model stamp (unlike
+`fact_embeddings`), so there is no live mismatch guard for it yet — `reindex`
+brute-forces the whole table instead of skipping already-current rows.
+
+---
+
+## Answer-cache diagnostics — how close was a miss?
+
+`memory/answer_cache.py:lookup()` takes an optional `stats` out-param; when
+supplied it is filled with `{"best_similarity": float, "scanned": int, "hit":
+bool}` on every call, hit or miss. The Telegram chat think uses this: a
+`cacheable`-intent question that misses the cache logs its episode with
+`cache-miss best=0.83 scanned=12` appended to the decision text — over days,
+this tells whether the cache's 0-hit problem (if any) is the
+`LHASSA_ANSWER_CACHE_THRESHOLD` (0.90) being too strict, low traffic, or the
+embedder's quality — rather than guessing.
 
 ---
 

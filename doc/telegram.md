@@ -62,7 +62,8 @@ underlying seams the terminal uses, all LLM-free: `/report [days]` (spend),
 `/tools` (self-written tools + gate state), `/skills` (installed skills),
 `/org` (the topology tree), `/fleet` (machines + last check-in), `/version`,
 `/today`, `/tomorrow`, `/checkin <text>`, `/remind <what> <when>` (timed
-reminders — see its section below), and `/code <task>` (parks an approval
+reminders — see its section below), `/config [key [value]]` (read/change a
+runtime setting — see its section below), and `/code <task>` (parks an approval
 — see "remote hands" below). `/help` groups them all with one-liners, and the
 bot's "/" menu is published from the same registry on poller start.
 
@@ -177,6 +178,36 @@ itself is $0; only the later reasoning about it costs anything:
 > /goal check my open PRs and flag anything stale --every daily
 Goal scheduled (daily): check my open PRs and flag anything stale [task t_9f2a]
 ```
+
+### `/config [key [value]]` — the settings service from chat
+
+The CLI-parity door onto `lhassa/settings.py`: same **EDITABLE** allowlist,
+type coercion, provider guard, live-apply and `~/.lhassa/settings.env`
+persistence the dashboard Settings panel and `lhassa config` use. Secrets are
+masked and not settable here — they live in `.env`, never in `settings.env`.
+No arguments lists every editable key; one argument reads it; two changes it —
+and the change applies INSIDE the poller process itself, so a knob like
+`knowledge_roots` is live for the very next `[[action: read_file …]]` with no
+restart:
+
+```
+> /config
+Editable settings (`/config <key> <value>` to change):
+- llm_provider = deepseek *
+- knowledge_roots = ~/notes
+...
+(* = overridden; secrets are masked and not settable here)
+
+> /config knowledge_roots
+knowledge_roots = ~/notes
+default: (empty)
+
+> /config knowledge_roots ~/notes,~/Documents
+✅ knowledge_roots = ~/notes,~/Documents
+```
+
+An unknown key or an invalid value is refused with the settings service's own
+error, never silently accepted.
 
 ### `/cv <job posting>` (+ the document bridge)
 The "Impossible-to-reject CV" work-flow, driven entirely from chat — not a
@@ -343,6 +374,79 @@ layer 4/5 recall can fire) → the router's routine decision → one plain
 completion, no tools. It is deliberately tool-less: routing chat through the
 full agentic loop on the cheap heartbeat backend produced malformed tool
 calls; a plain completion on the routine provider answers reliably.
+
+### The self-card — the chat knows itself
+
+Every chat think now carries a small (~500-token), deterministic, $0 block
+rendered live from `Config` + the registries (`notify/selfcard.py:build()`) —
+the model used to shrug at "what are you running on?"; now it always knows:
+
+- **the live configuration** — version, instance id, which seat is answering
+  this chat (provider/model, plus a pinned `LHASSA_TELEGRAM_PROVIDER` if set),
+  the heartbeat seat, the CLI-first fallback chain, and which agentic CLIs are
+  actually on `PATH`;
+- **the execution-modality taxonomy** — a static explanation of ACTIONS (the
+  `[[action: …]]` marker, below), PTC scripts, metered API think, subscription
+  CLIs, markers, and org delegation as distinct mechanisms with distinct
+  cost/gate shapes, so the model can reason about which route fits a request
+  instead of conflating "a script" with "a function" with "a CLI";
+- **which registered actions it may request**, split run-now vs
+  approval-gated — the same intersection of the `ACTIONS` registry and the
+  allowlist the marker below enforces.
+
+Every line is best-effort and the card never raises — a broken sub-part
+degrades to a placeholder rather than costing the owner a reply — and it
+never includes key material, only names/counts.
+
+### Acting — the `[[action: <name> key=value …]]` marker
+
+The third marker (mirroring `[[research: …]]` and `[[remember: …]]`): the chat
+stays tool-less, but the model can now REQUEST a real action instead of only
+explaining what it would do. `telegram_inbound._apply_action_marker` mints a
+signed task through the exact same allowlist + approval frontier `/goal` uses
+(HUMANO/telegram origin) — nothing here bypasses the allowlist:
+
+- **No-approval action** (e.g. `read_file`, `list_dir`, `set_config`) — runs
+  immediately via `core/dispatch.py:run_task_now` and reports its result back
+  over Telegram as a follow-up message once it finishes.
+- **Approval-gated action** — parks with an honest "needs your approval — see
+  /approvals" ack; nothing runs until the tap.
+- **Unknown or refused action** — an honest line ("I don't have an action
+  named…" / "was refused by the allowlist"), never a silent drop.
+
+The ack is written only after the mint actually succeeds:
+
+```
+> read me the notes on the Q3 roadmap
+Sure — one moment.
+⚙️ Running read_file — the result follows shortly.
+[a moment later]
+read_file: /home/owner/notes/q3-roadmap.md
+...
+```
+
+A chat action's result is delivered through the same `org/deliver.py`
+sender-of-record seam every other work-product uses (degrading to a plain
+send only if the seam itself fails) — no more surface-direct sends from the
+action-marker path.
+
+Approving a parked action from `/approvals` (or its inline keyboard) now
+**runs it immediately** too, the same early-runner+report path the marker
+uses for no-approval actions — resolving the approval releases the minted
+task back to `pendiente`, and the tap's own handler fires the run right away
+instead of waiting for the next heartbeat.
+
+### Natural-language settings
+
+The owner doesn't need `/config`'s exact syntax — a plain request like "agrega
+~/Documents a tus carpetas de lectura" lets the model emit
+`[[action: set_config key=knowledge_roots value=~/Documents]]`
+(`actionpack/_config.py:set_config`), which applies through the SAME `settings.set`
+seam as `/config`, `lhassa config` and the dashboard panel — secrets are
+unreachable by construction (not in the EDITABLE allowlist). The result always
+states old → new, so both the episode and the chat follow-up show exactly what
+changed. No new marker machinery — this is the generic `[[action:]]` seam plus
+one instruction sentence and the self-card listing the action.
 
 `LHASSA_TELEGRAM_PROVIDER` pins **which** provider answers the chat door
 specifically, independent of the heartbeat seat that flows/hard work use:
