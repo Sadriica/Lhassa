@@ -582,6 +582,43 @@ def test_memory_requires_query():
     assert "Usage" in reply
 
 
+# ── /knowledge ───────────────────────────────────────────────────────────────────
+
+
+def test_knowledge_requires_query():
+    reply = asyncio.run(commands.dispatch("/knowledge", config=_cfg()))
+    assert "Usage" in reply
+
+
+def test_knowledge_no_match(tmp_path, monkeypatch):
+    asyncio.run(_init_db(tmp_path, monkeypatch))
+    reply = asyncio.run(
+        commands.dispatch("/knowledge zzznomatch", config=_cfg(instance_id="inst_personal"))
+    )
+    assert "No indexed documents match" in reply
+
+
+def test_knowledge_finds_indexed_chunk(tmp_path, monkeypatch):
+    asyncio.run(_init_db(tmp_path, monkeypatch))
+    root = tmp_path / "notes"
+    root.mkdir()
+    (root / "trip.md").write_text("The Amazon rainforest trip was unforgettable.")
+
+    from lhassa.memory import knowledge
+
+    cfg = _cfg(
+        instance_id="inst_personal",
+        knowledge_roots=str(root),
+        knowledge_max_file_kb=512,
+        knowledge_chunk_chars=2000,
+    )
+    asyncio.run(knowledge.ingest("inst_personal", config=cfg))
+
+    reply = asyncio.run(commands.dispatch("/knowledge Amazon rainforest", config=cfg))
+    assert "trip.md" in reply
+    assert "Amazon" in reply
+
+
 # ── /capabilities ──────────────────────────────────────────────────────────────
 
 

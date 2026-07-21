@@ -914,10 +914,20 @@ async def _handle_callback_query(
         if existing is None:
             ack_text = f"No pending approval {ap_id}."
         else:
-            await _approval.resolve(
-                instance_id, ap_id, approved=approved, by_actor="telegram"
-            )
-            ack_text = f"{'Approved' if approved else 'Denied'} {ap_id}."
+            try:
+                await _approval.resolve(
+                    instance_id, ap_id, approved=approved, by_actor="telegram"
+                )
+            except _approval.ApprovalResolutionConflict:
+                # A double-tap (or a race with another surface): the approval is
+                # no longer pending — acknowledge honestly and launch NOTHING.
+                existing = None
+                ack_text = f"Approval {ap_id} was already resolved."
+            except KeyError:
+                existing = None
+                ack_text = f"No pending approval {ap_id}."
+            else:
+                ack_text = f"{'Approved' if approved else 'Denied'} {ap_id}."
 
         if callback_id:
             await telegram_api.answer_callback_query(

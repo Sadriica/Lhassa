@@ -12,13 +12,20 @@ Layers, in priority order:
      and a ``query`` is supplied AND fact embeddings have been indexed.
   5. episodic recall (Fase 1): the top few past episodes whose text matches the
      active ``query`` (FTS5, $0, deterministic — see ``core.db.search_episodes``).
-     The LOWEST priority layer; dropped first under budget, and fully defensive
-     (any error → empty, never raises).
+     Dropped before semantic, and fully defensive (any error → empty, never
+     raises).
+  6. knowledge (document perception): the top few chunks of the owner's OWN
+     documents (``lhassa.memory.knowledge.search``) matching the active
+     ``query`` — grounds thinking in real notes/papers at $0, offline. Fires
+     ONLY when a ``query`` is given, mirroring the recall layer exactly. The
+     LOWEST-priority layer; dropped first under budget, and fully defensive
+     (any error → empty, never raises — a missing/empty knowledge index is
+     the default, silent case).
 
 Then :func:`truncate` trims to the token budget, dropping the lowest-priority
-layer first (``priority=["pinned","recent","tags","semantic","recall"]``): recall
-goes before semantic, semantic before tags, tags before recent, and the identity
-core (directives + pinned facts) is never dropped.
+layer first (``priority=["pinned","recent","tags","semantic","recall","knowledge"]``):
+knowledge goes before recall, recall before semantic, semantic before tags, tags
+before recent, and the identity core (directives + pinned facts) is never dropped.
 
 Token counting is a deterministic estimate — exact via tiktoken when installed,
 else a ~3 chars/token safety heuristic (see :func:`estimate_tokens`). The semantic
@@ -35,7 +42,7 @@ from lhassa.memory.facts import Fact, load_by_tags, load_facts, resolve
 from lhassa.persona import load_identity
 
 # Priority of the layers, highest first. Truncation drops from the tail.
-PRIORITY = ["pinned", "recent", "tags", "semantic", "recall"]
+PRIORITY = ["pinned", "recent", "tags", "semantic", "recall", "knowledge"]
 
 
 # Lazy, cached tiktoken probe: attempted at most once per process. When tiktoken
@@ -92,6 +99,14 @@ def _render_recall(row: dict) -> str:
     return f"- [{row.get('creado_en', '')}] {row.get('despertar_por', '')} ({row.get('decision', '')}): {resultado}".rstrip(": ")
 
 
+def _render_knowledge(chunk: dict) -> str:
+    import os as _os
+
+    name = _os.path.basename(chunk.get("source_path", "")) or "your notes"
+    text = (chunk.get("text") or "").replace("\n", " ").strip()
+    return f"- [from your notes: {name}] {text}"
+
+
 @dataclass
 class Context:
     """
@@ -106,6 +121,7 @@ class Context:
     episodes: list[dict] = field(default_factory=list)
     semantic_facts: list[Fact] = field(default_factory=list)
     recall_episodes: list[dict] = field(default_factory=list)
+    knowledge_chunks: list[dict] = field(default_factory=list)
     token_budget: int = 0
 
     @property
@@ -134,6 +150,9 @@ class Context:
         if self.recall_episodes:
             lines = "\n".join(_render_recall(r) for r in self.recall_episodes)
             blocks.append(f"Recall (episodios relacionados):\n{lines}")
+        if self.knowledge_chunks:
+            lines = "\n".join(_render_knowledge(c) for c in self.knowledge_chunks)
+            blocks.append(f"From your documents:\n{lines}")
         return "\n\n".join(blocks)
 
     @property
@@ -168,6 +187,7 @@ def truncate(ctx: Context, token_budget: int) -> Context:
     tags_rank = PRIORITY.index("tags")
     semantic_rank = PRIORITY.index("semantic")
     recall_rank = PRIORITY.index("recall")
+    knowledge_rank = PRIORITY.index("knowledge")
     items: list[dict] = []
     for ep in ctx.episodes:
         items.append({"rank": recent_rank, "tok": estimate_tokens(_render_episode(ep)),
@@ -181,6 +201,9 @@ def truncate(ctx: Context, token_budget: int) -> Context:
     for r in ctx.recall_episodes:
         items.append({"rank": recall_rank, "tok": estimate_tokens(_render_recall(r)),
                       "kind": "recall", "payload": r})
+    for c in ctx.knowledge_chunks:
+        items.append({"rank": knowledge_rank, "tok": estimate_tokens(_render_knowledge(c)),
+                      "kind": "knowledge", "payload": c})
 
     used = mandatory + sum(it["tok"] for it in items)
     # Drop lowest-priority (highest rank) items, from the tail, until we fit.
@@ -193,6 +216,7 @@ def truncate(ctx: Context, token_budget: int) -> Context:
     ctx.tag_facts = [it["payload"] for it in items if it["kind"] == "tag"]
     ctx.semantic_facts = [it["payload"] for it in items if it["kind"] == "semantic"]
     ctx.recall_episodes = [it["payload"] for it in items if it["kind"] == "recall"]
+    ctx.knowledge_chunks = [it["payload"] for it in items if it["kind"] == "knowledge"]
     return ctx
 
 
@@ -249,6 +273,24 @@ async def _recall_layer(instance_id: str, query: str, *, topk: int = 3) -> list[
     """
     try:
         return await db.search_episodes(instance_id, query, topk)
+    except Exception:
+        return []
+
+
+async def _knowledge_layer(
+    instance_id: str, query: str, config, *, topk: int = 3
+) -> list[dict]:
+    """Layer 6 (document perception): top past-document chunks matching ``query``.
+
+    Fully defensive by design — the LOWEST-priority, purely-additive layer, so
+    ANY failure (no roots configured, no index yet, a bad DB state) must
+    silently yield an empty layer rather than disturb the rest of the context
+    build. Mirrors :func:`_recall_layer` exactly.
+    """
+    try:
+        from lhassa.memory import knowledge
+
+        return await knowledge.search(instance_id, query, limit=topk, config=config)
     except Exception:
         return []
 
@@ -346,6 +388,12 @@ async def load(
     if query:
         recall_episodes = await _recall_layer(instance_id, query)
 
+    # Layer 6 — document perception (knowledge roots). Lowest priority,
+    # purely additive: only when a query is given, never allowed to raise.
+    knowledge_chunks: list[dict] = []
+    if query:
+        knowledge_chunks = await _knowledge_layer(instance_id, query, config)
+
     ctx = Context(
         instance_id=instance_id,
         directives=directives,
@@ -354,6 +402,7 @@ async def load(
         episodes=episodes,
         semantic_facts=semantic_facts,
         recall_episodes=recall_episodes,
+        knowledge_chunks=knowledge_chunks,
         token_budget=token_budget,
     )
     return truncate(ctx, token_budget)

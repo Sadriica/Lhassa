@@ -246,7 +246,7 @@ async def _cmd_start(args: str, *, config=None) -> str:
 # registered by a plugin but missing here still appears — see _cmd_help's final
 # "also available" line — so a drop-in command can never vanish from /help.
 _HELP_GROUPS: list[Tuple[str, list[str]]] = [
-    ("Chat & memory", ["ai", "recall", "memory", "remind", "event", "checkin", "today", "tomorrow"]),
+    ("Chat & memory", ["ai", "recall", "memory", "knowledge", "remind", "event", "checkin", "today", "tomorrow"]),
     ("Calendars", ["calendar", "calendars"]),
     ("Decisions", ["approvals", "approve", "deny"]),
     ("Watch & goals", ["watch", "watches", "unwatch", "goal", "temple"]),
@@ -261,6 +261,7 @@ DESCRIPTIONS: dict[str, str] = {
     "ai": "<question> — I search the web AND answer it specifically (not just links).",
     "recall": "<text> — search past episodes.",
     "memory": "<query> — search durable facts.",
+    "knowledge": "<query> — search your indexed notes/papers (document perception).",
     "checkin": "<text> — save a personal morning/evening note.",
     "remind": "<what> a las 5pm | in 30 min — a timed reminder + a calendar file.",
     "event": "<what> a las 5pm | in 30 min — just the calendar file, no reminder.",
@@ -847,6 +848,12 @@ _TEMPLE_KEYWORDS: tuple[tuple[str, str], ...] = (
     ("world", "derive_world_facts"),
     ("learn calendar", "derive_world_facts"),
     ("calendar", "calendar_sync"),
+    # Checked BEFORE the bare "sync" keyword so "sync my notes"/"sync knowledge"
+    # routes to document perception, not the master-calendar reconcile.
+    ("sync my notes", "ingest_knowledge"),
+    ("sync knowledge", "ingest_knowledge"),
+    ("index my notes", "ingest_knowledge"),
+    ("knowledge", "ingest_knowledge"),
     ("sync", "calendar_sync"),
 )
 
@@ -1109,6 +1116,41 @@ async def _cmd_memory(args: str, *, config=None) -> str:
     except Exception as exc:
         logger.warning(f"commands: /memory {query!r} failed: {exc}")
         return _oops("search my memory")
+
+
+@register_command("knowledge")
+async def _cmd_knowledge(args: str, *, config=None) -> str:
+    """``/knowledge <query>`` — search the owner's OWN indexed documents, LLM-free.
+
+    A $0 cosine search over :mod:`lhassa.memory.knowledge` (document perception
+    — the owner's opt-in ``LHASSA_KNOWLEDGE_ROOTS``). Shows up to 5 matches:
+    the source filename and a short snippet. No args → a usage hint. No roots
+    configured / empty index → a plain "nothing indexed yet" message.
+    """
+    query = (args or "").strip()
+    if not query:
+        return "Usage: /knowledge <query> — searches your indexed notes/papers."
+    try:
+        import os as _os
+
+        cfg = _config(config)
+        instance_id = getattr(cfg, "instance_id", None) or "inst_personal"
+        from lhassa.memory import knowledge
+
+        hits = await knowledge.search(instance_id, query, limit=5, config=cfg)
+        if not hits:
+            return f"No indexed documents match {query!r}."
+        lines = [f"Your documents matching {query!r} ({len(hits)}):"]
+        for h in hits:
+            name = _os.path.basename(h.get("source_path", "")) or "?"
+            snippet = (h.get("text") or "").replace("\n", " ").strip()
+            if len(snippet) > 150:
+                snippet = snippet[:147] + "…"
+            lines.append(f"- [{name}] {snippet}")
+        return "\n".join(lines)
+    except Exception as exc:
+        logger.warning(f"commands: /knowledge {query!r} failed: {exc}")
+        return _oops("search my documents")
 
 
 @register_command("checkin")

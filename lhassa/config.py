@@ -490,6 +490,22 @@ class Config:
     # NEVER write this to settings.env — it stays in .env (secret).
     embeddings_api_key: str = os.getenv("LHASSA_EMBEDDINGS_API_KEY", "")
 
+    # ── Document perception — knowledge roots (opt-in, empty by default) ──────
+    # Lhassa reads the OWNER'S OWN documents so thinking/recall/the graph are
+    # grounded in real material — $0, local, deterministic, no model. NOT "read
+    # the whole PC": the owner points Lhassa at a small set of KNOWLEDGE ROOTS
+    # (CSV of directories, ``~``-relative allowed); nothing is indexed until
+    # this is set. A hard, non-negotiable ignore-list (secrets/noise) always
+    # applies regardless of what's inside a root — see
+    # ``lhassa.memory.knowledge``. The index itself lives in the grande
+    # (``~/.lhassa/brain.db``), never in the repo.
+    knowledge_roots: str = os.getenv("LHASSA_KNOWLEDGE_ROOTS", "")
+    # Files larger than this are skipped outright (KB).
+    knowledge_max_file_kb: int = _safe_int(os.getenv("LHASSA_KNOWLEDGE_MAX_FILE_KB", "512"), 512)
+    # Chunk size in characters (~500 tokens at the ~3-4 chars/token estimate
+    # used elsewhere in memory/load.py).
+    knowledge_chunk_chars: int = _safe_int(os.getenv("LHASSA_KNOWLEDGE_CHUNK_CHARS", "2000"), 2000)
+
     # ── Phase 6 — Telegram notifications (optional, token-gated) ──────────────
     # Polished Telegram channel for alerts/reports. Both must be set to enable it;
     # otherwise the notifier is a no-op (the established credential-gated pattern,

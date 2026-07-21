@@ -99,6 +99,10 @@ ACTION_OWNERS: dict[str, str] = {
     # loop, not fact-writing) or oracle (pattern detection over episodes, not
     # calendar-derived world knowledge).
     "derive_world_facts": GUARDIAN,
+    # Document perception — indexing the owner's knowledge roots is a sync
+    # pass over an external-ish source (the filesystem), same domain as
+    # calendar_sync, so it sits with synchronizer.
+    "ingest_knowledge": SYNCHRONIZER,
 }
 
 #: The trigger label for the worker's OWN execution episode — a distinct, greppable

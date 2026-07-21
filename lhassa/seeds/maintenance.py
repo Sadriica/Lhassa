@@ -8,9 +8,11 @@ facts), ``review_tools`` (gate 4 — retire unused/failing graduated tools),
 archived, never deletes), ``calendar_sync`` (the master-calendar reconcile —
 a $0 set diff that delivers a ``.ics`` for each event missing from the primary
 calendar; a clean no-op with no primary/feeds configured, so it's safe to
-schedule unconditionally), and ``derive_world_facts`` (the calendar-derived
+schedule unconditionally), ``derive_world_facts`` (the calendar-derived
 world model — bootstraps durable facts about courses/commitments/rhythm from
-the calendar feed; also a clean no-op with no calendar configured).
+the calendar feed; also a clean no-op with no calendar configured), and
+``ingest_knowledge`` (document perception — re-indexes the owner's opt-in
+knowledge roots; a clean no-op with ``LHASSA_KNOWLEDGE_ROOTS`` unset).
 
 Rather than minting each action bare (a task that used to dispatch straight to
 ``core.actions.run`` with no org attribution), this seed mints ``temple_run``
@@ -58,6 +60,10 @@ _RECURRING_ACTIONS: tuple[tuple[str, int], ...] = (
     ("curate_skills", 604800),
     ("calendar_sync", 86400),
     ("derive_world_facts", 604800),
+    # Document perception — re-index the owner's knowledge roots weekly (a
+    # clean $0 no-op when LHASSA_KNOWLEDGE_ROOTS is unset; notes/papers don't
+    # change so fast that a daily pass would earn its keep).
+    ("ingest_knowledge", 604800),
 )
 
 
@@ -157,7 +163,7 @@ def seed_maintenance(config: "Optional[Config]" = None) -> dict:
     "maintenance",
     "Mint the recurring self-improvement/hygiene tasks: distill_memory (daily), "
     "detect_repetition (daily), review_tools (weekly), curate_skills (weekly), "
-    "calendar_sync (daily), derive_world_facts (weekly).",
+    "calendar_sync (daily), derive_world_facts (weekly), ingest_knowledge (weekly).",
 )
 def apply(config: "Optional[Config]" = None) -> dict:
     """The ``maintenance`` seed entry point — see :func:`seed_maintenance`."""

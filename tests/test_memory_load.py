@@ -158,6 +158,83 @@ async def test_context_to_prompt_and_estimate(tmp_path, monkeypatch):
     assert ctx.token_estimate > 0
 
 
+# ── knowledge layer (document perception, lowest priority) ───────────────────
+
+
+@pytest.mark.asyncio
+async def test_load_knowledge_layer_adds_chunk_when_query_matches(tmp_path, monkeypatch):
+    await _init(tmp_path, monkeypatch)
+    from types import SimpleNamespace
+
+    from lhassa.memory import knowledge, load
+
+    root = tmp_path / "notes"
+    root.mkdir()
+    (root / "trip.md").write_text("The African elephant sanctuary visit was unforgettable.")
+
+    cfg = SimpleNamespace(
+        instance_id="inst_personal",
+        knowledge_roots=str(root),
+        knowledge_max_file_kb=512,
+        knowledge_chunk_chars=2000,
+        memory_layer4_enabled=False,
+    )
+    await knowledge.ingest("inst_personal", config=cfg)
+
+    ctx = await load.load(
+        "inst_personal", token_budget=10_000, query="elephant sanctuary", config=cfg
+    )
+    assert ctx.knowledge_chunks
+    prompt = ctx.to_prompt()
+    assert "from your notes: trip.md" in prompt
+    assert "elephant" in prompt.lower()
+
+
+@pytest.mark.asyncio
+async def test_load_knowledge_layer_empty_when_query_does_not_match(tmp_path, monkeypatch):
+    await _init(tmp_path, monkeypatch)
+    from types import SimpleNamespace
+
+    from lhassa.memory import knowledge, load
+
+    root = tmp_path / "notes"
+    root.mkdir()
+    (root / "trip.md").write_text("The African elephant sanctuary visit was unforgettable.")
+
+    cfg = SimpleNamespace(
+        instance_id="inst_personal",
+        knowledge_roots=str(root),
+        knowledge_max_file_kb=512,
+        knowledge_chunk_chars=2000,
+        memory_layer4_enabled=False,
+    )
+    await knowledge.ingest("inst_personal", config=cfg)
+
+    ctx = await load.load(
+        "inst_personal", token_budget=10_000, query=None, config=cfg
+    )
+    assert ctx.knowledge_chunks == []
+
+
+@pytest.mark.asyncio
+async def test_load_knowledge_layer_defensive_on_failure(tmp_path, monkeypatch):
+    await _init(tmp_path, monkeypatch)
+    from lhassa.memory import knowledge, load as load_mod
+
+    async def _boom(*a, **kw):
+        raise RuntimeError("knowledge exploded")
+
+    monkeypatch.setattr(knowledge, "search", _boom)
+    # _knowledge_layer wraps knowledge.search in its own try/except (mirrors
+    # _recall_layer exactly) — a broken search must degrade to an empty layer,
+    # never raise up through load().
+    result = await load_mod._knowledge_layer("inst_personal", "x", None)
+    assert result == []
+
+    ctx = await load_mod.load("inst_personal", token_budget=10_000, query="x")
+    assert ctx.knowledge_chunks == []
+
+
 # ── estimate_tokens (tiktoken optional, deterministic, never raises) ──────────
 
 
