@@ -46,6 +46,15 @@ joined EDITABLE, so the owner can say `/config knowledge_roots ~/Documents` from
 chat and the very next `[[action: read_file …]]` honors it — no restart, because
 the set applies inside the poller process itself.
 
+**And natural-language config**: `actionpack/_config.py:set_config` — the owner
+says "agrega ~/Documents a tus carpetas de lectura", the model emits
+`[[action: set_config key=knowledge_roots value=…]]`, and the action applies it
+through `settings.set` — the SAME EDITABLE allowlist/coercion/guards as the
+panel, `/config` and the CLI; secrets are unreachable by construction (not
+EDITABLE); the result line always states old → new so the episode and the chat
+follow-up show exactly what changed. No new marker machinery: the generic
+`[[action:]]` seam + one instruction sentence + the self-card listing the keys.
+
 Also today: **DeepSeek V4 Flash became the metered cloud seat** (replacing groq;
 CLIs still first everywhere) — provider, pricing, settings and voice branch in
 commit `66d6d34`; live-smoked end to end. Note V4 Flash spends reasoning tokens

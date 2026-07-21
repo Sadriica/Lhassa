@@ -39,6 +39,7 @@ def register_all() -> None:
     from lhassa.actionpack import (  # noqa: F401
         _brain,
         _calendar_sync,
+        _config,
         _curate,
         _derive,
         _digest,
@@ -104,6 +105,7 @@ def register_all() -> None:
     _reg("ingest_knowledge", _knowledge.ingest_knowledge)
     _reg("list_dir", _files.list_dir)
     _reg("read_file", _files.read_file)
+    _reg("set_config", _config.set_config)
 
     # ── Org — real delegation into the hierarchy (Etapa 3) ────────────────────
     _reg("org_run", _org.org_run)

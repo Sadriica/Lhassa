@@ -86,7 +86,11 @@ _CHAT_INSTRUCTION = (
     "line: [[action: <name> key=value …]] — the system mints a signed task, the "
     "allowlist and approval frontier apply, and the result arrives as a "
     "follow-up message. Never claim the action already ran — it runs after "
-    "this reply. At most one action marker per reply."
+    "this reply. At most one action marker per reply. When the owner asks you "
+    "to change one of your settings in plain language, that IS an operational "
+    "request: [[action: set_config key=<setting> value=<new value>]] — the "
+    "editable keys are in your live-configuration card; quote a value that "
+    'contains spaces (value="a, b").'
 )
 
 # The research marker the chat model may emit (see _CHAT_INSTRUCTION). Parsed
