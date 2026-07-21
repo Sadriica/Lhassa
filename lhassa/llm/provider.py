@@ -1024,6 +1024,15 @@ def get_pipeline_llm(config: "Config"):
             settings=OLLamaLLMService.Settings(model=config.model),
         )
 
+    elif provider == "deepseek":
+        from pipecat.services.openai.llm import OpenAILLMService
+        logger.info(f"LLM: DeepSeek ({config.model})")
+        return OpenAILLMService(
+            api_key=config.deepseek_api_key,
+            base_url="https://api.deepseek.com",
+            settings=OpenAILLMService.Settings(model=config.model),
+        )
+
     elif provider == "cerebras":
         from pipecat.services.cerebras.llm import CerebrasLLMService
         logger.info(f"LLM: Cerebras ({config.model})")
@@ -1046,7 +1055,7 @@ def get_pipeline_llm(config: "Config"):
 def get_agent_client(config: "Config"):
     """
     Return (async_client, provider_name) for use in BaseAgent.
-    Groq, OpenAI, OpenRouter, Ollama, and Cerebras all use the OpenAI-compatible
+    Groq, OpenAI, OpenRouter, Ollama, Cerebras and DeepSeek all use the OpenAI-compatible
     protocol so we use the `openai` package with a custom base_url.
     Anthropic uses its own package.
     """
@@ -1082,6 +1091,16 @@ def get_agent_client(config: "Config"):
         if key not in _agent_clients:
             from openai import AsyncOpenAI
             _agent_clients[key] = AsyncOpenAI(api_key="ollama", base_url=base)
+        return _agent_clients[key], "openai"
+
+    elif provider == "deepseek":
+        key = ("openai", config.deepseek_api_key, "https://api.deepseek.com")
+        if key not in _agent_clients:
+            from openai import AsyncOpenAI
+            _agent_clients[key] = AsyncOpenAI(
+                api_key=config.deepseek_api_key,
+                base_url="https://api.deepseek.com",
+            )
         return _agent_clients[key], "openai"
 
     elif provider == "cerebras":

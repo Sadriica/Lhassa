@@ -66,6 +66,10 @@ PRICING: dict[str, tuple[float, float]] = {
     # Groq list prices (metered API).
     "llama-3.3-70b-versatile": (0.59, 0.79),
     "llama-3.1-8b-instant": (0.05, 0.08),
+    # DeepSeek list prices (metered API; cache-miss input rate — cache hits cost
+    # ~50x less, so the ledger over-counts input conservatively).
+    "deepseek-v4-flash": (0.14, 0.28),
+    "deepseek-v4-pro": (0.435, 0.87),
 }
 
 
@@ -588,7 +592,7 @@ class LedgerGateway:
             )
             return text, resp.usage.input_tokens, resp.usage.output_tokens
 
-        # OpenAI-compatible (groq, openai, openrouter, ollama, cerebras)
+        # OpenAI-compatible (groq, openai, openrouter, ollama, cerebras, deepseek)
         chat_messages = messages
         if system:
             chat_messages = [{"role": "system", "content": system}, *messages]
@@ -648,7 +652,7 @@ class LedgerGateway:
                 resp.stop_reason or "",
             )
 
-        # OpenAI-compatible (groq, openai, openrouter, ollama, cerebras)
+        # OpenAI-compatible (groq, openai, openrouter, ollama, cerebras, deepseek)
         chat_messages = messages
         if system:
             chat_messages = [{"role": "system", "content": system}, *messages]

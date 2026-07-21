@@ -95,6 +95,10 @@ MODEL_HINTS: dict[str, list[str]] = {
         "llama3.3-70b",
         "llama3.1-8b",
     ],
+    "deepseek": [
+        "deepseek-v4-flash",
+        "deepseek-v4-pro",
+    ],
     "ollama": [
         "llama3.2",
         "llama3.3",
@@ -171,8 +175,8 @@ EDITABLE: list[dict] = [
         "env_var": "LHASSA_LLM_PROVIDER",
         "type": "enum",
         "options": [
-            "groq", "anthropic", "openai", "openrouter", "cerebras", "ollama",
-            "claude", "codex", "opencode",
+            "groq", "anthropic", "openai", "openrouter", "cerebras", "deepseek",
+            "ollama", "claude", "codex", "opencode",
         ],
         "label": "Chat provider (CLI / voice / agent)",
         "help": "Powers the CLI chat, voice, and the built-in agent. API providers "
@@ -560,6 +564,7 @@ _API_KEY_ATTR = {
     "openai": "openai_api_key",
     "openrouter": "openrouter_api_key",
     "cerebras": "cerebras_api_key",
+    "deepseek": "deepseek_api_key",
 }
 
 
