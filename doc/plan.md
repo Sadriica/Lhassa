@@ -5,7 +5,7 @@ que los loops existentes VIVAN antes de construir loops nuevos. Orden: Ola 0 →
 → 2 → 3 (0.1 es prerequisito de 1.3; la Ola 2 necesita días de tráfico tras la
 Ola 1). Nada nuevo (modalidades/departamentos/comandos) hasta acumular millas.
 
-## Ola 0 — encender lo apagado
+## Ola 0 — encender lo apagado ✅ (0.1 pendiente del owner)
 - **0.1 Activar percepción** (owner): `knowledge_roots` + `protected_roots` vía
   `/config`. DoD: `ingest_knowledge` indexa >0 archivos; una lectura protegida
   completa tap→resultado.
@@ -16,7 +16,7 @@ Ola 1). Nada nuevo (modalidades/departamentos/comandos) hasta acumular millas.
   rutas $0 vs thinks, patrones detectados. DoD: el digest responde "¿está
   aprendiendo?" sin preguntar.
 
-## Ola 1 — memoria que pega
+## Ola 1 — memoria que pega ✅
 - **1.1 Embeddings reales**: `RemoteEmbedder` → Ollama local
   (`nomic-embed-text`, $0, VPS-portable) + reindex de L4/cache/knowledge. DoD:
   una pregunta parafraseada pega en cache; L4 recupera por significado.
@@ -26,7 +26,7 @@ Ola 1). Nada nuevo (modalidades/departamentos/comandos) hasta acumular millas.
 - **1.3 Knowledge en el contexto** — ✅ YA EXISTÍA (commit 974d028): capa 6 en
   `memory/load.py`, prioridad mínima, cita el archivo fuente.
 
-## Ola 2 — kilometraje para la consciencia
+## Ola 2 — kilometraje para la consciencia ✅ (2026-07-21)
 - **2.1 Sensibilidad a bajo volumen**: umbrales del detector con datos jóvenes;
   `detect_routable` sobre los turnos reales. DoD: primera proposal real en
   Telegram con ahorro estimado.
@@ -35,7 +35,7 @@ Ola 1). Nada nuevo (modalidades/departamentos/comandos) hasta acumular millas.
 - **2.3 Simulacro del forjado**: drill end-to-end author → cuarentena → gates →
   approve → producción. DoD: primera fila en `tools` no escrita a mano.
 
-## Ola 3 — jerarquía sin deuda
+## Ola 3 — jerarquía sin deuda ✅ (2026-07-21; 3.2 fue piloto one-shot, el flag sigue OFF por defecto)
 - **3.1 Matar surface-direct sends**: `_run_action_and_report` + CV
   `send_document` pasan por `org/deliver.py`. DoD: cero sends directos.
 - **3.2 Piloto `LHASSA_ORG_LIVE`**: un departamento con executor real,
