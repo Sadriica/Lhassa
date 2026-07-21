@@ -31,6 +31,13 @@ from loguru import logger
 from lhassa._vendor import aiosqlite
 
 from lhassa.config import Config
+from lhassa.core.migrations import (
+    Migration,
+    MigrationValidationError,
+    apply_migrations,
+    ensure_supported,
+    get_schema_version,
+)
 
 # Module-level so tests can monkeypatch it the way test_memory_store patches
 # lhassa.memory.store.DB_PATH.
@@ -74,17 +81,10 @@ async def _has_column(conn, table: str, column: str) -> bool:
         return any(row[1] == column for row in await cur.fetchall())
 
 
-async def init_db() -> None:
-    """
-    Enable WAL and create every table. Idempotent — safe to call repeatedly.
-
-    Migrations for existing production DBs are handled with idempotent
-    ALTER TABLE statements guarded by PRAGMA table_info checks.
-    """
-    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    async with aiosqlite.connect(DB_PATH) as db:
-        await db.execute("PRAGMA journal_mode=WAL")
-
+async def _migration_001_baseline(db) -> None:
+    """Reconcile an empty or unversioned legacy database to the baseline."""
+    await db.execute("SAVEPOINT migration_001_baseline")
+    try:
         # LA GRANDE — append-only; never UPDATE/DELETE episodes.
         await db.execute("""
             CREATE TABLE IF NOT EXISTS episodes (
@@ -111,6 +111,7 @@ async def init_db() -> None:
         # (no row duplication — content lives only in `episodes`), kept in sync by
         # triggers. Defensive: some SQLite builds omit FTS5, so this — and ONLY
         # this — is wrapped so init_db() never crashes on an old/stripped build.
+        await db.execute("SAVEPOINT migration_001_fts")
         try:
             await db.execute("""
                 CREATE VIRTUAL TABLE IF NOT EXISTS episodes_fts USING fts5(
@@ -156,7 +157,11 @@ async def init_db() -> None:
                         "INSERT INTO episodes_fts(episodes_fts) VALUES ('rebuild')"
                     )
         except Exception as exc:
+            await db.execute("ROLLBACK TO SAVEPOINT migration_001_fts")
+            await db.execute("RELEASE SAVEPOINT migration_001_fts")
             logger.warning(f"db: episodes_fts (FTS5) unavailable, recall search disabled: {exc}")
+        else:
+            await db.execute("RELEASE SAVEPOINT migration_001_fts")
 
         await db.execute("""
             CREATE TABLE IF NOT EXISTS tasks (
@@ -521,7 +526,336 @@ async def init_db() -> None:
             ON answer_cache(instance_id, creado_en)
         """)
 
-        await db.commit()
+        # knowledge — document perception (§ memory.knowledge): chunks of the
+        # owner's OWN documents from opt-in ``config.knowledge_roots``, embedded
+        # offline so the brain's thinking/recall/graph can be grounded in real
+        # material at $0. One row per chunk; ``source_path`` + ``mtime`` make
+        # ingestion incremental (a file whose mtime is unchanged is skipped; a
+        # changed file has its old chunks deleted and re-indexed). Scoped to
+        # ``instance_id`` like everything else in the grande. This table is
+        # local-only (``~/.lhassa/brain.db``), never the repo — see
+        # doc/boundaries.md.
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS knowledge (
+                id           TEXT PRIMARY KEY,
+                instance_id  TEXT NOT NULL,
+                source_path  TEXT NOT NULL,
+                chunk_index  INTEGER NOT NULL,
+                text         TEXT NOT NULL,
+                embedding    TEXT NOT NULL,
+                mtime        REAL NOT NULL,
+                ingested_at  TEXT NOT NULL
+            )
+        """)
+        await db.execute("""
+            CREATE INDEX IF NOT EXISTS knowledge_by_instance
+            ON knowledge(instance_id, source_path)
+        """)
+
+    except BaseException:
+        await db.execute("ROLLBACK TO SAVEPOINT migration_001_baseline")
+        await db.execute("RELEASE SAVEPOINT migration_001_baseline")
+        raise
+    else:
+        await db.execute("RELEASE SAVEPOINT migration_001_baseline")
+
+
+_BASELINE_REQUIRED_COLUMNS: dict[str, set[str]] = {
+    "episodes": {
+        "id", "instance_id", "creado_en", "despertar_por", "decision", "accion",
+        "resultado", "dominio", "costo_usd", "memoria_cargada", "raw",
+    },
+    "tasks": {
+        "id", "instance_id", "accion", "objetivo", "params", "origen_trust",
+        "origen_actor", "estado", "firma", "creado_en", "due_at", "recurrence",
+        "updated_en",
+    },
+    "jobs": {
+        "id", "instance_id", "pid", "harness", "estado", "costo_usd", "creado_en",
+        "terminado_en", "acked",
+    },
+    "desired_state": {
+        "instance_id", "machine_id", "clave", "valor", "actualizado_en",
+    },
+    "tools": {
+        "id", "instance_id", "nombre", "dominio", "repo_url", "estado",
+        "metrica_baseline", "metrica_actual", "usos", "fallos", "creado_en",
+    },
+    "approvals": {
+        "id", "instance_id", "tipo", "payload", "estado", "creado_en", "resuelto_en",
+    },
+    "autonomy": {"instance_id", "accion", "actor_id", "streak", "actualizado_en"},
+    "facts": {
+        "id", "instance_id", "tipo", "contenido", "pinned", "tags",
+        "procedencia", "confianza", "creado_en", "actualizado_en",
+    },
+    "postulaciones": {
+        "id", "instance_id", "empresa", "rol", "estado", "creado_en",
+        "fuente", "link", "notas", "actualizado_en",
+    },
+    "fact_embeddings": {
+        "fact_id", "instance_id", "dim", "vector", "model", "creado_en",
+    },
+    "org_messages": {
+        "id", "instance_id", "kind", "from_instance", "to_instance", "status",
+        "payload", "corr_id", "creado_en",
+    },
+    "org_commons": {"instance_id", "clave", "valor", "curator", "actualizado_en"},
+    "owner_prompts": {
+        "id", "instance_id", "kind", "slot", "prompt", "status", "created_at",
+        "expires_at", "answered_at", "answer",
+    },
+    "watch_state": {"instance_id", "key", "value", "updated_en"},
+    "runs": {
+        "id", "instance_id", "kind", "entity_id", "parent_run_id", "status",
+        "trigger", "summary", "started_at", "finished_at", "duration_ms", "cost_usd",
+        "input_tokens", "output_tokens", "raw",
+    },
+    "run_steps": {
+        "id", "instance_id", "run_id", "idx", "kind", "entity_id", "status",
+        "started_at", "finished_at", "duration_ms", "cost_usd", "input_summary",
+        "output_summary", "error", "raw",
+    },
+    "artifacts": {
+        "id", "instance_id", "kind", "paths", "metadata", "origin_department",
+        "episode_id", "creado_en",
+    },
+    "answer_cache": {
+        "id", "instance_id", "question", "answer", "embedding", "tags", "hits",
+        "creado_en",
+    },
+    "knowledge": {
+        "id", "instance_id", "source_path", "chunk_index", "text", "embedding",
+        "mtime", "ingested_at",
+    },
+}
+
+
+async def _validate_migration_001(db) -> None:
+    problems: list[str] = []
+    for table, required in _BASELINE_REQUIRED_COLUMNS.items():
+        async with db.execute(f"PRAGMA table_info({table})") as cur:
+            actual = {row[1] for row in await cur.fetchall()}
+        missing = sorted(required - actual)
+        if missing:
+            problems.append(f"{table}: missing {', '.join(missing)}")
+    if problems:
+        raise MigrationValidationError("invalid baseline schema: " + "; ".join(problems))
+
+
+async def _migration_002_durable_flows(db) -> None:
+    """Add the operational kernel for resumable flow execution.
+
+    ``runs`` and ``run_steps`` remain analytics projections.  These tables own
+    live execution state, immutable checkpoints, attempts, and the event stream.
+    """
+    await db.execute("""
+        CREATE TABLE flow_run_state (
+            run_id              TEXT PRIMARY KEY,
+            instance_id         TEXT NOT NULL,
+            flow_id             TEXT NOT NULL,
+            flow_digest         TEXT NOT NULL DEFAULT '',
+            flow_snapshot       TEXT NOT NULL,
+            status              TEXT NOT NULL CHECK(status IN (
+                                    'queued', 'running', 'waiting_approval',
+                                    'waiting_retry', 'completed', 'failed', 'cancelled'
+                                )),
+            inputs              TEXT NOT NULL DEFAULT '{}',
+            frontier            TEXT NOT NULL DEFAULT '[]',
+            visited             TEXT NOT NULL DEFAULT '[]',
+            output              TEXT,
+            checkpoint_seq      INTEGER NOT NULL DEFAULT 0 CHECK(checkpoint_seq >= 0),
+            state_version       INTEGER NOT NULL DEFAULT 0 CHECK(state_version >= 0),
+            requested_by        TEXT NOT NULL DEFAULT '',
+            owner_department    TEXT NOT NULL DEFAULT '',
+            org_chain_snapshot  TEXT NOT NULL DEFAULT '[]',
+            topology_digest     TEXT NOT NULL DEFAULT '',
+            idempotency_key     TEXT,
+            lease_owner         TEXT,
+            lease_token         TEXT,
+            lease_expires_at    TEXT,
+            heartbeat_at        TEXT,
+            next_wakeup_at      TEXT,
+            error               TEXT,
+            created_at          TEXT NOT NULL,
+            updated_at          TEXT NOT NULL
+        )
+    """)
+    await db.execute("""
+        CREATE UNIQUE INDEX flow_run_idempotency
+        ON flow_run_state(instance_id, flow_id, idempotency_key)
+        WHERE idempotency_key IS NOT NULL
+    """)
+    await db.execute("""
+        CREATE INDEX flow_run_dispatch
+        ON flow_run_state(instance_id, status, next_wakeup_at, created_at)
+    """)
+    await db.execute("""
+        CREATE INDEX flow_run_expired_leases
+        ON flow_run_state(instance_id, lease_expires_at)
+        WHERE lease_token IS NOT NULL
+    """)
+
+    await db.execute("""
+        CREATE TABLE flow_step_attempts (
+            id              TEXT PRIMARY KEY,
+            instance_id     TEXT NOT NULL,
+            run_id          TEXT NOT NULL,
+            node_id         TEXT NOT NULL,
+            attempt         INTEGER NOT NULL CHECK(attempt >= 1),
+            assigned_brain  TEXT NOT NULL DEFAULT '',
+            org_corr_id     TEXT NOT NULL DEFAULT '',
+            status          TEXT NOT NULL CHECK(status IN (
+                                'running', 'succeeded', 'failed', 'abandoned',
+                                'timed_out', 'cancelled'
+                            )),
+            input           TEXT,
+            output          TEXT,
+            error           TEXT,
+            effect_key      TEXT NOT NULL DEFAULT '',
+            lease_token     TEXT,
+            heartbeat_at    TEXT,
+            started_at      TEXT NOT NULL,
+            finished_at     TEXT,
+            FOREIGN KEY(run_id) REFERENCES flow_run_state(run_id) ON DELETE CASCADE,
+            UNIQUE(run_id, node_id, attempt)
+        )
+    """)
+    await db.execute("""
+        CREATE INDEX flow_step_attempts_by_run
+        ON flow_step_attempts(instance_id, run_id, node_id, attempt)
+    """)
+
+    await db.execute("""
+        CREATE TABLE flow_checkpoints (
+            run_id          TEXT NOT NULL,
+            seq             INTEGER NOT NULL CHECK(seq >= 1),
+            instance_id     TEXT NOT NULL,
+            frontier        TEXT NOT NULL,
+            visited         TEXT NOT NULL,
+            state           TEXT NOT NULL,
+            source_event_id INTEGER,
+            schema_version  INTEGER NOT NULL DEFAULT 1 CHECK(schema_version >= 1),
+            created_at      TEXT NOT NULL,
+            PRIMARY KEY(run_id, seq),
+            FOREIGN KEY(run_id) REFERENCES flow_run_state(run_id) ON DELETE CASCADE
+        )
+    """)
+    await db.execute("""
+        CREATE INDEX flow_checkpoints_by_instance_run
+        ON flow_checkpoints(instance_id, run_id, seq)
+    """)
+
+    await db.execute("""
+        CREATE TABLE flow_events (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            instance_id     TEXT NOT NULL,
+            run_id          TEXT NOT NULL,
+            step_attempt_id TEXT,
+            kind            TEXT NOT NULL CHECK(kind IN (
+                                'RUN_CREATED', 'ORG_BOUND', 'RUN_CLAIMED',
+                                'RUN_STARTED', 'CHECKPOINT_SAVED', 'STEP_SCHEDULED',
+                                'STEP_CLAIMED', 'STEP_STARTED', 'STEP_HEARTBEAT',
+                                'STEP_COMPLETED', 'STEP_FAILED', 'EDGE_SELECTED',
+                                'RETRY_SCHEDULED', 'APPROVAL_REQUESTED',
+                                'APPROVAL_RESOLVED', 'RUN_PAUSED', 'RUN_RESUMED',
+                                'LEASE_EXPIRED', 'RUN_COMPLETED', 'RUN_FAILED',
+                                'RUN_CANCELLED'
+                            )),
+            payload         TEXT NOT NULL DEFAULT '{}',
+            schema_version  INTEGER NOT NULL DEFAULT 1 CHECK(schema_version >= 1),
+            actor_id        TEXT NOT NULL DEFAULT '',
+            actor_role      TEXT NOT NULL DEFAULT '',
+            dedupe_key      TEXT,
+            created_at      TEXT NOT NULL,
+            FOREIGN KEY(run_id) REFERENCES flow_run_state(run_id) ON DELETE CASCADE,
+            FOREIGN KEY(step_attempt_id) REFERENCES flow_step_attempts(id)
+        )
+    """)
+    await db.execute("""
+        CREATE INDEX flow_events_by_instance_run
+        ON flow_events(instance_id, run_id, id)
+    """)
+    await db.execute("""
+        CREATE UNIQUE INDEX flow_events_dedupe
+        ON flow_events(instance_id, dedupe_key)
+        WHERE dedupe_key IS NOT NULL
+    """)
+
+
+_DURABLE_FLOW_REQUIRED_COLUMNS: dict[str, set[str]] = {
+    "flow_run_state": {
+        "run_id", "instance_id", "flow_id", "flow_snapshot", "status",
+        "checkpoint_seq", "state_version", "idempotency_key", "lease_owner",
+        "lease_token", "lease_expires_at", "created_at", "updated_at",
+    },
+    "flow_step_attempts": {
+        "id", "instance_id", "run_id", "node_id", "attempt", "status",
+        "effect_key", "lease_token", "started_at", "finished_at",
+    },
+    "flow_checkpoints": {
+        "run_id", "seq", "instance_id", "frontier", "visited", "state",
+        "schema_version", "created_at",
+    },
+    "flow_events": {
+        "id", "instance_id", "run_id", "kind", "payload", "schema_version",
+        "actor_id", "actor_role", "dedupe_key", "created_at",
+    },
+}
+
+
+async def _validate_migration_002(db) -> None:
+    problems: list[str] = []
+    for table, required in _DURABLE_FLOW_REQUIRED_COLUMNS.items():
+        async with db.execute(f"PRAGMA table_info({table})") as cur:
+            actual = {row[1] for row in await cur.fetchall()}
+        missing = sorted(required - actual)
+        if missing:
+            problems.append(f"{table}: missing {', '.join(missing)}")
+    if problems:
+        raise MigrationValidationError(
+            "invalid durable flow schema: " + "; ".join(problems)
+        )
+
+
+async def _migration_003_knowledge_size(db) -> None:
+    """Record each indexed file's byte size alongside its ``mtime``.
+
+    Incremental re-ingest compares both: an mtime match alone can miss a real
+    rewrite (coarse filesystem clocks, same-second saves, mtime-preserving
+    tools). ``-1`` marks pre-migration rows whose size was never captured —
+    the ingester treats it as "unknown, trust the mtime".
+    """
+    await db.execute(
+        "ALTER TABLE knowledge ADD COLUMN size INTEGER NOT NULL DEFAULT -1"
+    )
+
+
+async def _validate_migration_003(db) -> None:
+    async with db.execute("PRAGMA table_info(knowledge)") as cur:
+        actual = {row[1] for row in await cur.fetchall()}
+    if "size" not in actual:
+        raise MigrationValidationError("invalid knowledge schema: missing size")
+
+
+MIGRATIONS = (
+    Migration(1, "baseline", _migration_001_baseline, _validate_migration_001),
+    Migration(2, "durable-flows", _migration_002_durable_flows, _validate_migration_002),
+    Migration(3, "knowledge-size", _migration_003_knowledge_size, _validate_migration_003),
+)
+SCHEMA_VERSION = MIGRATIONS[-1].version
+
+
+async def init_db() -> None:
+    """Enable WAL and migrate the grande to the supported schema version."""
+    path = Path(DB_PATH)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    async with aiosqlite.connect(path) as db:
+        # Refuse a newer DB before changing even its journal mode.
+        ensure_supported(await get_schema_version(db), SCHEMA_VERSION)
+        await db.execute("PRAGMA journal_mode=WAL")
+        await db.execute("PRAGMA busy_timeout=5000")
+        await apply_migrations(db, MIGRATIONS)
 
 
 # ── episodes (append-only) ───────────────────────────────────────────────────────
@@ -743,7 +1077,7 @@ async def record_run_step(row: dict) -> str:
         raw = json.dumps(raw if raw is not None else row, ensure_ascii=False)
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute(
-            """INSERT INTO run_steps(
+            """INSERT OR REPLACE INTO run_steps(
                    id, instance_id, run_id, idx, kind, entity_id, status,
                    started_at, finished_at, duration_ms, cost_usd,
                    input_summary, output_summary, error, raw)
@@ -1334,16 +1668,17 @@ async def get_approval(instance_id: str, approval_id: str) -> Optional[dict]:
     return out
 
 
-async def resolve_approval(instance_id: str, approval_id: str, estado: str) -> None:
-    """Resolve an approval (e.g. 'aprobada' / 'rechazada'), scoped to instance."""
+async def resolve_approval(instance_id: str, approval_id: str, estado: str) -> bool:
+    """CAS a pending approval and return whether this caller resolved it."""
     async with aiosqlite.connect(DB_PATH) as db:
-        await db.execute(
+        cur = await db.execute(
             """UPDATE approvals
                SET estado = ?, resuelto_en = ?
-               WHERE instance_id = ? AND id = ?""",
+               WHERE instance_id = ? AND id = ? AND estado = 'pendiente'""",
             (estado, _now(), instance_id, approval_id),
         )
         await db.commit()
+    return cur.rowcount == 1
 
 
 # ── autonomy (the friction knob — consecutive human approvals) ──────────────────
@@ -1983,3 +2318,104 @@ async def bump_answer_cache_hit(instance_id: str, cache_id: str) -> None:
             (instance_id, cache_id),
         )
         await db.commit()
+
+
+# ── knowledge (document perception — § memory.knowledge) ────────────────────
+
+async def insert_knowledge_chunk(row: dict) -> str:
+    """Insert one indexed chunk. Returns its id.
+
+    ``row`` needs ``instance_id``, ``source_path``, ``chunk_index``, ``text``,
+    ``embedding`` (a list of floats), ``mtime`` (a float, the source file's
+    mtime at ingestion time) and ``size`` (the file's byte size; together with
+    ``mtime`` it's how incremental re-ingest detects a change — ``-1`` = unknown).
+    """
+    chunk_id = row.get("id") or _new_id("kn")
+    size = row.get("size")
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            """INSERT INTO knowledge(
+                   id, instance_id, source_path, chunk_index, text, embedding,
+                   mtime, size, ingested_at)
+               VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                chunk_id,
+                row["instance_id"],
+                row["source_path"],
+                int(row.get("chunk_index") or 0),
+                row["text"],
+                _dumps(list(row.get("embedding") or [])),
+                float(row.get("mtime") or 0.0),
+                -1 if size is None else int(size),
+                row.get("ingested_at") or _now(),
+            ),
+        )
+        await db.commit()
+    return chunk_id
+
+
+async def list_knowledge_files(instance_id: str) -> dict[str, tuple[float, int]]:
+    """Return ``{source_path: (mtime, size)}`` for every file currently indexed.
+
+    One row per distinct ``source_path`` (its chunks all share the same
+    ``mtime``/``size``, stamped at ingestion) — used by
+    :func:`lhassa.memory.knowledge.ingest` to decide, per file, whether it's
+    unchanged (skip), new (index) or touched (delete old chunks, re-index).
+    ``size`` is ``-1`` for rows ingested before the size column existed.
+    """
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            """SELECT source_path, MAX(mtime) AS mtime, MAX(size) AS size
+               FROM knowledge
+               WHERE instance_id = ?
+               GROUP BY source_path""",
+            (instance_id,),
+        ) as cur:
+            rows = await cur.fetchall()
+    return {
+        row["source_path"]: (float(row["mtime"]), int(row["size"]))
+        for row in rows
+    }
+
+
+async def delete_knowledge_file(instance_id: str, source_path: str) -> None:
+    """Delete every chunk indexed for ``source_path`` (a re-index or a removal)."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "DELETE FROM knowledge WHERE instance_id = ? AND source_path = ?",
+            (instance_id, source_path),
+        )
+        await db.commit()
+
+
+async def list_knowledge_chunks(instance_id: str, limit: int = 5000) -> list[dict]:
+    """Return up to ``limit`` most recently ingested chunks for ``instance_id``.
+
+    ``embedding`` is decoded back into a list of floats. Bounded so a search
+    over a large index stays a cheap, in-memory cosine scan (mirrors
+    ``list_answer_cache``'s bounded-recent-set pattern).
+    """
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            """SELECT * FROM knowledge
+               WHERE instance_id = ?
+               ORDER BY ingested_at DESC, rowid DESC
+               LIMIT ?""",
+            (instance_id, limit),
+        ) as cur:
+            rows = [dict(row) for row in await cur.fetchall()]
+    for row in rows:
+        row["embedding"] = _loads(row.get("embedding"), [])
+    return rows
+
+
+async def clear_knowledge(instance_id: str) -> int:
+    """Wipe the whole knowledge index for ``instance_id``. Returns rows deleted."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        cur = await db.execute(
+            "DELETE FROM knowledge WHERE instance_id = ?", (instance_id,)
+        )
+        await db.commit()
+        return cur.rowcount if cur.rowcount is not None else 0

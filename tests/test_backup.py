@@ -93,6 +93,52 @@ async def test_verify_false_when_tables_missing(tmp_path, monkeypatch):
     assert await backup.verify(bare) is False
 
 
+@pytest.mark.asyncio
+async def test_verify_false_on_malformed_current_schema(tmp_path, monkeypatch):
+    db, backup = await _init(tmp_path, monkeypatch)
+    from lhassa._vendor import aiosqlite
+
+    malformed = tmp_path / "malformed-current.db"
+    await backup.backup(dest=malformed)
+    async with aiosqlite.connect(malformed) as conn:
+        await conn.execute("DROP TABLE knowledge")
+        await conn.commit()
+
+    assert await backup.verify(malformed) is False
+
+
+@pytest.mark.asyncio
+async def test_verify_false_on_malformed_legacy_schema(tmp_path, monkeypatch):
+    _, backup = await _init(tmp_path, monkeypatch)
+    from lhassa._vendor import aiosqlite
+
+    malformed = tmp_path / "malformed-legacy.db"
+    async with aiosqlite.connect(malformed) as conn:
+        for table in ("episodes", "facts", "tasks"):
+            await conn.execute(f"CREATE TABLE {table}(id TEXT PRIMARY KEY)")
+        await conn.commit()
+
+    assert await backup.verify(malformed) is False
+
+
+@pytest.mark.asyncio
+async def test_verify_false_when_file_disappears_before_stat(tmp_path, monkeypatch):
+    _, backup = await _init(tmp_path, monkeypatch)
+    from pathlib import Path
+
+    victim = tmp_path / "racing.db"
+    victim.write_bytes(b"sqlite-ish")
+    original_stat = Path.stat
+
+    def racing_stat(self, *args, **kwargs):
+        if self == victim:
+            raise FileNotFoundError(victim)
+        return original_stat(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "stat", racing_stat)
+    assert await backup.verify(victim) is False
+
+
 # ── restore round-trips ──────────────────────────────────────────────────────────
 
 @pytest.mark.asyncio
@@ -114,6 +160,11 @@ async def test_restore_round_trip(tmp_path, monkeypatch):
     restored = await facts.load_facts("inst_personal")
     assert any(f.contenido == "valuable knowledge" for f in restored)
 
+    from lhassa._vendor import aiosqlite
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        async with conn.execute("PRAGMA user_version") as cur:
+            assert (await cur.fetchone())[0] == db.SCHEMA_VERSION
+
 
 @pytest.mark.asyncio
 async def test_restore_to_explicit_dest(tmp_path, monkeypatch):
@@ -125,6 +176,80 @@ async def test_restore_to_explicit_dest(tmp_path, monkeypatch):
     other = tmp_path / "restored.db"
     await backup.restore(path, dest=other)
     assert await backup.verify(other) is True
+
+
+@pytest.mark.asyncio
+async def test_legacy_unversioned_backup_can_restore_then_upgrade(tmp_path, monkeypatch):
+    db, backup = await _init(tmp_path, monkeypatch)
+    from lhassa._vendor import aiosqlite
+
+    legacy = tmp_path / "legacy.db"
+    await backup.backup(dest=legacy)
+    async with aiosqlite.connect(legacy) as conn:
+        await conn.execute("PRAGMA user_version = 0")
+        await conn.commit()
+
+    assert await backup.verify(legacy) is True
+    restored = tmp_path / "restored-legacy.db"
+    await backup.restore(legacy, dest=restored)
+    monkeypatch.setattr(db, "DB_PATH", restored)
+    await db.init_db()
+    async with aiosqlite.connect(restored) as conn:
+        async with conn.execute("PRAGMA user_version") as cur:
+            assert (await cur.fetchone())[0] == db.SCHEMA_VERSION
+
+
+@pytest.mark.asyncio
+async def test_restore_rejects_too_new_backup_without_touching_dest(
+    tmp_path, monkeypatch
+):
+    db, backup = await _init(tmp_path, monkeypatch)
+    from lhassa._vendor import aiosqlite
+
+    future = tmp_path / "future.db"
+    await backup.backup(dest=future)
+    async with aiosqlite.connect(future) as conn:
+        await conn.execute(f"PRAGMA user_version = {db.SCHEMA_VERSION + 1}")
+        await conn.commit()
+    assert await backup.verify(future) is False
+
+    dest = tmp_path / "existing.db"
+    async with aiosqlite.connect(dest) as conn:
+        await conn.execute("CREATE TABLE sentinel(value TEXT)")
+        await conn.execute("INSERT INTO sentinel VALUES('keep')")
+        await conn.commit()
+
+    with pytest.raises(ValueError, match="unsupported schema"):
+        await backup.restore(future, dest=dest)
+    async with aiosqlite.connect(dest) as conn:
+        async with conn.execute("SELECT value FROM sentinel") as cur:
+            assert await cur.fetchone() == ("keep",)
+
+
+@pytest.mark.asyncio
+async def test_restore_rejects_malformed_current_without_touching_dest(
+    tmp_path, monkeypatch
+):
+    db, backup = await _init(tmp_path, monkeypatch)
+    from lhassa._vendor import aiosqlite
+
+    malformed = tmp_path / "malformed-current.db"
+    await backup.backup(dest=malformed)
+    async with aiosqlite.connect(malformed) as conn:
+        await conn.execute("DROP TABLE knowledge")
+        await conn.commit()
+
+    dest = tmp_path / "existing-malformed-dest.db"
+    async with aiosqlite.connect(dest) as conn:
+        await conn.execute("CREATE TABLE sentinel(value TEXT)")
+        await conn.execute("INSERT INTO sentinel VALUES('keep')")
+        await conn.commit()
+
+    with pytest.raises(ValueError, match="corrupt or has an unsupported schema"):
+        await backup.restore(malformed, dest=dest)
+    async with aiosqlite.connect(dest) as conn:
+        async with conn.execute("SELECT value FROM sentinel") as cur:
+            assert await cur.fetchone() == ("keep",)
 
 
 # ── recover something from days ago by tag (DoD) ─────────────────────────────────
