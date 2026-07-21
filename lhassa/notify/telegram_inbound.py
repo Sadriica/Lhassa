@@ -80,7 +80,13 @@ _CHAT_INSTRUCTION = (
     "search-engine query, never the user's vague phrase verbatim: name the topic, "
     "add specifics (product, place, month/year). 'dame las noticias de hoy' → "
     "[[research: technology news July 2026]] — not [[research: noticias de hoy]]. "
-    "At most one marker per reply."
+    "At most one marker per reply.\n"
+    "For an OPERATIONAL request that matches one of your registered actions "
+    "(your live-configuration card lists them), include this marker on its own "
+    "line: [[action: <name> key=value …]] — the system mints a signed task, the "
+    "allowlist and approval frontier apply, and the result arrives as a "
+    "follow-up message. Never claim the action already ran — it runs after "
+    "this reply. At most one action marker per reply."
 )
 
 # The research marker the chat model may emit (see _CHAT_INSTRUCTION). Parsed
@@ -93,6 +99,16 @@ _RESEARCH_MAX_QUERY = 300
 # Appended when a research task was actually minted — the promise the marker makes
 # is only ever written by US, deterministically, after the mint succeeded.
 _RESEARCH_ACK = "🔎 Looking it up — I'll message you shortly."
+
+# The action marker (see _CHAT_INSTRUCTION): ``[[action: <name> key=value …]]``.
+# Same defensive parsing as research: first match wins, all occurrences stripped.
+_ACTION_MARKER_RE = re.compile(
+    r"\[\[\s*action\s*:\s*([a-z0-9_]+)\s*(.*?)\s*\]\]", re.IGNORECASE | re.DOTALL
+)
+# Acks are written by US, deterministically, only after the mint succeeded —
+# the marker's promise is never the model's to make (mirrors _RESEARCH_ACK).
+_ACTION_ACK_RUN = "⚙️ Running {name} — the result follows shortly."
+_ACTION_ACK_PARKED = "⏳ {name} needs your approval — see /approvals."
 
 # The remember marker (offered by the periodic nudge in ``_brain_reply``): the
 # model flags ONE durable owner fact; we persist it to the grande (deduped) and
@@ -401,6 +417,115 @@ async def _apply_research_marker(reply: str, *, instance_id: str, config) -> str
     )
 
 
+def _parse_action_params(raw: str) -> dict:
+    """Parse ``key=value key2="two words"`` marker params. Defensive: any
+    unparseable tail yields the pairs parsed so far; bare tokens are ignored."""
+    import shlex
+
+    params: dict = {}
+    try:
+        tokens = shlex.split(raw or "")
+    except ValueError:
+        tokens = (raw or "").split()
+    for tok in tokens:
+        if "=" in tok:
+            key, _, value = tok.partition("=")
+            if key.strip():
+                params[key.strip()] = value
+    return params
+
+
+async def _run_action_and_report(
+    instance_id: str, task_id: str, name: str, params: dict, config
+) -> None:
+    """Run a chat-minted action NOW and message the outcome back. Never raises.
+
+    Same early-runner semantics as the research bridge (``run_task_now`` — a
+    failure leaves the task pending so the heartbeat retries); the follow-up
+    note carries the action's own episode ``resultado`` so the owner sees WHAT
+    happened, not just that something did.
+    """
+    from lhassa.core import db as _db
+    from lhassa.core import dispatch as _dispatch
+    from lhassa.notify import telegram as _telegram
+
+    ok = await _dispatch.run_task_now(
+        instance_id, task_id, name, params, despertar_por="telegram"
+    )
+    if ok:
+        note = f"⚙️ {name}: done."
+        with contextlib.suppress(Exception):
+            recent = await _db.load_recent_episodes(instance_id, 5)
+            resultado = next(
+                (str(e.get("resultado") or "") for e in recent if e.get("accion") == name),
+                "",
+            ).strip()
+            if resultado:
+                note = f"⚙️ {name}: {resultado[:300]}"
+    else:
+        note = f"⚙️ {name}: didn't run — left pending for the next heartbeat."
+    with contextlib.suppress(Exception):
+        await _telegram.send(note, config=config)
+
+
+async def _apply_action_marker(reply: str, *, instance_id: str, config) -> str:
+    """Turn an ``[[action: …]]`` marker into a REAL minted task; strip it from view.
+
+    Mirrors :func:`_apply_research_marker`: the first marker wins, every
+    occurrence is stripped, and the ack line is appended ONLY after the mint
+    actually succeeded. The action must exist in the ACTIONS registry; the mint
+    itself walks the same signed-task allowlist + approval frontier as ``/goal``
+    (HUMANO/telegram origin) — an unknown or disallowed action is refused with
+    an honest line, never silently dropped. Best-effort and never raises.
+    """
+    if not reply or "[[" not in reply:
+        return reply
+    match = _ACTION_MARKER_RE.search(reply)
+    if match is None:
+        return reply
+    name = match.group(1).lower()
+    params = _parse_action_params(match.group(2))
+    visible = _ACTION_MARKER_RE.sub("", reply).strip()
+
+    ack = ""
+    try:
+        from datetime import datetime, timezone
+
+        from lhassa import actionpack
+        from lhassa.core import dispatch as _dispatch
+        from lhassa.core.actions import ACTIONS
+        from lhassa.security.trust import Origin, TrustLevel
+
+        actionpack.register_all()  # idempotent — the poller may precede a beat
+        if name not in ACTIONS:
+            ack = f"(I don't have an action named {name!r} — see /capabilities.)"
+        else:
+            task_id, estado = await _dispatch.mint_task(
+                instance_id,
+                name,
+                params=params,
+                origin=Origin(trust=TrustLevel.HUMANO, actor_id="telegram"),
+                due_at=datetime.now(timezone.utc).isoformat(),
+            )
+            if task_id and estado == "pendiente":
+                asyncio.create_task(
+                    _run_action_and_report(instance_id, task_id, name, params, config)
+                )
+                ack = _ACTION_ACK_RUN.format(name=name)
+            elif task_id:
+                ack = _ACTION_ACK_PARKED.format(name=name)
+            else:
+                ack = f"({name} was refused by the allowlist.)"
+    except Exception as exc:  # a mint failure must not break the chat turn
+        logger.warning(f"Telegram inbound: action mint failed: {exc}")
+
+    if ack:
+        return f"{visible}\n{ack}".strip()
+    if visible:
+        return visible
+    return "That action path is unavailable right now — ask me again in a bit."
+
+
 async def _answer_calendar_query(text: str, *, config) -> Optional[str]:
     """Deterministic calendar-query answer, through the calendar seam — logs a
     ``despertar_por="telegram"`` episode ($0, ``accion="calendar_view"``) and
@@ -512,6 +637,15 @@ async def _brain_reply(text: str, *, config) -> str:
         memory_block = ctx.to_prompt()
         if memory_block:
             parts.append(memory_block)
+        # The self-card: live config + execution-modality taxonomy, $0 and
+        # deterministic — the model KNOWS what it runs on and how it executes
+        # (and which action names the [[action: …]] marker may name).
+        try:
+            from lhassa.notify import selfcard as _selfcard
+
+            parts.append(_selfcard.build(config))
+        except Exception as exc:  # a broken card must not cost the reply
+            logger.warning(f"Telegram inbound: selfcard degraded: {exc}")
         parts.append(_CHAT_INSTRUCTION)
 
         # Rolling conversation history + the periodic memory nudge. The counter
@@ -580,6 +714,9 @@ async def _brain_reply(text: str, *, config) -> str:
                 continue
             reply = (result.text or "").strip() or _FALLBACK_REPLY
             reply = await _apply_research_marker(
+                reply, instance_id=instance_id, config=config
+            )
+            reply = await _apply_action_marker(
                 reply, instance_id=instance_id, config=config
             )
             reply = await _apply_remember_marker(reply, instance_id=instance_id)
