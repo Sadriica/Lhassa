@@ -21,17 +21,37 @@ from loguru import logger
 
 from lhassa.state import state
 
-# Base commands lhassa may run as root. Mirror scripts/lhassa-sudoers.
-_DEFAULT_ALLOW = {
+# Candidate commands lhassa may run as root, distro-agnostic. The effective
+# allowlist keeps only those actually installed on THIS host (mirrors how
+# scripts/install-privileged.sh builds the sudoers per host): universal admin
+# tools, whichever package manager this distro ships, and the laptop/power
+# tools when present. The sudoers file is the kernel-side gate; this set is the
+# application-side mirror.
+_CANDIDATE_ALLOW = {
     "systemctl",
     "journalctl",
+    "dmesg",
+    "sensors",
+    # Package managers (Arch / Debian+Ubuntu / Fedora / openSUSE).
     "pacman",
+    "apt-get",
+    "apt",
+    "dnf",
+    "zypper",
+    # Laptop/power tools.
     "tlp",
     "tlp-stat",
     "power-mode",
-    "dmesg",
-    "sensors",
 }
+
+
+def _installed_allow() -> set[str]:
+    import shutil
+
+    return {c for c in _CANDIDATE_ALLOW if shutil.which(c)}
+
+
+_DEFAULT_ALLOW = _installed_allow()
 
 # Refused even when the base command is allowlisted.
 _DESTRUCTIVE = (

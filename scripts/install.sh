@@ -83,7 +83,7 @@ preflight() {
     if [ "$DO_DOCKER" -eq 1 ]; then
         if command -v docker >/dev/null 2>&1; then ok "docker: $(docker --version 2>&1)"; else err "docker not found (or use --no-docker)"; missing=1; fi
     fi
-    [ "$missing" -eq 0 ] || die "missing prerequisites — install them and re-run"
+    [ "$missing" -eq 0 ] || die "missing prerequisites — run 'sudo bash scripts/bootstrap.sh' (per-distro: apt/pacman/dnf/zypper) and re-run"
 }
 
 # ── Sync: venv + dashboard ────────────────────────────────────────────────────
