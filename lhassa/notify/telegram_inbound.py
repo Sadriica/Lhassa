@@ -604,10 +604,12 @@ async def _brain_reply(text: str, *, config) -> str:
         # are unaffected and fall straight through to the unchanged think below.
         intent = classify(text)
         cache_enabled = bool(getattr(config, "answer_cache_enabled", True))
+        cache_stats: dict = {}
         if intent == "cacheable" and cache_enabled:
             threshold = float(getattr(config, "answer_cache_threshold", 0.90) or 0.90)
             hit = await answer_cache.lookup(
-                instance_id, text, threshold=threshold, config=config
+                instance_id, text, threshold=threshold, config=config,
+                stats=cache_stats,
             )
             if hit is not None:
                 cached_answer, similarity = hit
@@ -751,6 +753,16 @@ async def _brain_reply(text: str, *, config) -> str:
                 decision=(
                     f"think: provider={actual} model={mdl or 'provider-default'}"
                     f"{_capabilities.tag_intent(text)}"
+                    # The near-miss diagnostic (plan 0.2): when a cacheable
+                    # question MISSED, record how close the cache came — days of
+                    # these decide whether the fix is the threshold, traffic, or
+                    # the embedder.
+                    + (
+                        f" cache-miss best={cache_stats['best_similarity']:.2f}"
+                        f" scanned={cache_stats['scanned']}"
+                        if cache_stats and not cache_stats.get("hit")
+                        else ""
+                    )
                 ),
                 accion="responder",
                 resultado=reply,

@@ -96,6 +96,7 @@ async def lookup(
     *,
     threshold: float = 0.90,
     config=None,
+    stats: "dict | None" = None,
 ) -> "tuple[str, float] | None":
     """Return ``(answer, similarity)`` for the best cached match, or ``None``.
 
@@ -106,9 +107,19 @@ async def lookup(
     time, so entries age out without a separate sweep). The winning row's
     ``hits`` counter is bumped (best-effort). Never raises: any failure degrades
     to a MISS (``None``), so a broken cache never breaks a chat reply.
+
+    ``stats`` is an optional, keyword-only diagnostics out-param — pass an empty
+    dict and this fills it with ``{"best_similarity": float, "scanned": int,
+    "hit": bool}`` regardless of hit/miss, so a caller can tell WHY a lookup
+    missed (a near-miss under threshold vs. nothing to scan at all vs. an
+    embedder/DB failure). Existing callers that don't pass ``stats`` see no
+    change in behavior or return value.
     """
     config = config or Config
     question = (question or "").strip()
+    if stats is not None:
+        stats.clear()
+        stats.update({"best_similarity": -1.0, "scanned": 0, "hit": False})
     if not question:
         return None
     try:
@@ -136,11 +147,18 @@ async def lookup(
                 best_sim = sim
                 best_row = row
 
+        if stats is not None:
+            stats["best_similarity"] = best_sim
+            stats["scanned"] = len(fresh)
+
         if best_row is None or best_sim < threshold:
             return None
 
         with contextlib.suppress(Exception):
             await db.bump_answer_cache_hit(instance_id, best_row["id"])
+
+        if stats is not None:
+            stats["hit"] = True
 
         return str(best_row["answer"]), best_sim
     except Exception as exc:  # never break the caller over a cache read
