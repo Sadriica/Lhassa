@@ -447,11 +447,13 @@ async def _run_action_and_report(
     Same early-runner semantics as the research bridge (``run_task_now`` — a
     failure leaves the task pending so the heartbeat retries); the follow-up
     note carries the action's own episode ``resultado`` so the owner sees WHAT
-    happened, not just that something did.
+    happened, not just that something did. The note is a WORK PRODUCT, so it
+    travels through :func:`lhassa.org.deliver.deliver` — Lhassa as the sender
+    of record, one logged hop — never a surface-direct send; a deliver failure
+    degrades to the plain channel so the owner is still told.
     """
     from lhassa.core import db as _db
     from lhassa.core import dispatch as _dispatch
-    from lhassa.notify import telegram as _telegram
 
     ok = await _dispatch.run_task_now(
         instance_id, task_id, name, params, despertar_por="telegram"
@@ -468,8 +470,22 @@ async def _run_action_and_report(
                 note = f"⚙️ {name}: {resultado[:300]}"
     else:
         note = f"⚙️ {name}: didn't run — left pending for the next heartbeat."
-    with contextlib.suppress(Exception):
-        await _telegram.send(note, config=config)
+    try:
+        from lhassa.org.deliver import deliver as _deliver
+
+        sent, _ = await _deliver(
+            note, kind="action-result",
+            metadata={"accion": name, "task_id": task_id},
+            config=config,
+        )
+    except Exception as exc:
+        logger.warning(f"Telegram inbound: deliver seam failed ({exc}); plain send")
+        sent = False
+    if not sent:
+        with contextlib.suppress(Exception):
+            from lhassa.notify import telegram as _telegram
+
+            await _telegram.send(note, config=config)
 
 
 async def _apply_action_marker(reply: str, *, instance_id: str, config) -> str:

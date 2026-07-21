@@ -186,7 +186,9 @@ async def test_claude_code_provider_parses_json():
     assert isinstance(prov, ModelProvider)
     c = await prov.complete([{"role": "user", "content": "hi"}])
     assert c.text == "hello there"
-    assert c.cost_usd == pytest.approx(0.0123)
+    # The CLI's total_cost_usd is an API-equivalent ESTIMATE; the subscription's
+    # marginal cash cost is $0 BY DESIGN — it must never enter the ledger.
+    assert c.cost_usd == 0.0
     assert c.input_tokens == 12 and c.output_tokens == 5
 
 
