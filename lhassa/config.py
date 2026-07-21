@@ -505,6 +505,11 @@ class Config:
     # ``lhassa.memory.knowledge``. The index itself lives in the grande
     # (``~/.lhassa/brain.db``), never in the repo.
     knowledge_roots: str = os.getenv("LHASSA_KNOWLEDGE_ROOTS", "")
+    # Second tier: folders the brain MAY read but only with the owner's explicit
+    # per-access approval (each read/list parks an approval — the tap IS the
+    # verification). Same CSV shape as knowledge_roots; may overlap it — the
+    # protected tier wins.
+    protected_roots: str = os.getenv("LHASSA_PROTECTED_ROOTS", "")
     # Files larger than this are skipped outright (KB).
     knowledge_max_file_kb: int = _safe_int(os.getenv("LHASSA_KNOWLEDGE_MAX_FILE_KB", "512"), 512)
     # Chunk size in characters (~500 tokens at the ~3-4 chars/token estimate

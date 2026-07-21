@@ -78,3 +78,70 @@ def test_list_dir_on_a_file_and_read_file_on_a_dir_degrade(tmp_path):
 def test_never_raises_on_garbage_params(tmp_path):
     assert isinstance(read_file(None), str)
     assert isinstance(list_dir({"path": 42, "config": _cfg(tmp_path)}), str)
+
+
+# ── the protected tier (per-access approval) ──────────────────────────────────
+
+
+def _task(accion, path):
+    from lhassa.security.trust import Origin, TrustLevel
+
+    return SimpleNamespace(
+        accion=accion,
+        params={"path": path},
+        origen=Origin(trust=TrustLevel.HUMANO, actor_id="telegram"),
+    )
+
+
+def test_protected_path_always_needs_approval(tmp_path, monkeypatch):
+    import lhassa.config as config_mod
+    from lhassa.security import approval
+
+    monkeypatch.setattr(config_mod.Config, "protected_roots", str(tmp_path))
+    assert approval.needs_approval(_task("read_file", str(tmp_path / "cv.pdf")))
+    # …and the autonomy knob can NOT lower it (the tap is the verification).
+    assert approval.needs_approval(
+        _task("list_dir", str(tmp_path)), autonomy=True
+    )
+
+
+def test_unprotected_path_does_not_trigger_the_protected_gate(tmp_path, monkeypatch):
+    import lhassa.config as config_mod
+    from lhassa.security import approval
+
+    monkeypatch.setattr(config_mod.Config, "protected_roots", str(tmp_path / "vault"))
+    assert not approval.needs_approval(_task("read_file", str(tmp_path / "open.md")))
+
+
+def test_no_protected_roots_configured_is_a_no_op(monkeypatch):
+    import lhassa.config as config_mod
+    from lhassa.security import approval
+
+    monkeypatch.setattr(config_mod.Config, "protected_roots", "")
+    assert not approval.needs_approval(_task("read_file", "/anything/at/all.md"))
+
+
+def test_protected_root_is_still_readable_by_the_action_itself(tmp_path):
+    # The gate lives at MINT time; the action reads once the owner tapped.
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    (vault / "diario.md").write_text("contenido aprobado")
+    cfg = SimpleNamespace(knowledge_roots="", protected_roots=str(vault))
+    out = read_file({"path": str(vault / "diario.md"), "config": cfg})
+    assert "contenido aprobado" in out
+
+
+def test_describe_shows_the_path_being_approved():
+    from lhassa.security.approval import describe
+
+    row = {
+        "tipo": "task",
+        "payload": {
+            "accion": "read_file",
+            "params": {"path": "/home/w/vault/diario.md"},
+            "actor_id": "telegram",
+        },
+    }
+    d = describe(row)
+    assert "read_file" in d["title"]
+    assert "/home/w/vault/diario.md" in d["detail"]
