@@ -197,6 +197,41 @@ memory_app.command("graph")(graph_cmd)
 memory_app.command("entities")(entities_cmd)
 
 
+# ── reindex — re-embed everything with the CURRENT embedder ──────────────────
+
+
+def reindex_cmd(
+    json_out: bool = typer.Option(False, "--json", help="Emit the result as JSON."),
+) -> None:
+    """Re-embed all facts and cached answers with the current embedder.
+
+    Run this after switching the embedder backend/model (e.g. enabling Ollama
+    with ``pull``ed model, or moving off the offline hashing embedder) — vectors
+    stored under a different embedder are cosine-garbage against a new one, so
+    this brings every stored vector back in sync. Best-effort per row: a single
+    row failing never aborts the batch.
+    """
+    from lhassa.config import Config
+    from lhassa.memory.embeddings import reindex_all
+
+    result = asyncio.run(reindex_all(Config.instance_id, Config))
+
+    if json_out:
+        _commands._dump_json(result)
+        return
+
+    out = _out()
+    out.print(f"[title]Reindexed with[/] [model]{result['embedder']}[/]")
+    out.print(f"  facts:   [success]{result['facts']}[/] re-embedded")
+    answers_line = f"  answers: [success]{result['answers']}[/] re-embedded"
+    if result.get("answers_failed"):
+        answers_line += f", [error]{result['answers_failed']}[/] failed"
+    out.print(answers_line)
+
+
+memory_app.command("reindex")(reindex_cmd)
+
+
 # ── onboard — a short guided questionnaire seeding the first owner facts ──────
 
 # Each entry: (prompt text, tipo, pinned).

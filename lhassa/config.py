@@ -491,6 +491,13 @@ class Config:
     # HashingEmbedder — memory loading never crashes.
     embeddings_url: str = os.getenv("LHASSA_EMBEDDINGS_URL", "http://localhost:11434")
     embeddings_model: str = os.getenv("LHASSA_EMBEDDINGS_MODEL", "nomic-embed-text")
+    # Embedder backend gate (memory/embeddings.get_embedder): "auto" probes the
+    # local Ollama and uses its NATIVE /api/embed when reachable (else offline
+    # hashing); "ollama" forces native (degrades with a warning); "hash" forces
+    # the offline embedder. The explicit embeddings_model/url knobs above still
+    # win when set — this gate matters when they are cleared.
+    embedder_backend: str = os.getenv("LHASSA_EMBEDDER_BACKEND", "auto")
+    embedder_model: str = os.getenv("LHASSA_EMBEDDER_MODEL", "nomic-embed-text")
     # API key for hosted embedding endpoints (Ollama is keyless; set for cloud).
     # NEVER write this to settings.env — it stays in .env (secret).
     embeddings_api_key: str = os.getenv("LHASSA_EMBEDDINGS_API_KEY", "")

@@ -1,5 +1,34 @@
 # Lhassa — decisions log
 
+## 2026-07-21 (tarde) — Plan "kilometraje", Ola 0+1 (subagentes en paralelo)
+
+`doc/plan.md` adopted: the audit showed the architecture is mature but the
+learning loops lack MILEAGE — so waves 0-1 make existing loops live instead of
+building new ones. Executed with four parallel Sonnet subagents on disjoint
+file territories; two items turned out ALREADY BUILT by prior work (thread
+continuity — `capabilities.is_followup`/`continue_followup`, commit 12c3e99;
+knowledge context layer 6, commit 974d028) and were verified, not duplicated.
+
+- **0.2 cache diagnostics** (`e34bf51`): `answer_cache.lookup(stats=…)` exposes
+  best-similarity/scanned on every miss; the telegram think episode records
+  `cache-miss best=0.83 scanned=12` — days of these decide whether the 0-hits
+  problem is the 0.90 threshold, traffic, or the hashing embedder.
+- **0.3 mileage telemetry** (same commit): the digest's "📈 My mileage" section
+  — thinks + cost, cache hit-rate, $0 work, real self-improvement findings —
+  over 24h/7d windows. The evening digest answers "is it learning?" unasked.
+- **1.1 real embeddings**: `RemoteEmbedder` speaks Ollama's native `/api/embed`
+  (with `/api/embeddings` fallback); `get_embedder` gains an `embedder_backend`
+  gate (auto/ollama/hash, defensive `getattr`); embedder `fingerprint` +
+  `needs_reindex` guard against mixing hash- and real-vectors; `lhassa memory
+  reindex` re-embeds facts + answer cache. The legacy default
+  (`embeddings_model=nomic-embed-text` @ `embeddings_url` → Ollama's OpenAI
+  surface) already works once the daemon is up, so defaults were kept.
+  KNOWN GAP: `answer_cache` rows carry no model stamp — no live mismatch guard
+  until a schema migration adds one; `reindex` brute-forces it meanwhile.
+  Owner enable: `ollama serve` + `ollama pull nomic-embed-text` + `lhassa
+  memory reindex`.
+
+
 Running log of the architectural/operational decisions for the Lhassa "brain"
 build. The source of truth for the architecture is `doc/lhassa-brief.md` (a
 living doc — correct it after each phase per §4). This file records the choices
