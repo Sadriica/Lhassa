@@ -10,8 +10,9 @@ Mounted by the integrator with ``app.include_router(approval_routes.router)``.
 
 from fastapi import APIRouter, HTTPException
 
-from lhassa.config import Config
+import lhassa.config as lhassa_config
 from lhassa.core import db
+from lhassa.flows.runtime import RuntimeConflict
 from lhassa.security import approval
 
 router = APIRouter()
@@ -26,7 +27,7 @@ async def get_approvals():
     approved, not just ids.
     """
     await db.init_db()
-    rows = await approval.pending(Config.instance_id)
+    rows = await approval.pending(lhassa_config.Config.instance_id)
     return [{**row, "summary": approval.describe(row)} for row in rows]
 
 
@@ -42,10 +43,26 @@ async def resolve_approval_endpoint(approval_id: str, payload: dict):
     approved = payload["approved"]
     if not isinstance(approved, bool):
         raise HTTPException(status_code=400, detail="'approved' must be a boolean.")
-    by_actor = (payload.get("by_actor") or "duenio").strip() or "duenio"
+    raw_actor = payload.get("by_actor", "duenio")
+    if not isinstance(raw_actor, str):
+        raise HTTPException(status_code=400, detail="'by_actor' must be a string.")
+    by_actor = raw_actor.strip() or "duenio"
 
     await db.init_db()
-    await approval.resolve(
-        Config.instance_id, approval_id, approved=approved, by_actor=by_actor
-    )
-    return {"ok": True, "approval_id": approval_id, "approved": approved}
+    try:
+        result = await approval.resolve(
+            lhassa_config.Config.instance_id,
+            approval_id,
+            approved=approved,
+            by_actor=by_actor,
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=f"approval {approval_id!r} not found") from exc
+    except (RuntimeConflict, approval.ApprovalResolutionConflict) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return {
+        "ok": True,
+        "approval_id": approval_id,
+        "approved": approved,
+        **(result or {}),
+    }

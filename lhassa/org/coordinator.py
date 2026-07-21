@@ -32,6 +32,8 @@ import re
 from functools import partial
 from typing import TYPE_CHECKING, Any, Awaitable, Callable, Optional, Union
 
+from loguru import logger
+
 from lhassa.config import Config
 from lhassa.core.episode import Episode
 from lhassa.org import messaging, rbac, routing
@@ -255,12 +257,21 @@ class DepartmentBrain:
                 )
             approval_id = payload.get("approval_id")
             if approval_id:
-                await approval.resolve(
-                    self.instance_id,
-                    approval_id,
-                    approved=True,
-                    by_actor=approver,
-                )
+                try:
+                    await approval.resolve(
+                        self.instance_id,
+                        approval_id,
+                        approved=True,
+                        by_actor=approver,
+                    )
+                except (KeyError, approval.ApprovalResolutionConflict) as exc:
+                    # A stale or raced approval id (duplicate delivery, resolved
+                    # elsewhere) must not abort the coordination walk — the
+                    # distinct-approver gate above already held.
+                    logger.warning(
+                        f"org: approval {approval_id!r} not resolvable ({exc}); "
+                        "continuing"
+                    )
 
         # ── Execute on the DEPARTMENT side (never the general) ──────────────────
         # Default: the real department brain (``brain_executor``), bound to THIS

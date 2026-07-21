@@ -17,6 +17,8 @@ This package is a self-contained FOUNDATION:
   - :mod:`lhassa.flows.model`  — the graph data model + validation + JSON round-trip.
   - :mod:`lhassa.flows.store`  — a crash-safe JSON store over ``config.flows_file``.
   - :mod:`lhassa.flows.engine` — a small, offline-testable async executor.
+  - :mod:`lhassa.flows.runtime` — transactional run state, checkpoints, events,
+    and fenced worker leases for the durable executor.
 
 The live canvas (a frontend slice) and live execution sit on top of this; live work
 is gated behind ``LHASSA_ORG_LIVE`` exactly like the rest of the codebase, so the

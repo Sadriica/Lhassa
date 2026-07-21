@@ -32,10 +32,16 @@ from typing import Iterator
 #   calendar seam : calendar                                   (leaf .ics file-I/O used by notify)
 #   leaf infra    : registry.py, plugins.py                   (keystone — depend on nothing)
 #
+# ``flows`` counts as a SHELL: its engine composes the org layer (topology,
+# coordinator, executor), so no inner layer may depend on it. The two inner
+# importers that exist today (security/approval.py's durable flow-gate bridge,
+# personal/secretary.py's seed-shaped flow provisioning) are precisely keyed in
+# ALLOWED_EXCEPTIONS below — any NEW inner->flows edge trips the guard.
+#
 # The forbidden directions encode "inner layers must not reach out to shells",
 # the keystone-leaf rule, and the model-vs-harness swap-axis independence.
 
-SHELLS = {"cli", "api", "voice", "notify", "org", "dashboard", "actionpack"}
+SHELLS = {"cli", "api", "voice", "notify", "org", "dashboard", "actionpack", "flows"}
 
 
 @dataclass(frozen=True)
@@ -118,6 +124,15 @@ KEYSTONE_FILES = ("registry.py", "plugins.py")
 #     exactly what ``seeds/cv.py`` does from the shell layer. The read-model
 #     modules (``personal/agenda.py``, ``memory/checkins.py``) remain shell-free;
 #     keying the exception on secretary.py alone keeps them that way.
+#   security/approval.py -> lhassa.flows.{durable,projection}:
+#     The durable flow-gate bridge: resolving a ``flow_gate`` approval must
+#     commit the decision and the run cursor atomically and resume the approved
+#     work, for every surface (API/CLI/chat) that resolves approvals. The import
+#     is lazy (inside ``resolve()``), keyed to the exact two modules — any other
+#     ``security`` -> ``flows`` edge still trips the guard.
+#   personal/secretary.py -> lhassa.flows.{model,store}:
+#     Same seed-shaped composition as its org edges above: provisioning the
+#     canonical briefing flows needs the flow data model + store, not the engine.
 ALLOWED_EXCEPTIONS: frozenset[tuple[str, str]] = frozenset(
     {
         ("tools/monitor.py", "lhassa.voice.notifier"),
@@ -127,6 +142,10 @@ ALLOWED_EXCEPTIONS: frozenset[tuple[str, str]] = frozenset(
         ("personal/secretary.py", "lhassa.org"),
         ("personal/secretary.py", "lhassa.org.management"),
         ("personal/secretary.py", "lhassa.org.topology"),
+        ("security/approval.py", "lhassa.flows.durable"),
+        ("security/approval.py", "lhassa.flows.projection"),
+        ("personal/secretary.py", "lhassa.flows.model"),
+        ("personal/secretary.py", "lhassa.flows.store"),
     }
 )
 

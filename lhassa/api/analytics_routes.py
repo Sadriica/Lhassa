@@ -59,7 +59,7 @@ def _add_run(stats: dict, row: dict) -> None:
         stats["completed"] += 1
     elif status == "stopped":
         stats["stopped"] += 1
-    elif status == "needs_approval":
+    elif status in {"needs_approval", "waiting_approval"}:
         stats["needs_approval"] += 1
     else:
         stats["failed"] += 1

@@ -116,6 +116,7 @@ from lhassa.api import (  # noqa: E402
     code_routes,
     config_routes,
     fleet_routes,
+    flow_run_routes,
     flow_routes,
     llm_routes,
     memory_routes,
@@ -138,6 +139,7 @@ app.include_router(analytics_routes.router)
 app.include_router(code_routes.router)
 app.include_router(relationship_routes.router)
 app.include_router(flow_routes.router)
+app.include_router(flow_run_routes.router)
 app.include_router(runtime_routes.router)
 app.include_router(llm_routes.router)
 app.include_router(approval_routes.router)

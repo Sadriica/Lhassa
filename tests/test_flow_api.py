@@ -10,7 +10,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from lhassa.api import flow_routes
+from lhassa.api import approval_routes, flow_routes, flow_run_routes
 
 
 @pytest.fixture
@@ -31,6 +31,8 @@ def client(tmp_path, monkeypatch):
 
     app = FastAPI()
     app.include_router(flow_routes.router)
+    app.include_router(flow_run_routes.router)
+    app.include_router(approval_routes.router)
     return TestClient(app)
 
 
@@ -49,6 +51,20 @@ def _sample(flow_id="f1"):
             {"from_node": "w", "to_node": "o"},
         ],
     }
+
+
+def _approval_sample(flow_id="approval-flow"):
+    flow = _sample(flow_id)
+    flow["nodes"].insert(
+        2,
+        {"id": "gate", "kind": "gate", "config": {"type": "approval"}},
+    )
+    flow["edges"] = [
+        {"from_node": "t", "to_node": "w"},
+        {"from_node": "w", "to_node": "gate"},
+        {"from_node": "gate", "to_node": "o"},
+    ]
+    return flow
 
 
 def test_crud_happy_path(client):
@@ -136,6 +152,87 @@ def test_run_endpoint_offline(client):
 
 def test_run_missing_flow_is_404(client):
     assert client.post("/api/flows/ghost/run", json={}).status_code == 404
+
+
+def test_approval_gate_pauses_and_resumes_from_checkpoint(client):
+    client.post("/api/flows", json=_approval_sample())
+    paused = client.post(
+        "/api/flows/approval-flow/run",
+        json={"inputs": {"summary": "draft"}},
+    )
+    assert paused.status_code == 200, paused.text
+    waiting = paused.json()
+    assert waiting["status"] == "waiting_approval"
+    assert waiting["finished_at"] is None
+    assert [step["kind"] for step in waiting["steps"]] == [
+        "trigger",
+        "task",
+        "gate",
+    ]
+
+    approvals = client.get("/api/approvals").json()
+    assert len(approvals) == 1
+    approval_id = approvals[0]["id"]
+    assert approvals[0]["payload"]["run_id"] == waiting["id"]
+    assert approvals[0]["payload"]["node_id"] == "gate"
+
+    operational = client.get(f"/api/flow-runs/{waiting['id']}")
+    assert operational.status_code == 200
+    assert operational.json()["status"] == "waiting_approval"
+
+    resolved = client.post(
+        f"/api/approvals/{approval_id}",
+        json={"approved": True, "by_actor": "owner"},
+    )
+    assert resolved.status_code == 200, resolved.text
+    body = resolved.json()
+    assert body["run_id"] == waiting["id"]
+    assert body["run_status"] == "completed"
+    assert [step["kind"] for step in body["run"]["steps"]] == [
+        "trigger",
+        "task",
+        "gate",
+        "output",
+    ]
+    assert sum(step["kind"] == "task" for step in body["run"]["steps"]) == 1
+
+    import asyncio
+    import lhassa.config as config_mod
+    import lhassa.core.db as db
+
+    projected = asyncio.run(db.list_run_steps(config_mod.Config.instance_id, waiting["id"]))
+    assert [step["kind"] for step in projected] == [
+        "trigger",
+        "task",
+        "gate",
+        "output",
+    ]
+    assert projected[2]["status"] == "completed"
+
+    events = client.get(f"/api/flow-runs/{waiting['id']}/events").json()
+    kinds = [event["kind"] for event in events]
+    assert "APPROVAL_REQUESTED" in kinds
+    assert "APPROVAL_RESOLVED" in kinds
+    assert kinds[-1] == "RUN_COMPLETED"
+    assert client.post(
+        f"/api/approvals/{approval_id}", json={"approved": True}
+    ).status_code == 409
+
+
+def test_rejected_flow_gate_cancels_without_downstream_output(client):
+    client.post("/api/flows", json=_approval_sample("rejected-flow"))
+    waiting = client.post("/api/flows/rejected-flow/run", json={}).json()
+    approval_id = client.get("/api/approvals").json()[0]["id"]
+
+    resolved = client.post(
+        f"/api/approvals/{approval_id}", json={"approved": False}
+    )
+
+    assert resolved.status_code == 200, resolved.text
+    record = resolved.json()["run"]
+    assert record["status"] == "cancelled"
+    assert not any(step["kind"] == "output" for step in record["steps"])
+    assert client.get(f"/api/flow-runs/{waiting['id']}").json()["status"] == "cancelled"
 
 
 # ── flow-templates gallery ────────────────────────────────────────────────────────

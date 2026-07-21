@@ -47,6 +47,8 @@ A structured run record::
 
 from __future__ import annotations
 
+import hashlib
+import json
 import os
 import time
 import uuid
@@ -61,6 +63,7 @@ from lhassa.flows.model import Flow, FlowNode, NodeKind
 # An executor seam: ``async (goal, *, department, config) -> dict``. Defaults to the
 # org's department brain (offline + $0 unless LHASSA_ORG_LIVE). Injected in tests.
 Executor = Callable[..., Awaitable[dict]]
+CheckpointHook = Callable[[dict], Awaitable[None]]
 
 _TRUTHY = {"1", "true", "yes", "on"}
 _MAX_STEPS_FACTOR = 4  # hard cap = nodes * factor + 8, defends against runaway walks
@@ -248,7 +251,15 @@ def _format_goal(prompt: str, data: Any, *, base_cv: str = "", company: str = ""
 
 
 async def _run_gate(
-    node: FlowNode, data: Any, *, config: Config, base_cv: str = ""
+    node: FlowNode,
+    data: Any,
+    *,
+    config: Config,
+    base_cv: str = "",
+    run_id: Optional[str] = None,
+    flow_id: Optional[str] = None,
+    approval_context: Optional[dict] = None,
+    approval_decisions: Optional[dict[str, bool]] = None,
 ) -> tuple[dict, Any, bool]:
     """Execute a gate node; returns ``(step_extra, data_out, passed)``.
 
@@ -260,22 +271,55 @@ async def _run_gate(
     gate_type = str(cfg.get("type") or "verify").lower()
 
     if gate_type == "approval":
-        approval_id = None
-        try:
-            from lhassa.security import approval
-
-            instance_id = getattr(config, "instance_id", None) or Config.instance_id
-            approval_id = await approval.request_approval(
-                instance_id,
-                tipo="flow_gate",
-                payload={"accion": "flow_gate", "node": node.id, "data": _safe(data)},
+        if approval_decisions and approval_decisions.get(node.id) is True:
+            return (
+                {
+                    "gate": "approval",
+                    "passed": True,
+                    "needs_approval": False,
+                    "approved": True,
+                },
+                data,
+                True,
             )
-        except Exception as exc:  # parking is best-effort; record it, don't crash
-            logger.debug("flows: approval gate could not park ({}): {}", node.id, exc)
+
+        instance_id = getattr(config, "instance_id", None) or Config.instance_id
+        payload = {
+            "accion": "flow_gate",
+            "node": node.id,
+            "data": _safe(data),
+        }
+        approval_id = None
+        if run_id is not None or flow_id is not None:
+            if not run_id or not flow_id or not node.id:
+                raise RuntimeError("durable approval gate is missing run, flow, or node identity")
+            payload.update(approval_context or {})
+            # Cursor identity is authoritative; callers may only add context.
+            payload.update(
+                {"run_id": run_id, "flow_id": flow_id, "node_id": node.id}
+            )
+            digest = hashlib.sha256(
+                f"{instance_id}:{run_id}:{flow_id}:{node.id}".encode()
+            ).hexdigest()[:24]
+            approval_id = f"ap_flow_{digest}"
+        else:
+            try:
+                from lhassa.security import approval
+
+                approval_id = await approval.request_approval(
+                    instance_id, tipo="flow_gate", payload=payload
+                )
+            except Exception as exc:  # legacy parking remains best-effort
+                logger.debug("flows: approval gate could not park ({}): {}", node.id, exc)
         # A parked approval is NOT a pass — the path waits (records needs_approval).
         return (
-            {"gate": "approval", "passed": False, "needs_approval": True,
-             "approval_id": approval_id},
+            {
+                "gate": "approval",
+                "passed": False,
+                "needs_approval": True,
+                "approval_id": approval_id,
+                **({"approval_payload": payload} if run_id is not None else {}),
+            },
             data,
             False,
         )
@@ -357,6 +401,55 @@ def _safe(value: Any) -> Any:
     return str(value)
 
 
+def _json_safe(value: Any) -> Any:
+    """Return a detached JSON value suitable for a durable checkpoint."""
+    return json.loads(json.dumps(value, ensure_ascii=False, default=str))
+
+
+def _cursor_snapshot(
+    *,
+    frontier: list[tuple[str, Any]],
+    visited: set[str],
+    steps: list[dict],
+    final_data: Any,
+    last_output: Any,
+    resolved_company: str,
+    base_cv: str,
+    run_started: str,
+    pending_approval: Optional[dict],
+    approval_decisions: dict[str, bool],
+    status: str,
+) -> dict:
+    """Build the versioned, JSON-only cursor consumed by a later resume."""
+    return _json_safe(
+        {
+            "schema_version": 1,
+            "status": status,
+            "frontier": [
+                {"node": node_id, "data": data} for node_id, data in frontier
+            ],
+            "visited": sorted(visited),
+            "steps": steps,
+            "final_data": final_data,
+            "last_output": last_output,
+            "resolved_company": resolved_company,
+            "base_cv": base_cv,
+            "run_started": run_started,
+            "pending_approval": pending_approval,
+            "approval_decisions": approval_decisions,
+        }
+    )
+
+
+def _restore_frontier(value: Any) -> list[tuple[str, Any]]:
+    """Decode a cursor frontier, ignoring malformed entries defensively."""
+    out: list[tuple[str, Any]] = []
+    for item in value if isinstance(value, list) else []:
+        if isinstance(item, dict) and item.get("node"):
+            out.append((str(item["node"]), item.get("data")))
+    return out
+
+
 # ── the walk ─────────────────────────────────────────────────────────────────
 async def run_flow(
     flow: Flow,
@@ -366,6 +459,11 @@ async def run_flow(
     executor: Optional[Executor] = None,
     company: Optional[str] = None,
     base_cv: Optional[str] = None,
+    run_id: Optional[str] = None,
+    resume_state: Optional[dict] = None,
+    checkpoint_hook: Optional[CheckpointHook] = None,
+    approval_context: Optional[dict] = None,
+    approval_decisions: Optional[dict[str, bool]] = None,
 ) -> dict:
     """Execute ``flow`` and return a structured run record. Never raises.
 
@@ -379,6 +477,12 @@ async def run_flow(
     CV a caller extracted from an uploaded document), instead of reading
     ``cv.load_base()`` from disk. ``None`` (the default) keeps the historical
     load-from-disk behaviour, so existing callers are unchanged.
+
+    Durable execution is opt-in. ``run_id`` fixes the execution identity;
+    ``resume_state`` restores a cursor previously returned as ``record["resume_state"]``;
+    and ``checkpoint_hook`` receives a detached JSON cursor after every node.
+    ``approval_decisions`` lets a resumed approval gate pass without parking another
+    request. Calls that omit these arguments retain the historical in-memory behavior.
     """
     if config is None:
         # Local import: stay correct if a test reloads ``lhassa.config`` (a stale
@@ -400,7 +504,17 @@ async def run_flow(
             logger.debug("flows: base CV unavailable ({})", exc)
             base_cv = ""
     resolved_company = resolve_company(company, inputs)
-    run_id = uuid.uuid4().hex
+    durable = any(
+        value is not None
+        for value in (
+            run_id,
+            resume_state,
+            checkpoint_hook,
+            approval_context,
+            approval_decisions,
+        )
+    )
+    run_id = run_id or uuid.uuid4().hex
     run_started = _iso_now()
     run_started_perf = time.perf_counter()
 
@@ -422,13 +536,57 @@ async def run_flow(
             "output": None,
         }
 
-    steps: list[dict] = []
-    visited: set[str] = set()
-    frontier: list[tuple[str, Any]] = [(start.id, inputs or {})]
+    state = resume_state if isinstance(resume_state, dict) else {}
+    if state:
+        steps = _json_safe(state.get("steps") or [])
+        visited = {str(item) for item in state.get("visited") or []}
+        frontier = _restore_frontier(state.get("frontier"))
+        last_output = _json_safe(state.get("last_output"))
+        final_data = _json_safe(state.get("final_data"))
+        resolved_company = str(
+            state.get("resolved_company") or resolved_company
+        )
+        base_cv = str(state.get("base_cv") if "base_cv" in state else base_cv)
+        run_started = str(state.get("run_started") or run_started)
+        pending_approval = state.get("pending_approval")
+    else:
+        steps = []
+        visited = set()
+        frontier = [(start.id, inputs or {})]
+        last_output = None
+        final_data = inputs or {}
+        pending_approval = None
+
+    decisions = {
+        str(key): bool(value)
+        for key, value in (state.get("approval_decisions") or {}).items()
+    }
+    decisions.update(
+        {str(key): bool(value) for key, value in (approval_decisions or {}).items()}
+    )
     cap = len(flow.nodes) * _MAX_STEPS_FACTOR + 8
-    last_output: Any = None
-    final_data: Any = inputs or {}
     failed = False
+    waiting_approval = False
+
+    async def checkpoint(status: str) -> dict:
+        cursor = _cursor_snapshot(
+            frontier=frontier,
+            visited=visited,
+            steps=steps,
+            final_data=final_data,
+            last_output=last_output,
+            resolved_company=resolved_company,
+            base_cv=base_cv or "",
+            run_started=run_started,
+            pending_approval=pending_approval,
+            approval_decisions=decisions,
+            status=status,
+        )
+        if checkpoint_hook is not None:
+            await checkpoint_hook(cursor)
+        return cursor
+
+    latest_cursor: Optional[dict] = None
 
     while frontier and len(steps) < cap:
         node_id, data = frontier.pop(0)
@@ -436,6 +594,14 @@ async def run_flow(
             continue
         visited.add(node_id)
         node = flow.node(node_id)
+        replace_step_idx: Optional[int] = None
+        if (
+            isinstance(pending_approval, dict)
+            and pending_approval.get("node_id", pending_approval.get("node")) == node_id
+        ):
+            candidate = pending_approval.get("step_index")
+            if isinstance(candidate, int) and 0 <= candidate < len(steps):
+                replace_step_idx = candidate
 
         step_started = _iso_now()
         step_started_perf = time.perf_counter()
@@ -460,7 +626,14 @@ async def run_flow(
                 step.update(extra)
             elif node.kind == NodeKind.GATE:
                 extra, data_out, passed = await _run_gate(
-                    node, data, config=config, base_cv=base_cv
+                    node,
+                    data,
+                    config=config,
+                    base_cv=base_cv,
+                    run_id=run_id if durable else None,
+                    flow_id=flow.id if durable else None,
+                    approval_context=approval_context,
+                    approval_decisions=decisions,
                 )
                 step.update(extra)
             elif node.kind == NodeKind.OUTPUT:
@@ -480,7 +653,17 @@ async def run_flow(
             step["duration_ms"] = _elapsed_ms(step_started_perf)
             failed = True
             steps.append(step)
+            final_data = data_out
             logger.warning("flows: node {} failed: {}", node.id, exc)
+            if durable:
+                try:
+                    latest_cursor = await checkpoint("failed")
+                except Exception as checkpoint_exc:
+                    logger.warning(
+                        "flows: checkpoint after failed node {} failed: {}",
+                        node.id,
+                        checkpoint_exc,
+                    )
             continue
 
         if node.kind == NodeKind.GATE and step.get("needs_approval"):
@@ -490,8 +673,37 @@ async def run_flow(
         if node.kind == NodeKind.TASK and isinstance(step.get("result"), dict):
             step["cost_usd"] = float(step["result"].get("cost_usd") or 0.0)
 
-        steps.append(step)
+        if replace_step_idx is None:
+            steps.append(step)
+        else:
+            previous_step = steps[replace_step_idx]
+            for field in ("approval_id", "approval_payload"):
+                if field in previous_step:
+                    step.setdefault(field, previous_step[field])
+            steps[replace_step_idx] = step
+            pending_approval = None
         final_data = data_out
+
+        if node.kind == NodeKind.GATE and step.get("needs_approval") and durable:
+            visited.discard(node.id)
+            frontier.insert(0, (node.id, data_out))
+            pending_approval = {
+                "node_id": node.id,
+                "approval_id": step.get("approval_id"),
+                "approval_payload": step.get("approval_payload"),
+                "step_index": len(steps) - 1,
+            }
+            waiting_approval = True
+            try:
+                latest_cursor = await checkpoint("waiting_approval")
+            except Exception as exc:
+                failed = True
+                waiting_approval = False
+                step["ok"] = False
+                step["status"] = "failed"
+                step["error"] = f"checkpoint failed: {exc}"
+                logger.warning("flows: approval checkpoint failed: {}", exc)
+            break
 
         # ── pick the outgoing edges to follow ────────────────────────────────
         out_edges = flow.edges_from(node.id)
@@ -510,20 +722,50 @@ async def run_flow(
                 if eval_when(e.when, ctx):
                     frontier.append((e.to_node, data_out))
 
-    status = "failed" if failed else "completed"
+        if durable:
+            try:
+                latest_cursor = await checkpoint("running")
+            except Exception as exc:
+                failed = True
+                frontier.clear()
+                logger.warning("flows: checkpoint after node {} failed: {}", node.id, exc)
+                break
+
+    status = (
+        "failed"
+        if failed
+        else ("waiting_approval" if waiting_approval else "completed")
+    )
     output = last_output if last_output is not None else _safe(final_data)
     cost_usd = sum(float(s.get("cost_usd") or 0.0) for s in steps)
-    return {
+    if durable and not waiting_approval:
+        latest_cursor = _cursor_snapshot(
+            frontier=frontier,
+            visited=visited,
+            steps=steps,
+            final_data=final_data,
+            last_output=last_output,
+            resolved_company=resolved_company,
+            base_cv=base_cv or "",
+            run_started=run_started,
+            pending_approval=pending_approval,
+            approval_decisions=decisions,
+            status=status,
+        )
+    record = {
         "id": run_id,
         "flow_id": flow.id,
         "status": status,
         "started_at": run_started,
-        "finished_at": _iso_now(),
+        "finished_at": None if waiting_approval else _iso_now(),
         "duration_ms": _elapsed_ms(run_started_perf),
         "cost_usd": round(cost_usd, 6),
         "steps": steps,
         "output": output,
     }
+    if durable:
+        record["resume_state"] = latest_cursor or await checkpoint(status)
+    return record
 
 
 def _edge_ctx(step: dict, data_out: Any) -> dict:
