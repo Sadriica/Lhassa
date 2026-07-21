@@ -14,7 +14,7 @@ load_dotenv()
 if os.getenv("LHASSA_NO_RUNTIME_OVERRIDES") != "1":
     load_dotenv(Path.home() / ".lhassa" / "settings.env", override=True)
 
-_PROVIDERS = {"groq", "anthropic", "openai", "openrouter", "ollama", "cerebras"}
+_PROVIDERS = {"groq", "anthropic", "openai", "openrouter", "ollama", "cerebras", "deepseek"}
 
 # Detect the claude CLI once at import time so the default is resolved before
 # Config is instantiated and the result is stable across the process lifetime.
@@ -51,6 +51,7 @@ _DEFAULT_MODELS = {
     "openrouter": "anthropic/claude-haiku-4-5-20251001",
     "cerebras":   "llama3.3-70b",
     "ollama":     "llama3.2",
+    "deepseek":   "deepseek-v4-flash",
 }
 
 
@@ -63,6 +64,7 @@ def _detect_provider() -> str:
       ANTHROPIC_API_KEY → anthropic
       OPENAI_API_KEY    → openai
       GROQ_API_KEY      → groq
+      DEEPSEEK_API_KEY  → deepseek
       OPENROUTER_API_KEY → openrouter
       CEREBRAS_API_KEY  → cerebras
     Falls back to "groq" (will fail validate() if no key is set).
@@ -76,6 +78,8 @@ def _detect_provider() -> str:
         return "openai"
     if os.getenv("GROQ_API_KEY"):
         return "groq"
+    if os.getenv("DEEPSEEK_API_KEY"):
+        return "deepseek"
     if os.getenv("OPENROUTER_API_KEY"):
         return "openrouter"
     if os.getenv("CEREBRAS_API_KEY"):
@@ -160,6 +164,7 @@ class Config:
     openai_api_key: str     = os.getenv("OPENAI_API_KEY", "")
     openrouter_api_key: str = os.getenv("OPENROUTER_API_KEY", "")
     cerebras_api_key: str   = os.getenv("CEREBRAS_API_KEY", "")
+    deepseek_api_key: str   = os.getenv("DEEPSEEK_API_KEY", "")
 
     # Ollama — local, no key needed.
     ollama_base_url: str = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
@@ -813,6 +818,7 @@ class Config:
             "openai":     ("openai_api_key",     "OPENAI_API_KEY"),
             "openrouter": ("openrouter_api_key", "OPENROUTER_API_KEY"),
             "cerebras":   ("cerebras_api_key",   "CEREBRAS_API_KEY"),
+            "deepseek":   ("deepseek_api_key",   "DEEPSEEK_API_KEY"),
         }
         if provider in key_map:
             attr, env = key_map[provider]
