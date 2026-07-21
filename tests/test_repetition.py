@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 import pytest
 import pytest_asyncio  # noqa: F401
 
-from lhassa.agents.repetition import detect_repetition, pattern_key
+from lhassa.agents.repetition import detect_repetition, effective_threshold, pattern_key
 
 
 @dataclass
@@ -596,3 +596,165 @@ def test_recommend_intervention_picks_route_for_a_routable_finding():
     assert rec["payload"]["capability"] == "calendar_view"
     assert "calendar_view" in rec["rationale"]
     assert "×7" in rec["rationale"]
+
+
+# ── effective_threshold: adaptive sensitivity for a young/small population ──────
+
+
+def test_effective_threshold_relaxes_toward_floor_for_tiny_population():
+    assert effective_threshold(5, 0) == 2  # default floor
+    assert effective_threshold(5, 1) == 2
+    assert effective_threshold(5, 3) == 2
+
+
+def test_effective_threshold_caps_at_base_for_large_population():
+    # population >= base * base (5 * 5 = 25) reaches the full strict base.
+    assert effective_threshold(5, 25) == 5
+    assert effective_threshold(5, 100) == 5
+    assert effective_threshold(5, 1000) == 5
+
+
+def test_effective_threshold_scales_between_floor_and_base():
+    assert effective_threshold(5, 10) == 2  # ceil(10/5)=2
+    assert effective_threshold(5, 15) == 3  # ceil(15/5)=3
+    assert effective_threshold(5, 20) == 4  # ceil(20/5)=4
+
+
+def test_effective_threshold_is_monotonic_in_population():
+    prev = effective_threshold(5, 0)
+    for population in range(0, 60):
+        cur = effective_threshold(5, population)
+        assert cur >= prev
+        prev = cur
+
+
+def test_effective_threshold_respects_custom_floor():
+    assert effective_threshold(5, 0, floor=1) == 1
+    assert effective_threshold(5, 0, floor=4) == 4
+    # floor can never exceed base, even if a caller passes floor > base.
+    assert effective_threshold(3, 0, floor=10) == 3
+
+
+def test_effective_threshold_never_raises_on_bad_input():
+    assert effective_threshold(0, 5) == 1  # base < 1 degrades to 1
+    assert effective_threshold(-5, 5) == 1
+    assert effective_threshold(5, -3) == 2  # negative population degrades to 0
+
+
+# ── adaptive sensitivity wired into the detectors ────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_detect_repetition_fires_with_few_repeats_in_a_tiny_population(brain):
+    """No explicit threshold: DEFAULT_THRESHOLD=5 would never fire on 3 repeats,
+    but a young/tiny window (population==3, nothing else in the log) relaxes the
+    bar toward the floor — this is the whole point of item 2.1."""
+    for _ in range(3):
+        await _seed_episode(
+            brain, instance_id="inst_young", despertar_por="pending_task",
+            accion="think", cost=0.01,
+        )
+    findings = await detect_repetition("inst_young", days=7)
+    assert len(findings) == 1
+    f = findings[0]
+    assert f["count"] == 3
+    assert f["threshold_used"] == effective_threshold(5, 3)
+    assert f["threshold_used"] < 5
+
+
+@pytest.mark.asyncio
+async def test_detect_repetition_does_not_fire_with_same_repeats_in_a_large_population(brain):
+    """Same 3 repeats of the target pattern, but a large window (many other
+    episodes) keeps the effective threshold at the strict base — no noise for a
+    mature brain."""
+    for _ in range(3):
+        await _seed_episode(
+            brain, instance_id="inst_mature", despertar_por="pending_task",
+            accion="think", cost=0.01,
+        )
+    for i in range(27):
+        await _seed_episode(
+            brain, instance_id="inst_mature", despertar_por=f"filler_{i}",
+            accion="noop", cost=0.0,
+        )
+    findings = await detect_repetition("inst_mature", days=7)
+    assert findings == []
+
+
+@pytest.mark.asyncio
+async def test_detect_repetition_explicit_threshold_is_never_adapted(brain):
+    """An explicit `threshold=` argument wins unchanged even in a tiny population
+    that would otherwise relax the bar — backward compatible with existing callers."""
+    for _ in range(3):
+        await _seed_episode(
+            brain, instance_id="inst_explicit", despertar_por="pending_task",
+            accion="think", cost=0.01,
+        )
+    findings = await detect_repetition("inst_explicit", days=7, threshold=5)
+    assert findings == []  # 3 < explicit 5, no adaptation applied
+
+    findings2 = await detect_repetition("inst_explicit", days=7, threshold=3)
+    assert len(findings2) == 1
+    assert findings2[0]["threshold_used"] == 3  # explicit value echoed back
+
+
+@pytest.mark.asyncio
+async def test_detect_recurring_adaptive_threshold_used_and_relaxes(brain):
+    """DEFAULT_RECURRING_THRESHOLD=3 with floor 2: a tiny population (only these
+    2 episodes) relaxes the bar to 2, so 2 repeats now surfaces a finding that a
+    static base=3 never would."""
+    from lhassa.agents.repetition import detect_recurring
+
+    for _ in range(2):
+        await _seed_episode(
+            brain, instance_id="inst_recurring_young", despertar_por="cron",
+            accion="fetch_feed", cost=0.0,
+        )
+    findings = await detect_recurring("inst_recurring_young", days=7)
+    hit = next(f for f in findings if f["accion"] == "fetch_feed")
+    assert hit["count"] == 2
+    assert hit["threshold_used"] == effective_threshold(3, 2)
+    assert hit["threshold_used"] == 2
+
+
+@pytest.mark.asyncio
+async def test_detect_recurring_explicit_min_count_is_never_adapted(brain):
+    from lhassa.agents.repetition import detect_recurring
+
+    for _ in range(2):
+        await _seed_episode(
+            brain, instance_id="inst_recurring_explicit", despertar_por="cron",
+            accion="fetch_feed", cost=0.0,
+        )
+    findings = await detect_recurring("inst_recurring_explicit", days=7, min_count=3)
+    assert findings == []  # 2 < explicit 3, no adaptation applied
+
+
+@pytest.mark.asyncio
+async def test_detect_routable_adaptive_threshold_used_and_relaxes(brain):
+    from lhassa.agents.repetition import detect_routable
+
+    for _ in range(2):
+        await _seed_episode(
+            brain, instance_id="inst_routable_young", despertar_por="telegram",
+            accion="responder", cost=0.0, decision=_ROUTABLE_DECISION,
+        )
+    findings = await detect_routable("inst_routable_young", days=7)
+    assert len(findings) == 1
+    f = findings[0]
+    assert f["count"] == 2
+    assert f["threshold_used"] == effective_threshold(5, 2)
+    assert f["threshold_used"] < 5
+
+
+@pytest.mark.asyncio
+async def test_detect_routable_explicit_min_count_is_never_adapted(brain):
+    from lhassa.agents.repetition import detect_routable
+
+    for _ in range(2):
+        await _seed_episode(
+            brain, instance_id="inst_routable_explicit", despertar_por="telegram",
+            accion="responder", cost=0.0, decision=_ROUTABLE_DECISION,
+        )
+    findings = await detect_routable("inst_routable_explicit", days=7, min_count=5)
+    assert findings == []  # 2 < explicit 5, no adaptation applied
