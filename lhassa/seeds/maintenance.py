@@ -56,6 +56,7 @@ if TYPE_CHECKING:
 _RECURRING_ACTIONS: tuple[tuple[str, int], ...] = (
     ("distill_memory", 86400),
     ("detect_repetition", 86400),
+    ("apply_feedback", 86400),
     ("review_tools", 604800),
     ("curate_skills", 604800),
     ("calendar_sync", 86400),

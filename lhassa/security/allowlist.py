@@ -271,6 +271,15 @@ def build_allowlist(repos: "set[str] | str | None" = None) -> dict[str, ActionSp
             min_trust=TrustLevel.INTERNO,
             requires_approval=False,
         ),
+        # Feedback → autonomy: reads the episode log, adjusts streaks in the
+        # local DB — the same $0 hygiene tier as distill_memory; its own
+        # invariants (never high-risk, never protected-root actions, negative
+        # wins, idempotent per window) live in security/autonomy.apply_feedback.
+        "apply_feedback": ActionSpec(
+            objetivos=WILDCARD,
+            min_trust=TrustLevel.INTERNO,
+            requires_approval=False,
+        ),
         # Natural-language settings changes. The frontier is the settings
         # service itself (EDITABLE allowlist, coercion, provider guard; secrets
         # unreachable), and the chat door only mints from the owner's own

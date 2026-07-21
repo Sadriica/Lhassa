@@ -43,6 +43,7 @@ def register_all() -> None:
         _curate,
         _derive,
         _digest,
+        _feedback,
         _files,
         _knowledge,
         _llm,
@@ -106,6 +107,7 @@ def register_all() -> None:
     _reg("list_dir", _files.list_dir)
     _reg("read_file", _files.read_file)
     _reg("set_config", _config.set_config)
+    _reg("apply_feedback", _feedback.apply_feedback)
 
     # ── Org — real delegation into the hierarchy (Etapa 3) ────────────────────
     _reg("org_run", _org.org_run)
