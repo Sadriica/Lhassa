@@ -253,6 +253,11 @@ async def test_api_approvals_roundtrip(tmp_path, monkeypatch, knob_config):
         assert resolved.status_code == 200
         assert resolved.json()["approved"] is True
 
+        repeated = await client.post(f"/api/approvals/{ap_id}", json={"approved": True})
+        assert repeated.status_code == 409
+        missing = await client.post("/api/approvals/ap_missing", json={"approved": True})
+        assert missing.status_code == 404
+
         empty = await client.get("/api/approvals")
         assert empty.json() == []
 
@@ -272,6 +277,11 @@ async def test_api_approvals_rejects_bad_body(tmp_path, monkeypatch, knob_config
         assert missing.status_code == 400
         wrong_type = await client.post(f"/api/approvals/{ap_id}", json={"approved": "yes"})
         assert wrong_type.status_code == 400
+        bad_actor = await client.post(
+            f"/api/approvals/{ap_id}",
+            json={"approved": True, "by_actor": 42},
+        )
+        assert bad_actor.status_code == 400
 
 
 # ── describe(): the one human-readable render every queue surface uses ─────────────

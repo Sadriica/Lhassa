@@ -82,7 +82,7 @@ function buildNodeStats(flowRuns = []) {
       const bucket = byNode[node] || { runs: 0, failures: 0, durationMs: 0 }
       bucket.runs += 1
       bucket.durationMs += Number(step.duration_ms || 0)
-      if (stepStatus(step) !== 'completed') bucket.failures += 1
+      if (!['completed', 'needs_approval'].includes(stepStatus(step))) bucket.failures += 1
       byNode[node] = bucket
     }
   }
@@ -312,7 +312,8 @@ function EditorInner({ flow, skills, brains, flowStats, flowRuns = [], isNew, on
     setRunning(false)
     if (res.ok) {
       setRun(res.run)
-      toast.success(`Run completed — ${res.run?.status || 'done'}`)
+      if (res.run?.status === 'waiting_approval') toast.info('Run waiting for approval')
+      else toast.success(`Run ${res.run?.status || 'completed'}`)
     } else {
       toast.error(res.detail || 'Run failed')
     }

@@ -194,3 +194,160 @@ async def test_default_executor_offline_stub(offline_env):
     task_step = next(s for s in rec["steps"] if s["kind"] == "task")
     assert task_step["ok"] is True
     assert "[offline]" in task_step["result"]["summary"]
+
+
+@pytest.mark.asyncio
+async def test_durable_approval_pauses_retries_and_resumes_from_cursor(
+    offline_env, monkeypatch
+):
+    from lhassa.security import approval
+
+    async def unexpected_parking(*args, **kwargs):
+        raise AssertionError("durable parking belongs to the checkpoint hook")
+
+    monkeypatch.setattr(approval, "request_approval", unexpected_parking)
+    flow = Flow(
+        id="durable",
+        name="durable approval",
+        nodes=[
+            FlowNode("t", NodeKind.TRIGGER, {"type": "manual"}),
+            FlowNode("w", NodeKind.TASK, {"skill": "optimization", "prompt": "do {input}"}),
+            FlowNode("g", NodeKind.GATE, {"type": "approval"}),
+            FlowNode("o", NodeKind.OUTPUT, {"type": "log", "target": "audit"}),
+        ],
+        edges=[FlowEdge("t", "w"), FlowEdge("w", "g"), FlowEdge("g", "o")],
+    )
+    calls = []
+    checkpoints = []
+
+    async def save(cursor):
+        # A checkpoint must be detached and persistable without a custom encoder.
+        checkpoints.append(json.loads(json.dumps(cursor)))
+
+    first = await run_flow(
+        flow,
+        inputs={"summary": "seed"},
+        config=offline_env,
+        executor=_recording_executor(calls),
+        run_id="run_fixed",
+        checkpoint_hook=save,
+        approval_context={
+            "requested_by": "owner",
+            "run_id": "untrusted",
+            "flow_id": "untrusted",
+            "node_id": "untrusted",
+        },
+    )
+
+    assert first["status"] == "waiting_approval"
+    assert first["finished_at"] is None
+    assert [step["node"] for step in first["steps"]] == ["t", "w", "g"]
+    assert first["steps"][-1]["status"] == "needs_approval"
+    cursor = first["resume_state"]
+    gate_data = first["steps"][1]["result"]
+    assert cursor["frontier"] == [{"node": "g", "data": gate_data}]
+    assert "g" not in cursor["visited"]
+    assert cursor["pending_approval"]["node_id"] == "g"
+    assert json.loads(json.dumps(cursor)) == cursor
+
+    approval_id = first["steps"][-1]["approval_id"]
+    approval_payload = {
+        "accion": "flow_gate",
+        "node": "g",
+        "node_id": "g",
+        "data": gate_data,
+        "run_id": "run_fixed",
+        "flow_id": "durable",
+        "requested_by": "owner",
+    }
+    assert first["steps"][-1]["approval_payload"] == approval_payload
+    assert cursor["pending_approval"] == {
+        "node_id": "g",
+        "approval_id": approval_id,
+        "approval_payload": approval_payload,
+        "step_index": 2,
+    }
+
+    # Reclaiming before a decision replays the gate, but neither the deterministic
+    # parking command nor the gate step changes or duplicates.
+    retried = await run_flow(
+        flow,
+        config=offline_env,
+        executor=_recording_executor(calls),
+        run_id="run_fixed",
+        resume_state=cursor,
+        checkpoint_hook=save,
+        approval_context={"requested_by": "owner"},
+    )
+    assert retried["status"] == "waiting_approval"
+    assert len([step for step in retried["steps"] if step["node"] == "g"]) == 1
+    assert retried["steps"][-1]["approval_id"] == approval_id
+    assert retried["resume_state"]["pending_approval"]["approval_payload"] == approval_payload
+
+    resumed = await run_flow(
+        flow,
+        config=offline_env,
+        executor=_recording_executor(calls),
+        run_id="run_fixed",
+        resume_state=retried["resume_state"],
+        checkpoint_hook=save,
+        approval_decisions={"g": True},
+    )
+    assert resumed["status"] == "completed"
+    assert resumed["finished_at"] is not None
+    assert [step["node"] for step in resumed["steps"]] == ["t", "w", "g", "o"]
+    gate = resumed["steps"][2]
+    assert gate["passed"] is True
+    assert gate["needs_approval"] is False
+    assert gate["approval_id"] == approval_id
+    assert gate["approval_payload"] == approval_payload
+    assert len(calls) == 1
+    assert resumed["resume_state"]["frontier"] == []
+    assert resumed["resume_state"]["status"] == "completed"
+
+
+@pytest.mark.asyncio
+async def test_durable_parking_is_deferred_while_legacy_remains_best_effort(
+    offline_env, monkeypatch
+):
+    from lhassa.security import approval
+
+    calls = []
+
+    async def cannot_park(*args, **kwargs):
+        calls.append((args, kwargs))
+        raise RuntimeError("database unavailable")
+
+    monkeypatch.setattr(approval, "request_approval", cannot_park)
+    flow = Flow(
+        id="approval-failure",
+        name="approval failure",
+        nodes=[
+            FlowNode("t", NodeKind.TRIGGER, {}),
+            FlowNode("g", NodeKind.GATE, {"type": "approval"}),
+        ],
+        edges=[FlowEdge("t", "g")],
+    )
+
+    legacy = await run_flow(flow, config=offline_env)
+    assert legacy["status"] == "completed"
+    assert legacy["steps"][-1]["status"] == "needs_approval"
+    assert legacy["steps"][-1]["approval_id"] is None
+    assert len(calls) == 1
+
+    async def checkpoint(_cursor):
+        return None
+
+    durable = await run_flow(
+        flow,
+        config=offline_env,
+        run_id="run_cannot_park",
+        checkpoint_hook=checkpoint,
+    )
+    assert durable["status"] == "waiting_approval"
+    assert durable["steps"][-1]["status"] == "needs_approval"
+    assert durable["steps"][-1]["approval_id"].startswith("ap_flow_")
+    assert durable["resume_state"]["pending_approval"]["approval_payload"][
+        "run_id"
+    ] == "run_cannot_park"
+    assert len(calls) == 1

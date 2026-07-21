@@ -144,9 +144,14 @@ async def _resolve(approval_id: str, approved: bool, by_actor: str) -> None:
     from lhassa.security import approval
 
     await db.init_db()
-    await approval.resolve(
-        _instance_id(), approval_id, approved=approved, by_actor=by_actor
-    )
+    try:
+        await approval.resolve(
+            _instance_id(), approval_id, approved=approved, by_actor=by_actor
+        )
+    except KeyError:
+        raise typer.BadParameter(f"no approval {approval_id!r}") from None
+    except approval.ApprovalResolutionConflict as exc:
+        raise typer.BadParameter(str(exc)) from None
 
 
 def approve_cmd(

@@ -28,7 +28,11 @@ function StepResult({ step }) {
 
 export function RunRecord({ run, live }) {
   if (!run) return null
-  const ok = run.status === 'completed'
+  const statusMeta = run.status === 'completed'
+    ? { label: '✓ completed', color: 'var(--lh-ok)', border: 'rgba(124,154,91,0.5)' }
+    : run.status === 'waiting_approval'
+      ? { label: 'waiting for approval', color: 'var(--lh-warn)', border: 'rgba(181,137,59,0.55)' }
+      : { label: `✗ ${run.status || 'failed'}`, color: 'var(--lh-alert)', border: 'rgba(162,62,52,0.5)' }
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-2 flex-wrap">
@@ -36,12 +40,12 @@ export function RunRecord({ run, live }) {
         <span
           className="lh-tag"
           style={{
-            borderColor: ok ? 'rgba(124,154,91,0.5)' : 'rgba(162,62,52,0.5)',
-            color: ok ? 'var(--lh-ok)' : 'var(--lh-alert)',
+            borderColor: statusMeta.border,
+            color: statusMeta.color,
             background: 'transparent',
           }}
         >
-          {ok ? '✓ completed' : '✗ failed'}
+          {statusMeta.label}
         </span>
         {!live && (
           <span className="text-[10px]" style={{ color: 'var(--lh-text-faint)' }}>
@@ -62,7 +66,9 @@ export function RunRecord({ run, live }) {
             className="lh-row"
             style={{ background: 'var(--lh-surface-2)', display: 'flex', gap: 8, alignItems: 'baseline' }}
           >
-            <span style={{ color: s.ok ? 'var(--lh-ok)' : 'var(--lh-alert)', fontSize: 12 }}>{s.ok ? '✓' : '✗'}</span>
+            <span style={{ color: s.needs_approval ? 'var(--lh-warn)' : (s.ok ? 'var(--lh-ok)' : 'var(--lh-alert)'), fontSize: 12 }}>
+              {s.needs_approval ? '!' : (s.ok ? '✓' : '✗')}
+            </span>
             <span className="lh-mono" style={{ fontSize: 11, color: 'var(--lh-text)' }}>{s.node ?? '—'}</span>
             <span
               className="lh-tag"

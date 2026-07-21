@@ -28,6 +28,10 @@ from lhassa.security.allowlist import AllowDecision
 from lhassa.security.trust import TrustLevel
 
 
+class ApprovalResolutionConflict(RuntimeError):
+    """An approval was already resolved or changed concurrently."""
+
+
 def _always_approve() -> "set[str]":
     """The configured high-risk action set (always requires human approval)."""
     actions = Config.always_approve_actions
@@ -87,7 +91,13 @@ def needs_approval(
     return bool(requires or trust_below or is_mundo)
 
 
-async def request_approval(instance_id: str, *, tipo: str, payload: dict) -> str:
+async def request_approval(
+    instance_id: str,
+    *,
+    tipo: str,
+    payload: dict,
+    approval_id: Optional[str] = None,
+) -> str:
     """Park an action in the approvals queue (pending) and return its id.
 
     Do-and-sleep: the task waits as pending; the machine reports
@@ -95,7 +105,20 @@ async def request_approval(instance_id: str, *, tipo: str, payload: dict) -> str
     both show the human what they are approving AND feed the autonomy knob on
     resolution — at minimum ``accion``, ``actor_id`` and ``origen_trust``.
     """
-    return await db.add_approval(instance_id, tipo, payload)
+    if approval_id:
+        existing = await db.get_approval(instance_id, approval_id)
+        if existing is not None:
+            return approval_id
+    try:
+        return await db.add_approval(
+            instance_id, tipo, payload, approval_id=approval_id
+        )
+    except Exception:
+        # A durable flow may retry after parking the request but before saving its
+        # checkpoint.  The deterministic id turns that replay into a read.
+        if approval_id and await db.get_approval(instance_id, approval_id) is not None:
+            return approval_id
+        raise
 
 
 async def resolve(
@@ -104,7 +127,7 @@ async def resolve(
     *,
     approved: bool,
     by_actor: str,
-) -> None:
+) -> Optional[dict]:
     """Resolve a pending approval and feed the decision to the autonomy knob.
 
     Marks the approval ``aprobada`` / ``rechazada`` in the queue, then records the
@@ -113,15 +136,44 @@ async def resolve(
     ``by_actor`` is the human who resolved it (recorded for the audit trail).
     """
     ap = await db.get_approval(instance_id, approval_id)
-    estado = "aprobada" if approved else "rechazada"
-    await db.resolve_approval(instance_id, approval_id, estado)
-
     if not ap:
-        return
+        raise KeyError(approval_id)
     payload = ap.get("payload") or {}
+    result = None
+    if ap.get("tipo") == "flow_gate" and payload.get("run_id"):
+        # Lazy import keeps security independent from the flow engine at import
+        # time. The durable service commits approval + run cursor atomically and
+        # resumes approved work for API, CLI, and chat surfaces alike.
+        from lhassa.flows.durable import RuntimeConflict, resolve_flow_gate
+
+        try:
+            result = await resolve_flow_gate(
+                instance_id,
+                approval_id,
+                approved=approved,
+                by_actor=by_actor,
+            )
+        except RuntimeConflict as exc:
+            # One exception contract for every surface: an already-resolved or
+            # inconsistent gate surfaces exactly like the plain-CAS branch below.
+            raise ApprovalResolutionConflict(str(exc)) from exc
+        from lhassa.flows.projection import project_flow_run
+
+        await project_flow_run(
+            result["run"],
+            trigger=result.get("trigger") or "manual",
+            instance_id=instance_id,
+        )
+    else:
+        estado = "aprobada" if approved else "rechazada"
+        if not await db.resolve_approval(instance_id, approval_id, estado):
+            raise ApprovalResolutionConflict(
+                f"approval {approval_id} is already {ap.get('estado') or 'resolved'}"
+            )
+
     accion = payload.get("accion") or ap.get("tipo")
     if not accion:
-        return
+        return result
     await autonomy.record_decision(
         instance_id,
         accion,
@@ -129,6 +181,7 @@ async def resolve(
         approved=approved,
         origen_trust=payload.get("origen_trust"),
     )
+    return result
 
 
 async def pending(instance_id: str) -> list:

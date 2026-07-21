@@ -210,6 +210,8 @@ async def delegate_flow(
     config: Optional[Config] = None,
     company: Optional[str] = None,
     base_cv: Optional[str] = None,
+    durable: bool = False,
+    idempotency_key: Optional[str] = None,
 ) -> dict:
     """Run ``flow`` THROUGH the org hierarchy, then execute it. Returns the run record.
 
@@ -241,12 +243,26 @@ async def delegate_flow(
             exc,
         )
 
-    # LAZY import: keep the org↔flows dependency one-directional at import time.
-    from lhassa.flows.engine import run_flow
+    if durable:
+        from lhassa.flows.durable import start_flow_run
 
-    record = await run_flow(
-        flow, inputs=inputs, config=config, company=company, base_cv=base_cv
-    )
+        record = await start_flow_run(
+            flow,
+            inputs=inputs,
+            config=config,
+            company=company,
+            base_cv=base_cv,
+            idempotency_key=idempotency_key,
+            owner_department=department,
+            org_chain_snapshot=chain,
+        )
+    else:
+        # LAZY import: keep the org↔flows dependency one-directional at import time.
+        from lhassa.flows.engine import run_flow
+
+        record = await run_flow(
+            flow, inputs=inputs, config=config, company=company, base_cv=base_cv
+        )
     if isinstance(record, dict):
         record["delegation"] = {"chain": list(chain), "department": department}
     return record
