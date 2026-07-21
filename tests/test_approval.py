@@ -435,3 +435,43 @@ def test_describe_dispatch_task_and_unknown_degrade():
         {"tipo": "mint_action", "payload": {"total_cost_usd": "not-a-number", "candidate_accion": "x"}}
     )
     assert weird_cost["title"]  # degraded but present
+
+
+# ── approving a parked mint_task RELEASES the task ───────────────────────────────
+
+@pytest.mark.asyncio
+async def test_approve_releases_the_parked_task_to_pendiente(tmp_path, monkeypatch, knob_config):
+    db = await _init(tmp_path, monkeypatch)
+    await db.add_task(
+        "inst_personal", "read_file", params={"path": "/vault/x.md"},
+        origen_actor="telegram", origen_trust=int(TrustLevel.HUMANO),
+        estado="esperando_aprobacion", task_id="t_park",
+    )
+    ap_id = await approval.request_approval(
+        "inst_personal", tipo="task",
+        payload={"task_id": "t_park", "accion": "read_file", "source": "mint_task",
+                 "actor_id": "telegram", "origen_trust": int(TrustLevel.HUMANO)},
+    )
+    await approval.resolve("inst_personal", ap_id, approved=True, by_actor="duenio")
+    pending_tasks = await db.load_pending_tasks("inst_personal")
+    assert [t["id"] for t in pending_tasks] == ["t_park"]
+
+
+@pytest.mark.asyncio
+async def test_deny_closes_the_parked_task_as_rechazada(tmp_path, monkeypatch, knob_config):
+    db = await _init(tmp_path, monkeypatch)
+    await db.add_task(
+        "inst_personal", "read_file", params={"path": "/vault/x.md"},
+        origen_actor="telegram", origen_trust=int(TrustLevel.HUMANO),
+        estado="esperando_aprobacion", task_id="t_park",
+    )
+    ap_id = await approval.request_approval(
+        "inst_personal", tipo="task",
+        payload={"task_id": "t_park", "accion": "read_file", "source": "mint_task",
+                 "actor_id": "telegram", "origen_trust": int(TrustLevel.HUMANO)},
+    )
+    await approval.resolve("inst_personal", ap_id, approved=False, by_actor="duenio")
+    assert await db.load_pending_tasks("inst_personal") == []
+    rows = await db.list_tasks("inst_personal")
+    estados = {t["id"]: t["estado"] for t in rows}
+    assert estados.get("t_park") == "rechazada"
