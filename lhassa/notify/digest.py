@@ -220,6 +220,87 @@ async def _due_soon_section(instance_id: str) -> list[str]:
         return []
 
 
+async def _kilometraje_window(instance_id: str, since_hours: float) -> dict:
+    """Raw counters for the kilometraje section over the last ``since_hours``.
+
+    A small targeted aggregate query over the ``episodes`` table — the existing
+    ``core.db`` helpers only cover recency/count, not this cost/decision
+    breakdown, so this reads the same table with the same connection pattern
+    ``core.db`` itself uses (``aiosqlite`` against ``db.DB_PATH``) rather than
+    growing a one-off helper into ``core/db.py``.
+    """
+    from lhassa._vendor import aiosqlite
+    from lhassa.core import db as _db
+
+    since = (datetime.now(timezone.utc) - timedelta(hours=since_hours)).isoformat()
+    out = {
+        "think_count": 0,
+        "think_cost": 0.0,
+        "cache_hits": 0,
+        "zero_cost": 0,
+        "self_improve": 0,
+    }
+    async with aiosqlite.connect(_db.DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        async with conn.execute(
+            """SELECT decision, accion, resultado, costo_usd FROM episodes
+               WHERE instance_id = ? AND creado_en >= ?""",
+            (instance_id, since),
+        ) as cur:
+            rows = [dict(row) for row in await cur.fetchall()]
+
+    for row in rows:
+        decision = str(row.get("decision") or "")
+        costo = float(row.get("costo_usd") or 0.0)
+        is_think = decision.startswith("think:")
+        is_cache_hit = decision.startswith("cache-hit")
+        if is_think:
+            out["think_count"] += 1
+            out["think_cost"] += costo
+        elif is_cache_hit:
+            out["cache_hits"] += 1
+        if costo == 0.0 and not is_think and not is_cache_hit:
+            out["zero_cost"] += 1
+        accion = str(row.get("accion") or "")
+        if accion in ("detect_repetition", "detect_recurring"):
+            resultado = str(row.get("resultado") or "").lower()
+            if "no repeated patterns" not in resultado:
+                out["self_improve"] += 1
+
+    return out
+
+
+async def _kilometraje_section(instance_id: str) -> list[str]:
+    """The brain's own mileage — how much of its work was free, and whether the
+    answer cache and self-improvement loop are actually pulling weight.
+
+    Deterministic, $0, reads only the episode log over the last 24h and 7d.
+    Best-effort: any failure degrades to an empty section (omitted from the
+    digest), never breaks the rest of the check-in.
+    """
+    try:
+        day = await _kilometraje_window(instance_id, 24.0)
+        week = await _kilometraje_window(instance_id, 24.0 * 7)
+
+        def _hit_rate(w: dict) -> float:
+            denom = w["cache_hits"] + w["think_count"]
+            return (w["cache_hits"] / denom) if denom else 0.0
+
+        lines = [
+            "📈 My mileage",
+            f"   thinks: {day['think_count']} today (${day['think_cost']:.4f}), "
+            f"{week['think_count']} this week (${week['think_cost']:.4f})",
+            f"   cache hits: {day['cache_hits']} today, {week['cache_hits']} this week "
+            f"(hit-rate {_hit_rate(day):.0%} / {_hit_rate(week):.0%})",
+            f"   $0 deterministic work: {day['zero_cost']} today, {week['zero_cost']} this week",
+            f"   self-improvement findings: {day['self_improve']} today, {week['self_improve']} this week",
+        ]
+        return lines[:5]
+    except Exception as exc:
+        logger.debug(f"digest: kilometraje section unavailable: {exc}")
+        return []
+
+
 def _lang_is_spanish(config) -> bool:
     lang = (getattr(config, "digest_language", "") or "").strip().lower()
     return lang.startswith("es") or lang.startswith("spanish")
@@ -315,6 +396,7 @@ async def build_digest(config: Optional[object] = None) -> str:
     lines: list[str] = [_greeting(slot)]
     lines.extend(_signals_section(cfg, instance_id))
     lines.extend(await _spend_section(cfg))
+    lines.extend(await _kilometraje_section(instance_id))
     lines.extend(await _approvals_section(instance_id))
     lines.extend(await _episodes_section(instance_id))
     lines.extend(_jobs_section())
