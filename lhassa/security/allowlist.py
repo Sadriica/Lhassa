@@ -258,6 +258,19 @@ def build_allowlist(repos: "set[str] | str | None" = None) -> dict[str, ActionSp
             min_trust=TrustLevel.INTERNO,
             requires_approval=False,
         ),
+        # Deterministic file perception — read-only, roots-bounded (the action
+        # itself refuses paths outside config.knowledge_roots + the hard
+        # ignore-list), so no approval: the roots ARE the owner's approval.
+        "list_dir": ActionSpec(
+            objetivos=WILDCARD,
+            min_trust=TrustLevel.INTERNO,
+            requires_approval=False,
+        ),
+        "read_file": ActionSpec(
+            objetivos=WILDCARD,
+            min_trust=TrustLevel.INTERNO,
+            requires_approval=False,
+        ),
     }
 
 
