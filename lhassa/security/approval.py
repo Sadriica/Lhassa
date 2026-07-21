@@ -216,6 +216,19 @@ async def resolve(
             raise ApprovalResolutionConflict(
                 f"approval {approval_id} is already {ap.get('estado') or 'resolved'}"
             )
+        # RELEASE the parked task the approval was minted for: an approve flips
+        # it back to 'pendiente' (the next heartbeat — or run_task_now — picks
+        # it up); a deny closes it as 'rechazada'. Without this the tap resolved
+        # the QUEUE row but the task itself waited forever. Best-effort: a
+        # release failure must not undo an already-recorded human decision.
+        task_id = payload.get("task_id")
+        if task_id and payload.get("source") == "mint_task":
+            import contextlib
+
+            with contextlib.suppress(Exception):
+                await db.set_task_state(
+                    instance_id, task_id, "pendiente" if approved else "rechazada"
+                )
 
     accion = payload.get("accion") or ap.get("tipo")
     if not accion:
