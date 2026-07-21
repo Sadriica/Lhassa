@@ -10,19 +10,27 @@ consistent snapshot while readers/writers continue, no manual checkpoint needed)
     rotates the mirror). "Incremental" in the operational sense: idempotent and
     safe to call on every heartbeat.
   - :func:`restore` — rebuild brain.db from a backup file.
-  - :func:`verify`  — open a backup read-only, run ``PRAGMA integrity_check`` and
-    confirm the expected tables exist. Returns True/False; never raises.
+  - :func:`verify`  — copy a backup to disposable storage, migrate it to the
+    current schema, and validate its integrity and schema without touching the
+    source. Returns True/False; never raises.
 
 The source path is read from ``lhassa.core.db.DB_PATH`` at call time, so tests
 that monkeypatch it (and the ``BACKUP_DIR`` seam) reroute everything to tmp paths.
 """
 
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
 from lhassa._vendor import aiosqlite
 
 from lhassa.config import Config
 from lhassa.core import db
+from lhassa.core.migrations import (
+    MigrationValidationError,
+    apply_migrations,
+    get_schema_version,
+    validate_schema,
+)
 
 # Module-level seam — tests monkeypatch this to a tmp directory.
 BACKUP_DIR = Path(Config.backup_dir)
@@ -66,23 +74,56 @@ async def restore(src: str | Path, *, dest: str | Path | None = None) -> None:
     database with the backup's contents.
     """
     src_path = Path(src)
-    dest_path = Path(dest) if dest is not None else Path(db.DB_PATH)
-    await _online_copy(src_path, dest_path)
+    with TemporaryDirectory(prefix="lhassa-backup-restore-") as temp_dir:
+        candidate = Path(temp_dir) / "candidate.db"
+        if not await _prepare_verified_copy(src_path, candidate):
+            raise ValueError(
+                f"backup is corrupt or has an unsupported schema: {src_path}"
+            )
+        dest_path = Path(dest) if dest is not None else Path(db.DB_PATH)
+        await _online_copy(candidate, dest_path)
 
 
-async def verify(path: str | Path) -> bool:
-    """
-    Verify a backup at ``path`` is restorable. Opens it READ-ONLY, runs
-    ``PRAGMA integrity_check`` (must return "ok") and confirms the expected
-    grande tables exist. Returns True only if both pass; any error (missing file,
-    empty file, corruption, wrong schema) returns False — never raises.
-    """
-    path = Path(path)
-    if not path.exists() or path.stat().st_size == 0:
-        return False
+async def _prepare_verified_copy(path: Path, candidate: Path) -> bool:
+    """Copy ``path`` to ``candidate``, migrate it, and validate the result."""
     try:
-        uri = f"file:{path}?mode=ro"
-        async with aiosqlite.connect(uri, uri=True) as conn:
+        if not path.exists() or path.stat().st_size == 0:
+            return False
+
+        await _online_copy(path, candidate)
+        async with aiosqlite.connect(candidate) as conn:
+            async with conn.execute("PRAGMA integrity_check") as cur:
+                row = await cur.fetchone()
+            if not row or str(row[0]).lower() != "ok":
+                return False
+
+            async with conn.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'table'"
+            ) as cur:
+                source_tables = {r[0] for r in await cur.fetchall()}
+            if not _EXPECTED_TABLES.issubset(source_tables):
+                return False
+
+            # Some old backup tooling did not preserve user_version. If a
+            # version-0 file already satisfies the entire current schema,
+            # normalize only this disposable copy instead of replaying DDL.
+            version = await get_schema_version(conn)
+            if version == 0:
+                try:
+                    await validate_schema(
+                        conn,
+                        db.MIGRATIONS,
+                        version=db.SCHEMA_VERSION,
+                    )
+                except MigrationValidationError:
+                    pass
+                else:
+                    await conn.execute(
+                        f"PRAGMA user_version = {db.SCHEMA_VERSION}"
+                    )
+                    await conn.commit()
+            await apply_migrations(conn, db.MIGRATIONS)
+
             async with conn.execute("PRAGMA integrity_check") as cur:
                 row = await cur.fetchone()
             if not row or str(row[0]).lower() != "ok":
@@ -92,5 +133,16 @@ async def verify(path: str | Path) -> bool:
             ) as cur:
                 tables = {r[0] for r in await cur.fetchall()}
         return _EXPECTED_TABLES.issubset(tables)
-    except (aiosqlite.Error, OSError):
+    except Exception:
         return False
+
+
+async def verify(path: str | Path) -> bool:
+    """
+    Verify a backup at ``path`` is restorable. A disposable copy is migrated to
+    the current schema, checked for integrity, and validated with every schema
+    validator. Returns False on any error and never modifies the source.
+    """
+    with TemporaryDirectory(prefix="lhassa-backup-verify-") as temp_dir:
+        candidate = Path(temp_dir) / "candidate.db"
+        return await _prepare_verified_copy(Path(path), candidate)

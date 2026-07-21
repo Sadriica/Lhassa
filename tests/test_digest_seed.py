@@ -106,10 +106,6 @@ def test_idempotency_is_per_slot_not_count(cfg):
     ).astimezone().hour
     assert minted_hour == evening_hour
 
-    import asyncio
-
-    import lhassa.core.db as db
-
     # The seed is non-destructive, so the pre-existing duplicate morning stays
     # (that's for a cleanup to remove, not a seed) — but BOTH scheduled hours are
     # now covered: the point is that the evening slot got healed.
