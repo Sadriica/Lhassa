@@ -42,6 +42,7 @@ def register_all() -> None:
         _curate,
         _derive,
         _digest,
+        _knowledge,
         _llm,
         _memory,
         _net,
@@ -97,6 +98,9 @@ def register_all() -> None:
     # ── Calendar-derived world model ($0, deterministic — courses/commitments/
     # rhythm bootstrapped from the calendar feed into durable facts) ──────────
     _reg("derive_world_facts", _derive.derive_world_facts)
+
+    # ── Document perception — index the owner's opt-in knowledge roots ───────
+    _reg("ingest_knowledge", _knowledge.ingest_knowledge)
 
     # ── Org — real delegation into the hierarchy (Etapa 3) ────────────────────
     _reg("org_run", _org.org_run)

@@ -121,9 +121,61 @@ last time…" at `$0`, no model call, BM25-ranked.
     top 5 matches, LLM-free.
   - **`GET /api/episodes/search?q=...&n=...`** (`lhassa/api/reports_routes.py`)
     — `n` capped `1..200`, returns `{query, count, results}`.
-- It is the lowest-priority context layer (item 5 above): a think only spends
-  the tokens on it when a `query` is actually supplied, and it is the first
-  thing to fall off the budget.
+- It was the lowest-priority context layer until document perception (below)
+  landed beneath it: a think only spends the tokens on it when a `query` is
+  actually supplied.
+
+---
+
+## Document perception (knowledge roots)
+
+Beyond what Lhassa is told and what it has lived (episodes), it can also read
+the owner's OWN documents — notes, papers, projects — so thinking, recall and
+the knowledge graph are grounded in real material. This is deliberately **not**
+"read the whole PC": like the calendar knob, the owner points Lhassa at a small
+set of **knowledge roots**, and only those are ever touched.
+
+- **Opt-in, empty by default.** `LHASSA_KNOWLEDGE_ROOTS` (CSV of directories,
+  `~`-relative allowed) is empty until the owner sets it — nothing is indexed
+  otherwise.
+- **A hard ignore-list, non-negotiable.** Regardless of what a configured root
+  contains, `lhassa/memory/knowledge.py` always skips: `.env`/`.env.*`,
+  `*.key`/`*.pem`/`id_rsa*`/`*.p12`, anything with `secret`/`credential`/`token`
+  in the name, `.git/`, `node_modules/`, `__pycache__/`, `.venv/`/`venv/`,
+  `.cache/`, `dist/`, `build/`, `.ssh/`, and every dotfile/dotdir. This is not a
+  default the owner widens — it is baked into `ingest()` itself.
+- **What's indexed.** Only `.md`/`.txt`/`.rst`/`.org`/`.tex`/`.markdown` and
+  `.pdf` (extracted with `pypdf`, the same pattern as the CV bridge's
+  `cv/extract.py`) — code and everything else is out of scope; this is document
+  perception, not a code indexer. A file over `LHASSA_KNOWLEDGE_MAX_FILE_KB`
+  (default 512) is skipped.
+- **Chunking + embedding.** Each file's text is split into
+  `LHASSA_KNOWLEDGE_CHUNK_CHARS`-sized chunks (~500 tokens) and embedded with
+  the same offline-capable `get_embedder()` layer 4 uses — $0, deterministic,
+  no network by default.
+- **Storage.** One row per chunk in the `knowledge` table (`lhassa/core/db.py`)
+  — local to `~/.lhassa/brain.db`, scoped by `instance_id`, **never** the repo
+  (see `doc/boundaries.md`: the index is private, gitignored territory).
+- **Incremental.** `ingest()` tracks each indexed file's `mtime`: unchanged →
+  skipped; changed → its old chunks are deleted and it's re-indexed; a brand
+  new match under a root → indexed for the first time.
+- **Search.** `knowledge.search(instance_id, query)` embeds the query and
+  cosine-scans a bounded recent set of chunks — the same pattern as
+  `memory/answer_cache.py` — returning the top matches with their source file
+  and a score.
+- **Grounds thinking.** `memory/load.py` adds a **`knowledge`** context layer at
+  the LOWEST priority (below recall) — fires only when a `query` is given,
+  truncates first under budget, and is fully defensive (any failure adds
+  nothing, never breaks the load). Matching chunks are attributed
+  `[from your notes: <filename>]` so the brain's own answer can point back at
+  its source.
+- **Re-indexing.** The `synchronizer` monk (see `doc/architecture.md` — the
+  temple's inner departments) owns `ingest_knowledge`, scheduled weekly by the
+  `maintenance` seed through the same down-execute-up temple loop as
+  `calendar_sync`; a clean $0 no-op with no roots configured.
+- **Surfaces.** Telegram **`/knowledge <query>`** and
+  **`lhassa knowledge ingest|search <q>|clear`** (CLI) — both LLM-free.
+  `clear` wipes the whole index (a re-ingest, or a privacy reset).
 
 ---
 
@@ -206,11 +258,15 @@ running, no manual checkpoint dance:
   (default `~/.lhassa/backups`). Idempotent and cheap enough to run on every
   heartbeat; the mirror is simply overwritten.
 - **`restore(src, dest=…)`** — rebuilds a database from a backup file, same
-  online-copy mechanism, reversed.
+  online-copy mechanism, reversed. The source is verified before the destination
+  is touched.
 - **`verify(path)`** — opens a backup **read-only**, runs
   `PRAGMA integrity_check`, and confirms the expected tables
-  (`episodes`, `facts`, `tasks`) exist. Returns `True`/`False`; never raises,
-  so a corrupt or missing backup is a signal, not a crash.
+  (`episodes`, `facts`, `tasks`) exist. It also checks SQLite's schema version:
+  unversioned (`user_version=0`) legacy backups remain restorable and are
+  upgraded by the next `init_db()`, while backups created by a newer Lhassa are
+  refused rather than downgraded. Returns `True`/`False`; never raises, so a
+  corrupt, missing, or incompatible backup is a signal, not a crash.
 
 ---
 

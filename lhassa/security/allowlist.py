@@ -249,6 +249,15 @@ def build_allowlist(repos: "set[str] | str | None" = None) -> dict[str, ActionSp
             min_trust=TrustLevel.INTERNO,
             requires_approval=False,
         ),
+        # ── Document perception — index the owner's opt-in knowledge roots ───
+        # Read-only filesystem scan + a local write to the grande; no external
+        # send, empty roots by default (nothing runs until the owner sets
+        # LHASSA_KNOWLEDGE_ROOTS). Mirrors calendar_sync/distill_memory.
+        "ingest_knowledge": ActionSpec(
+            objetivos=WILDCARD,
+            min_trust=TrustLevel.INTERNO,
+            requires_approval=False,
+        ),
     }
 
 
