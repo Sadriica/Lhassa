@@ -42,6 +42,7 @@ def register_all() -> None:
         _curate,
         _derive,
         _digest,
+        _files,
         _knowledge,
         _llm,
         _memory,
@@ -101,6 +102,8 @@ def register_all() -> None:
 
     # ── Document perception — index the owner's opt-in knowledge roots ───────
     _reg("ingest_knowledge", _knowledge.ingest_knowledge)
+    _reg("list_dir", _files.list_dir)
+    _reg("read_file", _files.read_file)
 
     # ── Org — real delegation into the hierarchy (Etapa 3) ────────────────────
     _reg("org_run", _org.org_run)
