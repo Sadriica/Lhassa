@@ -5,6 +5,35 @@ build. The source of truth for the architecture is `doc/lhassa-brief.md` (a
 living doc — correct it after each phase per §4). This file records the choices
 made along the way. Newest first.
 
+## 2026-07-21 — The chat knows itself (self-card, modality taxonomy, [[action: …]] muscle)
+
+Driven by a real Telegram session: asked "what are you running on?" the brain
+shrugged; asked how its own search worked it explained correctly only by luck;
+asked to operate, it had no hands. Three fixes, all deterministic/$0, none
+touching the tool-less invariant:
+
+- **Self-card** (`notify/selfcard.py`): every chat think now carries a ~500-token
+  block rendered live from `Config` + the registries — version, instance, the
+  chat seat (provider/model), heartbeat seat, fallback chain, CLIs on PATH, and
+  the registered action names split run-now vs approval-gated. Best-effort per
+  line, never raises, never includes key material (tested).
+- **Execution-modality taxonomy** (static half of the card): the model is told
+  what ACTIONS, PTC scripts, API think, subscription CLIs, markers and org
+  delegation ARE — distinct mechanisms with distinct cost/gate shapes — so it
+  can explain itself and reason about which route fits a request.
+- **`[[action: <name> key=value …]]` marker** (`telegram_inbound._apply_action_marker`):
+  the third marker, mirroring research: chat stays tool-less; the marker mints a
+  signed task (same HUMANO/telegram origin as `/goal` — allowlist + approval
+  frontier unchanged), a no-approval action runs immediately via `run_task_now`
+  and reports its episode `resultado` back over Telegram; approval-gated ones
+  park with an honest "/approvals" ack. Unknown/refused actions get an honest
+  line, never a silent drop. Acks are written only after the mint succeeded.
+
+Also today: **DeepSeek V4 Flash became the metered cloud seat** (replacing groq;
+CLIs still first everywhere) — provider, pricing, settings and voice branch in
+commit `66d6d34`; live-smoked end to end. Note V4 Flash spends reasoning tokens
+as output: a tiny `max_tokens` can yield an empty reply (512/768 budgets are fine).
+
 ## 2026-07-06 — The brain that knows its owner (Olas 1+2: memory, one clock, remote hands)
 
 Two waves of parallel subagents (one interrupted mid-flight by a session limit and

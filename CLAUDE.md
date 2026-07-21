@@ -244,7 +244,14 @@ Telegram with sources, $0, and the follow-up ALWAYS arrives (a failed search
 degrades to an honest message) — and it arrives in SECONDS: a no-approval
 chat-minted task runs immediately via `core/dispatch.py:run_task_now` (the
 heartbeat's own runner, early; a failure leaves the task pending so the beat
-retries). The chat REMEMBERS: a rolling per-chat history
+retries). Every chat think carries a deterministic **self-card**
+(`notify/selfcard.py`: live seats + CLIs on PATH + registered actions + the
+execution-modality taxonomy, $0, never raises, no key material), and the model
+may request a registered action with `[[action: <name> key=value …]]` — the
+third marker, same `mint_task` seam (allowlist + approval frontier; a
+no-approval action runs immediately via `run_task_now` and reports its episode
+`resultado` back over Telegram; gated ones park with an "/approvals" ack).
+The chat REMEMBERS: a rolling per-chat history
 (`LHASSA_TELEGRAM_HISTORY_TURNS` pairs, TTL'd, process-memory only) threads into
 every think, and every `LHASSA_CHAT_MEMORY_NUDGE_TURNS` turns the model may flag
 ONE durable owner fact with `[[remember: …]]` → persisted to the grande as a
