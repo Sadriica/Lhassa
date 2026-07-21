@@ -271,6 +271,15 @@ def build_allowlist(repos: "set[str] | str | None" = None) -> dict[str, ActionSp
             min_trust=TrustLevel.INTERNO,
             requires_approval=False,
         ),
+        # Natural-language settings changes. The frontier is the settings
+        # service itself (EDITABLE allowlist, coercion, provider guard; secrets
+        # unreachable), and the chat door only mints from the owner's own
+        # HUMANO/telegram messages — so no extra approval hop.
+        "set_config": ActionSpec(
+            objetivos=WILDCARD,
+            min_trust=TrustLevel.INTERNO,
+            requires_approval=False,
+        ),
     }
 
 
