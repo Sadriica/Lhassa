@@ -25,8 +25,32 @@ fi
 
 DST="/etc/sudoers.d/lhassa"
 
-# Curated allowlist — keep in sync with lhassa/tools/privileged.py.
-ALLOW="/usr/bin/systemctl, /usr/bin/journalctl, /usr/bin/pacman, /usr/bin/tlp, /usr/bin/tlp-stat, /usr/local/bin/power-mode, /usr/bin/dmesg, /usr/bin/sensors"
+# Curated allowlist — built PER HOST: universal admin tools + THIS distro's
+# package manager + optional laptop tools, each included only when the binary
+# actually exists (sudoers requires absolute paths; a missing binary is skipped,
+# never guessed). Keep the candidate set in sync with lhassa/tools/privileged.py.
+CANDIDATES=(
+    # Universal admin/observability.
+    systemctl journalctl dmesg sensors
+    # One of these is this distro's package manager (Arch/Debian+Ubuntu/Fedora/openSUSE).
+    pacman apt-get apt dnf zypper
+    # Laptop/power tools — present on the reference laptop, absent on servers.
+    tlp tlp-stat power-mode
+)
+ALLOW=""
+for cmd in "${CANDIDATES[@]}"; do
+    path="$(command -v "${cmd}" 2>/dev/null || true)"
+    # Only absolute system paths — refuse anything odd a user PATH could inject.
+    case "${path}" in
+        /usr/bin/*|/usr/sbin/*|/bin/*|/sbin/*|/usr/local/bin/*|/usr/local/sbin/*)
+            ALLOW="${ALLOW:+${ALLOW}, }${path}"
+            ;;
+    esac
+done
+if [[ -z "${ALLOW}" ]]; then
+    echo "No allowlisted binaries found on this host; nothing to install." >&2
+    exit 1
+fi
 
 TMP="$(mktemp)"
 trap 'rm -f "${TMP}"' EXIT

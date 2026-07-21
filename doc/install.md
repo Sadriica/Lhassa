@@ -21,6 +21,22 @@ Install these before running the installer:
 The subscription CLIs (`claude` / `codex` / `opencode`) are optional and need **no
 API key**. The preflight checks `python3`/`uv`/`docker` and fails early if missing.
 
+### Per-distro bootstrap (Arch / Debian / Ubuntu / Fedora / openSUSE)
+
+On a fresh host, one command installs the system prerequisites for whichever
+distro it finds (pacman / apt / dnf / zypper):
+
+```bash
+sudo bash scripts/bootstrap.sh   # git, curl, python3, nodejs+npm — idempotent
+```
+
+It then prints the user-level next steps (uv, `install.sh`, optional ollama and
+privileged). The privileged installer is distro-aware too:
+`scripts/install-privileged.sh` builds the sudoers line PER HOST — universal
+admin tools + whichever package manager the distro ships + laptop/power tools
+only when actually installed (a server simply gets a shorter, validated line) —
+and `lhassa/tools/privileged.py` mirrors the same host-filtered set at runtime.
+
 ## Quickstart
 
 ```bash
