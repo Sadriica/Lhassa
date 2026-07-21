@@ -21,10 +21,19 @@ _MAX_FILE_BYTES = 512 * 1024
 
 
 def _resolved_roots(cfg) -> list[Path]:
+    """Knowledge roots PLUS protected roots — both readable by these actions.
+
+    The protected tier's per-access approval gate lives in
+    ``security.approval.needs_approval`` (checked at MINT time, before the task
+    may run); by the time this action executes, a protected read has already
+    been tapped through by the owner.
+    """
     from lhassa.memory.knowledge import _resolve_root, _roots_from_config
 
     roots = []
-    for raw in _roots_from_config(cfg):
+    raw_protected = (getattr(cfg, "protected_roots", "") or "")
+    extra = [r.strip() for r in raw_protected.split(",") if r.strip()]
+    for raw in [*_roots_from_config(cfg), *extra]:
         resolved = _resolve_root(raw)
         if resolved is not None:
             roots.append(resolved)
@@ -54,8 +63,8 @@ def _resolve_within_roots(raw_path: str, cfg) -> "tuple[Path, str] | tuple[None,
     inside = any(path == r or r in path.parents for r in roots)
     if not inside:
         return None, (
-            f"{path} is outside your configured knowledge roots — I only read "
-            "inside them."
+            f"{path} is outside your configured roots (knowledge + protected) — "
+            "I only read inside them."
         )
     return path, ""
 

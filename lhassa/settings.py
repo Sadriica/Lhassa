@@ -354,6 +354,38 @@ EDITABLE: list[dict] = [
         "restart": RESTART_NONE,
     },
     {
+        "key": "knowledge_roots",
+        "attr": "knowledge_roots",
+        "env_var": "LHASSA_KNOWLEDGE_ROOTS",
+        "type": "str",
+        "label": "Knowledge roots (folders the brain may read)",
+        "help": (
+            "Comma-separated directories document perception and the "
+            "list_dir/read_file actions may touch — the OWNER'S opt-in reading "
+            "frontier. Nothing is read until this is set; the hard ignore-list "
+            "(dotfiles, .env*, keys…) applies even inside a root."
+        ),
+        "group": "Memory",
+        "default": "",
+        "restart": RESTART_NONE,
+    },
+    {
+        "key": "protected_roots",
+        "attr": "protected_roots",
+        "env_var": "LHASSA_PROTECTED_ROOTS",
+        "type": "str",
+        "label": "Protected roots (folders needing your tap per read)",
+        "help": (
+            "Comma-separated directories the brain may read ONLY with a "
+            "per-access approval: each list_dir/read_file inside one parks an "
+            "approval you resolve from /approvals or the dashboard. Never "
+            "auto-promoted by the autonomy knob."
+        ),
+        "group": "Memory",
+        "default": "",
+        "restart": RESTART_NONE,
+    },
+    {
         "key": "answer_cache_enabled",
         "attr": "answer_cache_enabled",
         "env_var": "LHASSA_ANSWER_CACHE",

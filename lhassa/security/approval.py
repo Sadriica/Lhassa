@@ -38,6 +38,44 @@ def _always_approve() -> "set[str]":
     return actions if isinstance(actions, set) else set(actions or [])
 
 
+# File-perception actions whose ``path`` param is checked against the owner's
+# protected roots (see input (d) in ``needs_approval``).
+_PATH_ACTIONS = ("read_file", "list_dir")
+
+
+def _touches_protected_root(accion: str, params) -> bool:
+    """True when a file action's path resolves inside ``Config.protected_roots``.
+
+    Fail-CLOSED: if the check itself errors we say True — when we can't tell
+    whether a path is protected, the human decides.
+    """
+    if accion not in _PATH_ACTIONS:
+        return False
+    try:
+        import os
+        from pathlib import Path
+
+        from lhassa.config import Config
+
+        raw = (getattr(Config, "protected_roots", "") or "").strip()
+        if not raw:
+            return False
+        target = str((params or {}).get("path", "") or "").strip()
+        if not target:
+            return False
+        path = Path(os.path.expanduser(target)).resolve()
+        for entry in raw.split(","):
+            entry = entry.strip()
+            if not entry:
+                continue
+            root = Path(os.path.expanduser(entry)).resolve()
+            if path == root or root in path.parents:
+                return True
+        return False
+    except Exception:
+        return True
+
+
 def needs_approval(
     decision_or_task: Union["AllowDecision", object],
     *,
@@ -79,6 +117,14 @@ def needs_approval(
         trust_below = trust < min_trust
         is_mundo = trust <= TrustLevel.MUNDO
         high_risk = accion in _always_approve()
+
+    # (d) Protected-path reads: a file action whose path resolves inside
+    # ``Config.protected_roots`` ALWAYS asks the owner — per access, and (like
+    # high-risk) never lowered by the autonomy knob: the tap IS the verification.
+    if not isinstance(decision_or_task, AllowDecision) and _touches_protected_root(
+        decision_or_task.accion, getattr(decision_or_task, "params", None)
+    ):
+        return True
 
     # (c) High-risk ALWAYS needs approval — never lowered by autonomy or history.
     if high_risk:
@@ -315,6 +361,11 @@ def describe(row: dict) -> dict:
         bits = []
         if payload.get("objetivo"):
             bits.append(f"goal: {str(payload['objetivo'])[:100]}")
+        # A protected-root read parks here: the owner must see WHICH path
+        # they are approving, never a bare action name.
+        task_params = payload.get("params")
+        if isinstance(task_params, dict) and task_params.get("path"):
+            bits.append(f"path: {str(task_params['path'])[:120]}")
         if payload.get("actor_id"):
             bits.append(f"asked by {payload['actor_id']}")
         if payload.get("origen_trust") is not None:

@@ -29,6 +29,23 @@ touching the tool-less invariant:
   park with an honest "/approvals" ack. Unknown/refused actions get an honest
   line, never a silent drop. Acks are written only after the mint succeeded.
 
+**Same day, follow-up — deterministic file hands + the protected tier + /config.**
+"Reading a file needs no AI" made real: `actionpack/_files.py` adds `list_dir` /
+`read_file` — read-only, $0, allowlisted without approval because the frontier is
+the path, not the action: only inside `config.knowledge_roots`, hard ignore-list
+(secret-shaped names) enforced even there, traversal resolved before the check,
+chat-sized output caps. A SECOND tier, `LHASSA_PROTECTED_ROOTS`, is the owner's
+"careful" zone: `security/approval.needs_approval` grew input (d) — a file action
+whose `path` resolves inside a protected root ALWAYS parks an approval (fail-closed
+on any resolution error, never lowered by the autonomy knob — the tap is the
+verification), and `describe()` now surfaces the `path` param so the owner sees
+WHICH file they're approving. `/config` (Telegram) is the new CLI-parity door onto
+the settings service (same EDITABLE allowlist/coercion/guards as `lhassa config` +
+the panel; secrets masked, not settable); `knowledge_roots` and `protected_roots`
+joined EDITABLE, so the owner can say `/config knowledge_roots ~/Documents` from
+chat and the very next `[[action: read_file …]]` honors it — no restart, because
+the set applies inside the poller process itself.
+
 Also today: **DeepSeek V4 Flash became the metered cloud seat** (replacing groq;
 CLIs still first everywhere) — provider, pricing, settings and voice branch in
 commit `66d6d34`; live-smoked end to end. Note V4 Flash spends reasoning tokens

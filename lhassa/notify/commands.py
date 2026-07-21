@@ -295,6 +295,7 @@ DESCRIPTIONS: dict[str, str] = {
     "org": "The org chart — brains and how they hang together.",
     "fleet": "Known machines, last check-in, desired state.",
     "version": "My version, runtime and key toggles.",
+    "config": "[key [value]] — read or change a runtime setting.",
 }
 
 
@@ -1824,6 +1825,60 @@ def _calendar_sync_reply(summary: str) -> str:
         f"I found {n} event(s) on your other calendars not in your master "
         f"calendar — sent you {delivered} to add."
     )
+
+
+@register_command("config")
+async def _cmd_config(args: str, *, config=None) -> str:
+    """``/config [key [value]]`` — read/change a runtime setting, LLM-free.
+
+    The CLI-parity door onto the settings service: the same EDITABLE allowlist,
+    coercion, provider guard, live-apply and ``settings.env`` persistence that
+    ``lhassa config`` and the dashboard panel use. Secrets stay masked and are
+    not settable here (they live in ``.env``, never in settings.env). Setting
+    happens INSIDE the poller process, so a knob like ``knowledge_roots`` is
+    live for the very next chat-minted action without a restart.
+    """
+    try:
+        from lhassa import settings as _settings
+
+        text = (args or "").strip()
+        cfg = _config(config)
+        if not text:
+            rows = _settings.effective(cfg)["settings"]
+            lines = ["Editable settings (`/config <key> <value>` to change):"]
+            for row in rows:
+                mark = " *" if row.get("overridden") else ""
+                lines.append(f"- {row['key']} = {row['value']}{mark}")
+            lines.append("(* = overridden; secrets are masked and not settable here)")
+            return "\n".join(lines)
+
+        parts = text.split(maxsplit=1)
+        key = parts[0].strip()
+        if len(parts) == 1:
+            row = _settings.get(key, cfg)
+            if row.get("error"):
+                return f"No editable setting {key!r} — see /config for the list."
+            lines = [
+                f"{row['key']} = {row['value']}"
+                + (" (overridden)" if row.get("overridden") else ""),
+                f"default: {row['default']}",
+            ]
+            if row.get("options"):
+                lines.append("options: " + ", ".join(str(o) for o in row["options"]))
+            if row.get("help"):
+                lines.append(str(row["help"]))
+            return "\n".join(lines)
+
+        result = _settings.set(key, parts[1].strip())
+        if not result.get("applied"):
+            return f"Couldn't set {key!r}: {result.get('error', 'unknown error')}"
+        reply = f"✅ {key} = {result.get('value')}"
+        if result.get("restart_needed"):
+            reply += f"\n(needs restart: {result.get('restart_hint', '')})"
+        return reply
+    except Exception as exc:
+        logger.warning(f"commands: /config failed: {exc}")
+        return _oops("change that setting")
 
 
 @register_command("version")
