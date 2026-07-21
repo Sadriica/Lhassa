@@ -10,7 +10,7 @@ cp .env.example .env
 
 ## LLM Provider
 
-Lhassa supports six LLM providers. **You only need to set one API key** — Lhassa auto-detects the provider from whichever key is present, and that same provider is used for the voice pipeline, the built-in agent tool loop, and vision tools.
+Lhassa supports seven LLM providers. **You only need to set one API key** — Lhassa auto-detects the provider from whichever key is present, and that same provider is used for the voice pipeline, the built-in agent tool loop, and vision tools.
 
 ### API keys and auto-detection
 
@@ -23,9 +23,14 @@ Set one (or more) of these keys. The first one found is used:
 | `GROQ_API_KEY` | `groq` | `llama-3.3-70b-versatile` | [console.groq.com](https://console.groq.com) |
 | `OPENROUTER_API_KEY` | `openrouter` | `anthropic/claude-haiku-4-5-20251001` | [openrouter.ai/keys](https://openrouter.ai/keys) |
 | `CEREBRAS_API_KEY` | `cerebras` | `llama3.3-70b` | [cloud.cerebras.ai](https://cloud.cerebras.ai) |
+| `DEEPSEEK_API_KEY` | `deepseek` | `deepseek-v4-flash` | [platform.deepseek.com](https://platform.deepseek.com) — the metered cloud seat (subscription CLIs are still tried first in the fallback chain) |
 | `OLLAMA_BASE_URL` | `ollama` | `llama3.2` | No key needed — set URL if Ollama isn't on localhost |
 
-Auto-detection priority: `ANTHROPIC_API_KEY` → `OPENAI_API_KEY` → `GROQ_API_KEY` → `OPENROUTER_API_KEY` → `CEREBRAS_API_KEY`.
+Auto-detection priority: `ANTHROPIC_API_KEY` → `OPENAI_API_KEY` → `GROQ_API_KEY` → `OPENROUTER_API_KEY` → `CEREBRAS_API_KEY` → `DEEPSEEK_API_KEY`.
+
+Note on DeepSeek: V4 Flash spends reasoning tokens as output tokens — a very
+small `max_tokens` budget can yield an empty reply; 512-768 tokens is a safe
+floor.
 
 `OLLAMA_BASE_URL` defaults to `http://localhost:11434`. To use Ollama you must set `LHASSA_LLM_PROVIDER=ollama` explicitly (no key to detect from).
 
@@ -40,7 +45,7 @@ If you want to force a specific provider or model, set these explicitly:
 
 | Variable | Default | Description |
 |---|---|---|
-| `LHASSA_LLM_PROVIDER` | auto-detected | Override: `groq`, `anthropic`, `openai`, `openrouter`, `cerebras`, `ollama` |
+| `LHASSA_LLM_PROVIDER` | auto-detected | Override: `groq`, `anthropic`, `openai`, `openrouter`, `cerebras`, `deepseek`, `ollama` |
 | `LHASSA_MODEL` | provider default | Override: any model name supported by the active provider |
 
 ### Provider examples
@@ -403,6 +408,10 @@ In debug mode, every STT frame is printed to the terminal:
 | `LHASSA_DIGEST_PERSONAL_CHECKIN` | No | `0` | Adds the $0 personal agenda/check-in section to the digest and captures the next Telegram reply as a daily check-in for six hours. |
 | `LHASSA_MONITOR_DELEGATE` | No | `0` | When on, the watcher converts monitor findings into minted `org_run` tasks (fingerprint-deduped). |
 | `LHASSA_REPETITION_THRESHOLD` | No | `5` | Occurrences (with real cost) before `detect_repetition` proposes minting a deterministic action. |
+| `LHASSA_KNOWLEDGE_ROOTS` | No | *(empty)* | CSV of directories (`~`-relative allowed) the `list_dir`/`read_file` actions and document perception (see `doc/memory.md`) may touch — opt-in, empty means nothing is reachable. |
+| `LHASSA_PROTECTED_ROOTS` | No | *(empty)* | A SECOND, stricter tier of roots (may overlap `LHASSA_KNOWLEDGE_ROOTS`): a file action whose `path` resolves inside one of these ALWAYS parks a per-access approval, fail-closed, never lowered by the autonomy knob — see `doc/security.md`. |
+| `LHASSA_EMBEDDER_BACKEND` | No | `auto` | Layer-4/knowledge embedder backend: `auto` (probe local Ollama, else hashing), `ollama` (force native Ollama, degrade to hashing if unreachable), `hash` (always the offline embedder). |
+| `LHASSA_EMBEDDER_MODEL` | No | `nomic-embed-text` | Ollama model name used by the native embedder backend. |
 
 See `lhassa config list` for the live view — these are also editable at runtime via the settings service where marked `EDITABLE`.
 

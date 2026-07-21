@@ -1,0 +1,14 @@
+[Unit]
+Description=Ollama local model server (real semantic embeddings for Lhassa memory)
+After=network.target
+
+[Service]
+# env resolves the binary wherever the host installed it (/usr/local/bin, /usr/bin).
+ExecStart=/usr/bin/env ollama serve
+Restart=on-failure
+RestartSec=5
+# Keep it lean: embeddings need CPU only; models unload after 5 idle minutes.
+Environment=OLLAMA_KEEP_ALIVE=5m
+
+[Install]
+WantedBy=default.target

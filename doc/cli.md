@@ -49,12 +49,21 @@ lhassa code "refactor the parser" --cli codex
 | `watch` | Tail recent activity (re-renders the latest episodes; Ctrl-C to stop) | `lhassa watch --interval 3 --n 12` |
 | `report` | Cost/usage summary for a window (gateway ledger + optional ccusage) | `lhassa report --days 7 --json` |
 | `memory <query>` | Search durable facts (substring or tag match) | `lhassa memory temperatura --json` |
+| `memory reindex` | Re-embed every fact and every cached answer-cache question with the CURRENT embedder — run after switching `LHASSA_EMBEDDER_BACKEND`/model | `lhassa memory reindex --json` |
 | `tools` | List the self-written tools and their gate/usage state | `lhassa tools` |
 | `tools propose <name>` | Have the routine model author a candidate tool, run it through quarantine + the gates, and park a graduation approval on a full pass | `lhassa tools propose clean_downloads --desc "sort ~/Downloads by type"` |
 | `fleet` | Known machines with their last check-in and desired state | `lhassa fleet` |
 | `version` | Version, Python runtime, and a few key toggles | `lhassa version` |
 
 `watch --once` renders a single frame and exits.
+
+`tools propose` without `--baseline` cannot graduate — this is BY DESIGN, not
+a bug: gate 3 ("mejor") requires beating a concrete numeric baseline, and a
+net-new candidate has nothing yet to prove itself better than. The first real
+graduations come from the repetition detector's own proposals
+(`agents/repetition.py`), which already know the pattern's cost and supply it
+as the baseline automatically — `tools propose` stays the manual, stricter
+door.
 
 ## Approvals (HITL)
 
