@@ -1,0 +1,105 @@
+---
+import '@/styles/global.css'
+import siteScript from '@/scripts/site.js?raw'
+
+interface Props {
+  title: string
+  titleEn?: string
+  description: string
+  ogImage?: string
+  path?: string
+}
+
+const {
+  title,
+  titleEn = Astro.props.title,
+  description,
+  ogImage = '/og/home.png',
+  path = '/',
+} = Astro.props
+
+const siteUrl = 'https://lhassa.witara.site'
+const canonical = new URL(path, siteUrl).toString()
+const ogImageUrl = new URL(ogImage, siteUrl).toString()
+
+// SoftwareApplication (pre-release): Lhassa is not sold or installable yet,
+// so this describes the project honestly rather than implying a product
+// with a price or a download link that does not exist.
+const appJsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'SoftwareApplication',
+  name: 'Lhassa',
+  applicationCategory: 'DeveloperApplication',
+  operatingSystem: 'Cross-platform',
+  releaseNotes: 'Pre-release. Runs today on its author\'s own machine; no public installer yet.',
+  description:
+    'Lhassa es un cerebro personal y persistente, identidad más allá del modelo. / Lhassa is a persistent personal brain, an identity beyond the model.',
+  url: siteUrl,
+  isPartOf: {
+    '@type': 'Organization',
+    name: 'Witara',
+    url: 'https://witara.site',
+  },
+  license: 'https://opensource.org/licenses/MIT',
+}
+
+// Runs before paint (is:inline in <head>) so there is never a flash of the
+// wrong language or un-degraded (non-JS) styling. Own storage key
+// (lhassa_lang), analogous to witara.site's witara_lang but never shared
+// with it -- these are separate sites under the same family.
+const langInit = `
+(function () {
+  document.documentElement.classList.add('js');
+  try {
+    var stored = localStorage.getItem('lhassa_lang');
+    var lang = stored || (navigator.language && navigator.language.slice(0, 2) === 'en' ? 'en' : 'es');
+    document.documentElement.dataset.lang = lang;
+    document.documentElement.lang = lang;
+    var t = document.documentElement.dataset[lang === 'en' ? 'titleEn' : 'titleEs'];
+    if (t) document.title = t;
+  } catch (_) {}
+})();
+`
+---
+<html lang="es" data-lang="es" data-title-es={title} data-title-en={titleEn}>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={canonical} />
+    <!--
+      hreflang: es/en share a single URL (client-side `data-lang` toggle),
+      there is no separate URL per language. Emitting es/en alternates that
+      both point at this same URL would be a spam signal, so we only ever
+      declare x-default → canonical.
+    -->
+    <link rel="alternate" hreflang="x-default" href={canonical} />
+    <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+    <meta name="theme-color" content="#0b0f1a" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:image" content={ogImageUrl} />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:locale" content="es_CO" />
+    <meta property="og:locale:alternate" content="en_US" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={ogImageUrl} />
+
+    <script is:inline type="application/ld+json" set:html={JSON.stringify(appJsonLd)} />
+
+    <script is:inline set:html={langInit} />
+  </head>
+  <body>
+    <nav aria-label="Saltar navegación / Skip navigation" class="skip-nav">
+      <a href="#main" class="skip-link"><span class="lang-es">Saltar al contenido</span><span class="lang-en">Skip to content</span></a>
+    </nav>
+    <slot />
+    <span id="lang-announce" class="sr-only" aria-live="polite" aria-atomic="true"></span>
+    <script is:inline set:html={siteScript} />
+  </body>
+</html>
