@@ -8,8 +8,12 @@
 # (scripts/systemd/lhassa-heartbeat.timer).
 #
 # Usage:
-#   scripts/lhassa-heartbeat           # one beat + print summary
-#   scripts/lhassa-heartbeat --quiet   # one beat, no terminal output
+#   scripts/lhassa-heartbeat                # one beat + print summary
+#   scripts/lhassa-heartbeat --quiet        # one beat, no terminal output
+#   scripts/lhassa-heartbeat --loop [secs]  # resident mode: import once, then
+#                                            # beat + sleep <secs> forever
+#                                            # (default 900; SIGTERM/SIGINT stop
+#                                            # it cleanly after the current tick)
 set -euo pipefail
 
 # Resolve the repo root from this script's location, and prefer the venv python.
@@ -29,21 +33,23 @@ import sys
 sys.path.insert(0, os.environ.get("LHASSA_ROOT", os.getcwd()))
 
 from lhassa.core.heartbeat import beat
+from lhassa.core.heartbeat_loop import run_loop, summarize_beat
 from lhassa import actionpack
 actionpack.register_all()
 
+argv = sys.argv[1:]
+quiet = "--quiet" in argv
 
-def _summarize(summary: dict) -> str:
-    triggers = summary.get("triggers", 0)
-    if not triggers:
-        return "heartbeat: nothing to do — sleeping."
-    actions = summary.get("actions", 0)
-    deferred = summary.get("deferred", 0)
-    return f"heartbeat: {triggers} trigger(s) — {actions} action(s), {deferred} deferred."
-
-
-quiet = "--quiet" in set(sys.argv[1:])
-summary = asyncio.run(beat())
-if not quiet:
-    print(_summarize(summary))
+if "--loop" in argv:
+    idx = argv.index("--loop")
+    nxt = argv[idx + 1] if idx + 1 < len(argv) else None
+    if nxt is not None and not nxt.startswith("-"):
+        interval = float(nxt)
+    else:
+        interval = float(os.environ.get("LHASSA_HEARTBEAT_INTERVAL", "900"))
+    asyncio.run(run_loop(interval, quiet=quiet))
+else:
+    summary = asyncio.run(beat())
+    if not quiet:
+        print(summarize_beat(summary))
 PYEOF
