@@ -429,3 +429,83 @@ html.js [data-reveal].in { opacity: 1; transform: none; }
 .by-witara:hover { opacity: 1; }
 .by-witara .label { color: var(--lh-stone); }
 .by-witara img { display: block; opacity: 0.9; }
+
+/* ===== Hero de templo completo ===== */
+.hero-full {
+  position: relative;
+  min-height: 100vh;
+  display: grid;
+  overflow: hidden;
+}
+.hero-full .hero-bg {
+  position: absolute; inset: 0;
+  z-index: 0;
+  width: 100%; height: 100%;
+  object-fit: cover;
+  object-position: center 30%;
+}
+/* Scrims fotograficos para legibilidad (no son superficie: son luz) */
+.hero-full::before {
+  content: '';
+  position: absolute; inset: 0;
+  z-index: 1;
+  background:
+    radial-gradient(ellipse 62% 42% at 50% 58%, rgba(20,17,13,0.66) 0%, rgba(20,17,13,0.28) 60%, rgba(20,17,13,0) 100%),
+    linear-gradient(180deg, rgba(20,17,13,0.85) 0%, rgba(20,17,13,0.32) 22%, rgba(20,17,13,0.30) 55%, rgba(20,17,13,0.9) 100%);
+  pointer-events: none;
+}
+.hero-top {
+  position: relative; z-index: 2;
+  padding: 26px 5vw 0;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.hero-top .brand-plate { gap: 0.9rem; }
+.hero-top .by-witara { margin-left: 1.4rem; align-self: center; }
+.hero-center {
+  position: relative; z-index: 2;
+  place-self: center;
+  text-align: center;
+  padding: 0 5vw;
+  max-width: 900px;
+}
+.hero-center h1 {
+  font-size: clamp(2.5rem, 5vw, 4.6rem);
+  line-height: 1.1;
+  text-shadow: 0 2px 30px rgba(20, 17, 13, 0.95), 0 0 60px rgba(20, 17, 13, 0.7);
+}
+.hero-center .hero-sub {
+  margin: 1.4em auto 0;
+  max-width: 46ch;
+  color: var(--lh-white);
+  opacity: 0.94;
+  text-shadow: 0 1px 16px rgba(20, 17, 13, 0.95), 0 0 34px rgba(20, 17, 13, 0.8);
+}
+.scroll-cue {
+  position: absolute; z-index: 2;
+  left: 50%; bottom: 26px;
+  transform: translateX(-50%);
+  display: block;
+  padding: 8px;
+}
+.cue-line {
+  display: block;
+  width: 1px; height: 52px;
+  background: linear-gradient(180deg, var(--lh-gold), transparent);
+  animation: cue-drop 2.6s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+  transform-origin: top;
+}
+@keyframes cue-drop {
+  0% { transform: scaleY(0); opacity: 0; }
+  35% { transform: scaleY(1); opacity: 1; }
+  75% { transform: scaleY(1); opacity: 1; }
+  100% { transform: scaleY(1); opacity: 0; }
+}
+.hero-full .imgcap { z-index: 2; }
+@media (max-width: 800px) {
+  .hero-full { min-height: 92vh; }
+  .hero-top { flex-wrap: wrap; gap: 12px; }
+  .hero-center h1 { font-size: clamp(2rem, 9vw, 2.6rem); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cue-line { animation: none; opacity: 1; transform: scaleY(1); }
+}
