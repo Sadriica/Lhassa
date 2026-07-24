@@ -39,11 +39,12 @@ case "$mode" in
             echo "lhassa: single heartbeat beat"
             exec /app/scripts/lhassa-heartbeat
         fi
-        echo "lhassa: heartbeat loop every ${interval}s"
-        while true; do
-            /app/scripts/lhassa-heartbeat || echo "lhassa: heartbeat beat failed (continuing)"
-            sleep "$interval"
-        done
+        echo "lhassa: resident heartbeat loop every ${interval}s"
+        # Resident mode: one interpreter/import, then beat + sleep forever
+        # in-process (lhassa.core.heartbeat_loop), instead of relaunching the
+        # whole Python process every tick. SIGTERM/SIGINT (docker stop) are
+        # handled cleanly by the loop itself.
+        exec /app/scripts/lhassa-heartbeat --loop "$interval"
         ;;
 
     telegram)

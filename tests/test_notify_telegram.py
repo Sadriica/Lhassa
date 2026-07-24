@@ -3,6 +3,8 @@
 import asyncio
 from types import SimpleNamespace
 
+import httpx
+
 from lhassa.notify import telegram
 
 
@@ -43,7 +45,7 @@ def test_unconfigured_returns_false_no_network(monkeypatch):
     def _boom(*a, **k):
         raise AssertionError("no network call when unconfigured")
 
-    monkeypatch.setattr(telegram.httpx, "AsyncClient", _boom)
+    monkeypatch.setattr(httpx, "AsyncClient", _boom)
 
     cfg = SimpleNamespace(telegram_bot_token="", telegram_chat_id="")
     assert asyncio.run(telegram.send("hi", config=cfg)) is False
@@ -55,7 +57,7 @@ def test_unconfigured_returns_false_no_network(monkeypatch):
 
 def test_configured_posts(monkeypatch):
     _FakeClient.last = None
-    monkeypatch.setattr(telegram.httpx, "AsyncClient", _FakeClient)
+    monkeypatch.setattr(httpx, "AsyncClient", _FakeClient)
 
     cfg = SimpleNamespace(telegram_bot_token="TOKEN", telegram_chat_id="123")
     ok = asyncio.run(telegram.send("hello", config=cfg))
@@ -69,14 +71,14 @@ def test_http_error_returns_false(monkeypatch):
         async def post(self, url, json=None):
             return _Resp(status=400, payload={"ok": False}, text="bad request")
 
-    monkeypatch.setattr(telegram.httpx, "AsyncClient", _ErrClient)
+    monkeypatch.setattr(httpx, "AsyncClient", _ErrClient)
     cfg = SimpleNamespace(telegram_bot_token="TOKEN", telegram_chat_id="123")
     assert asyncio.run(telegram.send("hi", config=cfg)) is False
 
 
 def test_send_omits_parse_mode_and_reply_markup_when_absent(monkeypatch):
     _FakeClient.last = None
-    monkeypatch.setattr(telegram.httpx, "AsyncClient", _FakeClient)
+    monkeypatch.setattr(httpx, "AsyncClient", _FakeClient)
 
     cfg = SimpleNamespace(telegram_bot_token="TOKEN", telegram_chat_id="123")
     assert asyncio.run(telegram.send("hello", config=cfg)) is True
@@ -87,7 +89,7 @@ def test_send_omits_parse_mode_and_reply_markup_when_absent(monkeypatch):
 
 def test_send_includes_parse_mode_and_reply_markup_when_present(monkeypatch):
     _FakeClient.last = None
-    monkeypatch.setattr(telegram.httpx, "AsyncClient", _FakeClient)
+    monkeypatch.setattr(httpx, "AsyncClient", _FakeClient)
 
     keyboard = {"inline_keyboard": [[{"text": "Approve", "callback_data": "approve:ap_1"}]]}
     cfg = SimpleNamespace(telegram_bot_token="TOKEN", telegram_chat_id="123")
@@ -105,7 +107,7 @@ def test_transport_error_returns_false(monkeypatch):
         async def post(self, url, json=None):
             raise RuntimeError("connection refused")
 
-    monkeypatch.setattr(telegram.httpx, "AsyncClient", _RaisingClient)
+    monkeypatch.setattr(httpx, "AsyncClient", _RaisingClient)
     cfg = SimpleNamespace(telegram_bot_token="TOKEN", telegram_chat_id="123")
     assert asyncio.run(telegram.send("hi", config=cfg)) is False
 
@@ -120,7 +122,7 @@ def test_dispatch_unconfigured_is_noop_no_network(monkeypatch):
     def _boom(*a, **k):
         raise AssertionError("no network when unconfigured")
 
-    monkeypatch.setattr(telegram.httpx, "AsyncClient", _boom)
+    monkeypatch.setattr(httpx, "AsyncClient", _boom)
 
     cfg = SimpleNamespace(telegram_bot_token="", telegram_chat_id="")
     assert asyncio.run(dispatch.notify("hi", config=cfg)) is False

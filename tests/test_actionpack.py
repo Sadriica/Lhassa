@@ -185,7 +185,7 @@ def test_ssrf_check_allows_public_hostname(mock_gai):
 # ---------------------------------------------------------------------------
 
 
-@patch("lhassa.actionpack._net.httpx.AsyncClient")
+@patch("httpx.AsyncClient")
 def test_web_fetch_happy_path(mock_client_cls):
     """web_fetch fetches a URL and returns stripped text."""
     mock_resp = MagicMock()
@@ -225,7 +225,7 @@ def test_web_fetch_ssrf_refused():
     assert isinstance(result, str)
 
 
-@patch("lhassa.actionpack._net.httpx.AsyncClient")
+@patch("httpx.AsyncClient")
 def test_web_fetch_timeout_returns_string(mock_client_cls):
     """web_fetch returns an error string on timeout — never raises."""
     import httpx
@@ -250,7 +250,7 @@ def test_web_fetch_timeout_returns_string(mock_client_cls):
 # ---------------------------------------------------------------------------
 
 
-@patch("lhassa.actionpack._net.httpx.AsyncClient")
+@patch("httpx.AsyncClient")
 def test_ping_url_happy_path(mock_client_cls):
     """ping_url returns status code and elapsed ms."""
     mock_resp = MagicMock()

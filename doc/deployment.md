@@ -76,9 +76,12 @@ docker run --rm lhassa:dev python -c "import lhassa, main; print('ok')"
 
 Compose has no cron. Two honest options:
 
-- **In-container loop (default):** the `heartbeat` service runs a beat, sleeps
-  `LHASSA_HEARTBEAT_INTERVAL` seconds (default 900 = 15 min), repeats. Each beat
-  is a fresh process that re-reads `.env`. Simple, self-contained.
+- **In-container loop (default):** the `heartbeat` service runs `scripts/lhassa-heartbeat
+  --loop $LHASSA_HEARTBEAT_INTERVAL` (default 900 = 15 min). This is a resident
+  process (`lhassa.core.heartbeat_loop`): it imports the brain once, then beats,
+  sleeps, repeats in-process, instead of relaunching the interpreter every tick
+  (the old shell loop paid the full ~400ms import cost on every wake for no
+  reason). SIGTERM/SIGINT stop it cleanly after the tick in flight.
 - **Host scheduler:** set `LHASSA_HEARTBEAT_INTERVAL=0` (run one beat and exit)
   and drive it from the host — cron or a systemd timer calling
   `docker compose run --rm heartbeat`. This replaces the repo's

@@ -9,8 +9,6 @@ from __future__ import annotations
 import time
 from html.parser import HTMLParser
 
-import httpx
-
 from lhassa.actionpack._ssrf import ssrf_check
 
 # Hard caps so a large response never bloats an episode.
@@ -80,6 +78,8 @@ async def web_fetch(params: dict) -> str:
     Returns a short string (URL + first 2000 chars of extracted text) on
     success, or an error string on any failure. Never raises.
     """
+    import httpx
+
     try:
         url = str(params.get("url") or "").strip()
         if not url:
@@ -136,6 +136,8 @@ async def ping_url(params: dict) -> str:
     Returns "ping_url <status> <url> <elapsed>ms" on success, or an error
     string. Never raises.
     """
+    import httpx
+
     try:
         url = str(params.get("url") or "").strip()
         if not url:

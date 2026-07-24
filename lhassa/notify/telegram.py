@@ -14,7 +14,6 @@ from __future__ import annotations
 
 from typing import Optional
 
-import httpx
 from loguru import logger
 
 # The Telegram Bot API send-message endpoint. ``<token>`` is interpolated per call.
@@ -64,6 +63,8 @@ async def send(
     if not token or not chat_id:
         # No credentials → never touch the network (the github_token pattern).
         return False
+
+    import httpx
 
     url = _SEND_URL.format(token=token)
     payload: dict = {"chat_id": chat_id, "text": text}
