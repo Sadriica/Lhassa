@@ -72,7 +72,10 @@ const photos = [
             />
           </p>
         </div>
-        <p class="label"><span class="finial">●</span> by Witara · Colombia · 2026</p>
+        <a class="by-witara" href="https://witara.site" rel="noopener">
+          <span class="label">by</span>
+          <img src="/brand/logo_web_white.svg" alt="Witara" width="42" height="48" />
+        </a>
       </div>
       <div class="hero-img">
         <img src="/img/obsidiana/potala.png" width="880" height="586" alt="El palacio de Potala de noche, Lhasa" fetchpriority="high" loading="eager" decoding="async" />
@@ -94,6 +97,10 @@ const photos = [
             es="Lo que dura no es el modelo que usa hoy: es quién es. Los modelos, los harnesses, las herramientas: todo eso se alquila, se cambia, se descarta. La memoria, el juicio, el historial de confianza, eso se queda. Consejo, no control: Lhassa no decide por ti; te ayuda a decidir, y solo actúa por su cuenta cuando ya se ganó ese permiso, contigo, con evidencia."
             en="What lasts is not the model it uses today: it is who it is. Models, harnesses, tools: all of that is rented, swapped, discarded. The memory, the judgment, the trust record, that stays. Counsel, not control: Lhassa does not decide for you; it helps you decide, and only acts on its own once it has earned that, with you, with evidence."
           />
+        </p>
+        <p class="body" data-reveal style="margin-top: 2em; max-width: 62ch;">
+          <span class="lang-es">Lhassa es un producto de <a href="https://witara.site" rel="noopener">Witara</a>, la casa de investigación que hace software calmado con criterio. De ahí hereda la regla de la familia: consejo, no control.</span>
+          <span class="lang-en">Lhassa is a product of <a href="https://witara.site" rel="noopener">Witara</a>, the research house that makes calm software with judgment. From it, it inherits the family rule: counsel, not control.</span>
         </p>
       </div>
     </section>
@@ -147,7 +154,7 @@ const photos = [
             <img src="/img/dash/overview.png" width="1440" height="900" alt="Admin console de Lhassa: un run agentico en vivo, presupuesto de tokens del dia, latido de autonomia y decisiones pendientes" loading="lazy" decoding="async" />
           </div>
           <figcaption>
-            <span><Bi es="Admin console · datos de demostración (nada personal entra al árbol)" en="Admin console · demo data (nothing personal enters the tree)" /></span>
+            <span><Bi es="Admin console · datos de demostración" en="Admin console · demo data" /></span>
             <span>36 KB</span>
           </figcaption>
         </figure>
@@ -380,7 +387,6 @@ make check     <span class="c"># valida el entorno, sin llamadas API / validates
       </a>
       <span>Lhassa v{version} · by Witara</span>
       <span><Bi es="Página: 1.1 MB" en="Page: 1.1 MB" /></span>
-      <span>Colombia · 2026</span>
       <button type="button" class="lang-toggle" aria-label="Cambiar idioma / Switch language">
         <span class="lang-es">EN</span><span class="lang-en">ES</span>
       </button>
