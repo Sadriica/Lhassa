@@ -419,3 +419,13 @@ html.js [data-reveal].in { opacity: 1; transform: none; }
 @media (max-width: 800px) {
   .casos-grid { grid-template-columns: 1fr; }
 }
+
+/* Lockup by-Witara del hero */
+.by-witara {
+  display: inline-flex; align-items: center; gap: 10px;
+  text-decoration: none;
+  opacity: 0.85;
+}
+.by-witara:hover { opacity: 1; }
+.by-witara .label { color: var(--lh-stone); }
+.by-witara img { display: block; opacity: 0.9; }
