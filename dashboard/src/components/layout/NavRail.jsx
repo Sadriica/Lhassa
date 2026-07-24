@@ -48,10 +48,13 @@ export default function NavRail({ sections, section, onNavigate, navOpen, onClos
         <div className="lh-brand-plate">
           <div className="lh-brand-mark flex items-center justify-center">
             <svg width="20" height="20" viewBox="0 0 48 48" aria-hidden="true">
-              <circle cx="24" cy="7.4" r="1.8" fill="#a23e34" />
-              <path fill="#d9a521" d="M24 9.6l4.6 5.4h-9.2L24 9.6Z" />
-              <path fill="#e8bf55" d="M18.4 17.4h11.2l2 4.8H16.4l2-4.8Z" />
-              <path fill="#ece4d3" d="M16.6 24.4h14.8l2.4 8.2H14.2l2.4-8.2Z" />
+              <circle cx="24" cy="6" r="1.8" fill="#a23e34" />
+              <rect x="23.3" y="8.4" width="1.4" height="3.1" rx="0.7" fill="#d9a521" />
+              <path fill="#d9a521" d="M17.6 12.9h12.8l1.3 2.7H16.3l1.3-2.7z" />
+              <path fill="#a23e34" d="M18.6 17h10.8l0.9 6.4H17.7L18.6 17z" />
+              <path fill="#ece4d3" d="M15.2 24.8h17.6l1.1 5H14.1l1.1-5z" />
+              <path fill="#ece4d3" d="M12.4 31.2h23.2l1.3 5.4H11.1l1.3-5.4z" />
+              <path fill="#ece4d3" d="M9.6 38h28.8l1.5 5.6H8.1L9.6 38z" />
             </svg>
           </div>
           <div className="min-w-0 flex-1">
