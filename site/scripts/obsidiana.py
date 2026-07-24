@@ -2,7 +2,8 @@
 # del dashboard de Lhassa (carbon calido -> blanco hueso). Mismo metodo que
 # el tratamiento carbon de witara.site; distinta piel.
 from PIL import Image, ImageOps, ImageEnhance
-import os, sys, json
+import json
+import os
 
 STOPS = [(20, 17, 13), (74, 63, 47), (168, 152, 122), (236, 228, 211)]
 

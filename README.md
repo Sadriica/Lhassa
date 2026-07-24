@@ -146,6 +146,15 @@ Telegram, systemd + Docker? That's the next section below
 (`bash scripts/install.sh`), or the full walkthrough in
 [`doc/install.md`](doc/install.md).
 
+No clone yet, on a totally fresh machine? A single command handles the clone,
+`uv` and the `lhassa` shim for you:
+
+```bash
+curl -fsSL https://lhassa.witara.site/get-lhassa.sh | bash
+```
+
+Details and flags: [`doc/install.md`](doc/install.md#one-command-install).
+
 ---
 
 ## Full install (always-on)
