@@ -168,6 +168,89 @@ const photos = [
       </div>
     </section>
 
+
+    <section id="distinto" class="distinto">
+      <div class="inner">
+        <div class="section-rule" data-reveal><p class="label"><Bi es="Distinto por diseño" en="Different by design" /></p><span class="dot" aria-hidden="true"></span></div>
+        <h2 data-reveal><Bi es="No es otro agente. Es otra pregunta." en="Not another agent. Another question." /></h2>
+        <p class="body" data-reveal style="max-width: 62ch; margin-bottom: 1em;">
+          <Bi
+            es="Admiramos a proyectos como Hermes de Nous Research: agentes potentes, listos para instalar, siempre dispuestos a pensar. Lhassa nace de una pregunta distinta: ¿cuánto puede hacer un cerebro que casi nunca piensa, que no le pertenece a ningún proveedor, y que se gana cada permiso?"
+            en="We admire projects like Nous Research&rsquo;s Hermes: powerful agents, ready to install, always willing to think. Lhassa starts from a different question: how much can a brain do if it almost never thinks, belongs to no provider, and earns every permission?"
+          />
+        </p>
+        <div class="trait-grid">
+          <div class="trait" data-reveal>
+            <p class="n">Δ1 · <Bi es="Piensa menos" en="Thinks less" /></p>
+            <h3><Bi es="Dormir es el estado natural." en="Sleeping is the natural state." /></h3>
+            <p class="body">
+              <Bi
+                es="Un agente siempre listo paga tokens por estar listo. Lhassa invierte la premisa: vive dormida a costo cero, y pensar (gastar) es la excepción que el criterio debe justificar. La factura de ayer se muestra en el dashboard, centavo a centavo."
+                en="An always-ready agent pays tokens for its readiness. Lhassa inverts the premise: it sleeps at zero cost, and thinking (spending) is the exception judgment must justify. Yesterday&rsquo;s bill shows in the dashboard, cent by cent."
+              />
+            </p>
+          </div>
+          <div class="trait" data-reveal style="transition-delay: 0.12s">
+            <p class="n">Δ2 · <Bi es="Posee lo esencial" en="Owns the essentials" /></p>
+            <h3><Bi es="Nada prestado en el centro." en="Nothing rented at the core." /></h3>
+            <p class="body">
+              <Bi
+                es="La identidad, la memoria, el historial de confianza y el criterio son propios y viven en tu disco. Los modelos y harnesses se alquilan y se cambian sin que Lhassa deje de ser Lhassa. Ningún tercero puede llevarse lo que importa."
+                en="Identity, memory, the trust record and judgment are its own, living on your disk. Models and harnesses are rented and swapped without Lhassa ceasing to be Lhassa. No third party can walk away with what matters."
+              />
+            </p>
+          </div>
+          <div class="trait" data-reveal style="transition-delay: 0.24s">
+            <p class="n">Δ3 · <Bi es="Optimiza antes de crear" en="Optimizes before creating" /></p>
+            <h3><Bi es="Se usa lo maduro; se construye el vacío." en="Use what is mature; build the void." /></h3>
+            <p class="body">
+              <Bi
+                es="El cuerpo ya lo construyeron otros y bien: harnesses de código, contabilidad de tokens, modelos. Lhassa los usa y los exprime en vez de competir con ellos, y solo construye lo que no existe: el cerebro persistente que los orquesta con juicio."
+                en="The body was already built by others, and well: coding harnesses, token accounting, models. Lhassa uses and squeezes them instead of competing, and only builds what does not exist: the persistent brain that orchestrates them with judgment."
+              />
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="abierto" class="abierto">
+      <div class="inner narrow">
+        <div class="section-rule" data-reveal><p class="label"><Bi es="Código abierto" en="Open source" /></p><span class="dot" aria-hidden="true"></span></div>
+        <h2 data-reveal><Bi es="Abierto de verdad: código, documentos y decisiones." en="Truly open: code, documents, and decisions." /></h2>
+        <p class="body" data-reveal style="max-width: 62ch;">
+          <Bi
+            es="Lhassa es MIT y se construye sobre herramientas abiertas; devolver es parte del diseño. El repositorio no trae solo código: trae los documentos que explican cómo piensa, y un registro de decisiones fase a fase, incluidas las que salieron mal."
+            en="Lhassa is MIT-licensed and built on open tools; giving back is part of the design. The repository does not just carry code: it carries the documents that explain how it thinks, and a phase-by-phase decisions log, including the ones that went wrong."
+          />
+        </p>
+        <div class="doc-list" data-reveal>
+          <p class="doc"><span class="doc-name">concepts.md</span><span class="doc-desc"><Bi es="Las ideas núcleo: hace-y-duerme, las dos memorias, el árbitro, la organización." en="The core ideas: do-and-sleep, the two memories, the arbiter, the org." /></span></p>
+          <p class="doc"><span class="doc-name">security.md</span><span class="doc-desc"><Bi es="Confianza, aprobaciones, allowlist, cuarentena y compuertas." en="Trust, approvals, the allowlist, quarantine and the gates." /></span></p>
+          <p class="doc"><span class="doc-name">architecture-layers.md</span><span class="doc-desc"><Bi es="Las capas y sus fronteras: un test las hace cumplir, no un documento." en="The layers and their borders: a test enforces them, not a document." /></span></p>
+          <p class="doc"><span class="doc-name">narrative.md</span><span class="doc-desc"><Bi es="El libro de voz: la bandera, los pilares, el tono." en="The voice book: the flag, the pillars, the tone." /></span></p>
+          <p class="doc"><span class="doc-name">decisions.md</span><span class="doc-desc"><Bi es="El registro vivo de decisiones, fase a fase." en="The living decisions log, phase by phase." /></span></p>
+        </div>
+        <h3 class="sub-h" data-reveal><Bi es="Cómo aportar" en="How to contribute" /></h3>
+        <p class="body" data-reveal style="max-width: 62ch;">
+          <Bi
+            es="Pequeño y enfocado gana. Tres reglas del CONTRIBUTING real: las dependencias apuntan hacia abajo y un test lo verifica; el plano determinista jamás llama a un modelo (un latido no puede morir por un proveedor); y nada personal entra al árbol, nunca. Mientras Lhassa madura, el mejor aporte es leer los documentos y cuestionar el diseño: consejo, no control, también aplica hacia nosotros."
+            en="Small and focused wins. Three rules from the real CONTRIBUTING: dependencies point down and a test verifies it; the deterministic plane never calls a model (a heartbeat cannot die on a provider); and nothing personal ever enters the tree. While Lhassa matures, the best contribution is reading the documents and questioning the design: counsel, not control, applies to us too."
+          />
+        </p>
+        <pre class="devloop" data-reveal><code>make install   <span class="c"># uv sync + dashboard build</span>
+make test      <span class="c"># la suite completa / the whole suite</span>
+make lint      <span class="c"># ruff</span>
+make check     <span class="c"># valida el entorno, sin llamadas API / validates env, no API calls</span></code></pre>
+        <p class="body" data-reveal style="max-width: 62ch;">
+          <Bi
+            es="Construida sobre hombros abiertos: Python y uv, ruff, React y Vite en el dashboard, los harnesses de código que alquila como músculos, y Wikimedia Commons hasta en estas fotos. Gracias."
+            en="Built on open shoulders: Python and uv, ruff, React and Vite in the dashboard, the coding harnesses it rents as muscles, and Wikimedia Commons down to these very photos. Thank you."
+          />
+        </p>
+      </div>
+    </section>
+
     <section id="sigue" class="sigue">
       <div class="inner narrow">
         <p class="label" data-reveal><Bi es="Sigue la construcción" en="Follow the construction" /></p>
