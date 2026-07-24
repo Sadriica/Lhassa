@@ -354,3 +354,43 @@ html.js [data-reveal].in { opacity: 1; transform: none; }
   figure img.color { transition: none; }
   html.js [data-reveal] { opacity: 1; transform: none; transition: none; }
 }
+
+/* ===== Codigo abierto: mapa de documentos + dev loop ===== */
+.doc-list { margin: 3vh 0 4vh; display: grid; gap: 0; }
+.doc {
+  display: flex; gap: 2em; align-items: baseline;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--lh-hairline);
+}
+.doc-name {
+  font-family: 'JetBrains Mono', ui-monospace, Menlo, monospace;
+  font-size: 12px;
+  color: var(--lh-gold-soft);
+  flex: 0 0 200px;
+}
+.doc-desc { color: var(--lh-stone); font-size: 0.95rem; }
+.sub-h {
+  margin-top: 5vh;
+  font-family: 'JetBrains Mono', ui-monospace, Menlo, monospace;
+  font-size: 11px; letter-spacing: 0.28em; text-transform: uppercase;
+  color: var(--lh-gold);
+}
+.devloop {
+  margin: 3vh 0;
+  background: var(--lh-surface-2);
+  border: 1px solid var(--lh-border);
+  border-radius: var(--lh-radius);
+  padding: 18px 22px;
+  overflow-x: auto;
+}
+.devloop code {
+  font-family: 'JetBrains Mono', ui-monospace, Menlo, monospace;
+  font-size: 12.5px;
+  line-height: 1.9;
+  color: var(--lh-white);
+}
+.devloop .c { color: var(--lh-stone); }
+@media (max-width: 800px) {
+  .doc { flex-direction: column; gap: 0.2em; }
+  .doc-name { flex: none; }
+}
