@@ -198,3 +198,37 @@ also disables boot lingering.
 - [`deployment.md`](deployment.md) — Docker image design, the Compose roles
   (`api` / `heartbeat` / `telegram`), secrets, and the portability caveats
   (voice needs host audio, the opencode heartbeat is a host CLI).
+
+## One-command install
+
+For a fresh machine with no clone, no Docker and no prior Python setup, there
+is a single-command bootstrap:
+
+```bash
+curl -fsSL https://lhassa.witara.site/get-lhassa.sh | bash
+# or, until that host is live, straight from GitHub:
+curl -fsSL https://raw.githubusercontent.com/Sadriica/Lhassa/main/scripts/get-lhassa.sh | bash
+```
+
+What it does: detects the platform (Linux; macOS best-effort; anything else
+is a clear "not supported yet" instead of a guess), installs `uv` if missing
+(leaving an existing install alone), clones the repo into
+`~/.local/share/lhassa` (override with `LHASSA_DIR`, or the source with
+`LHASSA_REPO_URL`) or updates it if already cloned, runs `uv sync` headless
+(no `voice` extra — pass `--voice` to include it), and drops a `lhassa` shim
+into `~/.local/bin` so the command is on `PATH`. It is idempotent: re-running
+it updates the clone and re-syncs instead of duplicating anything.
+
+What it does **not** do: it does not install Docker, does not set up systemd
+units, does not enable boot lingering, and does not configure a model
+backend. It only gets `lhassa` itself onto the machine and runnable. For the
+always-on path (systemd + Docker + boot persistence), run
+`bash scripts/install.sh` from the clone afterward, as described above. For
+the two-minute talk-to-it path from an existing clone, see `make quickstart`
+in the main [`README.md`](../README.md#quickstart).
+
+After it finishes, `lhassa --help` works with no model backend configured;
+commands that actually need to think (e.g. `lhassa "hello"`) need `.env` set
+up first — copy `.env.example` to `.env` in the clone and set one API key, or
+point it at Ollama or a subscription CLI as described in
+[`getting-started.md`](getting-started.md).
