@@ -5,7 +5,7 @@ import Base from '@/layouts/Base.astro'
 import Bi from '@/components/Bi.astro'
 
 // Version read live from Lhassa's own pyproject.toml, so the footer never
-// hardcodes a number that drifts from the real repo -- same pattern as
+// hardcodes a number that drifts from the real repo; same pattern as
 // witara.site's "page declares its own weight" footer.
 const pyprojectPath = fileURLToPath(new URL('../../../pyproject.toml', import.meta.url))
 const pyproject = readFileSync(pyprojectPath, 'utf-8')
@@ -16,6 +16,33 @@ const title = 'Lhassa · by Witara'
 const titleEn = 'Lhassa · by Witara'
 const description =
   'Construye el cerebro, alquila el cuerpo. Un cerebro personal y persistente, identidad más allá del modelo. / Build the brain, rent the body. A persistent personal brain, an identity beyond the model.'
+
+const photos = [
+  {
+    id: 'potala', w: 880, h: 586, kb: 55,
+    cap: { es: 'El Potala de noche, Lhasa', en: 'The Potala at night, Lhasa' },
+    title: '20140505 Potala Palace at night', author: 'Windmemories', lic: 'CC BY-SA 4.0',
+    href: 'https://commons.wikimedia.org/wiki/File:20140505_Potala_Palace_at_night.jpg',
+  },
+  {
+    id: 'everest', w: 880, h: 586, kb: 70,
+    cap: { es: 'Cara norte del Everest, Tíbet', en: 'Everest north face, Tibet' },
+    title: 'Everest North Face toward Base Camp Tibet', author: 'Luca Galuzzi', lic: 'CC BY-SA 2.5',
+    href: 'https://commons.wikimedia.org/wiki/File:Everest_North_Face_toward_Base_Camp_Tibet_Luca_Galuzzi_2006.jpg',
+  },
+  {
+    id: 'banderas', w: 880, h: 660, kb: 102,
+    cap: { es: 'Banderas de oración', en: 'Prayer flags' },
+    title: 'Prayer flags - Tibet in 2017', author: 'cattan2011', lic: 'CC BY 2.0',
+    href: 'https://commons.wikimedia.org/wiki/File:Prayer_flags_-_Tibet_in_2017.jpg',
+  },
+  {
+    id: 'luna', w: 880, h: 586, kb: 72,
+    cap: { es: 'Salida de luna en el Himalaya', en: 'Moonrise in the Himalaya' },
+    title: 'Moonrise in himalaya (Binsar)', author: 'Rajborah123', lic: 'CC BY-SA 4.0',
+    href: 'https://commons.wikimedia.org/wiki/File:Moonrise_in_himalaya(binsar_wild_life_sanctury).jpg',
+  },
+]
 ---
 <Base title={title} titleEn={titleEn} description={description} ogImage="/og/home.png" path="/">
   <main id="main">
@@ -27,8 +54,14 @@ const description =
 
     <header class="hero" id="hero">
       <div class="hero-text">
+        <div class="brand-plate">
+          <img src="/brand/lhassa-mark.svg" alt="" width="44" height="44" aria-hidden="true" />
+          <div>
+            <p class="brand-name">Lhassa</p>
+            <div class="brand-rule" aria-hidden="true"></div>
+          </div>
+        </div>
         <div>
-          <p class="label on-noche"><Bi es="Lhassa · by Witara" en="Lhassa · by Witara" /></p>
           <h1>
             <Bi es="Construye el cerebro, alquila el cuerpo." en="Build the brain, rent the body." />
           </h1>
@@ -39,17 +72,17 @@ const description =
             />
           </p>
         </div>
-        <p class="label on-noche">Colombia · 2026</p>
+        <p class="label"><span class="finial">●</span> by Witara · Colombia · 2026</p>
       </div>
       <div class="hero-img">
-        <img src="/img/noche/01.png" width="880" height="586" alt="Cielo estrellado sobre el desierto de Atacama, Andes de Chile" fetchpriority="high" loading="eager" decoding="async" />
-        <span class="imgcap"><Bi es="Cielo estrellado sobre Atacama · 61 KB · CC BY 4.0" en="Starry sky over Atacama · 61 KB · CC BY 4.0" /></span>
+        <img src="/img/obsidiana/potala.png" width="880" height="586" alt="El palacio de Potala de noche, Lhasa" fetchpriority="high" loading="eager" decoding="async" />
+        <span class="imgcap"><Bi es="El Potala de noche · 55 KB" en="The Potala at night · 55 KB" /></span>
       </div>
     </header>
 
     <section id="que-es" class="que-es">
       <div class="inner narrow">
-        <p class="label" data-reveal><Bi es="Qué es" en="What it is" /></p>
+        <div class="section-rule" data-reveal><p class="label"><Bi es="Qué es" en="What it is" /></p><span class="dot" aria-hidden="true"></span></div>
         <p class="big" data-reveal>
           <Bi
             es="Lhassa es un cerebro personal y persistente. No es un chatbot con tareas programadas: es una identidad que vive despierta todo el día, a costo cero casi siempre, y que solo piensa (de verdad, con un modelo) cuando el criterio lo exige."
@@ -67,7 +100,7 @@ const description =
 
     <section id="rasgos" class="rasgos">
       <div class="inner">
-        <p class="label on-noche" data-reveal><Bi es="Los tres rasgos" en="The three traits" /></p>
+        <div class="section-rule" data-reveal><p class="label"><Bi es="Los tres rasgos" en="The three traits" /></p><span class="dot" aria-hidden="true"></span></div>
         <h2 data-reveal><Bi es="Lo que Lhassa ya es, no lo que promete ser." en="What Lhassa already is, not what it promises to be." /></h2>
         <div class="trait-grid">
           <div class="trait" data-reveal>
@@ -106,8 +139,14 @@ const description =
 
     <section id="estado" class="estado">
       <div class="inner narrow">
-        <p class="label" data-reveal><Bi es="Estado honesto de construcción" en="Honest state of construction" /></p>
-        <h2 data-reveal><Bi es="Lo que hoy existe, lo que falta." en="What exists today, what is missing." /></h2>
+        <div class="section-rule" data-reveal><p class="label"><Bi es="Estado honesto de construcción" en="Honest state of construction" /></p><span class="dot" aria-hidden="true"></span></div>
+        <h2 data-reveal><Bi es="La honestidad es la estética." en="Honesty is the aesthetic." /></h2>
+        <div class="metrics" data-reveal>
+          <div class="metric"><p class="value">v{version}</p><p class="name"><Bi es="versión real" en="real version" /></p></div>
+          <div class="metric"><p class="value">1 400+</p><p class="name">tests</p></div>
+          <div class="metric"><p class="value">5</p><p class="name"><Bi es="monjes activos" en="active monks" /></p></div>
+          <div class="metric"><p class="value">1</p><p class="name"><Bi es="máquina" en="machine" /></p></div>
+        </div>
         <p class="body" data-reveal>
           <Bi
             es="Hoy existe: el cerebro corre en la máquina de su autor, piensa lo mínimo indispensable, recuerda en capas (hechos, episodios, memoria semántica), se escribe sus propias herramientas bajo cuarentena, y tiene adentro una organización propia de &ldquo;monjes&rdquo; que reportan hacia arriba."
@@ -131,7 +170,7 @@ const description =
 
     <section id="sigue" class="sigue">
       <div class="inner narrow">
-        <p class="label on-noche" data-reveal><Bi es="Sigue la construcción" en="Follow the construction" /></p>
+        <p class="label" data-reveal><Bi es="Sigue la construcción" en="Follow the construction" /></p>
         <p class="story" data-reveal>
           <Bi
             es="Lhassa se construye a la vista de todos, en un repositorio abierto (MIT). Sigue el avance real (commits, decisiones, lo que se rompió y se reescribió) en las notas de Witara, cuando exista la primera; hasta entonces, en el propio repositorio."
@@ -146,60 +185,30 @@ const description =
 
     <section id="creditos" class="creditos">
       <div class="inner narrow">
-        <p class="label" data-reveal><Bi es="Créditos de fotografía" en="Photo credits" /></p>
-        <p class="body" data-reveal style="max-width: 60ch; color: var(--noche-soft); margin-bottom: 1em;">
+        <div class="section-rule" data-reveal><p class="label"><Bi es="El paisaje del nombre" en="The landscape of the name" /></p><span class="dot" aria-hidden="true"></span></div>
+        <p class="body" data-reveal style="max-width: 60ch; margin-bottom: 1em;">
           <Bi
-            es="Cuatro fotografías de Wikimedia Commons, con licencia CC, tratadas con el pipeline de dithering noche/luna. Un toque revela el color original; la quietud de la foto es también parte de la tesis."
-            en="Four Wikimedia Commons photographs, CC-licensed, treated with the night/moonlight dithering pipeline. A hover reveals the original color; the photo&rsquo;s stillness is part of the thesis too."
+            es="Lhassa se llama así por Lhasa, la ciudad en el techo del mundo. Estas cuatro fotografías del Tíbet y el Himalaya vienen de Wikimedia Commons, tratadas con el pipeline de dithering en la paleta obsidiana del propio dashboard. Un toque revela el color original."
+            en="Lhassa is named for Lhasa, the city at the roof of the world. These four photographs of Tibet and the Himalaya come from Wikimedia Commons, treated with the dithering pipeline in the dashboard&rsquo;s own obsidian palette. A touch reveals the original color."
           />
         </p>
         <div class="gallery-grid">
-          <figure data-hint="hover / touch">
-            <div class="frame">
-              <img src="/img/noche/01.png" width="880" height="586" alt="Cielo estrellado sobre el desierto de Atacama, Andes de Chile" loading="lazy" decoding="async" />
-              <img class="color" src="/img/color/01.jpg" width="880" height="586" alt="" loading="lazy" decoding="async" />
-            </div>
-            <figcaption><span>Starry night in Northern Chile · 61 KB</span><span>CC BY 4.0</span></figcaption>
-          </figure>
-          <figure data-hint="hover / touch">
-            <div class="frame">
-              <img src="/img/noche/02.png" width="880" height="586" alt="Luna llena sobre la cordillera Sangre de Cristo" loading="lazy" decoding="async" />
-              <img class="color" src="/img/color/02.jpg" width="880" height="586" alt="" loading="lazy" decoding="async" />
-            </div>
-            <figcaption><span>Moon rise over the Sangre de Cristo mountains · 59 KB</span><span>CC BY 2.0</span></figcaption>
-          </figure>
-          <figure data-hint="hover / touch">
-            <div class="frame">
-              <img src="/img/noche/03.png" width="880" height="593" alt="Vía láctea sobre el glaciar Juncal, Andes de Chile" loading="lazy" decoding="async" />
-              <img class="color" src="/img/color/03.jpg" width="880" height="593" alt="" loading="lazy" decoding="async" />
-            </div>
-            <figcaption><span>Milky way over Glaciar Juncal, Los Andes · 70 KB</span><span>CC BY 4.0</span></figcaption>
-          </figure>
-          <figure data-hint="hover / touch">
-            <div class="frame">
-              <img src="/img/noche/04.png" width="880" height="587" alt="Nevado de noche bajo un cielo estrellado" loading="lazy" decoding="async" />
-              <img class="color" src="/img/color/04.jpg" width="880" height="587" alt="" loading="lazy" decoding="async" />
-            </div>
-            <figcaption><span>Starry night at Mount Everest · 49 KB</span><span>CC BY-SA 3.0</span></figcaption>
-          </figure>
+          {photos.map((p, i) => (
+            <figure data-hint="hover / touch" data-reveal style={`transition-delay: ${i * 0.1}s`}>
+              <div class="frame">
+                <img src={`/img/obsidiana/${p.id}.png`} width={p.w} height={p.h} alt={p.title} loading="lazy" decoding="async" />
+                <img class="color" src={`/img/color/${p.id}.jpg`} width={p.w} height={p.h} alt="" aria-hidden="true" loading="lazy" decoding="async" />
+              </div>
+              <figcaption><span><Bi es={p.cap.es} en={p.cap.en} /></span><span>{p.kb} KB · {p.lic}</span></figcaption>
+            </figure>
+          ))}
         </div>
         <div class="credits-list" data-reveal>
-          <p class="credit">
-            <Bi es="Título: " en="Title: " /><em>Starry night in Northern Chile</em> · G. Hüdepohl / ESO ·
-            <a href="https://commons.wikimedia.org/wiki/File:Starry_night_in_Northern_Chile_(gerd_huedepohl-04).jpg" rel="noopener">Wikimedia Commons</a> · CC BY 4.0
-          </p>
-          <p class="credit">
-            <Bi es="Título: " en="Title: " /><em>Moon rise over the Sangre de Cristo mountains</em> · Mike Lewinski ·
-            <a href="https://commons.wikimedia.org/wiki/File:Moon_rise_over_the_Sangre_de_Cristo_mountains.jpg" rel="noopener">Wikimedia Commons</a> · CC BY 2.0
-          </p>
-          <p class="credit">
-            <Bi es="Título: " en="Title: " /><em>Milky way over Glaciar Juncal, Los Andes, Chile</em> · Angellogonz ·
-            <a href="https://commons.wikimedia.org/wiki/File:Milky_way_over_Glaciar_Juncal_-_Los_Andes,_Chile.jpg" rel="noopener">Wikimedia Commons</a> · CC BY 4.0
-          </p>
-          <p class="credit">
-            <Bi es="Título: " en="Title: " /><em>Starry night at Mount Everest</em> · Matt Wier ·
-            <a href="https://commons.wikimedia.org/wiki/File:Starry_night_at_Mount_Everest.jpg" rel="noopener">Wikimedia Commons</a> · CC BY-SA 3.0
-          </p>
+          {photos.map((p) => (
+            <p class="credit">
+              <em>{p.title}</em> · {p.author} · <a href={p.href} rel="noopener">Wikimedia Commons</a> · {p.lic}
+            </p>
+          ))}
         </div>
       </div>
     </section>
@@ -209,7 +218,7 @@ const description =
         <img src="/brand/logo_web_white.svg" alt="Witara" width="56" height="64" />
       </a>
       <span>Lhassa v{version} · by Witara</span>
-      <span><Bi es="Página: 0.9 MB" en="Page: 0.9 MB" /></span>
+      <span><Bi es="Página: 1.1 MB" en="Page: 1.1 MB" /></span>
       <span>Colombia · 2026</span>
       <button type="button" class="lang-toggle" aria-label="Cambiar idioma / Switch language">
         <span class="lang-es">EN</span><span class="lang-en">ES</span>
