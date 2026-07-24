@@ -1,128 +1,42 @@
-#!/usr/bin/env python3
-"""Generate the Open Graph image (1200x630) in the "tratamiento noche"
-aesthetic, for lhassa.witara.site.
-
-Adapted from Witara's scripts/og.py: same composition (cover-crop photo,
-veils for legibility, tracked-letter wordmark, quantized palette to keep
-the file small), noche/luna/acento colors instead of carbon/paper/accent.
-
-Usage:
-    python scripts/og.py
-"""
-
-from __future__ import annotations
-
+# OG 1200x630: el Potala en obsidiana + wordmark, misma tecnica que witara
+# (velo + blur suave antes del texto, cuantizar sin dithering para comprimir).
+from PIL import Image, ImageDraw, ImageFont, ImageFilter
 import os
 
-from PIL import Image, ImageDraw, ImageFilter, ImageFont
+W, H = 1200, 630
+BG = (20, 17, 13)
+PAPER = (236, 228, 211)
+GOLD = (217, 165, 33)
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-NOCHE_DIR = os.path.join(ROOT, "public", "img", "noche")
+base = Image.open('public/img/obsidiana/potala.png').convert('RGB')
+r = W / base.width
+base = base.resize((W, int(base.height * r)), Image.LANCZOS)
+canvas = Image.new('RGB', (W, H), BG)
+canvas.paste(base, (0, (H - base.height) // 2))
 
-WIDTH, HEIGHT = 1200, 630
+veil = Image.new('L', (W, H), 0)
+dv = ImageDraw.Draw(veil)
+for i, alpha in enumerate([60, 110, 160, 200]):
+    dv.rectangle([0, H - 240 + i * 60, W, H - 240 + (i + 1) * 60], fill=alpha)
+dark = Image.new('RGB', (W, H), BG)
+canvas = Image.composite(dark, canvas, veil)
+canvas = canvas.filter(ImageFilter.GaussianBlur(2.0))
 
-NOCHE = (11, 15, 26)      # #0b0f1a
-LUNA = (233, 237, 240)    # #e9edf0
-ACENTO = (201, 168, 106)  # #c9a86a
+d = ImageDraw.Draw(canvas)
+font_b = ImageFont.truetype('/usr/share/fonts/TTF/JetBrainsMonoNL-Bold.ttf', 54)
+font_r = ImageFont.truetype('/usr/share/fonts/TTF/JetBrainsMonoNL-Regular.ttf', 22)
 
-FONT_BOLD = "/usr/share/fonts/TTF/JetBrainsMonoNL-Bold.ttf"
-FONT_REGULAR = "/usr/share/fonts/TTF/JetBrainsMonoNL-Regular.ttf"
-
-PHOTO = "01.png"
-SUBTITLE = "by Witara · Construye el cerebro, alquila el cuerpo"
-OUT_PATH = os.path.join(ROOT, "public", "og", "home.png")
-
-
-def cover_crop(im: Image.Image, w: int, h: int) -> Image.Image:
-    src_w, src_h = im.size
-    scale = max(w / src_w, h / src_h)
-    new_w, new_h = round(src_w * scale), round(src_h * scale)
-    im = im.resize((new_w, new_h), Image.LANCZOS)
-    left = (new_w - w) // 2
-    top = (new_h - h) // 2
-    return im.crop((left, top, left + w, top + h))
-
-
-def draw_tracked_text(draw, xy, text, font, fill, tracking):
-    x, y = xy
+def tracked(draw, pos, text, font, fill, tracking):
+    x, y = pos
     for ch in text:
-        bbox = font.getbbox(ch)
-        w = bbox[2] - bbox[0] if ch != " " else font.getbbox("x")[2] // 2
         draw.text((x, y), ch, font=font, fill=fill)
-        x += w + tracking
+        x += draw.textlength(ch, font=font) + tracking
+    return x
 
+x_end = tracked(d, (70, H - 150), 'LHASSA', font_b, PAPER, 16)
+tracked(d, (74, H - 78), 'by Witara · Colombia', font_r, GOLD, 6)
 
-def spaced(text: str) -> str:
-    return " ".join(list(text))
-
-
-STEPS = 14
-
-
-def _stepped(local: float, steps: int = STEPS) -> float:
-    return round(local * steps) / steps
-
-
-def make_veil(w: int, h: int, top: bool, strength: float = 0.92) -> Image.Image:
-    veil = Image.new("L", (1, h), 0)
-    for y in range(h):
-        t = y / h
-        if top:
-            if t > 0.25:
-                a = 0
-            else:
-                local = 1 - (t / 0.25)
-                a = int(255 * _stepped(local ** 1.6) * 0.35)
-        else:
-            if t < 0.40:
-                a = 0
-            else:
-                local = (t - 0.40) / 0.60
-                a = int(255 * _stepped(local ** 1.4) * strength)
-        veil.putpixel((0, y), a)
-    veil = veil.resize((w, h))
-    layer = Image.new("RGBA", (w, h), NOCHE + (0,))
-    layer.putalpha(veil)
-    return layer
-
-
-def build_og() -> str:
-    base = Image.open(os.path.join(NOCHE_DIR, PHOTO)).convert("RGB")
-    base = cover_crop(base, WIDTH, HEIGHT)
-    canvas = base.convert("RGBA")
-
-    tint = Image.new("RGBA", (WIDTH, HEIGHT), NOCHE + (40,))
-    canvas = Image.alpha_composite(canvas, tint)
-    canvas = Image.alpha_composite(canvas, make_veil(WIDTH, HEIGHT, top=True))
-    canvas = Image.alpha_composite(canvas, make_veil(WIDTH, HEIGHT, top=False))
-    canvas = canvas.convert("RGB").filter(ImageFilter.GaussianBlur(2.2)).convert("RGBA")
-
-    draw = ImageDraw.Draw(canvas)
-    margin = 96
-    rule_y = HEIGHT - 190
-    draw.line([(margin, rule_y), (margin + 64, rule_y)], fill=ACENTO + (255,), width=2)
-
-    wordmark_font = ImageFont.truetype(FONT_BOLD, 52)
-    subtitle_font = ImageFont.truetype(FONT_REGULAR, 20)
-
-    word_y = rule_y + 22
-    draw_tracked_text(draw, (margin, word_y), spaced("LHASSA"), wordmark_font, LUNA, 18)
-
-    sub_y = word_y + 68
-    draw.text((margin, sub_y), SUBTITLE, font=subtitle_font, fill=ACENTO + (255,))
-
-    os.makedirs(os.path.dirname(OUT_PATH), exist_ok=True)
-    rgb = canvas.convert("RGB")
-    quantized = rgb.quantize(colors=48, method=Image.MEDIANCUT, dither=Image.NONE)
-    quantized.save(OUT_PATH, format="PNG", optimize=True, compress_level=9)
-    return OUT_PATH
-
-
-def main() -> None:
-    out_path = build_og()
-    size = os.path.getsize(out_path)
-    print(f"{out_path}  {size/1024:.1f} KB")
-
-
-if __name__ == "__main__":
-    main()
+q = canvas.quantize(colors=40, dither=Image.Dither.NONE)
+os.makedirs('public/og', exist_ok=True)
+q.save('public/og/home.png', optimize=True)
+print('og:', os.path.getsize('public/og/home.png') // 1024, 'KB')
