@@ -422,13 +422,17 @@ html.js [data-reveal].in { opacity: 1; transform: none; }
 
 /* Lockup by-Witara del hero */
 .by-witara {
-  display: inline-flex; align-items: center; gap: 10px;
+  display: inline-flex; align-items: center; gap: 9px;
   text-decoration: none;
-  opacity: 0.85;
 }
-.by-witara:hover { opacity: 1; }
-.by-witara .label { color: var(--lh-stone); }
-.by-witara img { display: block; opacity: 0.9; }
+.by-witara .by {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 1rem;
+  color: var(--lh-stone);
+}
+.by-witara img { display: block; }
+.by-witara:hover .by { color: var(--lh-white); }
 
 /* ===== Hero: templo recortado sobre carbon ===== */
 .hero-full {
