@@ -394,3 +394,28 @@ html.js [data-reveal].in { opacity: 1; transform: none; }
   .doc { flex-direction: column; gap: 0.2em; }
   .doc-name { flex: none; }
 }
+
+/* ===== El producto hoy: screenshot + terminal ===== */
+.shot { margin: 4vh 0 3vh; cursor: default; }
+.shot-frame {
+  border: 1px solid var(--lh-border-strong);
+  border-radius: var(--lh-radius-lg);
+  overflow: hidden;
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.45);
+  background: var(--lh-bg);
+}
+.shot img { width: 100%; height: auto; display: block; }
+.shot figcaption {
+  display: flex; justify-content: space-between; gap: 1em;
+  padding-top: 8px;
+  font-family: 'JetBrains Mono', ui-monospace, Menlo, monospace;
+  font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--lh-stone);
+}
+.shot::after { content: none; }
+.term .p { color: var(--lh-gold); }
+.term .g { color: var(--lh-green); }
+.casos-grid { grid-template-columns: repeat(2, 1fr); }
+@media (max-width: 800px) {
+  .casos-grid { grid-template-columns: 1fr; }
+}
