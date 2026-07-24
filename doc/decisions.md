@@ -1,5 +1,40 @@
 # Lhassa — decisions log
 
+## 2026-07-24 — The lean body: measured, then optimized (heartbeat, sentry shadow, one-command install)
+
+- **The Rust question, answered with data first**: 7 days of production
+  journalctl (997 beats) showed the brain awake 0.15% of the day; the wake
+  paid ~336 ms of Python startup, dominated by httpx (122 ms, pulled at
+  module level by the notify path even on beats that notify nothing) and
+  rich.console (52 ms, dragged in by httpx). A full rewrite would optimize
+  noise; surgery was chosen instead. Raw numbers live with the company
+  drafts (witara: docs/drafts/latido-datos-crudos.md).
+- **perf, beat path** (`52b0863`): httpx now imports lazily inside
+  `notify/telegram.send()` and `actionpack/_net`; import tax 336 -> 215 ms.
+  New `core/heartbeat_loop.run_loop()` gives the beat a resident `--loop`
+  mode (imports paid once, clean SIGTERM/SIGINT, per-beat cost ~0 at any
+  frequency); docker heartbeat role now execs it instead of respawning the
+  interpreter each interval. Left alone on purpose: loguru (project-wide
+  logging), core.db and config (real spine), dotenv via _curate (actionpack
+  design). 2048 tests green.
+- **lhassa-sentry, shadow only** (`e544b37`): the ear ported to Rust
+  (sentry/ crate: signals from brain.db + digest/flows JSON, detect_events,
+  fingerprints, importance gate; rusqlite + serde only, read-only, no
+  network). 1.4 MB binary, ~3.9 MB RSS vs the 50 MB Python watcher. Parity
+  by shadow harness (scripts/sentry-shadow.py): 21/21 ticks identical
+  (10 real + 8 fixture-injected + 3 independent). Honest v1 gap in the
+  code: agent_runs is in-process state no external process can observe, so
+  run lifecycle events never fire from the sentry. The reaction (minting,
+  trust, episodes) stays in Python. Cutover only after days of clean diff.
+- **feat, install** (`4472047`): scripts/get-lhassa.sh, a one-command
+  headless bootstrap over uv (installs uv if missing, clone or ff-pull,
+  sync without the voice extra, `lhassa` shim in ~/.local/bin), verified
+  in a clean simulated HOME including idempotent re-runs.
+- **Known bug, filed not fixed**: a headless chat turn crashes on the
+  unconditional pipecat import in `tools/schemas.py` (ModuleNotFoundError
+  before any provider check). Deserves its own surgery: lazy or split
+  schemas so the no-voice install can chat.
+
 ## 2026-07-21 (noche) — Olas 2+3: la consciencia siente, la jerarquía sin deuda
 
 - **2.1 adaptive thresholds** (`9010114`): `effective_threshold(base, population,
