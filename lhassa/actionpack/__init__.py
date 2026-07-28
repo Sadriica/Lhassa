@@ -45,6 +45,7 @@ def register_all() -> None:
         _digest,
         _feedback,
         _files,
+        _kg,
         _knowledge,
         _projects,
         _llm,
@@ -110,6 +111,7 @@ def register_all() -> None:
     _reg("set_config", _config.set_config)
     _reg("apply_feedback", _feedback.apply_feedback)
     _reg("create_project", _projects.create_project_action)
+    _reg("kg_sync", _kg.kg_sync)
     _projects.register_sense()
 
     # ── Org — real delegation into the hierarchy (Etapa 3) ────────────────────

@@ -17,15 +17,23 @@ Layers, in priority order:
   6. knowledge (document perception): the top few chunks of the owner's OWN
      documents (``lhassa.memory.knowledge.search``) matching the active
      ``query`` — grounds thinking in real notes/papers at $0, offline. Fires
-     ONLY when a ``query`` is given, mirroring the recall layer exactly. The
-     LOWEST-priority layer; dropped first under budget, and fully defensive
-     (any error → empty, never raises — a missing/empty knowledge index is
-     the default, silent case).
+     ONLY when a ``query`` is given, mirroring the recall layer exactly.
+     Dropped before recall, and fully defensive (any error → empty, never
+     raises — a missing/empty knowledge index is the default, silent case).
+  7. graph (Wave 3, "LightRAG-lite"): a handful of facts pulled in via
+     ``lhassa.memory.graph_retrieve.retrieve`` — vector-seeded, 1-hop expanded
+     over the persisted knowledge graph (``memory/kg.py``). Fires ONLY when a
+     ``query`` is given AND ``config.memory_graph_enabled`` (off by default),
+     mirroring the recall/knowledge layers exactly. The LOWEST-priority
+     layer; dropped first under budget, and fully defensive (any error →
+     empty, never raises).
 
 Then :func:`truncate` trims to the token budget, dropping the lowest-priority
-layer first (``priority=["pinned","recent","tags","semantic","recall","knowledge"]``):
-knowledge goes before recall, recall before semantic, semantic before tags, tags
-before recent, and the identity core (directives + pinned facts) is never dropped.
+layer first
+(``priority=["pinned","recent","tags","semantic","recall","knowledge","graph"]``):
+graph goes before knowledge, knowledge before recall, recall before semantic,
+semantic before tags, tags before recent, and the identity core (directives +
+pinned facts) is never dropped.
 
 Token counting is a deterministic estimate — exact via tiktoken when installed,
 else a ~3 chars/token safety heuristic (see :func:`estimate_tokens`). The semantic
@@ -42,7 +50,7 @@ from lhassa.memory.facts import Fact, load_by_tags, load_facts, resolve
 from lhassa.persona import load_identity
 
 # Priority of the layers, highest first. Truncation drops from the tail.
-PRIORITY = ["pinned", "recent", "tags", "semantic", "recall", "knowledge"]
+PRIORITY = ["pinned", "recent", "tags", "semantic", "recall", "knowledge", "graph"]
 
 
 # Lazy, cached tiktoken probe: attempted at most once per process. When tiktoken
@@ -107,6 +115,12 @@ def _render_knowledge(chunk: dict) -> str:
     return f"- [from your notes: {name}] {text}"
 
 
+def _render_graph(item: dict) -> str:
+    via = (item.get("via") or "").strip()
+    text = (item.get("text") or "").replace("\n", " ").strip()
+    return f"- [connected: {via}] {text}"
+
+
 @dataclass
 class Context:
     """
@@ -122,6 +136,7 @@ class Context:
     semantic_facts: list[Fact] = field(default_factory=list)
     recall_episodes: list[dict] = field(default_factory=list)
     knowledge_chunks: list[dict] = field(default_factory=list)
+    graph_items: list[dict] = field(default_factory=list)
     token_budget: int = 0
 
     @property
@@ -153,6 +168,9 @@ class Context:
         if self.knowledge_chunks:
             lines = "\n".join(_render_knowledge(c) for c in self.knowledge_chunks)
             blocks.append(f"From your documents:\n{lines}")
+        if self.graph_items:
+            lines = "\n".join(_render_graph(g) for g in self.graph_items)
+            blocks.append(f"Connected (graph):\n{lines}")
         return "\n\n".join(blocks)
 
     @property
@@ -188,6 +206,7 @@ def truncate(ctx: Context, token_budget: int) -> Context:
     semantic_rank = PRIORITY.index("semantic")
     recall_rank = PRIORITY.index("recall")
     knowledge_rank = PRIORITY.index("knowledge")
+    graph_rank = PRIORITY.index("graph")
     items: list[dict] = []
     for ep in ctx.episodes:
         items.append({"rank": recent_rank, "tok": estimate_tokens(_render_episode(ep)),
@@ -204,6 +223,9 @@ def truncate(ctx: Context, token_budget: int) -> Context:
     for c in ctx.knowledge_chunks:
         items.append({"rank": knowledge_rank, "tok": estimate_tokens(_render_knowledge(c)),
                       "kind": "knowledge", "payload": c})
+    for g in ctx.graph_items:
+        items.append({"rank": graph_rank, "tok": estimate_tokens(_render_graph(g)),
+                      "kind": "graph", "payload": g})
 
     used = mandatory + sum(it["tok"] for it in items)
     # Drop lowest-priority (highest rank) items, from the tail, until we fit.
@@ -217,6 +239,7 @@ def truncate(ctx: Context, token_budget: int) -> Context:
     ctx.semantic_facts = [it["payload"] for it in items if it["kind"] == "semantic"]
     ctx.recall_episodes = [it["payload"] for it in items if it["kind"] == "recall"]
     ctx.knowledge_chunks = [it["payload"] for it in items if it["kind"] == "knowledge"]
+    ctx.graph_items = [it["payload"] for it in items if it["kind"] == "graph"]
     return ctx
 
 
@@ -291,6 +314,25 @@ async def _knowledge_layer(
         from lhassa.memory import knowledge
 
         return await knowledge.search(instance_id, query, limit=topk, config=config)
+    except Exception:
+        return []
+
+
+async def _graph_layer(
+    instance_id: str, query: str, config, *, topk: int = 3
+) -> list[dict]:
+    """Layer 7 (Wave 3, "LightRAG-lite"): a few facts pulled in via the
+    persisted knowledge graph (see :mod:`lhassa.memory.graph_retrieve`).
+
+    Fully defensive by design — the LOWEST-priority, purely-additive layer, so
+    ANY failure (graph disabled, no entities indexed yet, a bad DB state) must
+    silently yield an empty layer rather than disturb the rest of the context
+    build. Mirrors :func:`_knowledge_layer` / :func:`_recall_layer` exactly.
+    """
+    try:
+        from lhassa.memory import graph_retrieve
+
+        return await graph_retrieve.retrieve(instance_id, query, limit=topk, config=config)
     except Exception:
         return []
 
@@ -394,6 +436,13 @@ async def load(
     if query:
         knowledge_chunks = await _knowledge_layer(instance_id, query, config)
 
+    # Layer 7 — graph-augmented retrieval (Wave 3). Lowest priority, purely
+    # additive: only when a query is given AND the feature flag is on
+    # (default OFF), never allowed to raise.
+    graph_items: list[dict] = []
+    if query and getattr(config, "memory_graph_enabled", False):
+        graph_items = await _graph_layer(instance_id, query, config)
+
     ctx = Context(
         instance_id=instance_id,
         directives=directives,
@@ -403,6 +452,7 @@ async def load(
         semantic_facts=semantic_facts,
         recall_episodes=recall_episodes,
         knowledge_chunks=knowledge_chunks,
+        graph_items=graph_items,
         token_budget=token_budget,
     )
     return truncate(ctx, token_budget)

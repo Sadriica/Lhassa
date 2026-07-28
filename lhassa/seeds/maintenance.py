@@ -59,6 +59,7 @@ _RECURRING_ACTIONS: tuple[tuple[str, int], ...] = (
     ("apply_feedback", 86400),
     ("review_tools", 604800),
     ("curate_skills", 604800),
+    ("kg_sync", 604800),
     ("calendar_sync", 86400),
     ("derive_world_facts", 604800),
     # Document perception — re-index the owner's knowledge roots weekly (a

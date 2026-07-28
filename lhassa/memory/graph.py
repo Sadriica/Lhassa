@@ -318,3 +318,13 @@ async def timeline(instance_id: str | None, entity: str, *, config=None) -> list
         return items
     except Exception:
         return []
+
+
+# ── public extraction aliases (reused by memory/kg.py — behavior unchanged) ──
+#
+# The persisted knowledge graph (Wave 3, memory/kg.py) feeds off the SAME
+# deterministic extraction this read-model already uses, so entity terms are
+# consistent across both. Exposed here rather than duplicated.
+extract_terms = _extract_terms
+episode_text = _episode_text
+episode_terms = _episode_terms

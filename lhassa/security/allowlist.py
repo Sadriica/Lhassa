@@ -271,6 +271,13 @@ def build_allowlist(repos: "set[str] | str | None" = None) -> dict[str, ActionSp
             min_trust=TrustLevel.INTERNO,
             requires_approval=False,
         ),
+        # Knowledge-graph sync — read-only fact/episode scan + local graph
+        # write; same $0 hygiene tier as ingest_knowledge.
+        "kg_sync": ActionSpec(
+            objetivos=WILDCARD,
+            min_trust=TrustLevel.INTERNO,
+            requires_approval=False,
+        ),
         # Project alta. INTERNO + no approval covers the owner's explicit door
         # (CLI/chat, HUMANO origin); the DETECTOR proposes with a MUNDO origin,
         # which the trust model itself parks at the approval frontier — the

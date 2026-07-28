@@ -11,6 +11,10 @@ import json
 
 os.environ.setdefault("LHASSA_NO_RUNTIME_OVERRIDES", "1")
 os.environ.setdefault("LHASSA_QUARANTINE_ISOLATION", "none")
+# Hermetic embeddings: a LIVE local Ollama must never change test behavior or
+# speed — the whole suite runs on the offline hashing embedder unless a test
+# explicitly opts a config double into a remote backend.
+os.environ["LHASSA_EMBEDDER_BACKEND"] = "hash"
 # Neutralize any real external endpoints from the owner's .env: config.py's
 # load_dotenv uses override=False, so a value set here BEFORE the lhassa import
 # wins. The calendar feed URL especially must be blank — otherwise the agenda

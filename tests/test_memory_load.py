@@ -273,3 +273,136 @@ def test_estimate_tokens_degrades_on_tiktoken_import_failure(monkeypatch):
     assert load_mod._get_tiktoken_encoding() is None
     # Falls back to the char heuristic, deterministically, without raising.
     assert load_mod.estimate_tokens("abcdef") == 2
+
+
+# ── graph layer (Wave 3, LightRAG-lite — lowest priority) ────────────────────
+
+
+async def _sync_kg_fixture(config):
+    """Two facts sharing 'Sezzle' so a 1-hop expansion from 'Ana' surfaces a
+    SECOND fact (not the direct entity-match seed) — exercises the
+    "connected: X —kind→ Y" citation, not just a direct name match."""
+    from lhassa.memory import facts, kg
+
+    await facts.add_fact("inst_personal", "dato", "Ana works at Sezzle", tags=["work"])
+    await facts.add_fact("inst_personal", "dato", "Sezzle pays through Visa", tags=["finance"])
+    return await kg.sync("inst_personal", config=config)
+
+
+@pytest.mark.asyncio
+async def test_load_graph_layer_absent_when_flag_off(tmp_path, monkeypatch):
+    await _init(tmp_path, monkeypatch)
+    from types import SimpleNamespace
+
+    from lhassa.memory import load
+
+    cfg = SimpleNamespace(
+        instance_id="inst_personal",
+        memory_graph_enabled=True,  # ON for the sync fixture ...
+        memory_layer4_enabled=False,
+    )
+    await _sync_kg_fixture(cfg)
+
+    # ... but OFF for the load() call — the default, and the flag load() itself
+    # checks. The layer must not fire even though the graph is populated.
+    off_cfg = SimpleNamespace(
+        instance_id="inst_personal",
+        memory_graph_enabled=False,
+        memory_layer4_enabled=False,
+    )
+    ctx = await load.load("inst_personal", token_budget=10_000, query="Ana", config=off_cfg)
+    assert ctx.graph_items == []
+    assert "connected:" not in ctx.to_prompt()
+
+
+@pytest.mark.asyncio
+async def test_load_graph_layer_adds_hop_derived_fact_when_flag_on(tmp_path, monkeypatch):
+    await _init(tmp_path, monkeypatch)
+    from types import SimpleNamespace
+
+    from lhassa.memory import load
+
+    cfg = SimpleNamespace(
+        instance_id="inst_personal",
+        memory_graph_enabled=True,
+        memory_layer4_enabled=False,
+    )
+    await _sync_kg_fixture(cfg)
+
+    # Isolate the KG-hop path from the always-on fact-embedding side effect
+    # (facts.add_fact embeds on write regardless of memory_layer4_enabled) —
+    # this test targets graph_retrieve's OWN 1-hop expansion, not whichever
+    # embedder backend happens to be reachable in this environment.
+    async def _no_semantic(*a, **kw):
+        return []
+
+    monkeypatch.setattr(load, "_semantic_layer", _no_semantic)
+
+    ctx = await load.load("inst_personal", token_budget=10_000, query="Ana", config=cfg)
+    assert ctx.graph_items
+    prompt = ctx.to_prompt()
+    assert "connected:" in prompt
+    # The hop-derived fact (reached via Sezzle, NOT the direct "Ana" match) is
+    # what proves 1-hop expansion actually ran, not just a name match.
+    assert "Visa" in prompt
+    assert any("—co_occurs→" in item["via"] or "—mentions→" in item["via"] for item in ctx.graph_items)
+
+
+@pytest.mark.asyncio
+async def test_load_graph_layer_empty_when_no_query(tmp_path, monkeypatch):
+    await _init(tmp_path, monkeypatch)
+    from types import SimpleNamespace
+
+    from lhassa.memory import load
+
+    cfg = SimpleNamespace(
+        instance_id="inst_personal",
+        memory_graph_enabled=True,
+        memory_layer4_enabled=False,
+    )
+    await _sync_kg_fixture(cfg)
+
+    ctx = await load.load("inst_personal", token_budget=10_000, query=None, config=cfg)
+    assert ctx.graph_items == []
+
+
+@pytest.mark.asyncio
+async def test_load_graph_layer_defensive_on_failure(tmp_path, monkeypatch):
+    await _init(tmp_path, monkeypatch)
+    from lhassa.memory import graph_retrieve, load as load_mod
+
+    async def _boom(*a, **kw):
+        raise RuntimeError("graph exploded")
+
+    monkeypatch.setattr(graph_retrieve, "retrieve", _boom)
+    result = await load_mod._graph_layer("inst_personal", "x", None)
+    assert result == []
+
+    from types import SimpleNamespace
+
+    cfg = SimpleNamespace(memory_graph_enabled=True, memory_layer4_enabled=False)
+    ctx = await load_mod.load("inst_personal", token_budget=10_000, query="x", config=cfg)
+    assert ctx.graph_items == []
+
+
+def test_truncate_drops_graph_before_knowledge():
+    """Graph is the LOWEST-priority layer — under a tight budget it must be
+    dropped before the (still low-priority, but ranked above it) knowledge
+    layer."""
+    from lhassa.memory import load as load_mod
+
+    knowledge_chunk = {"source_path": "notes/trip.md", "text": "elephant sanctuary notes"}
+    graph_item = {"text": "Sezzle pays through Visa", "via": "Ana —co_occurs→ Sezzle", "source": "fact:x"}
+
+    ctx = load_mod.Context(instance_id="inst_personal")
+    ctx.knowledge_chunks = [knowledge_chunk]
+    ctx.graph_items = [graph_item]
+
+    knowledge_tok = load_mod.estimate_tokens(load_mod._render_knowledge(knowledge_chunk))
+    graph_tok = load_mod.estimate_tokens(load_mod._render_graph(graph_item))
+    budget = knowledge_tok + graph_tok - 1  # not enough room for both
+
+    load_mod.truncate(ctx, budget)
+
+    assert ctx.knowledge_chunks == [knowledge_chunk]
+    assert ctx.graph_items == []

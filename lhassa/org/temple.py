@@ -88,6 +88,9 @@ TEMPLE_WORKERS: tuple[str, ...] = (SCRIBE, ARTIFICER, SYNCHRONIZER, GUARDIAN, OR
 #: from the topology) falls back to ``temple`` itself — the department.
 ACTION_OWNERS: dict[str, str] = {
     "distill_memory": GUARDIAN,
+    # The knowledge graph is stored signal turned durable structure — the
+    # guardian's domain, like distill_memory.
+    "kg_sync": GUARDIAN,
     "review_tools": GUARDIAN,
     "curate_skills": GUARDIAN,
     "detect_repetition": ORACLE,

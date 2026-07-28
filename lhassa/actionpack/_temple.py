@@ -32,6 +32,8 @@ TEMPLE_ACTIONS: frozenset[str] = frozenset(
         "calendar_sync",
         "derive_world_facts",
         "ingest_knowledge",
+        "kg_sync",
+        "apply_feedback",
     }
 )
 
