@@ -62,9 +62,10 @@ that backs semantic retrieval (layer 4, below).
 ## How context is loaded at think time
 
 `lhassa/memory/load.py` builds the **chica context** for one think — a
-`Context` object with a token budget, assembled from five layers in strict
-priority order (`PRIORITY = ["pinned", "recent", "tags", "semantic",
-"recall"]`):
+`Context` object with a token budget, assembled from layers in strict
+priority order (`PRIORITY = ["pinned", "recent", "tags", "semantic", "recall",
+"knowledge", "graph"]` — document perception and the persisted-graph layer,
+both below, are the two lowest and both fire only when a `query` is given):
 
 1. **Pinned + directivas (identity — always).** All `pinned` facts and every
    `directiva` fact, folded together with the persona's own directives
@@ -300,6 +301,69 @@ and their co-occurrences on the fly from rows `load_facts`/
   /api/memory/entities` (`lhassa/api/memory_routes.py`), and `lhassa memory
   graph <query> [--json]` / `lhassa memory entities [--json]`
   (`lhassa/cli/memory_cmds.py`).
+
+---
+
+## The persisted knowledge graph ("LightRAG-lite")
+
+Where `memory/graph.py` (above) recomputes co-occurrence at query time from
+raw facts/episodes, `lhassa/memory/kg.py` accumulates the SAME extraction
+**durably**, into two new grande tables (`kg_entities`/`kg_edges`), so 1-hop
+expansion doesn't have to re-scan the whole grande on every retrieval. Off by
+default — the whole feature is gated by one flag, `LHASSA_MEMORY_GRAPH`
+(`config.memory_graph_enabled`).
+
+- **Entities** carry a `kind`: `"tag"` (from a fact's own `tags` — the
+  stronger signal, mirrors `memory/graph.py`'s own "once tagged, stays
+  tagged" rule) or `"term"` (pulled from free text via
+  `memory.graph.extract_terms`).
+- **Edges** are a CLOSED vocabulary (`memory/kg.py:EDGE_KINDS`, mirroring
+  `org/relationships.py`'s discipline): `co_occurs` (symmetric — two
+  entities in the same fact/episode, weight accumulates per co-occurrence),
+  `mentions` (directed, term → tag, same fact only — reserved for the one
+  relationship that carries extra structure beyond plain co-occurrence), and
+  `derived_from` (reserved for future provenance edges; part of the closed
+  set but not yet emitted by the feeder).
+- **`kg_sync`** (`memory/kg.py:sync`, fronted by the `kg_sync` action,
+  `actionpack/_kg.py`) is the $0 incremental feeder: it walks facts +
+  episodes SINCE the last sync (a `watch_state` marker, `kg_sync:last` — the
+  same dedup pattern the watchlist senses use), upserts entities/edges, and
+  advances the marker. Never calls a model, never raises — a disabled flag or
+  any internal failure degrades to a zeroed summary. Owned by the `guardian`
+  monk under the temple department, scheduled **weekly** by the
+  `maintenance` seed alongside `review_tools`/`curate_skills`.
+
+### Fused retrieval — vector seed, 1-hop expand
+
+`lhassa/memory/graph_retrieve.py:retrieve(instance_id, query)` layers the
+persisted graph on top of the existing layer-4 semantic search, LightRAG-lite
+style:
+
+1. **Seed** — the layer-4 semantic hits (reusing `memory/load.py`'s own
+   `_semantic_layer`, no second embedding index) plus a direct name match of
+   the query's terms against stored `kg_entities`.
+2. **Expand 1-hop** — `db.kg_neighbors` over the seed entity ids, heaviest
+   edge first.
+3. **Map back to facts** — each neighbor entity is resolved to the facts
+   whose tags/content mention its name.
+4. **Merge + rank** — semantic-seed facts first, then direct entity-name
+   matches, then hop-derived facts ranked by the originating edge's weight
+   (a stronger co-occurrence is a more reliable hop). Deduped by fact id,
+   capped at `limit`.
+
+Each result carries a `via` field naming WHY it was pulled in — `"semantic"`,
+`"entity:<name>"`, or `"<seed> —<edge_kind>→ <neighbor>"` — so a caller can
+always show its provenance. $0 beyond the one embedding call the semantic
+seed already makes; any internal failure degrades to `[]`, never raises.
+
+### The graph context layer
+
+`memory/load.py` wires `graph_retrieve.retrieve` in as the **`graph`**
+layer — the LOWEST priority in `PRIORITY` (dropped first under budget) and,
+like the `knowledge` layer above it, fires only when both a `query` is given
+**and** `config.memory_graph_enabled` is on. With the flag off (the default),
+this layer is a byte-for-byte no-op — turning it on is strictly additive,
+the same contract layer 4 and document perception both keep.
 
 ---
 

@@ -40,3 +40,13 @@ Ola 1). Nada nuevo (modalidades/departamentos/comandos) hasta acumular millas.
   `send_document` pasan por `org/deliver.py`. DoD: cero sends directos.
 - **3.2 Piloto `LHASSA_ORG_LIVE`**: un departamento con executor real,
   presupuesto acotado. DoD: delegación viva con costo visible por hop.
+
+
+## Plan 2 — seis frentes (2026-07-28) ✅ EJECUTADO
+Projects (entidad + detector-propone) · standing brains por kind (read-only
+auto, escritor con tap) · plataforma (API/dashboard/evidencia
+prepared-observed-verified) · knowledge graph LightRAG-lite (kg_sync + retrieval
+fusionado, flag OFF) · `lhassa tui` (Textual) · TOON (construido y archivado).
+Detalle en doc/decisions.md 2026-07-28. Pendiente natural: encender
+LHASSA_MEMORY_GRAPH tras unos kg_sync semanales; pantalla TUI de mensajes/org;
+proyectos en el digest.

@@ -412,6 +412,8 @@ In debug mode, every STT frame is printed to the terminal:
 | `LHASSA_PROTECTED_ROOTS` | No | *(empty)* | A SECOND, stricter tier of roots (may overlap `LHASSA_KNOWLEDGE_ROOTS`): a file action whose `path` resolves inside one of these ALWAYS parks a per-access approval, fail-closed, never lowered by the autonomy knob — see `doc/security.md`. |
 | `LHASSA_EMBEDDER_BACKEND` | No | `auto` | Layer-4/knowledge embedder backend: `auto` (probe local Ollama, else hashing), `ollama` (force native Ollama, degrade to hashing if unreachable), `hash` (always the offline embedder). |
 | `LHASSA_EMBEDDER_MODEL` | No | `nomic-embed-text` | Ollama model name used by the native embedder backend. |
+| `LHASSA_KIND_TEMPLATES` | No | *(empty — `code:code-review` built in)* | CSV `kind:template,kind:template` overriding/extending which `org.templates` preset a project's `kind` auto-attaches (the standing-brains reflex, `actionpack/_standing.py`). A malformed entry is skipped, never crashes the reflex. |
+| `LHASSA_MEMORY_GRAPH` | No | `0` | Opt-in switch for the persisted knowledge graph (`kg_entities`/`kg_edges`) — gates both the `kg_sync` feeder and `memory/load.py`'s graph-augmented context layer. See `doc/memory.md`. |
 
 See `lhassa config list` for the live view — these are also editable at runtime via the settings service where marked `EDITABLE`.
 

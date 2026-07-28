@@ -124,6 +124,42 @@ action's `path` param resolves inside one:
 - **`approval.describe()` surfaces the `path`** for these rows, so the owner
   approving one sees WHICH file is being read, never a bare action name.
 
+### Standing-brains attach — a risk classification stamped upstream, on purpose
+
+A project's standing review brains (`org/templates.py`'s use-case templates,
+auto-attached by the `actionpack/_standing.py` watchlist sense) are a fifth
+input to `needs_approval()`, input (e): an `attach_project_template` task is
+gated **unless** the target template is PROVABLY read-only
+(`org.templates.template_is_read_only` — every brain in it has
+`limits.read_only is True`; unknown template, empty brain list, or any brain
+missing the flag all fail-closed to "gate it"). The layering here is
+deliberate, not incidental: `org` is a SHELL and `security/approval.py` is an
+INTERFACE, and interfaces must never import a shell — not even lazily, since
+the architecture guard (`tests/test_architecture.py`) walks every import
+regardless of nesting. So the classification is computed **upstream**, in
+`actionpack/_standing.py` (a shell, where the `org` import is legal), and
+stamped onto the minted task's own `params` as `read_only`;
+`security/approval.py:_attach_template_needs_gate` only ever reads that
+pre-computed flag. A read-only attach (e.g. `code-review`, whose two brains
+both carry `limits.read_only: True`) still mints via `INTERNO` origin — this
+is an internal reflex, not world-derived content — but still needs no human
+tap; a template that writes (or can't be proven not to) always parks, same
+never-lowered-by-autonomy standing as the protected-roots tier above.
+
+### The project detector — a MUNDO-origin proposal, never a silent create
+
+The $0 project detector (`actionpack/_projects.py`'s watchlist sense) notices
+a repo listed in `LHASSA_AUTO_SYNC_REPOS` with no matching project row and
+mints a `create_project` task to propose one — but it mints it with a
+**`MUNDO`** origin, not `INTERNO`. The repo's presence on disk is
+world-derived content (something the detector observed, not something the
+owner directly asked for in this moment), so input (b) alone is enough to
+park it regardless of the action's own approval flag: the trust model itself
+is what keeps detection from ever silently creating anything. The same
+pattern governs the standing-brains sense's own attach mint (`INTERNO`,
+above) — the difference in origin is the difference between "the brain
+noticed something in the world" and "the brain reacting to its own state."
+
 `security/autonomy.py` is the streak knob: `should_auto_approve()` tracks, **per
 `(accion, actor_id)`** — never globally — the count of consecutive human approvals; once
 it reaches `Config.autonomy_threshold` (default 3), that specific action from that

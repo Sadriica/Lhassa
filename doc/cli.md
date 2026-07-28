@@ -65,6 +65,44 @@ graduations come from the repetition detector's own proposals
 as the baseline automatically — `tools propose` stays the manual, stricter
 door.
 
+## `lhassa project` — the workspace entity
+
+A project is a named, TYPED unit of the owner's work (`kind`: `code` /
+`research` / `ops` / `personal` / `generic`, open — `kind` is what the
+standing-brains reflex keys off). Creation is an explicit owner act — the CLI,
+a chat marker, or an approved proposal — never silent.
+
+| Subcommand | Purpose | Example |
+|---|---|---|
+| `create <name>` | Create a project (refuses a duplicate active name) | `lhassa project create lhassa --kind code --path .` |
+| `list` | List projects, newest first (`--all` includes archived, `--kind`) | `lhassa project list --kind code` |
+| `show <ref>` | One project in full — id, name, kind, path, metadata | `lhassa project show lhassa` |
+| `archive <ref>` | Archive (never deleted; excluded from active listings) | `lhassa project archive lhassa` |
+| `runs <ref>` | Runs scoped to the project, with their evidence rung (`prepared`/`observed`/`verified`) | `lhassa project runs lhassa --limit 20` |
+| `artifacts <ref>` | Artifacts delivered for the project, newest first | `lhassa project artifacts lhassa` |
+
+`<ref>` resolves an id, an exact name, or a filesystem path that lives inside
+the project's own `path` (the deepest-rooted project wins on a nested match).
+
+A `code` project with no standing brains yet gets its review pair
+(`code-review` by default; override via `LHASSA_KIND_TEMPLATES`) proposed
+automatically by a $0 watchlist sense — see `doc/security.md` for the
+approval gate that guards the attach.
+
+## `lhassa tui` — the brain in a terminal
+
+`lhassa tui` launches a Textual terminal app: four tabs (Overview / Projects /
+Runs / Approvals), all reading `lhassa/core/db.py` **directly** — it works
+with the API server down. Approve/deny on the Approvals tab go through the
+same `security/approval.py:resolve()` seam the CLI/API use, never bypassed.
+
+| Key | Where | Action |
+|---|---|---|
+| `a` | Approvals tab | Approve the selected row |
+| `d` | Approvals tab | Deny the selected row |
+| `r` | any tab | Refresh |
+| `q` | anywhere | Quit |
+
 ## Approvals (HITL)
 
 | Command | Purpose | Example |

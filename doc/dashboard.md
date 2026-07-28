@@ -59,6 +59,7 @@ drives hash routing (`#<id>`), localStorage persistence, and the command palette
 | Command | `run` | Run task | `AgenticPanel.jsx` |
 | Autonomy | `watchlist` | Watchlist | `WatchlistPanel.jsx` |
 | Autonomy | `flows` | Flows | `WorkflowsPanel.jsx` (the n8n-style work-flow editor) |
+| Autonomy | `projects` | Projects | `ProjectsPanel.jsx` |
 | Autonomy | `approvals` | Approvals | `ApprovalQueuePanel.jsx` |
 | Capability | `capabilities` | Capabilities | `CapabilitiesPanel.jsx` |
 | Capability | `tools` | Actions | `QuarantinePanel.jsx` (self-written-tool gates/graduation) |
@@ -113,6 +114,17 @@ the n8n-style canvas over `flows/model.py`'s `trigger → task → gate → outp
 visible here: `personal-morning-briefing` and `personal-evening-briefing`. Both
 pin their task nodes to the `personal` department brain, but their node order
 differs so morning planning and evening review can evolve independently.
+
+### Projects
+
+`ProjectsPanel.jsx` — a read-only view over the project entity
+(`core/projects.py`): `GET /api/projects` lists projects (kind + status
+badges; a toggle shows archived), and opening one loads its scoped runs,
+delivered artifacts, and recent episodes (`GET /api/projects/{id}/{runs,
+artifacts,episodes}`). Each run's evidence rung — `prepared` / `observed` /
+`verified` — renders as a badge, mirroring the same three-rung contract
+`lhassa/memory/evidence.py` computes server-side. Creation is a CLI/chat act
+(`lhassa project create`), not a dashboard form.
 
 ### Approvals
 
@@ -257,6 +269,7 @@ the dashboard's panels actually call, plus the always-relevant liveness ones.
 | `GET` | `/api/agents` | All agent runs for the current session |
 | `GET` | `/api/code/clis` / `POST /api/code` / `GET /api/code/runs` / `POST /api/code/{id}/stop` | The Run task panel (agentic local-CLI door) |
 | `GET/POST /api/flows`, `GET/PUT/PATCH/DELETE /api/flows/{id}`, `POST /api/flows/{id}/run` | The Flows editor |
+| `GET` | `/api/projects[/{id}]`, `/api/projects/{id}/{runs,artifacts,episodes}` | The Projects panel |
 | `GET` | `/api/watchlist` | Read-only preview of what would wake the brain right now |
 | `GET/POST` | `/api/approvals`, `/api/approvals/{id}` (body `{action: "approve"\|"deny"}`) | The Approvals queue |
 | `GET` | `/api/tools`, `POST /api/tools/{name}/graduate` | The Actions (quarantine/gates) panel |

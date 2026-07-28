@@ -99,8 +99,8 @@ Built additively over an existing skeleton (extend, never rewrite). From
     CLI (incl. `code` → agentic local CLI) · Telegram (notify) ·
     dashboard + API (:7766, Lhasa identity) · voice
     dashboard sections: Overview · Brains (Flow/Tree/Templates + relationship
-      overlay) · Skills · Run (agentic) · Flows (work-flow editor) · Settings ·
-      Reports · Fleet · Activity
+      overlay) · Skills · Run (agentic) · Flows (work-flow editor) · Projects ·
+      Settings · Reports · Fleet · Activity
 
   Org: a command TREE + a typed RELATIONSHIP overlay (1..N brains)
                   lhassa  (root administrator — never removed/demoted)
@@ -122,7 +122,8 @@ Built additively over an existing skeleton (extend, never rewrite). From
 
   API routes (FastAPI, :7766) include — besides the brain/LLM/approval surface —
     /api/org/* (topology · brains · route · templates · relationships) ·
-    /api/flows[/{id}[/run]] · /api/code (+ /clis, /runs) · /api/skills/* · /api/config
+    /api/flows[/{id}[/run]] · /api/code (+ /clis, /runs) · /api/skills/* ·
+    /api/projects[/{id}[/runs|artifacts|episodes]] · /api/config
 ```
 
 Everything that can be swapped sits behind a `Registry` (`registry.py`) and can be
@@ -159,8 +160,9 @@ The same seed also creates temple's five leaf WORKER brains — its **monks**, e
 owning a sub-domain: `scribe` (docs), `artificer` (internal creation — tools/
 skills/flows authoring), `synchronizer` (sync — repo/calendar/memory), `guardian`
 (self-maintenance) and `oracle` (the consciousness). `org/temple.py:ACTION_OWNERS`
-is the deterministic action→monk ownership map for the maintenance seed's five
-actions:
+is the deterministic action→monk ownership map for the maintenance seed's
+hygiene actions (a representative subset shown below — the map has grown
+past this list without every addition being echoed here):
 
 | action | owning monk |
 |---|---|
@@ -169,6 +171,7 @@ actions:
 | `curate_skills` | `guardian` |
 | `detect_repetition` | `oracle` |
 | `calendar_sync` | `synchronizer` |
+| `kg_sync` | `guardian` |
 
 An action absent from the map, or whose resolved worker is missing from the
 topology, falls back to `temple` itself — the department is always someone.
@@ -243,4 +246,25 @@ CLI subcommand yet for the first two):
   and `GET /api/code/runs` list the installed CLIs and recent runs. The dashboard
   "Run" section is the UI; the CLI equivalent is `lhassa code "<task>"`. The
   `lhassa-app` service adds `~/.local/bin` to PATH so it finds the `claude` CLI.
+- **Projects** (`core/projects.py` + `api/project_routes.py`) — the first-class
+  workspace entity, scoped through existing tables via one namespaced-string
+  convention (`entity_tag`) rather than new columns. `kind` is a policy key: it
+  maps to an org template (`org/templates.py`, overridable via
+  `LHASSA_KIND_TEMPLATES`) that a $0 watchlist sense (`actionpack/_standing.py`)
+  proposes attaching — gated unless the template is provably read-only. A second
+  sense (`actionpack/_projects.py`) detects an unregistered repo on
+  `LHASSA_AUTO_SYNC_REPOS` and proposes a project with `MUNDO` origin — detection
+  never creates silently. `lhassa project create|list|show|archive|runs|artifacts`
+  is the CLI door; `ProjectsPanel.jsx` (dashboard, "Projects" section) is
+  read-only. Runs/tasks scoped to a project render an **evidence rung**
+  (`memory/evidence.py`: `prepared` / `observed` / `verified`), a pure derived
+  read with no new storage.
+- **The persisted knowledge graph** (`memory/kg.py` + `memory/graph_retrieve.py`,
+  opt-in via `LHASSA_MEMORY_GRAPH`) — a durable accumulation of the same
+  entity/co-occurrence extraction `memory/graph.py`'s on-the-fly read-model
+  already does, into two new grande tables (`kg_entities`/`kg_edges`, a closed
+  edge-kind vocabulary). `kg_sync` (owned by the `guardian` monk, weekly) is the
+  $0 incremental feeder; `graph_retrieve.retrieve()` is vector-seeded, 1-hop
+  graph-expanded fact retrieval, wired into `memory/load.py` as its lowest-
+  priority `graph` context layer (see `doc/memory.md`).
 </content>

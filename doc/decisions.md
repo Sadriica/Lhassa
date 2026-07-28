@@ -1,5 +1,53 @@
 # Lhassa — decisions log
 
+## 2026-07-28 — Six fronts in one day (projects, standing brains, platform, kg, TUI, TOON)
+
+Deep research first (oh-my-hermes, TOON v3, graph-RAG 2026 consensus, Textual),
+then a reuse-before-build inventory, then five parallel Sonnet subagent waves on
+disjoint territories with the shared storage (migrations 4-6) pre-built by the
+integrator. All owner decisions confirmed up front. Commits `f592e15..feb0494`.
+
+- **Projects** (`f592e15`): the first-class typed workspace (`projects` table,
+  Migration 4; CRUD + a deterministic resolver id>name>deepest-path;
+  `entity_tag()` — scoping via `runs.entity_id="project:<id>"` +
+  `artifacts.metadata.project_id`, NO new columns on existing tables). Alta by
+  explicit CLI/chat AND a $0 detector sense that PROPOSES via a MUNDO-origin
+  mint — the trust model itself parks the approval; detection never creates.
+- **Standing brains** (`6bd6241`): `DEFAULT_KIND_TEMPLATES` (env-overridable),
+  `template_is_read_only` (fail-closed), per-project brain namespacing
+  (`code-review:<project_id>:reviewer`), the sense→mint→attach loop, and
+  approval input (e): an attach parks UNLESS the template is provably
+  read-only — risk computed UPSTREAM in the sense and stamped on params,
+  because security (interface) may never import org (shell), even lazily.
+  E2E-verified live: create code project → one beat → reviewers in the tree;
+  second beat no-op; demo cleaned.
+- **Platform** (`693312a`): `/api/projects/*`, dashboard Projects section, and
+  the oh-my-hermes-inspired EVIDENCE VOCABULARY as a pure derived function
+  (`memory/evidence.py`): prepared (intent, no outcome — the state we lacked a
+  name for) / observed (episode exists) / verified (verifier passed or approval
+  aprobada). Unknown shapes degrade to "prepared", the humblest claim.
+- **Knowledge graph** (`75aaf44`): LightRAG-lite — `kg_entities`/`kg_edges`
+  (Migration 6, closed vocabulary co_occurs/mentions/derived_from,
+  relationships.py's validation discipline on SQLite), $0 incremental `kg_sync`
+  (weekly, guardian-owned, temple-wrapped), fused retrieval (vector seeds +
+  1-hop by edge weight, `via` hop labels) as the LOWEST-priority context layer
+  behind `LHASSA_MEMORY_GRAPH` (OFF by default). Deliberately no multi-hop, no
+  community summaries — the 2026 consensus and $0-first both say 1-hop is the
+  increment that pays.
+- **TUI** (`d178205`): `lhassa tui` (Textual 8.x) — overview/projects/runs/
+  approvals over DIRECT db reads (works with the API down); approvals render
+  via `describe()` and resolve via the one approval seam (a/d keys,
+  by_actor="tui"). Lazy-imported so `lhassa --help` stays fast.
+- **TOON** (`feb0494`): built and SHELVED — the inventory showed no
+  JSON-in-prompt anti-pattern to fix (the house hand-renders compact lines), so
+  the encoder (52.8% of JSON's size on tabular data) sits unwired with its
+  first consumer named (graph-expansion tables) and an explicit do-not-wire-
+  speculatively note.
+- **Test hermeticity hardened**: the whole suite pins
+  `LHASSA_EMBEDDER_BACKEND=hash` in conftest — a live local Ollama must never
+  change test outcomes or speed (69s → 12s on the affected set).
+
+
 ## 2026-07-24 — The lean body: measured, then optimized (heartbeat, sentry shadow, one-command install)
 
 - **The Rust question, answered with data first**: 7 days of production

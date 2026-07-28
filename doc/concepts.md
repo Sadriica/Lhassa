@@ -235,6 +235,37 @@ IMPORTANT transitions (failures, a worsened health level, a new approval). A tok
 spent only under `LHASSA_MONITOR_THINK` + `LHASSA_ORG_LIVE`; idle watching is $0 by
 construction.
 
+## The project: a typed workspace, never silently created
+
+A **project** (`core/projects.py`) is a named, TYPED unit of the owner's work — a
+code repo, a research effort, an ops surface — scoped by `kind` (`code` / `research`
+/ `ops` / `personal` / `generic`, an open vocabulary like `dominio`). `kind` is not
+decoration: it is a POLICY key. A project's `kind` maps (`org.templates.kind_template_map`,
+overridable via `LHASSA_KIND_TEMPLATES`) to an org template, and a $0 watchlist sense
+(`actionpack/_standing.py`) proposes attaching that template's brains — a `code`
+project gets a reviewer + security-reviewer pair standing by, without being asked.
+Existing tables already reference a project through one namespaced-string convention
+(`runs.entity_id = "project:<id>"`, `artifacts.metadata.project_id`) rather than new
+columns — schema sprawl is deferred until the convention actually proves insufficient.
+
+The project entity never appears by magic. A repo on `LHASSA_AUTO_SYNC_REPOS` with no
+matching project row is *detected*, not created: `actionpack/_projects.py`'s watchlist
+sense mints a `create_project` task with **`MUNDO`** origin — world-derived content is
+never trusted to act on its own (`doc/security.md`), so the owner's tap is the actual
+act of creation. The same principle governs the standing-brains attach itself: whether
+it needs a human OK depends on whether the target template is *provably* read-only
+(every brain in it carries `limits.read_only: True`) — anything else, including "can't
+tell," gates fail-closed.
+
+Runs and tasks scoped to a project carry an **evidence rung** (`memory/evidence.py`),
+the repo's honesty contract for "did this actually happen": **prepared** (intent
+recorded, no outcome — the default for anything unrecognized, never an inflated
+claim), **observed** (a finished status asserts an outcome, uncorroborated), or
+**verified** (observed AND independently corroborated — a passing `Verifier` result,
+or a resolved, linked approval). It is a pure derived read over columns already on
+`runs`/`tasks` — no new storage, and never a stronger claim than the evidence
+actually supports.
+
 ## Work-flows run through the hierarchy
 
 A work-flow (`flows/`) is a DAG wiring `trigger → task → gate → output` (+ `branch`),

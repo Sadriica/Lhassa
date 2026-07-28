@@ -161,6 +161,14 @@ deterministic, $0, degrade-to-normal-think on any failure:
   co-occurring terms, its time span), `entities()`, `timeline()`. Entity
   extraction is tags-first + capitalized/quoted terms (documented as heuristic,
   not NLP). `GET /api/memory/graph|entities`, `lhassa memory graph|entities`.
+- **The persisted knowledge graph** (opt-in, `LHASSA_MEMORY_GRAPH`).
+  `memory/kg.py` accumulates the same entity/co-occurrence extraction durably
+  into `kg_entities`/`kg_edges` (a closed edge-kind vocabulary: `co_occurs`
+  symmetric, `mentions` directed term→tag, `derived_from` reserved); `kg_sync`
+  is the $0 incremental feeder (`guardian` monk, weekly). `memory/graph_retrieve.py`
+  is vector-seeded, 1-hop graph-expanded fact retrieval, wired into
+  `memory/load.py` as its lowest-priority `graph` context layer — fires only
+  with a query AND the flag on.
 - **The consciousness** (`agents/repetition.py` + `actionpack/_selfimprove.py`).
   Beyond the cost detector: `detect_recurring` finds patterns repeated OFTEN
   (any cost) and reads a temporal cadence (regular gaps → "fires weekly");
@@ -324,6 +332,32 @@ kind, no self-edge) before it writes. `/api/org/relationships` (+ `/kinds`,
 overlay (legend + toggles) and the inspector adds/removes them. Multi-person approval:
 proposer ≠ approver for high-risk.
 
+**Projects + standing brains.** `core/projects.py` is the first-class workspace
+entity — a named, TYPED unit of work (`kind`: `code`/`research`/`ops`/`personal`/
+`generic`, open), scoped into existing tables via one namespaced-string convention
+(`entity_tag`, `runs.entity_id = "project:<id>"`) rather than new columns.
+`kind` is a policy key: `org/templates.py`'s `kind_template_map` (overridable via
+`LHASSA_KIND_TEMPLATES`) maps it to an org template, and a $0 watchlist sense
+(`actionpack/_standing.py`) proposes attaching that template's brains to a matching
+project — gated (`security/approval.py`'s input (e)) unless every brain in the
+template is provably `read_only`, a classification computed upstream (in the shell,
+where the `org` import is legal) and stamped onto the task so the interface layer
+never imports a shell. A second sense (`actionpack/_projects.py`) detects a repo on
+`LHASSA_AUTO_SYNC_REPOS` with no project row and proposes one with **`MUNDO`**
+origin — detection never creates silently, the owner's tap is the actual act.
+`lhassa project create|list|show|archive|runs|artifacts`; `GET /api/projects[/{id}
+[/runs|artifacts|episodes]]`; the dashboard's read-only Projects section. Runs/tasks
+scoped to a project carry an **evidence rung** (`memory/evidence.py`): `prepared`
+(intent recorded, the default for anything unrecognized) / `observed` (a finished
+status asserts an outcome) / `verified` (observed AND independently corroborated —
+a passing verify result, or a resolved linked approval) — a pure derived read, no
+new storage, never a stronger claim than the evidence supports.
+
+**The brain in a terminal.** `lhassa tui` (`cli/tui/`) is a Textual app — four tabs
+(Overview/Projects/Runs/Approvals) reading `core/db.py` directly, so it works with
+the API server down; approve/deny (`a`/`d` keys) go through the same
+`security/approval.py:resolve()` seam as the CLI/API.
+
 **The temple (`temple`) — Lhassa's own inner department.** Distinct from `interns`
 (CV workers) and `personal` (the owner's own department): `temple` is a DIRECT
 child of Lhassa, seeded by `seeds/temple.py` (`lhassa seed apply temple`), that owns
@@ -334,9 +368,10 @@ owning a sub-domain: `scribe` (docs), `artificer` (internal creation), `synchron
 (sync), `guardian` (self-maintenance) and `oracle` (the consciousness — repetition
 detection, self-routing proposals); the same seed creates all five, idempotently.
 `org/temple.py:ACTION_OWNERS` is the deterministic action→monk ownership map for the
-maintenance seed's five actions: `distill_memory`/`review_tools`/`curate_skills` →
-`guardian`, `detect_repetition` → `oracle`, `calendar_sync` → `synchronizer`; an
-unmapped action, or a topology missing the resolved worker, falls back to `temple`
+maintenance seed's hygiene actions: `distill_memory`/`review_tools`/`curate_skills`/
+`kg_sync` → `guardian`, `detect_repetition`/`apply_feedback` → `oracle`,
+`calendar_sync`/`ingest_knowledge` → `synchronizer`, `derive_world_facts` →
+`guardian`; an unmapped action, or a topology missing the resolved worker, falls back to `temple`
 itself. `org/temple.py:delegate_internal(action, params, config, instruction)` is the
 down-execute-up loop: it resolves the owning worker (`resolve_worker`), logs ONE
 `org-delegate` Episode delegating the action DOWN the path `lhassa → temple → <worker>`
