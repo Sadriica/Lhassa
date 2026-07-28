@@ -24,6 +24,7 @@ This is a SHELL module (it composes management/topology/skills); it adds no new 
 
 from __future__ import annotations
 
+import os
 from typing import TYPE_CHECKING, Optional
 
 from lhassa.org import management
@@ -34,6 +35,15 @@ if TYPE_CHECKING:
 
 #: The token a brain's ``parent`` uses to attach UNDER the permanent administrator.
 ADMIN_REF = "__admin__"
+
+#: kind -> default org template id, applied by the standing-brains reflex
+#: (``actionpack/_standing.py``, Wave 1) when a project of that kind appears with no
+#: matching ``project_brains`` row yet. Overridable/extendable via the
+#: ``LHASSA_KIND_TEMPLATES`` env var (CSV ``"kind:template,kind:template"``) — see
+#: :func:`kind_template_map`.
+DEFAULT_KIND_TEMPLATES: dict[str, str] = {
+    "code": "code-review",
+}
 
 
 class TemplateError(ValueError):
@@ -262,26 +272,79 @@ def get_template(template_id: str) -> dict:
     return template
 
 
+def kind_template_map() -> dict[str, str]:
+    """The merged ``project.kind -> template_id`` map: :data:`DEFAULT_KIND_TEMPLATES`
+    overridden/extended by ``LHASSA_KIND_TEMPLATES`` (CSV ``"kind:template,..."``).
+
+    Parsed defensively: a malformed entry (no ``:``, empty kind/template) is
+    skipped rather than raising — a typo in the env var degrades to "use the
+    default for that kind", never crashes the reflex that reads this. Never
+    validates the template id exists (``get_template``/``template_is_read_only``
+    do that at the point of use) — this stays pure string plumbing.
+    """
+    merged = dict(DEFAULT_KIND_TEMPLATES)
+    raw = os.environ.get("LHASSA_KIND_TEMPLATES", "") or ""
+    for entry in raw.split(","):
+        entry = entry.strip()
+        if not entry or ":" not in entry:
+            continue
+        kind, _, template_id = entry.partition(":")
+        kind = kind.strip().lower()
+        template_id = template_id.strip()
+        if kind and template_id:
+            merged[kind] = template_id
+    return merged
+
+
+def template_is_read_only(template_id: str) -> bool:
+    """True only when EVERY brain in the template is provably read-only.
+
+    A brain is read-only when its ``limits`` dict has ``read_only: True`` (the
+    field ``code-review``/``bug-investigation`` already set — see the catalog
+    above; ``max_risk``/``require_approval`` are a coarser risk hint the template
+    author may also set, but ``read_only`` is the one explicit, boolean signal we
+    trust for this classification). Fail-CLOSED in every uncertain case: an
+    unknown template id, a template with no brains, or any brain missing/not-True
+    ``read_only`` all return ``False`` — this is a RISK gate (see
+    ``security/approval.py``'s ``_attach_template_needs_gate``), so "can't tell"
+    must mean "treat as write-capable", never the reverse.
+    """
+    try:
+        template = get_template(template_id)
+    except TemplateError:
+        return False
+    brains = template.get("brains") or []
+    if not brains:
+        return False
+    for brain in brains:
+        limits = brain.get("limits")
+        if not isinstance(limits, dict) or limits.get("read_only") is not True:
+            return False
+    return True
+
+
 # ── instantiation ────────────────────────────────────────────────────────────────
 
 
-def _namespaced(template_id: str, local_id: str) -> str:
-    """The on-chart id for a template-local brain id (``"<template>:<local>"``)."""
-    return f"{template_id}:{local_id}"
+def _namespaced(namespace: str, local_id: str) -> str:
+    """The on-chart id for a template-local brain id (``"<namespace>:<local>"``)."""
+    return f"{namespace}:{local_id}"
 
 
-def _resolve_parent(template_id: str, parent: Optional[str], admin: str) -> str:
+def _resolve_parent(namespace: str, parent: Optional[str], admin: str) -> str:
     """Resolve a brain's ``parent`` ref to a real chart id.
 
     ``"__admin__"``/empty ⇒ the permanent administrator (Lhassa); any other value is
-    a template-local id ⇒ its namespaced chart id.
+    a template-local id ⇒ its namespaced chart id (within the SAME instantiation).
     """
     if not parent or parent == ADMIN_REF:
         return admin
-    return _namespaced(template_id, parent)
+    return _namespaced(namespace, parent)
 
 
-def instantiate(template_id: str, *, config: "Optional[Config]" = None) -> dict:
+def instantiate(
+    template_id: str, *, config: "Optional[Config]" = None, namespace: "Optional[str]" = None
+) -> dict:
     """Build a template's brains under Lhassa and return the updated chart.
 
     Idempotent: a namespaced brain id that already exists is skipped (so re-applying
@@ -290,15 +353,25 @@ def instantiate(template_id: str, *, config: "Optional[Config]" = None) -> dict:
     corrupts the saved chart. Brains are listed parent-first, so a coordinator exists
     before its children attach.
 
+    ``namespace`` defaults to ``template_id`` (the plain ``"<template>:<local>"``
+    chart ids the CLI/API "apply a template" flows expect — unchanged). Pass a more
+    specific namespace (e.g. ``"<template_id>:<project_id>"``, what the standing-
+    brains reflex in ``actionpack/_standing.py`` does) to instantiate a SEPARATE set
+    of brains per caller instead of sharing one global set — this is the collision
+    rule: two callers that pass the SAME namespace share/reuse brains (skip on
+    re-apply, by design); callers that want isolated brains per instantiation must
+    pass a namespace unique to them.
+
     Returns ``{"template", "created": [ids], "skipped": [ids], "chart": describe()}``.
     """
     template = get_template(template_id)
     admin = topo.admin_id(config)
+    ns = namespace or template_id
 
     created: list[str] = []
     skipped: list[str] = []
     for brain in template["brains"]:
-        real_id = _namespaced(template_id, brain["id"])
+        real_id = _namespaced(ns, brain["id"])
         # Re-read each loop so we see brains added earlier in this same call.
         topology = topo.load_topology(config)
         if topology.has(real_id):
@@ -307,7 +380,7 @@ def instantiate(template_id: str, *, config: "Optional[Config]" = None) -> dict:
         management.add_brain(
             real_id,
             role=brain.get("role", "department"),
-            parent=_resolve_parent(template_id, brain.get("parent"), admin),
+            parent=_resolve_parent(ns, brain.get("parent"), admin),
             department=brain.get("department"),
             skills=brain.get("skills", ()),
             limits=brain.get("limits"),
@@ -317,6 +390,7 @@ def instantiate(template_id: str, *, config: "Optional[Config]" = None) -> dict:
 
     return {
         "template": template_id,
+        "namespace": ns,
         "created": created,
         "skipped": skipped,
         "chart": management.describe(config),

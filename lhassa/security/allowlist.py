@@ -271,6 +271,15 @@ def build_allowlist(repos: "set[str] | str | None" = None) -> dict[str, ActionSp
             min_trust=TrustLevel.INTERNO,
             requires_approval=False,
         ),
+        # Standing-brains attach. (a)/(b) stay neutral (INTERNO, no flag) so
+        # approval input (e) is the ONE deciding factor: a template that isn't
+        # provably read-only parks for the owner's tap (risk stamped upstream
+        # by the sense — see actionpack/_standing.py + security/approval.py).
+        "attach_project_template": ActionSpec(
+            objetivos=WILDCARD,
+            min_trust=TrustLevel.INTERNO,
+            requires_approval=False,
+        ),
         # Knowledge-graph sync — read-only fact/episode scan + local graph
         # write; same $0 hygiene tier as ingest_knowledge.
         "kg_sync": ActionSpec(

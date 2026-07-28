@@ -76,6 +76,31 @@ def _touches_protected_root(accion: str, params) -> bool:
         return True
 
 
+def _attach_template_needs_gate(accion: str, params) -> bool:
+    """True (park) unless an ``attach_project_template`` task is PROVABLY read-only.
+
+    Input (e): whether the standing-brains reflex's attach needs a human tap
+    depends on the target org template's risk
+    (``org.templates.template_is_read_only``). ``org`` is a SHELL and this module
+    is an INTERFACE — it must never import a shell, even lazily (the architecture
+    guard in ``tests/test_architecture.py`` walks every import regardless of
+    nesting, so a function-body import would still trip it). So this does NOT
+    import ``org.templates``: the classification is computed once, upstream, by
+    the caller that mints the task (``actionpack/_standing.py``'s sense, where the
+    ``org`` import IS legal) and stamped onto the task's own ``params`` as
+    ``read_only``. This just reads that pre-computed flag.
+
+    Fail-CLOSED like (d): missing/non-``True`` ⇒ gated. Only accion this applies
+    to is ``attach_project_template``; any other accion returns ``False`` (no
+    opinion — the other inputs decide).
+    """
+    if accion != "attach_project_template":
+        return False
+    if not isinstance(params, dict):
+        return True
+    return params.get("read_only") is not True
+
+
 def needs_approval(
     decision_or_task: Union["AllowDecision", object],
     *,
@@ -95,6 +120,10 @@ def needs_approval(
     (c) **The high-risk always-approve set.** Actions in
         ``Config.always_approve_actions`` (e.g. move_money / delete_data) ALWAYS need
         approval, regardless of everything else — including the autonomy knob.
+    (d) **A protected-path file read** (see ``_touches_protected_root``) — per
+        access, never lowered by autonomy.
+    (e) **A standing-brains attach whose template isn't provably read-only** (see
+        ``_attach_template_needs_gate``) — per attach, never lowered by autonomy.
 
     ``decision_or_task`` may be a ``Task`` (the rich case — all three inputs apply)
     or an ``AllowDecision`` (only input (a) is knowable). ``autonomy`` is the knob's
@@ -122,6 +151,13 @@ def needs_approval(
     # ``Config.protected_roots`` ALWAYS asks the owner — per access, and (like
     # high-risk) never lowered by the autonomy knob: the tap IS the verification.
     if not isinstance(decision_or_task, AllowDecision) and _touches_protected_root(
+        decision_or_task.accion, getattr(decision_or_task, "params", None)
+    ):
+        return True
+
+    # (e) A standing-brains attach whose target template is not provably read-only
+    # ALWAYS asks the owner — same never-lowered-by-autonomy standing as (d).
+    if not isinstance(decision_or_task, AllowDecision) and _attach_template_needs_gate(
         decision_or_task.accion, getattr(decision_or_task, "params", None)
     ):
         return True
