@@ -303,5 +303,14 @@ app.add_typer(_knowledge_cmds.knowledge_app, name="knowledge")
 _memory_cmds.register(app)
 
 
+@app.command("tui")
+def tui_cmd() -> None:
+    """Launch the Textual terminal dashboard (offline, direct DB reads)."""
+    # Lazy import: importing the CLI must never pay Textual's import cost.
+    from lhassa.cli.tui.app import run_tui
+
+    run_tui()
+
+
 def main() -> None:
     app()
