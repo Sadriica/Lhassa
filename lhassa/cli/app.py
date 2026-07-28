@@ -44,6 +44,7 @@ from lhassa.cli import memory_cmds as _memory_cmds  # noqa: E402
 from lhassa.cli import org_cmds as _org_cmds  # noqa: E402
 from lhassa.cli import seed_cmds as _seed_cmds  # noqa: E402
 from lhassa.cli import skills_cmds as _skills_cmds  # noqa: E402
+from lhassa.cli import project_cmds as _project_cmds  # noqa: E402
 from lhassa.cli import task_cmds as _task_cmds  # noqa: E402
 from lhassa.cli import tools_cmds as _tools_cmds  # noqa: E402
 from lhassa.cli.theme import LHASSA_THEME, cost_markup, prompt_fragments  # noqa: E402
@@ -288,6 +289,9 @@ app.add_typer(_config_cmds.config_app, name="config")
 
 # Attach the `lhassa task` sub-app (task/standing-goal management).
 app.add_typer(_task_cmds.task_app, name="task")
+
+# ── lhassa project … (the first-class workspace entity) ─────────────────────
+app.add_typer(_project_cmds.project_app, name="project")
 
 # Attach the `lhassa tools` sub-app (self-written tools: list + propose).
 app.add_typer(_tools_cmds.tools_app, name="tools")

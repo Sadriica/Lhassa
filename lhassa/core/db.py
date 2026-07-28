@@ -838,10 +838,142 @@ async def _validate_migration_003(db) -> None:
         raise MigrationValidationError("invalid knowledge schema: missing size")
 
 
+async def _migration_004_projects(db) -> None:
+    """The PROJECT entity — the first-class workspace Lhassa works ON.
+
+    A project is a named unit of the owner's work (a repo, a research effort,
+    an ops surface), typed by ``kind`` so project-type policy (standing review
+    brains, default flows) can key off it. Scoping of existing tables happens
+    WITHOUT new columns: ``runs.entity_id`` carries ``project:<id>`` and
+    ``artifacts.metadata`` carries a ``project_id`` key — the namespaced-string
+    convention, promoted to schema only if it ever proves insufficient.
+    """
+    await db.execute("""
+        CREATE TABLE projects (
+            id               TEXT PRIMARY KEY,
+            instance_id      TEXT NOT NULL,
+            name             TEXT NOT NULL,
+            kind             TEXT NOT NULL DEFAULT 'generic',
+            path             TEXT,
+            status           TEXT NOT NULL DEFAULT 'active',
+            metadata         TEXT,
+            owner_department TEXT,
+            created_at       TEXT NOT NULL,
+            updated_at       TEXT NOT NULL
+        )
+    """)
+    await db.execute("""
+        CREATE INDEX projects_by_instance
+        ON projects(instance_id, status, kind)
+    """)
+
+
+async def _validate_migration_004(db) -> None:
+    async with db.execute("PRAGMA table_info(projects)") as cur:
+        actual = {row[1] for row in await cur.fetchall()}
+    required = {
+        "id", "instance_id", "name", "kind", "path", "status",
+        "metadata", "owner_department", "created_at", "updated_at",
+    }
+    missing = required - actual
+    if missing:
+        raise MigrationValidationError(f"invalid projects schema: missing {sorted(missing)}")
+
+
+async def _migration_005_project_brains(db) -> None:
+    """Standing-brain attachments: which org template is bound to which project.
+
+    The durable record behind "a code project always has its reviewer brains":
+    the standing-brains sense fires only for projects with no row here, and the
+    ``attach_project_template`` action writes one after instantiating — the row
+    IS the idempotency (mirrors ``watch_state`` dedup, but queryable both ways).
+    """
+    await db.execute("""
+        CREATE TABLE project_brains (
+            project_id      TEXT NOT NULL,
+            instance_id     TEXT NOT NULL,
+            template_id     TEXT NOT NULL,
+            status          TEXT NOT NULL DEFAULT 'attached',
+            instantiated_at TEXT NOT NULL,
+            PRIMARY KEY (project_id, template_id)
+        )
+    """)
+    await db.execute("""
+        CREATE INDEX project_brains_by_instance
+        ON project_brains(instance_id, project_id)
+    """)
+
+
+async def _validate_migration_005(db) -> None:
+    async with db.execute("PRAGMA table_info(project_brains)") as cur:
+        actual = {row[1] for row in await cur.fetchall()}
+    required = {"project_id", "instance_id", "template_id", "status", "instantiated_at"}
+    missing = required - actual
+    if missing:
+        raise MigrationValidationError(f"invalid project_brains schema: missing {sorted(missing)}")
+
+
+async def _migration_006_knowledge_graph(db) -> None:
+    """The persisted knowledge graph (LightRAG-lite): entities + typed edges.
+
+    Fed $0 from the existing deterministic extraction (memory/graph.py tags +
+    regex terms); validation/vocabulary discipline lives in the domain module
+    (mirrors org/relationships.py), these tables stay dumb storage. ``weight``
+    accumulates co-occurrence counts; ``source`` names the feeder
+    (``fact:<id>`` / ``episode:<id>``) for auditability.
+    """
+    await db.execute("""
+        CREATE TABLE kg_entities (
+            id          TEXT PRIMARY KEY,
+            instance_id TEXT NOT NULL,
+            name        TEXT NOT NULL,
+            kind        TEXT NOT NULL DEFAULT 'term',
+            first_seen  TEXT NOT NULL,
+            last_seen   TEXT NOT NULL
+        )
+    """)
+    await db.execute("""
+        CREATE UNIQUE INDEX kg_entities_by_name
+        ON kg_entities(instance_id, name)
+    """)
+    await db.execute("""
+        CREATE TABLE kg_edges (
+            instance_id TEXT NOT NULL,
+            from_id     TEXT NOT NULL,
+            to_id       TEXT NOT NULL,
+            kind        TEXT NOT NULL,
+            weight      REAL NOT NULL DEFAULT 1.0,
+            source      TEXT,
+            created_at  TEXT NOT NULL,
+            updated_at  TEXT NOT NULL,
+            PRIMARY KEY (instance_id, from_id, to_id, kind)
+        )
+    """)
+    await db.execute("""
+        CREATE INDEX kg_edges_by_from
+        ON kg_edges(instance_id, from_id)
+    """)
+
+
+async def _validate_migration_006(db) -> None:
+    for table, required in (
+        ("kg_entities", {"id", "instance_id", "name", "kind", "first_seen", "last_seen"}),
+        ("kg_edges", {"instance_id", "from_id", "to_id", "kind", "weight", "source", "created_at", "updated_at"}),
+    ):
+        async with db.execute(f"PRAGMA table_info({table})") as cur:
+            actual = {row[1] for row in await cur.fetchall()}
+        missing = required - actual
+        if missing:
+            raise MigrationValidationError(f"invalid {table} schema: missing {sorted(missing)}")
+
+
 MIGRATIONS = (
     Migration(1, "baseline", _migration_001_baseline, _validate_migration_001),
     Migration(2, "durable-flows", _migration_002_durable_flows, _validate_migration_002),
     Migration(3, "knowledge-size", _migration_003_knowledge_size, _validate_migration_003),
+    Migration(4, "projects", _migration_004_projects, _validate_migration_004),
+    Migration(5, "project-brains", _migration_005_project_brains, _validate_migration_005),
+    Migration(6, "knowledge-graph", _migration_006_knowledge_graph, _validate_migration_006),
 )
 SCHEMA_VERSION = MIGRATIONS[-1].version
 
@@ -2419,3 +2551,222 @@ async def clear_knowledge(instance_id: str) -> int:
         )
         await db.commit()
         return cur.rowcount if cur.rowcount is not None else 0
+
+
+# ── projects (the first-class workspace entity — § core.projects) ─────────────
+
+
+async def insert_project(row: dict) -> str:
+    """Insert one project row. Returns the project id. Scoped to ``instance_id``."""
+    metadata = row.get("metadata")
+    metadata_json = (
+        metadata if isinstance(metadata, str)
+        else json.dumps(metadata or {}, ensure_ascii=False)
+    )
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            """INSERT INTO projects(
+                   id, instance_id, name, kind, path, status,
+                   metadata, owner_department, created_at, updated_at)
+               VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                row["id"],
+                row["instance_id"],
+                row["name"],
+                row.get("kind") or "generic",
+                row.get("path"),
+                row.get("status") or "active",
+                metadata_json,
+                row.get("owner_department"),
+                row["created_at"],
+                row["updated_at"],
+            ),
+        )
+        await db.commit()
+    return row["id"]
+
+
+async def get_project_row(instance_id: str, project_id: str) -> "Optional[dict]":
+    """One project row (metadata decoded), or ``None``."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            "SELECT * FROM projects WHERE instance_id = ? AND id = ?",
+            (instance_id, project_id),
+        ) as cur:
+            row = await cur.fetchone()
+    if row is None:
+        return None
+    out = dict(row)
+    out["metadata"] = _loads(out.get("metadata"), {})
+    return out
+
+
+async def list_project_rows(
+    instance_id: str, *, status: "Optional[str]" = "active", kind: "Optional[str]" = None
+) -> "list[dict]":
+    """Project rows for ``instance_id`` (newest first). ``status=None`` lists all."""
+    sql = "SELECT * FROM projects WHERE instance_id = ?"
+    params: list = [instance_id]
+    if status is not None:
+        sql += " AND status = ?"
+        params.append(status)
+    if kind is not None:
+        sql += " AND kind = ?"
+        params.append(kind)
+    sql += " ORDER BY created_at DESC"
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(sql, params) as cur:
+            rows = [dict(row) for row in await cur.fetchall()]
+    for row in rows:
+        row["metadata"] = _loads(row.get("metadata"), {})
+    return rows
+
+
+async def update_project_row(
+    instance_id: str, project_id: str, fields: dict
+) -> bool:
+    """Update allowed mutable columns on one project. Returns whether a row changed."""
+    allowed = {"name", "kind", "path", "status", "owner_department", "metadata", "updated_at"}
+    sets, params = [], []
+    for key, value in fields.items():
+        if key not in allowed:
+            continue
+        if key == "metadata" and not isinstance(value, str):
+            value = json.dumps(value or {}, ensure_ascii=False)
+        sets.append(f"{key} = ?")
+        params.append(value)
+    if not sets:
+        return False
+    params.extend([instance_id, project_id])
+    async with aiosqlite.connect(DB_PATH) as db:
+        cur = await db.execute(
+            f"UPDATE projects SET {', '.join(sets)} WHERE instance_id = ? AND id = ?",
+            params,
+        )
+        await db.commit()
+        return bool(cur.rowcount)
+
+
+# ── project_brains (standing-brain attachments — Wave 1) ─────────────────────
+
+
+async def insert_project_brains(row: dict) -> None:
+    """Record one template attachment. INSERT OR IGNORE — the row is the idempotency."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            """INSERT OR IGNORE INTO project_brains(
+                   project_id, instance_id, template_id, status, instantiated_at)
+               VALUES(?, ?, ?, ?, ?)""",
+            (
+                row["project_id"],
+                row["instance_id"],
+                row["template_id"],
+                row.get("status") or "attached",
+                row["instantiated_at"],
+            ),
+        )
+        await db.commit()
+
+
+async def list_project_brains(
+    instance_id: str, project_id: "Optional[str]" = None
+) -> "list[dict]":
+    """Attachment rows for one project (or the whole instance)."""
+    sql = "SELECT * FROM project_brains WHERE instance_id = ?"
+    params: list = [instance_id]
+    if project_id is not None:
+        sql += " AND project_id = ?"
+        params.append(project_id)
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(sql, params) as cur:
+            return [dict(row) for row in await cur.fetchall()]
+
+
+# ── knowledge graph (kg_entities / kg_edges — Wave 3, dumb storage) ──────────
+
+
+async def upsert_kg_entity(row: dict) -> str:
+    """Insert-or-touch one entity by (instance_id, name). Returns its id."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            "SELECT id FROM kg_entities WHERE instance_id = ? AND name = ?",
+            (row["instance_id"], row["name"]),
+        ) as cur:
+            existing = await cur.fetchone()
+        if existing is not None:
+            await db.execute(
+                "UPDATE kg_entities SET last_seen = ?, kind = ? WHERE id = ?",
+                (row["last_seen"], row.get("kind") or "term", existing["id"]),
+            )
+            await db.commit()
+            return existing["id"]
+        await db.execute(
+            """INSERT INTO kg_entities(id, instance_id, name, kind, first_seen, last_seen)
+               VALUES(?, ?, ?, ?, ?, ?)""",
+            (
+                row["id"],
+                row["instance_id"],
+                row["name"],
+                row.get("kind") or "term",
+                row["first_seen"],
+                row["last_seen"],
+            ),
+        )
+        await db.commit()
+        return row["id"]
+
+
+async def upsert_kg_edge(row: dict) -> None:
+    """Insert one edge or accumulate its weight (co-occurrence counting)."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            """INSERT INTO kg_edges(
+                   instance_id, from_id, to_id, kind, weight, source, created_at, updated_at)
+               VALUES(?, ?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT(instance_id, from_id, to_id, kind)
+               DO UPDATE SET weight = weight + excluded.weight,
+                             updated_at = excluded.updated_at""",
+            (
+                row["instance_id"],
+                row["from_id"],
+                row["to_id"],
+                row["kind"],
+                float(row.get("weight") or 1.0),
+                row.get("source"),
+                row["created_at"],
+                row["updated_at"],
+            ),
+        )
+        await db.commit()
+
+
+async def kg_neighbors(instance_id: str, entity_ids: "list[str]", limit: int = 50) -> "list[dict]":
+    """1-hop edges touching any of ``entity_ids`` (either direction), heaviest first."""
+    if not entity_ids:
+        return []
+    marks = ",".join("?" for _ in entity_ids)
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            f"""SELECT * FROM kg_edges
+                WHERE instance_id = ? AND (from_id IN ({marks}) OR to_id IN ({marks}))
+                ORDER BY weight DESC LIMIT ?""",
+            [instance_id, *entity_ids, *entity_ids, limit],
+        ) as cur:
+            return [dict(row) for row in await cur.fetchall()]
+
+
+async def list_kg_entities(instance_id: str, limit: int = 200) -> "list[dict]":
+    """Entities for this instance, most-recently-seen first."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            """SELECT * FROM kg_entities WHERE instance_id = ?
+               ORDER BY last_seen DESC LIMIT ?""",
+            (instance_id, limit),
+        ) as cur:
+            return [dict(row) for row in await cur.fetchall()]

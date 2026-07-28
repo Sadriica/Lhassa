@@ -498,6 +498,9 @@ class Config:
     # win when set — this gate matters when they are cleared.
     embedder_backend: str = os.getenv("LHASSA_EMBEDDER_BACKEND", "auto")
     embedder_model: str = os.getenv("LHASSA_EMBEDDER_MODEL", "nomic-embed-text")
+    # Knowledge-graph context layer (LightRAG-lite, Wave 3): OFF by default —
+    # behavior is unchanged until the owner opts in (same rollout as layer 4).
+    memory_graph_enabled: bool = os.getenv("LHASSA_MEMORY_GRAPH", "0").strip().lower() in ("1", "true", "yes", "on")
     # API key for hosted embedding endpoints (Ollama is keyless; set for cloud).
     # NEVER write this to settings.env — it stays in .env (secret).
     embeddings_api_key: str = os.getenv("LHASSA_EMBEDDINGS_API_KEY", "")
