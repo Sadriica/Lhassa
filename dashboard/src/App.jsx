@@ -8,6 +8,7 @@ import SkillsPanel from './components/SkillsPanel'
 import AgentsPanel from './components/AgentsPanel'
 import AgenticPanel from './components/AgenticPanel'
 import WorkflowsPanel from './components/WorkflowsPanel'
+import ProjectsPanel from './components/ProjectsPanel'
 import MetricsPanel from './components/MetricsPanel'
 import AIUsagePanel from './components/AIUsagePanel'
 import MemoryPanel from './components/MemoryPanel'
@@ -88,6 +89,10 @@ export default function App() {
 
         {section === 'flows' && (
           <ErrorBoundary><WorkflowsPanel route={subRoute} onRoute={onFlowRoute} /></ErrorBoundary>
+        )}
+
+        {section === 'projects' && (
+          <ErrorBoundary><ProjectsPanel /></ErrorBoundary>
         )}
 
         {section === 'run' && (

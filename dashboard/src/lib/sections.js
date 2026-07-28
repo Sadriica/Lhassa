@@ -7,6 +7,7 @@ export const SECTIONS = [
   { id: 'run', label: 'Run task', group: 'Command' },
   { id: 'watchlist', label: 'Watchlist', group: 'Autonomy' },
   { id: 'flows', label: 'Flows', group: 'Autonomy' },
+  { id: 'projects', label: 'Projects', group: 'Autonomy' },
   { id: 'approvals', label: 'Approvals', group: 'Autonomy' },
   { id: 'capabilities', label: 'Capabilities', group: 'Capability' },
   { id: 'tools', label: 'Actions', group: 'Capability' },
