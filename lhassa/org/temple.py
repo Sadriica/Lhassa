@@ -91,6 +91,7 @@ ACTION_OWNERS: dict[str, str] = {
     # The knowledge graph is stored signal turned durable structure — the
     # guardian's domain, like distill_memory.
     "kg_sync": GUARDIAN,
+    "kg_resolve": GUARDIAN,
     "review_tools": GUARDIAN,
     "curate_skills": GUARDIAN,
     "detect_repetition": ORACLE,

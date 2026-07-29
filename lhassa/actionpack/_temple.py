@@ -33,6 +33,7 @@ TEMPLE_ACTIONS: frozenset[str] = frozenset(
         "derive_world_facts",
         "ingest_knowledge",
         "kg_sync",
+        "kg_resolve",
         "apply_feedback",
     }
 )

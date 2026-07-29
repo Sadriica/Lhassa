@@ -24,9 +24,12 @@ LightRAG-style pattern this wave is named after, but kept deliberately small:
 
 Each result is ``{"text": str, "source": "fact:<id>", "via": str}`` — ``via``
 is ``"semantic"`` for an embedding hit, ``"entity:<name>"`` for a direct
-name-match seed, or ``"<seed> —<edge_kind>→ <neighbor>"`` for a 1-hop
-graph-derived fact (e.g. ``"budget —co_occurs→ credit-card"``), so a caller can
-always show WHY a fact was pulled in.
+name-match seed, or ``"<seed> —<edge_kind>→ <neighbor> (<provenance>)"`` for a
+1-hop graph-derived fact (e.g.
+``"budget —co_occurs→ credit-card (fact:f_123)"``) — the trailing
+``(<provenance>)`` is the ORIGINATING EDGE's own ``source`` column (the
+fact/episode it was learned from; omitted when the edge carries none), so a
+caller can always show WHY a fact was pulled in AND what grounded that edge.
 
 $0 beyond the one embedding call the semantic seed already makes (offline with
 the default ``HashingEmbedder``). Fully defensive: any internal failure
@@ -154,14 +157,23 @@ async def retrieve(
             if not neighbor_name:
                 continue
             hop_items.append(
-                (float(edge.get("weight") or 0.0), seed_name, edge.get("kind") or "", neighbor_name)
+                (
+                    float(edge.get("weight") or 0.0),
+                    seed_name,
+                    edge.get("kind") or "",
+                    neighbor_name,
+                    edge.get("source") or "",
+                )
             )
 
         # ── (c)+(d) map neighbors back to facts, ranked by edge weight ──────
         hop_items.sort(key=lambda t: -t[0])
-        for _weight, seed_name, kind, neighbor_name in hop_items:
+        for _weight, seed_name, kind, neighbor_name, edge_source in hop_items:
             if len(results) >= limit:
                 break
+            via = f"{seed_name} —{kind}→ {neighbor_name}"
+            if edge_source:
+                via = f"{via} ({edge_source})"
             for f in _facts_mentioning(all_facts, neighbor_name):
                 if len(results) >= limit:
                     break
@@ -172,7 +184,7 @@ async def retrieve(
                     {
                         "text": f.contenido,
                         "source": f"fact:{f.id}",
-                        "via": f"{seed_name} —{kind}→ {neighbor_name}",
+                        "via": via,
                     }
                 )
 

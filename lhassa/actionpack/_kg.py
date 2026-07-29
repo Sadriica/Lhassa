@@ -1,11 +1,20 @@
-"""kg_sync — the deterministic action fronting the persisted knowledge graph.
+"""kg_sync / kg_resolve — the deterministic actions fronting the persisted
+knowledge graph.
 
-Runs :func:`lhassa.memory.kg.sync` and renders a one-line summary. Read-only
-scan of facts/episodes since the last sync + a local write to the grande's
-``kg_entities``/``kg_edges`` tables — no external send, no HITL-worthy surface
-(mirrors ``ingest_knowledge``/``distill_memory``, both also
-``requires_approval=False``). A clean no-op when ``config.memory_graph_enabled``
-is off (the default), so it is safe to schedule unconditionally. Never raises.
+``kg_sync`` runs :func:`lhassa.memory.kg.sync` and renders a one-line summary.
+Read-only scan of facts/episodes since the last sync + a local write to the
+grande's ``kg_entities``/``kg_edges`` tables — no external send, no
+HITL-worthy surface (mirrors ``ingest_knowledge``/``distill_memory``, both
+also ``requires_approval=False``). A clean no-op when
+``config.memory_graph_enabled`` is off (the default), so it is safe to
+schedule unconditionally. Never raises.
+
+``kg_resolve`` runs :func:`lhassa.memory.kg.resolve` (entity deduplication —
+see its docstring for the deterministic prefilter + optional-model merge
+rule) and renders a one-line summary. Same profile as ``kg_sync``: a local
+write only (merges entities/repoints edges within this instance's own
+``kg_entities``/``kg_edges``), no external send, ``requires_approval=False``.
+Never raises.
 """
 
 from __future__ import annotations
@@ -38,3 +47,39 @@ async def kg_sync(params: dict) -> str:
         )
     except Exception as exc:
         return f"kg_sync: {type(exc).__name__}: {exc}"
+
+
+async def kg_resolve(params: dict) -> str:
+    """Merge duplicate knowledge-graph entities. Never raises.
+
+    params:
+        config    — optional Config override (tests).
+        max_pairs — optional cap on candidate pairs judged this pass
+                    (defaults to ``kg.resolve``'s own default, 20).
+    """
+    try:
+        if not isinstance(params, dict):
+            params = {}
+        config = params.get("config")
+        max_pairs = params.get("max_pairs")
+
+        from lhassa.config import Config
+        from lhassa.memory import kg
+
+        cfg = config or Config
+        instance_id = getattr(cfg, "instance_id", None) or "inst_personal"
+
+        if not getattr(cfg, "memory_graph_enabled", False):
+            return "kg_resolve: memory graph disabled (LHASSA_MEMORY_GRAPH)"
+
+        kwargs = {"config": cfg}
+        if max_pairs is not None:
+            kwargs["max_pairs"] = int(max_pairs)
+
+        summary = await kg.resolve(instance_id, **kwargs)
+        return (
+            f"kg_resolve: merged {summary['merged']} of {summary['candidates']} "
+            f"candidate(s), {summary['skipped']} skipped"
+        )
+    except Exception as exc:
+        return f"kg_resolve: {type(exc).__name__}: {exc}"

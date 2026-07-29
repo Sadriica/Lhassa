@@ -52,7 +52,7 @@ async def test_add_edge_refuses_self_edge(tmp_path, monkeypatch):
 
 
 def test_edge_kinds_closed_vocabulary():
-    assert kg.EDGE_KINDS == ("co_occurs", "mentions", "derived_from")
+    assert kg.EDGE_KINDS == ("co_occurs", "mentions", "derived_from", "asserts")
     assert kg.SYMMETRIC_KINDS == frozenset({"co_occurs"})
 
 
@@ -195,3 +195,234 @@ async def test_sync_is_incremental_via_marker(tmp_path, monkeypatch):
     entities = {e["name"] for e in await db.list_kg_entities(INSTANCE)}
     assert "Carla" in entities
     assert "Bogota" in entities
+
+
+# ── C1: opt-in cheap-model triple extraction ─────────────────────────────────
+
+
+class _FakeTripleProvider:
+    """Records the model/messages of each call; replies with canned JSON text."""
+
+    def __init__(self, text: str = "[]", *, raises: Exception | None = None):
+        self.name = "fake"
+        self.zero_retention = False
+        self._text = text
+        self._raises = raises
+        self.calls: list = []
+
+    async def complete(self, messages, *, model=None, max_tokens=1024, **opts):
+        from lhassa.llm.provider import Completion
+
+        self.calls.append((model, messages))
+        if self._raises is not None:
+            raise self._raises
+        return Completion(text=self._text, model=model or "?", cost_usd=0.0)
+
+
+async def _asserts_edges(db, instance_id):
+    entities = await db.list_kg_entities(instance_id)
+    ids = [e["id"] for e in entities]
+    if not ids:
+        return []
+    edges = await db.kg_neighbors(instance_id, ids, limit=200)
+    return [e for e in edges if e["kind"] == kg.ASSERTS]
+
+
+@pytest.mark.asyncio
+async def test_sync_triples_flag_off_is_regression_locked(tmp_path, monkeypatch):
+    """kg_triples_enabled defaults False — sync must never touch a provider,
+    even if one is explicitly injected, and must write no ``asserts`` edges."""
+    db = await _init(tmp_path, monkeypatch)
+    from lhassa.memory import facts
+
+    await facts.add_fact(INSTANCE, "dato", "Ana works at Sezzle", tags=["work"])
+    fake = _FakeTripleProvider(text="[]")
+    cfg = _cfg(kg_triples_enabled=False)
+
+    result = await kg.sync(INSTANCE, config=cfg, provider=fake, model="cheap")
+
+    assert fake.calls == []  # never invoked — the flag was off
+    assert result["scanned"] == 1
+    assert await _asserts_edges(db, INSTANCE) == []
+
+
+@pytest.mark.asyncio
+async def test_sync_triples_extraction_produces_asserts_edges_with_provenance(
+    tmp_path, monkeypatch
+):
+    db = await _init(tmp_path, monkeypatch)
+    from lhassa.memory import facts
+
+    fact = await facts.add_fact(INSTANCE, "dato", "Ana works at Sezzle", tags=["work"])
+    triple_json = (
+        '[{"subject": "Ana", "predicate": "works_at", "object": "Sezzle", '
+        f'"source": "fact:{fact.id}"}}]'
+    )
+    fake = _FakeTripleProvider(text=triple_json)
+    cfg = _cfg(kg_triples_enabled=True)
+
+    result = await kg.sync(INSTANCE, config=cfg, provider=fake, model="cheap-model")
+
+    assert fake.calls  # the routine model WAS invoked this time
+    assert fake.calls[0][0] == "cheap-model"
+
+    asserts = await _asserts_edges(db, INSTANCE)
+    assert len(asserts) == 1
+    assert asserts[0]["source"] == f"fact:{fact.id}|pred:works_at"
+
+    entities = {e["name"]: e["id"] for e in await db.list_kg_entities(INSTANCE)}
+    assert asserts[0]["from_id"] == entities["Ana"]
+    assert asserts[0]["to_id"] == entities["Sezzle"]
+    assert result["edges"] > 0
+
+
+@pytest.mark.asyncio
+async def test_sync_triples_budget_exceeded_degrades(tmp_path, monkeypatch):
+    """A budget/provider failure on the triples pass must not raise, and must
+    not stop the regex-derived edges from being written."""
+    db = await _init(tmp_path, monkeypatch)
+    from lhassa.memory import facts
+
+    from lhassa.llm.gateway import BudgetExceeded
+
+    await facts.add_fact(INSTANCE, "dato", "Ana works at Sezzle", tags=["work"])
+    fake = _FakeTripleProvider(raises=BudgetExceeded("no budget"))
+    cfg = _cfg(kg_triples_enabled=True)
+
+    result = await kg.sync(INSTANCE, config=cfg, provider=fake, model="cheap-model")
+
+    assert result["entities"] >= 2  # Ana, Sezzle, work regex entities still written
+    assert result["edges"] > 0  # regex co_occurs/mentions edges still stand
+    assert await _asserts_edges(db, INSTANCE) == []  # no asserts edge born
+
+
+@pytest.mark.asyncio
+async def test_sync_triples_ignores_hallucinated_source(tmp_path, monkeypatch):
+    """A triple whose 'source' isn't one of the offered ids is dropped, not
+    trusted — grounding is enforced, not merely requested."""
+    db = await _init(tmp_path, monkeypatch)
+    from lhassa.memory import facts
+
+    await facts.add_fact(INSTANCE, "dato", "Ana works at Sezzle", tags=["work"])
+    triple_json = (
+        '[{"subject": "Ana", "predicate": "works_at", "object": "Sezzle", '
+        '"source": "fact:not_a_real_id"}]'
+    )
+    fake = _FakeTripleProvider(text=triple_json)
+    cfg = _cfg(kg_triples_enabled=True)
+
+    await kg.sync(INSTANCE, config=cfg, provider=fake, model="cheap-model")
+
+    assert await _asserts_edges(db, INSTANCE) == []
+
+
+# ── C2: entity resolution ─────────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_resolve_merges_exact_normalized_pairs_without_model(tmp_path, monkeypatch):
+    db = await _init(tmp_path, monkeypatch)
+    a = await kg.upsert_entity(INSTANCE, "Sezzle", when="2026-01-01T00:00:00")
+    await kg.upsert_entity(INSTANCE, "sezzle", when="2026-01-02T00:00:00")
+
+    cfg = _cfg(kg_triples_enabled=False)
+    result = await kg.resolve(INSTANCE, config=cfg)
+
+    assert result == {"merged": 1, "candidates": 1, "skipped": 0}
+    remaining = await db.list_kg_entities(INSTANCE)
+    assert len(remaining) == 1
+    assert remaining[0]["id"] == a  # earlier-seen entity survives
+
+
+@pytest.mark.asyncio
+async def test_resolve_fuzzy_without_model_is_skipped_not_merged(tmp_path, monkeypatch):
+    db = await _init(tmp_path, monkeypatch)
+    await kg.upsert_entity(INSTANCE, "Buzz Aldrin", when="2026-01-01T00:00:00")
+    await kg.upsert_entity(INSTANCE, "Edwin Aldrin", when="2026-01-01T00:00:00")
+
+    cfg = _cfg(kg_triples_enabled=False)  # no model may run
+    result = await kg.resolve(INSTANCE, config=cfg)
+
+    assert result["merged"] == 0
+    assert result["candidates"] == 1
+    assert result["skipped"] == 1
+    assert len(await db.list_kg_entities(INSTANCE)) == 2  # neither guessed away
+
+
+@pytest.mark.asyncio
+async def test_resolve_stubbed_model_merges_aldrin_pair(tmp_path, monkeypatch):
+    db = await _init(tmp_path, monkeypatch)
+    a = await kg.upsert_entity(
+        INSTANCE, "Buzz Aldrin", kind=kg.ENTITY_TERM, when="2026-01-01T00:00:00"
+    )
+    b = await kg.upsert_entity(
+        INSTANCE, "Edwin Aldrin", kind=kg.ENTITY_TERM, when="2026-01-02T00:00:00"
+    )
+    # A third entity co-occurring with the DROPPED entity, so the repoint is
+    # actually observable via kg_neighbors after the merge.
+    c = await kg.upsert_entity(INSTANCE, "Apollo 11", when="2026-01-02T00:00:00")
+    await kg.add_edge(INSTANCE, b, c, kg.CO_OCCURS, when="2026-01-02T00:00:00")
+
+    triple_json = f'[{{"a": "{a}", "b": "{b}", "same": true}}]'
+    fake = _FakeTripleProvider(text=triple_json)
+    cfg = _cfg(kg_triples_enabled=True)
+
+    result = await kg.resolve(INSTANCE, config=cfg, provider=fake, model="cheap-model")
+
+    assert result["merged"] == 1
+    assert result["candidates"] == 1
+    assert result["skipped"] == 0
+
+    remaining = {e["name"]: e["id"] for e in await db.list_kg_entities(INSTANCE)}
+    assert "Edwin Aldrin" not in remaining
+    assert "Buzz Aldrin" in remaining
+
+    # The edge that used to touch the dropped "Edwin Aldrin" now touches the
+    # surviving "Buzz Aldrin" entity.
+    neighbors = await db.kg_neighbors(INSTANCE, [a])
+    assert any(c in (e["from_id"], e["to_id"]) for e in neighbors)
+
+
+@pytest.mark.asyncio
+async def test_resolve_never_raises_on_internal_failure(tmp_path, monkeypatch):
+    await _init(tmp_path, monkeypatch)
+    await kg.upsert_entity(INSTANCE, "Sezzle", when="2026-01-01T00:00:00")
+    await kg.upsert_entity(INSTANCE, "sezzle", when="2026-01-01T00:00:00")
+
+    async def _boom(*a, **kw):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(kg.db, "merge_kg_entities", _boom)
+    cfg = _cfg()
+    result = await kg.resolve(INSTANCE, config=cfg)
+    assert result == {"merged": 0, "candidates": 0, "skipped": 0}
+
+
+# ── C3: retrieval cites its edge (kind + provenance) ─────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_graph_retrieve_via_includes_edge_kind_and_provenance(tmp_path, monkeypatch):
+    await _init(tmp_path, monkeypatch)
+    from lhassa.memory import facts, graph_retrieve
+
+    fact1 = await facts.add_fact(INSTANCE, "dato", "Ana works at Sezzle", tags=["work"])
+    await facts.add_fact(INSTANCE, "dato", "Sezzle pays through Visa", tags=["finance"])
+    cfg = _cfg(memory_layer4_enabled=False)
+    await kg.sync(INSTANCE, config=cfg)
+
+    async def _no_semantic(*a, **kw):
+        return []
+
+    monkeypatch.setattr("lhassa.memory.load._semantic_layer", _no_semantic)
+
+    # Query "Ana" — a direct entity-name seed — but the second fact (mentioning
+    # Visa, not Ana) can only be reached via the 1-hop expansion through Sezzle.
+    # The hop's "via" cites the ORIGINATING EDGE's own provenance — the fact
+    # that produced the Ana↔Sezzle co_occurs edge (fact1), not the destination
+    # fact the hop lands on.
+    results = await graph_retrieve.retrieve(INSTANCE, "Ana", config=cfg)
+    hop_results = [r for r in results if "—" in r["via"] and "→" in r["via"]]
+    assert hop_results
+    assert any(f"(fact:{fact1.id})" in r["via"] for r in hop_results)
+    assert any("co_occurs" in r["via"] or "mentions" in r["via"] for r in hop_results)

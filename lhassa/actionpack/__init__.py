@@ -113,6 +113,7 @@ def register_all() -> None:
     _reg("apply_feedback", _feedback.apply_feedback)
     _reg("create_project", _projects.create_project_action)
     _reg("kg_sync", _kg.kg_sync)
+    _reg("kg_resolve", _kg.kg_resolve)
     _reg("attach_project_template", _standing.attach_project_template)
     _projects.register_sense()
     _standing.register_sense()
