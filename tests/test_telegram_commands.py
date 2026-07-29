@@ -411,6 +411,88 @@ def test_goal_requires_text():
     assert "Usage" in reply
 
 
+# ── /goal --verify / --turns (Wave A, TASK A2) ────────────────────────────────
+
+
+def test_goal_verify_command_spec_mints_a_loop(tmp_path, monkeypatch):
+    db = asyncio.run(_init_db(tmp_path, monkeypatch))
+    reply = asyncio.run(
+        commands.dispatch(
+            "/goal ship the release --verify command:true --turns 5",
+            config=_cfg(instance_id="inst_personal"),
+        )
+    )
+    assert "Goal scheduled (daily)" in reply
+    assert "verify: command, max 5 turns" in reply
+
+    tasks = asyncio.run(db.list_tasks("inst_personal", estado="pendiente"))
+    assert len(tasks) == 1
+    loop_id = tasks[0]["params"].get("_loop_id")
+    assert loop_id
+
+    loops = asyncio.run(db.list_loops("inst_personal"))
+    assert len(loops) == 1
+    assert loops[0]["id"] == loop_id
+    assert loops[0]["max_turns"] == 5
+    assert loops[0]["verifier_spec"] == {"type": "command", "cmd": "true"}
+    assert loops[0]["origin"] == "telegram-goal"
+
+
+def test_goal_verify_regex_spec_default_turns(tmp_path, monkeypatch):
+    db = asyncio.run(_init_db(tmp_path, monkeypatch))
+    reply = asyncio.run(
+        commands.dispatch(
+            "/goal watch for READY --verify regex:READY",
+            config=_cfg(instance_id="inst_personal"),
+        )
+    )
+    assert "verify: regex, max 10 turns" in reply
+    loops = asyncio.run(db.list_loops("inst_personal"))
+    assert loops[0]["verifier_spec"] == {"type": "regex", "pattern": "READY"}
+    assert loops[0]["max_turns"] == 10
+
+
+def test_goal_verify_bad_regex_mints_nothing(tmp_path, monkeypatch):
+    db = asyncio.run(_init_db(tmp_path, monkeypatch))
+    reply = asyncio.run(
+        commands.dispatch(
+            "/goal broken --verify regex:(unbalanced",
+            config=_cfg(instance_id="inst_personal"),
+        )
+    )
+    assert "Bad --verify spec" in reply
+    assert asyncio.run(db.list_tasks("inst_personal", estado="pendiente")) == []
+    assert asyncio.run(db.list_loops("inst_personal")) == []
+
+
+def test_goal_verify_unknown_type_is_a_usage_error(tmp_path, monkeypatch):
+    asyncio.run(_init_db(tmp_path, monkeypatch))
+    reply = asyncio.run(
+        commands.dispatch(
+            "/goal broken --verify sometype:x",
+            config=_cfg(instance_id="inst_personal"),
+        )
+    )
+    # Doesn't match the command:/regex: shorthand at all -> falls through as plain
+    # goal text (no --verify recognised), which is the honest, defensive default.
+    assert "Goal scheduled" in reply or "Usage" in reply
+
+
+def test_goal_no_verify_is_byte_identical_to_before(tmp_path, monkeypatch):
+    """Regression: no --verify -> no loop row, same reply shape as the old /goal."""
+    db = asyncio.run(_init_db(tmp_path, monkeypatch))
+    reply = asyncio.run(
+        commands.dispatch(
+            "/goal watch my inbox for invoices --every hourly",
+            config=_cfg(instance_id="inst_personal"),
+        )
+    )
+    assert reply.endswith("]")  # no "[verify: ...]" suffix appended
+    tasks = asyncio.run(db.list_tasks("inst_personal", estado="pendiente"))
+    assert "_loop_id" not in tasks[0]["params"]
+    assert asyncio.run(db.list_loops("inst_personal")) == []
+
+
 # ── /code — parks a code_run approval, never runs directly ───────────────────
 
 

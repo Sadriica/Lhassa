@@ -49,6 +49,13 @@ def _build_messages(trigger: "watchlist.Trigger", ctx: "memory_load.Context") ->
 
     The instruction asks the model to optionally reply with a JSON dispatch
     payload alongside (or instead of) prose. Plain text is always acceptable.
+
+    Feedback-threading seam (Wave A, TASK A2): when this turn belongs to a
+    verify-terminated loop (``trigger.params["_loop_id"]``) and the PREVIOUS
+    turn's verifier failed, ``_judge`` stamps that verdict's ``detail`` onto
+    ``trigger.params["_loop_feedback"]`` before minting the next recurrence — the
+    SAME trigger.params dict the recurrence-mint block in ``step()`` copies
+    forward. This is the ONE place that text is read back into the prompt.
     """
     objetivo = f" sobre {trigger.objetivo!r}" if trigger.objetivo else ""
     body = (
@@ -67,6 +74,12 @@ def _build_messages(trigger: "watchlist.Trigger", ctx: "memory_load.Context") ->
         "convierte en una tarea run_script que un humano aprueba antes de correr; "
         "máx 1 por respuesta. Sin efectos: texto plano es válido."
     )
+    loop_feedback = (getattr(trigger, "params", None) or {}).get("_loop_feedback")
+    if loop_feedback:
+        body += (
+            "\n\nEste objetivo tiene un verificador objetivo. El intento anterior "
+            f"NO pasó: {loop_feedback}\nAjusta tu respuesta para intentar cumplirlo."
+        )
     return [{"role": "user", "content": body}]
 
 
@@ -80,6 +93,28 @@ _FULL_RECENT_N = 20
 def _judgment_query(trigger: "watchlist.Trigger") -> str:
     """The semantic-layer query text for a trigger: its objetivo, else kind:action."""
     return trigger.objetivo or f"{trigger.kind}:{trigger.action}"
+
+
+async def _notify_loop_capped(instance_id: str, loop_id: str, goal: str) -> None:
+    """Notify the owner once via the existing notify path — the registered
+    ``notify`` fixed action (``actionpack/_brain.py:notify``), so ``core/``
+    (spine) never imports ``notify/`` (shell) directly; the registry indirection
+    is the seam. Best-effort: a delivery failure must never break the tick.
+    """
+    try:
+        await actions.run(
+            "notify",
+            {
+                "text": (
+                    f"Goal loop {loop_id} capped: {goal!r} did not verify-pass "
+                    "within its turn budget. Recurrence stopped."
+                ),
+                "level": "warning",
+            },
+            None,
+        )
+    except Exception as exc:
+        logger.debug(f"step: could not notify owner of capped loop {loop_id}: {exc}")
 
 
 async def _judge(
@@ -108,7 +143,63 @@ async def _judge(
     cloud) is walked before giving up; only if every entry in the chain also
     fails does the episode finish as ``DEFERRED_DECISION`` and False is returned
     (the caller counts it as deferred).
+
+    **Loop runtime (Wave A, TASK A2)** — when ``trigger.params["_loop_id"]`` is
+    set (stamped by ``/goal --verify ...``, see ``notify/commands.py:_cmd_goal``),
+    this turn is one iteration of a bounded, verifier-terminated loop
+    (``core/db.py``'s ``loops`` table):
+      - The turn cap is enforced BEFORE any model call: a loop already at
+        ``max_turns`` is marked ``status="capped"``, the owner is notified once,
+        recurrence is stopped (``trigger.recurrence`` cleared so ``step()``'s
+        recurrence-mint block below is a no-op), and the model never runs.
+      - Otherwise the turn proceeds as normal, and AFTER the model answers, the
+        loop's ``verifier_spec`` (``agents/verify.py`` — deterministic, $0-first,
+        never an LLM) checks the reply text: a PASS marks the loop ``"done"`` and
+        stops recurrence (goal reached); a FAIL marks it ``"iterate"`` (turn
+        bumped) and threads the verifier's ``detail`` into
+        ``trigger.params["_loop_feedback"]`` — the SAME trigger object the
+        recurrence-mint block below copies into the next occurrence's params, so
+        the next turn's prompt (see ``_build_messages``) reads the previous
+        verdict. A missing/broken loop row degrades to a normal, unbounded
+        judgment turn — this feature must never break a plain ``/goal``.
     """
+    loop_id = (getattr(trigger, "params", None) or {}).get("_loop_id")
+    loop_row: Optional[dict] = None
+    if loop_id:
+        try:
+            loop_row = await db.get_loop(instance_id, loop_id)
+        except Exception as exc:
+            logger.debug(f"step: could not load loop {loop_id!r}: {exc}")
+            loop_row = None
+
+        if loop_row is not None and loop_row.get("status") in ("done", "capped", "failed"):
+            # Terminal already (e.g. a stray extra recurrence) — stop it here too.
+            trigger.recurrence = None
+            ep.finish(
+                decision=f"loop {loop_id} already {loop_row.get('status')}",
+                accion=trigger.action,
+                resultado="loop already terminal; recurrence stopped",
+            )
+            return True
+
+        if loop_row is not None:
+            max_turns = int(loop_row.get("max_turns") or 10)
+            turn = int(loop_row.get("turn") or 0)
+            if turn >= max_turns:
+                # Cap enforced BEFORE any work — the model never runs this turn.
+                try:
+                    await db.advance_loop(instance_id, loop_id, status="capped")
+                except Exception as exc:
+                    logger.debug(f"step: could not cap loop {loop_id!r}: {exc}")
+                trigger.recurrence = None
+                await _notify_loop_capped(instance_id, loop_id, trigger.objetivo or "")
+                ep.finish(
+                    decision=f"loop {loop_id} capped at {max_turns} turns",
+                    accion=trigger.action,
+                    resultado="turn cap reached before work; recurrence stopped",
+                )
+                return True
+
     try:
         minimal = context_tier == "minimal"
         token_budget = (
@@ -253,10 +344,43 @@ async def _judge(
             if dispatch_summary.startswith("dispatched:")
             else ""
         )
+
+        # Loop verify-and-terminate (Wave A, TASK A2): a PASS ends the loop
+        # ("done") and stops recurrence; a FAIL bumps the turn ("iterate") and
+        # threads the verifier's detail into trigger.params["_loop_feedback"] for
+        # the recurrence-mint block below to carry into the next occurrence. A
+        # loop row with no verifier_spec (shouldn't happen — /goal always sets
+        # one when it creates a loop) is left alone rather than guessed at.
+        loop_note = ""
+        loop_vspec = loop_row.get("verifier_spec") if loop_row is not None else None
+        if loop_id and loop_vspec:
+            lvres = verify_agent.verify(result.text, spec=loop_vspec)
+            try:
+                if lvres.passed:
+                    await db.advance_loop(
+                        instance_id, loop_id,
+                        status="done", verdict={"passed": True, "detail": lvres.detail},
+                    )
+                    trigger.recurrence = None
+                    loop_note = f" | loop {loop_id}: done (verified)"
+                else:
+                    await db.advance_loop(
+                        instance_id, loop_id,
+                        status="iterate",
+                        verdict={"passed": False, "detail": lvres.detail},
+                        bump_turn=True,
+                    )
+                    trigger.params = dict(trigger.params or {})
+                    trigger.params["_loop_feedback"] = lvres.detail
+                    loop_note = f" | loop {loop_id}: iterate (verify failed)"
+            except Exception as exc:
+                # Loop bookkeeping must never break a normal judgment turn.
+                logger.debug(f"step: loop {loop_id!r} advance failed: {exc}")
+
         ep.finish(
             decision=decision_note,
             accion=trigger.action,
-            resultado=result.text + dispatch_note,
+            resultado=result.text + dispatch_note + loop_note,
             costo_usd=result.cost_usd,
         )
         return True

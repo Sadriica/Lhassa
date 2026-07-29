@@ -84,12 +84,18 @@ def tools_propose(
     domain: str = typer.Option(
         "optimization", "--domain", help="Gate domain (default: optimization)."
     ),
+    max_turns: int = typer.Option(
+        3, "--max-turns", help="Bounded iterations: on a retryable gate failure "
+        "(segura/correcta), the candidate is re-authored with the failing gate's "
+        "detail threaded in as feedback, up to this many turns."
+    ),
 ) -> None:
     """Author a candidate tool and run it through quarantine + the four gates.
 
     Asks the routine (cheap) model to write ``<name>.py`` + its test, commits
     the candidate on a local git branch, and runs the segura/correcta/mejor
-    gates in order. If every gate passes, a ``tool_graduation`` approval is
+    gates in order — ITERATING (``--max-turns``) on a retryable gate failure
+    before giving up. If every gate passes, a ``tool_graduation`` approval is
     parked (resolve it via ``POST /api/tools/<name>/graduate`` or the
     dashboard) — this command NEVER auto-graduates a tool.
     """
@@ -105,6 +111,7 @@ def tools_propose(
             list(examples or []),
             domain=domain,
             baseline=baseline,
+            max_turns=max_turns,
             instance_id=_config().instance_id,
         )
 
@@ -115,12 +122,22 @@ def tools_propose(
         _err().print(f"[yellow]✗[/yellow] {result.get('reason', 'not authored')}")
         raise typer.Exit(code=1)
 
+    turns = result.get("turns")
+    turns_note = f" (turn {turns}/{max_turns})" if turns else ""
+
     if result.get("graduated"):
-        out.print(f"[green]✓[/green] {name} passed all gates — [bold]approval parked[/bold]")
+        out.print(
+            f"[green]✓[/green] {name} passed all gates{turns_note} — "
+            "[bold]approval parked[/bold]"
+        )
         out.print(f"  [dim]approval_id: {result.get('approval_id')}[/dim]")
         out.print(f"  [dim]branch: {result.get('branch')}[/dim]")
     else:
-        out.print(f"[yellow]✗[/yellow] {name} did not graduate — {result.get('reason', '')}")
+        capped_note = " [red](capped)[/red]" if result.get("capped") else ""
+        out.print(
+            f"[yellow]✗[/yellow] {name} did not graduate{turns_note}{capped_note} — "
+            f"{result.get('reason', '')}"
+        )
         for gate in result.get("gates") or []:
             status = "[green]pass[/green]" if getattr(gate, "passed", False) else "[red]fail[/red]"
             out.print(f"  {status} {getattr(gate, 'gate', '?')}: {getattr(gate, 'detail', '')[:120]}")

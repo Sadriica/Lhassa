@@ -279,7 +279,11 @@ DESCRIPTIONS: dict[str, str] = {
     "watch": "<pattern> -> <accion> — add a watch rule.",
     "watches": "List configured watch rules.",
     "unwatch": "<index> — remove a watch rule.",
-    "goal": "<text> [--every daily|hourly] — schedule a recurring think.",
+    "goal": (
+        "<text> [--every daily|hourly] [--verify command:<cmd>|regex:<pattern>] "
+        "[--turns N] — schedule a recurring think, optionally bounded + "
+        "verify-terminated."
+    ),
     "temple": (
         "<instruction> | schedule — internal work / the temple's own clock "
         "(e.g. 'distill', 'curate skills', 'sync calendar', 'derive world')."
@@ -631,6 +635,18 @@ _WATCH_ARROW_RE = re.compile(r"^\s*(.+?)\s*->\s*(.+?)\s*$")
 _GOAL_EVERY_RE = re.compile(r"--every\s+(daily|hourly)\b", re.IGNORECASE)
 _GOAL_CADENCE_SECONDS = {"hourly": 3600, "daily": 86400}
 
+# "--turns N" (only meaningful alongside --verify — the loop's max_turns cap).
+_GOAL_TURNS_RE = re.compile(r"--turns\s+(\d+)\b", re.IGNORECASE)
+
+# "--verify command:<cmd>" / "--verify regex:<pattern>" — a compact shorthand onto
+# agents.verify's spec machinery (make_verifier). Applied AFTER --every/--turns are
+# stripped so its body can simply run to the end of the (remaining) text — a shell
+# command or a regex may itself contain "--", so no lookahead heuristics.
+_GOAL_VERIFY_RE = re.compile(r"--verify\s+(command|regex):(.+)$", re.IGNORECASE)
+
+# Default turn cap for a --verify'd goal loop when --turns is not given.
+_GOAL_DEFAULT_MAX_TURNS = 10
+
 
 async def _known_actions(config) -> set:
     """The full set of registered fixed-action names (core actions + actionpack).
@@ -779,14 +795,29 @@ async def _cmd_recall(args: str, *, config=None) -> str:
         return _oops("search my episodes")
 
 
+_GOAL_USAGE = (
+    "Usage: /goal <text> [--every daily|hourly] "
+    "[--verify command:<cmd>|regex:<pattern>] [--turns N]"
+)
+
+
 @register_command("goal")
 async def _cmd_goal(args: str, *, config=None) -> str:
-    """``/goal <text> [--every daily|hourly]`` — schedule a recurring judgment task.
+    """``/goal <text> [--every ...] [--verify <spec>] [--turns N]`` — schedule a goal.
 
     Mints a recurring ``judgment=True`` task (``core.dispatch.mint_task``) with
     HUMANO-origin trust and actor ``"telegram"``. The task is picked up and REASONED
     about by the brain on its own schedule (a real, later token spend) — minting it
     here is $0; only that later think costs anything.
+
+    With ``--verify`` (a compact shorthand onto :mod:`lhassa.agents.verify`'s spec
+    machinery — ``command:<shell cmd>`` or ``regex:<pattern>``), this ALSO creates a
+    bounded ``loops`` row (kind="closed", origin="telegram-goal", max_turns from
+    ``--turns`` or :data:`_GOAL_DEFAULT_MAX_TURNS`) and stamps its id into the
+    minted task's ``params["_loop_id"]`` — ``core.step._judge`` reads that seam each
+    turn to verify-and-terminate (see there for the feedback-threading detail).
+    A bad ``--verify`` spec parses defensively: nothing is minted, an honest usage
+    reply is returned. Without ``--verify`` this is byte-identical to before.
     """
     text = args or ""
     cadence = "daily"
@@ -794,9 +825,38 @@ async def _cmd_goal(args: str, *, config=None) -> str:
     if m:
         cadence = m.group(1).lower()
         text = _GOAL_EVERY_RE.sub("", text).strip()
+
+    turns: Optional[int] = None
+    tm = _GOAL_TURNS_RE.search(text)
+    if tm:
+        turns = int(tm.group(1))
+        text = _GOAL_TURNS_RE.sub("", text).strip()
+        if turns <= 0:
+            return _GOAL_USAGE
+
+    verify_spec: Optional[dict] = None
+    vm = _GOAL_VERIFY_RE.search(text)
+    if vm:
+        vtype = vm.group(1).lower()
+        vbody = vm.group(2).strip()
+        text = _GOAL_VERIFY_RE.sub("", text).strip()
+        if not vbody:
+            return _GOAL_USAGE
+        verify_spec = (
+            {"type": "command", "cmd": vbody}
+            if vtype == "command"
+            else {"type": "regex", "pattern": vbody}
+        )
+        try:
+            from lhassa.agents import verify as _verify
+
+            _verify.make_verifier(verify_spec)
+        except Exception as exc:
+            return f"Bad --verify spec: {exc}"
+
     text = text.strip()
     if not text:
-        return "Usage: /goal <text> [--every daily|hourly]"
+        return _GOAL_USAGE
 
     try:
         from datetime import datetime, timezone
@@ -812,11 +872,30 @@ async def _cmd_goal(args: str, *, config=None) -> str:
         origin = Origin(trust=TrustLevel.HUMANO, actor_id="telegram")
         due_at = datetime.now(timezone.utc).isoformat()
         interval = _GOAL_CADENCE_SECONDS[cadence]
+
+        params: dict = {}
+        max_turns = turns or _GOAL_DEFAULT_MAX_TURNS
+        if verify_spec is not None:
+            loop_id = await _db.insert_loop({
+                "id": _db._new_id("loop"),
+                "instance_id": instance_id,
+                "goal": text,
+                "kind": "closed",
+                "origin": "telegram-goal",
+                "status": "plan",
+                "turn": 0,
+                "max_turns": max_turns,
+                "verifier_spec": verify_spec,
+                "created_at": _db._now(),
+                "updated_at": _db._now(),
+            })
+            params["_loop_id"] = loop_id
+
         task_id, estado = await mint_task(
             instance_id,
             "goal",
             objetivo=text,
-            params={},
+            params=params,
             origin=origin,
             due_at=due_at,
             recurrence=str(interval),
@@ -828,7 +907,12 @@ async def _cmd_goal(args: str, *, config=None) -> str:
 
     if not task_id:
         return f"Could not schedule goal: {estado}"
-    return f"Goal scheduled ({cadence}): {text} [task {task_id}]"
+    suffix = (
+        f" [verify: {verify_spec['type']}, max {max_turns} turns]"
+        if verify_spec is not None
+        else ""
+    )
+    return f"Goal scheduled ({cadence}): {text} [task {task_id}]{suffix}"
 
 
 # Free-form instruction -> a known temple action, LLM-free (a keyword match, not
