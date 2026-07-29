@@ -1,5 +1,50 @@
 # Lhassa — decisions log
 
+## 2026-07-28 (tarde) — El plan "Inteligencia": loops, context packs, grafo real, MoA, bench
+
+Deep research over 10 owner-supplied sources (read IN FULL via the owner's
+Chrome session — X blocks anonymous access — plus WebFetch): Anthropic's loop-
+and graph-engineering material, Hermes /moa, Memanto, retrieval-as-code, the
+ai-engineering-from-scratch curriculum, /no-ai-slop. Plan designed, approved,
+and EXECUTED same-day: shared substrate first (migrations 7 `loops` + 8
+`bench_runs`, `merge_kg_entities`, `LHASSA_KG_TRIPLES` flag), then five
+parallel Sonnet waves on disjoint territories. Commits `a0c9a2f..633b111`.
+
+- **Loops** (`614d536`, the flagship): the unit of work is a bounded,
+  verifier-terminated LOOP. The forge ITERATES — a failing gate's detail (never
+  a self-judgment) threads into the next authoring turn, max_turns default 3,
+  'mejor'-no-baseline is non-retryable by design. `/goal --verify command:…|
+  regex:… --turns N` gives standing goals a real termination: the deterministic
+  verifier runs after each judgment turn; pass/cap stops the recurrence by
+  clearing it on the SAME trigger the recurrence-mint already copies — feedback
+  rides `params["_loop_feedback"]`, no new minting path. Caps fire BEFORE any
+  model call. Every turn is an Episode.
+- **Context packs** (`c74f2cd`): every rented-body run (/code) starts with
+  `~/.lhassa/projects/<id>/context/{VISION,ARCHITECTURE,RULES,MEMORY}.md`
+  generated $0 from the project row + facts + runs + pending work (MEMORY.md =
+  TRIED/VERIFIED/OPEN, the loop-engineering ladder made file). Digest-header
+  staleness (`source_digest` over project/fact/run timestamps) makes ensure()
+  a no-op when fresh. The pack pointer is prepended to the CLI prompt; a
+  missing pack never blocks a launch — context is a gift, not a gate.
+- **Graph engineering** (`cf90dab`): opt-in (`LHASSA_KG_TRIPLES`) cheap-model
+  triple extraction batched over NEW rows only — `asserts` edges with the
+  predicate riding the provenance string (`fact:<id>|pred:<verb>`, schema-free
+  by choice); hallucinated sources are dropped, not trusted. `kg_resolve`
+  (weekly, guardian): exact-normalized merges need no model; fuzzy pairs are
+  judged by ONE bounded completion or honestly skipped. Retrieval now cites
+  kind + provenance in its `via` labels.
+- **MoA** (`633b111`): `/moa` fans the same question to claude+codex+deepseek
+  (missing CLI = honest ✗, <2 answers = no aggregation spend), one cheap-seat
+  synthesis names real disagreement; `propose_tool(moa_verdict=True)` attaches
+  an advisory panel review to the graduation approval — gates remain the only
+  hard filter.
+- **LhassaBench** (`bbc650e`): 10 self-contained fixtures scored ONLY by the
+  existing objective verifiers (scorer-locked by test); `bench_runs` rows carry
+  pass/metric/cost/duration; `lhassa bench run|history`. Router consumption of
+  this data is a named follow-up, not silent scope.
+- **/no-ai-slop** installed as a SKILL.md from the source repo.
+
+
 ## 2026-07-28 — Six fronts in one day (projects, standing brains, platform, kg, TUI, TOON)
 
 Deep research first (oh-my-hermes, TOON v3, graph-RAG 2026 consensus, Textual),

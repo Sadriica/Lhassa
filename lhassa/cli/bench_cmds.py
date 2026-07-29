@@ -26,7 +26,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from lhassa.cli.theme import TABLE_KWARGS
+from lhassa.cli.theme import LHASSA_THEME, TABLE_KWARGS
 
 bench_app = typer.Typer(
     add_completion=False,
@@ -41,11 +41,11 @@ _DEFAULT_SUBJECT_CANDIDATES = ("claude", "codex", "default")
 
 
 def _out() -> Console:
-    return Console()
+    return Console(theme=LHASSA_THEME)
 
 
 def _err() -> Console:
-    return Console(stderr=True)
+    return Console(stderr=True, theme=LHASSA_THEME)
 
 
 def _config():
