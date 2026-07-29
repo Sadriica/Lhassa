@@ -40,6 +40,8 @@ from pydantic import BaseModel
 from lhassa.agents import local_cli
 import lhassa.config as lhassa_config
 from lhassa.core import db
+from lhassa.core import projects as projects_mod
+from lhassa.harness import context_pack
 from lhassa.state import AgentRun, state
 
 router = APIRouter()
@@ -124,7 +126,13 @@ async def launch_code(req: CodeRequest):
 
     # Defensive: a launch failure is a clear 4xx, never a 500.
     try:
-        agent = local_cli.make_agent(cli)
+        pack_dir = await _resolve_context_pack(_agent_cwd())
+        try:
+            agent = local_cli.make_agent(cli, context_pack_dir=pack_dir)
+        except TypeError:
+            # A caller-supplied make_agent (e.g. a test double) may not accept
+            # context_pack_dir — context is a gift, not a gate, so fall back.
+            agent = local_cli.make_agent(cli)
         run_id = uuid.uuid4().hex[:8]
         run = AgentRun(id=run_id, name=f"ai-cli ({cli})", status="running", task=task, cli=cli)
         state.register_agent(run)
@@ -175,6 +183,22 @@ def _agent_cwd() -> Path:
         return Path(agent_dir).expanduser() if agent_dir else Path.cwd()
     except Exception:
         return Path.cwd()
+
+
+async def _resolve_context_pack(cwd: Path):
+    """Resolve a project from the run's cwd and ensure its context pack.
+
+    Returns the pack dir, or ``None`` when no project matches — a launch never
+    blocks on this: context is a gift, not a gate.
+    """
+    try:
+        project = await projects_mod.resolve_project(lhassa_config.Config.instance_id, str(cwd))
+        if project is None:
+            return None
+        return await context_pack.ensure(project["id"])
+    except Exception as exc:
+        logger.debug(f"[code] context pack skipped for cwd={cwd!r}: {exc}")
+        return None
 
 
 def _iso_from_ts(value: float | None) -> str | None:

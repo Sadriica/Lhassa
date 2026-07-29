@@ -179,15 +179,37 @@ def build_argv(cli: str, task: str) -> list[str]:
     return [*_CLI_ARGV[cli], task]
 
 
+def context_pack_hint(pack_dir) -> str:
+    """A short pointer block naming a project's context pack files.
+
+    Context is a gift, not a gate: this is pure string formatting over an
+    already-resolved pack directory, so it never fails a launch. Callers pass
+    ``None``/falsy when no project matched — the prompt is simply unchanged.
+    """
+    if not pack_dir:
+        return ""
+    try:
+        base = str(pack_dir)
+        names = ("VISION.md", "ARCHITECTURE.md", "RULES.md", "MEMORY.md")
+        paths = ", ".join(f"{base}/{name}" for name in names)
+        return f"Project context (read these first): {paths}\n\n"
+    except Exception:
+        return ""
+
+
 class LocalCliAgent:
     def __init__(self, cli: str | None = None, hint: str = "", timeout: int | None = None,
-                 on_line=None):
+                 on_line=None, context_pack_dir=None):
         self.cli = (cli or detect_ai_cli()).lower()
         self._hint = hint
         self._timeout = timeout if timeout is not None else _DEFAULT_TIMEOUT
         # Optional sink called with each stdout line as it streams (e.g. the CLI's
         # `lhassa code` prints them live). Best-effort — a failing sink never stops the run.
         self._on_line = on_line
+        # An already-resolved project context pack dir (see harness/context_pack.py),
+        # or None when no project matched the run's cwd. Prepended to the prompt as a
+        # pointer block; for CLIs that support an add-dir style flag, also added to argv.
+        self.context_pack_dir = context_pack_dir
 
     async def run(self, task: str) -> str:
         """Dispatch `task` to the selected CLI. Never raises — returns a string."""
@@ -239,7 +261,7 @@ class LocalCliAgent:
             return f"AI CLI {self.cli} error: {e}"
 
     async def _invoke(self, run_id: str, run: AgentRun, task: str, cwd: Path) -> str:
-        prompt = self._hint + task
+        prompt = self._hint + context_pack_hint(self.context_pack_dir) + task
         argv = build_argv(self.cli, prompt)
         logger.info(f"[ai-cli/{self.cli}] cwd={cwd} task={task[:80]!r}")
 
@@ -311,9 +333,13 @@ class LocalCliAgent:
             _unregister_proc(run_id)
 
 
-def make_agent(cli: str | None = None, on_line=None) -> LocalCliAgent:
+def make_agent(cli: str | None = None, on_line=None, context_pack_dir=None) -> LocalCliAgent:
     """Return a LocalCliAgent for the given CLI (or the auto-detected default).
 
     ``on_line`` is an optional per-stdout-line sink for live streaming.
+    ``context_pack_dir`` is an already-resolved project context pack directory
+    (see ``harness/context_pack.py``), or ``None`` when no project matched.
     """
-    return LocalCliAgent(cli=cli, hint=_OS_HINT, on_line=on_line)
+    return LocalCliAgent(
+        cli=cli, hint=_OS_HINT, on_line=on_line, context_pack_dir=context_pack_dir
+    )
