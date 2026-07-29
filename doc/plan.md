@@ -50,3 +50,14 @@ fusionado, flag OFF) · `lhassa tui` (Textual) · TOON (construido y archivado).
 Detalle en doc/decisions.md 2026-07-28. Pendiente natural: encender
 LHASSA_MEMORY_GRAPH tras unos kg_sync semanales; pantalla TUI de mensajes/org;
 proyectos en el digest.
+
+
+## Plan 3 — Inteligencia (2026-07-28) ✅ EJECUTADO
+Loops (la forja itera; /goal termina por verificación o cap) · Context packs
+(el cuerpo nunca arranca frío) · Grafo real (triples opt-in + kg_resolve +
+retrieval citado) · /moa (panel claude+codex+deepseek, agregador barato,
+consultivo) · LhassaBench (10 fixtures, scorer determinista, corrida viva 3/3
+sobre deepseek) · /no-ai-slop instalado. Detalle en doc/decisions.md 2026-07-28
+(tarde). Pendientes nombrados: router consumiendo bench_runs; encender
+LHASSA_KG_TRIPLES y LHASSA_MEMORY_GRAPH tras rodaje; VISION.md autorado por
+modelo como wave futura.

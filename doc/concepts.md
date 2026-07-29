@@ -325,6 +325,60 @@ The four gates (`agents/gates.py`), in order, stopping at the first failure
    quarantine if it went unused (zero recorded uses) or its production failure rate
    crosses 50% over at least 3 uses. The `review_tools` action runs this sweep.
 
+## Loop engineering: the unit of work is a bounded, verifier-terminated loop
+
+Past a single think, Lhassa's second unit of work is the **loop**: not "call the
+model until it feels done," but a bounded, deterministic state machine
+(`loops` table, `lhassa/core/db.py`) that terminates on an OBJECTIVE verdict, not
+a self-judgment. Two callers share the same substrate:
+
+- **The forge iterates.** `agents/author.py:propose_tool(..., max_turns=3)` no
+  longer authors once and gives up on the first failing gate — each turn's
+  failing gate detail (never the model's own opinion of its work) threads into
+  the *next* authoring turn as feedback, up to `max_turns`. One exception is
+  deliberately non-retryable: a "mejor" failure with no baseline/metric to
+  compare against stops the loop immediately — no amount of feedback can
+  conjure a baseline that was never given. Every turn is its own Episode.
+- **Standing goals get a real termination.** `/goal --verify command:…|regex:…
+  --turns N` (Telegram, see `doc/telegram.md`) attaches an objective verifier to
+  a recurring judgment task: `core/step.py:_judge()` runs the verifier after
+  each judgment turn and either clears the recurrence on a pass or feeds the
+  verifier's failure detail into the next occurrence's prompt
+  (`trigger.params["_loop_feedback"]`) on a fail — the same trigger object the
+  recurrence-mint already copies forward, so no new minting path was needed.
+
+The one rule that makes this safe rather than an unbounded token sink: **caps
+are checked before any model call.** `_judge()` reads the loop's turn count
+against its `max_turns` first; a capped loop stops the recurrence and notifies
+the owner once, without spending a single token on that tick. A missing or
+broken loop row degrades to a normal, unbounded judgment turn — loops are an
+enhancement to standing goals, not a new failure mode.
+
+This is also where the árbitro principle (above) extends past self-written
+tools: a loop's "done" is a `Verifier` result (command/regex/…), never the
+model grading its own homework.
+
+## Context packs: the body never starts cold
+
+`harness/context_pack.py` gives every rented-body run (`lhassa code`, the
+dashboard's Run section) a small, generated-just-in-time briefing instead of an
+empty working directory. For a project, it renders four files —
+`VISION.md`, `ARCHITECTURE.md`, `RULES.md`, `MEMORY.md` — into
+`~/.lhassa/projects/<id>/context/`, built $0 from the project row, its facts,
+its recent runs, and pending work; `MEMORY.md` in particular renders as
+TRIED / VERIFIED / OPEN — the loop-engineering ladder made into a file a CLI
+agent can actually read.
+
+Generation is staleness-gated, not re-run on every launch: a digest header
+(`source_digest`, hashed from the project/fact/run timestamps) makes `ensure()`
+a cheap no-op when the pack is already fresh, and a full regeneration only when
+something underneath it changed. The pack's own pointer — not its content — is
+prepended to the CLI prompt, so the agent knows where to look without the pack
+itself bloating the prompt. And the design leans the same way as everything
+else here: a missing or failed pack (unknown project, any internal error)
+never blocks the launch — `ensure()` returns `None` and the run proceeds
+unbriefed. Context is a gift, not a gate.
+
 **PTC — Programmatic Tool Calling** (`agents/ptc.py`) is the "one-think-many-actions"
 device: a script runs fully quarantined (its own temp workdir, scrubbed env, process
 group), and its *only* door out is a Unix-domain-socket RPC back to the parent process,

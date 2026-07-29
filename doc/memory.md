@@ -321,9 +321,10 @@ default — the whole feature is gated by one flag, `LHASSA_MEMORY_GRAPH`
   `org/relationships.py`'s discipline): `co_occurs` (symmetric — two
   entities in the same fact/episode, weight accumulates per co-occurrence),
   `mentions` (directed, term → tag, same fact only — reserved for the one
-  relationship that carries extra structure beyond plain co-occurrence), and
+  relationship that carries extra structure beyond plain co-occurrence),
   `derived_from` (reserved for future provenance edges; part of the closed
-  set but not yet emitted by the feeder).
+  set but not yet emitted by the feeder), and `asserts` (directed,
+  subject → object — opt-in, only emitted by triple extraction, below).
 - **`kg_sync`** (`memory/kg.py:sync`, fronted by the `kg_sync` action,
   `actionpack/_kg.py`) is the $0 incremental feeder: it walks facts +
   episodes SINCE the last sync (a `watch_state` marker, `kg_sync:last` — the
@@ -332,6 +333,60 @@ default — the whole feature is gated by one flag, `LHASSA_MEMORY_GRAPH`
   any internal failure degrades to a zeroed summary. Owned by the `guardian`
   monk under the temple department, scheduled **weekly** by the
   `maintenance` seed alongside `review_tools`/`curate_skills`.
+
+### Triple extraction — opt-in, `asserts` edges
+
+`kg_sync`'s co-occurrence feeder is byte-for-byte unchanged by default. A
+second, separate opt-in (`LHASSA_KG_TRIPLES` / `config.kg_triples_enabled`,
+off by default) layers cheap-model **triple extraction** on top: batched over
+NEW facts/episodes only (never a full re-scan), one completion per batch asks
+the routine model for `subject / predicate / object` triples grounded in the
+rows it was actually shown. A triple's `source` field must name one of the
+sources actually offered in that prompt — anything else (a hallucinated
+source the model invented) is dropped, never trusted, along with empty fields
+and self-edges. Surviving triples are written as `asserts` edges (directed,
+subject → object) — a **fourth** edge kind alongside `co_occurs`/`mentions`/
+`derived_from` (`memory/kg.py:EDGE_KINDS`). Because the edge schema carries no
+predicate column, the predicate rides inside the `source` string by
+convention: `fact:<id>|pred:<verb>` or `episode:<id>|pred:<verb>` — provenance
+and relationship type in one field, by choice, rather than widening the
+schema for one new column. Per-batch isolation means one bad batch never sinks
+the others; any provider failure (budget, no provider) degrades to skipping
+extraction for that run, never a crash.
+
+### `kg_resolve` — merging duplicate entities, exact first
+
+Two co-referring entities (`"budget"` and `"Budget"`, or a near-miss spelling)
+fragment the graph unless something merges them. `kg.resolve` (the
+`kg_resolve` action, owned by the `guardian` monk, run weekly) finds candidate
+pairs deterministically — same `kind`, then either an **exact** match (case/
+accent-normalized equality) or a **fuzzy** one (a shared token ≥3 chars, or a
+`difflib` similarity ratio ≥0.6) — capped at a small number of pairs per run.
+The two tiers are handled with very different discipline:
+
+- **Exact pairs merge with no model at all** — `db.merge_kg_entities()`
+  repoints every edge from the duplicate onto the entity with the earlier
+  `first_seen`, folding a colliding edge's weight rather than dropping it.
+- **Fuzzy pairs only merge when `LHASSA_KG_TRIPLES` is on**, and even then
+  only after one bounded, batched completion judges that specific pair
+  genuinely the same entity — with the flag off, or the provider unavailable,
+  fuzzy candidates are left alone rather than guessed at. Merging on a
+  hallucinated "same" verdict would silently corrupt the graph, so a fuzzy
+  merge is never attempted without an actual judgment backing it — an honest
+  skip, not a downgraded merge.
+
+`resolve()` never raises and reports `{merged, candidates, skipped}`.
+
+### Cited retrieval — the `via` label names its provenance
+
+`memory/graph_retrieve.py`'s fused retrieval (above) already tags each result
+with a `via` field explaining why it was pulled in. With triple extraction on,
+a hop-derived result's `via` string carries the SAME edge-kind + provenance
+convention triples write: `"<seed> —asserts→ <object> (fact:<id>|pred:<verb>)"`
+— so a citation for an asserted relationship names both the kind of edge
+(`asserts`, not just `co_occurs`) and the exact fact/episode + predicate it
+came from, not merely "found via the graph." The trailing `(<provenance>)` is
+always the originating edge's own `source` column, verbatim.
 
 ### Fused retrieval — vector seed, 1-hop expand
 

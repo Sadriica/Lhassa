@@ -37,6 +37,29 @@ Lhassa has access to a set of built-in **voice/chat tools** it can call automati
 > section (`QuarantinePanel.jsx`). `review_tools` retires ones that stop
 > earning their keep. None of the tools below went through that pipeline; they
 > are the hand-written baseline.
+>
+> **The forge iterates.** `propose_tool(..., max_turns=3)` doesn't stop at the
+> first failing gate — it's a bounded loop (backed by the same `loops` table
+> `/goal --verify` uses, see `doc/concepts.md`'s "Loop engineering"). Each
+> turn: author a candidate → run it through the gates in order (segura →
+> correcta → mejor) → on failure, the FAILING GATE'S OWN DETAIL (never the
+> model second-guessing itself) is appended as feedback to the *next* turn's
+> authoring prompt. One failure is a dead end by design, not a bug to retry
+> around: a "mejor" failure with no baseline/metric supplied stops the loop on
+> that same turn — there is nothing a next turn could do differently, since no
+> baseline was ever given to beat. Exhausting `max_turns` without graduating
+> caps the loop (`status="capped"`) rather than looping forever. Every turn
+> is logged as its own Episode, so a capped or failed forge run is fully
+> legible after the fact, not just a final verdict.
+>
+> **`propose_tool(..., moa_verdict=True)`** attaches one extra, purely
+> advisory step when a turn's gates all pass: a Mixture-of-Agents panel
+> (`llm/moa.py`, see `/moa` in `doc/telegram.md`) reviews the graduated
+> candidate's own code, and its verdict — the synthesis text, the panel
+> breakdown, its cost — rides along on the `tool_graduation` approval payload
+> (`payload["moa_review"]`) so the human approving it sees a second opinion
+> alongside the gate results. It is advisory ONLY: the four gates remain the
+> sole hard filter, and a missing/degraded panel never blocks graduation.
 
 ---
 

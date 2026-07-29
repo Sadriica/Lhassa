@@ -52,6 +52,8 @@ lhassa code "refactor the parser" --cli codex
 | `memory reindex` | Re-embed every fact and every cached answer-cache question with the CURRENT embedder — run after switching `LHASSA_EMBEDDER_BACKEND`/model | `lhassa memory reindex --json` |
 | `tools` | List the self-written tools and their gate/usage state | `lhassa tools` |
 | `tools propose <name>` | Have the routine model author a candidate tool, run it through quarantine + the gates, and park a graduation approval on a full pass | `lhassa tools propose clean_downloads --desc "sort ~/Downloads by type"` |
+| `bench run` | Score one or more subjects against the LhassaBench fixtures, printing a pass-rate table | `lhassa bench run --subject claude --subject codex` |
+| `bench history` | Recent `bench_runs` rows for a fixture/subject | `lhassa bench history --fixture codegen_fibonacci --limit 20` |
 | `fleet` | Known machines with their last check-in and desired state | `lhassa fleet` |
 | `version` | Version, Python runtime, and a few key toggles | `lhassa version` |
 
@@ -64,6 +66,21 @@ graduations come from the repetition detector's own proposals
 (`agents/repetition.py`), which already know the pattern's cost and supply it
 as the baseline automatically — `tools propose` stays the manual, stricter
 door.
+
+**`tools propose --max-turns N`** (default 3) makes the forge an iterating
+loop rather than a single attempt: a failing gate's own detail (never a
+self-judgment) threads into the *next* authoring turn as feedback, up to `N`
+turns, each logged as its own Episode. One failure is deliberately
+non-retryable — a "mejor" failure with no baseline/metric to compare against
+stops the loop immediately, since no amount of feedback can conjure a
+baseline that was never given. See `doc/tools.md` for the turn-by-turn detail.
+
+**`lhassa bench run`** scores installed subjects (`--subject`/`-s`, repeatable
+— default: whichever of `claude`/`codex`/`default` is actually runnable) against
+LhassaBench's fixtures (`--fixture`/`-f`, repeatable — default: all 10) using
+the SAME objective verifiers the árbitro uses elsewhere — never an LLM judge —
+and prints a pass-rate/cost table. **`lhassa bench history`** lists past
+`bench_runs` rows (`--fixture`, `--subject`, `--limit`, default 50).
 
 ## `lhassa project` — the workspace entity
 

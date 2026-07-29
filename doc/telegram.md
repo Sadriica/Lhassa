@@ -53,8 +53,8 @@ failing call never blocks startup.
 Every command is answered **locally and cheaply** — the registry
 (`lhassa.notify.commands.COMMANDS`) is LLM-free by design; nothing here spends
 a token except `/goal` (which only mints a task — the actual think happens
-later, on the brain's own schedule) and `/cv` (a real model turn, the one
-paid exception).
+later, on the brain's own schedule), `/cv` (a real model turn), and `/moa`
+(a real, multi-provider panel turn — the two paid exceptions besides `/cv`).
 
 Beyond the commands detailed below, the CLI-parity set answers from the same
 underlying seams the terminal uses, all LLM-free: `/report [days]` (spend),
@@ -170,7 +170,7 @@ Removed watch rule 0: /deploy failed/ -> judgment
 An invalid regex or an unknown action name is refused with a clear reason —
 nothing is written on validation failure.
 
-### `/goal <text> [--every daily|hourly]`
+### `/goal <text> [--every daily|hourly] [--verify command:<cmd>|regex:<pattern>] [--turns N]`
 Mints a recurring `judgment=True` task (default cadence: daily) — the mint
 itself is $0; only the later reasoning about it costs anything:
 
@@ -178,6 +178,43 @@ itself is $0; only the later reasoning about it costs anything:
 > /goal check my open PRs and flag anything stale --every daily
 Goal scheduled (daily): check my open PRs and flag anything stale [task t_9f2a]
 ```
+
+Add `--verify` to give a standing goal a real termination instead of an
+unbounded recurrence: a `command:` or `regex:` spec (validated up front via
+`agents/verify.py:make_verifier` — a bad spec is refused with no task minted)
+runs after every judgment turn. A pass clears the recurrence; a fail feeds the
+verifier's own failure detail into the *next* occurrence's prompt and counts
+against the turn cap — never a self-judgment. `--turns N` sets that cap
+(default 10 when `--verify` is given with no explicit turns):
+
+```
+> /goal fix the failing lint check --verify command:"make lint" --turns 5
+Goal scheduled (daily): fix the failing lint check [task t_a01f] [verify: command, max 5 turns]
+```
+
+If every turn is spent without a pass, the goal is capped rather than left
+running forever — the recurrence stops and you're notified once, before any
+further model call on it.
+
+### `/moa <question>`
+Fans the same question to a panel of models (default `claude`, `codex`, and
+the cost-gateway `default` seat) and returns one synthesis that names real
+disagreement rather than averaging it away — costs more than a normal chat
+turn, so it's for decisions expensive to get wrong:
+
+```
+> /moa should I use Postgres or SQLite for this project?
+Panel roughly agrees: SQLite is fine for a single-writer app under
+moderate load; Postgres only pays off once you need concurrent writers
+or hosted replication. One panelist flagged that WAL-mode SQLite already
+covers most of the concurrency worry.
+
+panel: claude ✓, codex ✓, default ✓ · $0.0031
+```
+
+A missing CLI shows as an honest `✗` in the footer rather than being silently
+skipped; if fewer than two panelists answer, there's nothing to synthesize —
+the single answer comes back as-is, with no extra aggregation spend.
 
 ### `/config [key [value]]` — the settings service from chat
 

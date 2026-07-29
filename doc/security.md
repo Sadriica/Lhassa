@@ -270,6 +270,13 @@ park a `tool_graduation` approval (`security/approval.py`, above). A human, or a
 autonomy streak, still has to say yes before the candidate is trusted with real
 invocations.
 
+`propose_tool(..., moa_verdict=True)` can attach a Mixture-of-Agents panel
+review (`llm/moa.py`) of the graduated candidate's code to that same approval
+payload — a second opinion for the human to read alongside the gate results.
+It changes nothing about the trust boundary: the review is advisory only, the
+four gates remain the sole hard filter, and a missing or degraded panel never
+blocks or auto-approves a graduation.
+
 ## PTC containment — one script, many re-checked actions
 
 `agents/ptc.py:run_script()` is "Programmatic Tool Calling": a script that needs to

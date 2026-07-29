@@ -18,6 +18,31 @@
 
 ---
 
+## Context packs — what a `/code` run sees at launch
+
+That other door no longer hands a local CLI an empty working directory. When
+`POST /api/code` resolves the launch's cwd to a known project
+(`core/projects.py:resolve_project`), `harness/context_pack.py:ensure()`
+generates (or reuses, if fresh) four files under
+`~/.lhassa/projects/<id>/context/`: `VISION.md`, `ARCHITECTURE.md`,
+`RULES.md`, `MEMORY.md` — built $0 from the project row, its facts, its
+recent runs, and its pending tasks/approvals. `MEMORY.md` renders as TRIED /
+VERIFIED / OPEN, so the agent starts already knowing what's been tried before
+and what's still open, not just the raw file tree.
+
+`agents/local_cli.py:context_pack_hint()` prepends a short pointer to the
+prompt — the four file paths, read-these-first — rather than inlining the
+pack's content, so the agent chooses what to actually open. Staleness is
+digest-gated: a header (`source_digest`, hashed from the project/fact/run
+timestamps) lets `ensure()` skip regeneration when nothing underneath the
+pack has changed since the last run, and only re-render when it has.
+
+No project match, or any internal failure, resolves to no pack at all — the
+launch proceeds exactly as before context packs existed. A pack is a gift to
+the agent, never a precondition for the run.
+
+---
+
 ## What Sub-Agents Are
 
 Each agent is an instance of `BaseAgent` (`lhassa/agents/base.py`) — a wrapper

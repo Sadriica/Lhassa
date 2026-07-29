@@ -168,7 +168,15 @@ deterministic, $0, degrade-to-normal-think on any failure:
   is the $0 incremental feeder (`guardian` monk, weekly). `memory/graph_retrieve.py`
   is vector-seeded, 1-hop graph-expanded fact retrieval, wired into
   `memory/load.py` as its lowest-priority `graph` context layer — fires only
-  with a query AND the flag on.
+  with a query AND the flag on. **Triple extraction** (opt-in, `LHASSA_KG_TRIPLES` /
+  `config.kg_triples_enabled`) layers cheap-model `subject/predicate/object` triples on
+  top of `kg_sync`, batched over NEW rows only; the predicate rides the provenance
+  string (`fact:<id>|pred:<verb>`, schema-free by choice) on a new `asserts` edge kind;
+  a triple whose source wasn't actually offered in the prompt (hallucinated) is
+  dropped, never trusted. `kg_resolve` (weekly, `guardian`) merges duplicate entities —
+  exact-normalized pairs merge with no model (`merge_kg_entities`); fuzzy pairs only
+  merge under the flag, judged by one bounded completion, else honestly skipped.
+  `graph_retrieve`'s `via` labels now cite kind + provenance for asserted edges too.
 - **The consciousness** (`agents/repetition.py` + `actionpack/_selfimprove.py`).
   Beyond the cost detector: `detect_recurring` finds patterns repeated OFTEN
   (any cost) and reads a temporal cadence (regular gaps → "fires weekly");
@@ -201,10 +209,23 @@ deterministic, $0, degrade-to-normal-think on any failure:
   `mint_action` approval + notifies (deduped via `watch_state`). `agents/author.py`
   has the routine model write a candidate tool+test → `versioning.create_candidate`
   → `gates.promote` (quarantine + verifiers) → a `tool_graduation` approval; CLI
-  `lhassa tools propose <name> --desc "..."`. `POST /api/tools/{n}/graduate`
+  `lhassa tools propose <name> --desc "..." [--max-turns N]` (the iterating forge, above).
+  `moa_verdict=True` attaches an advisory MoA panel review to the approval payload —
+  never a hard filter, the gates remain the only one. `POST /api/tools/{n}/graduate`
   refuses (409) tools that didn't pass the gates. `review_tools` applies
   `should_retire`/`retire`. Authored code never executes outside quarantine before
   graduating.
+- **Loops** (`core/db.py`'s `loops` table) — the unit of work past a single think is a
+  bounded, verifier-terminated loop, never an unbounded "call the model until it feels
+  done." `agents/author.py:propose_tool(..., max_turns=3)` iterates: a failing gate's
+  own detail (never a self-judgment) threads into the next authoring turn as feedback;
+  a "mejor" failure with no baseline is non-retryable by design (no feedback conjures a
+  baseline). `/goal --verify command:…|regex:… --turns N` gives a standing goal a real
+  termination: `core/step.py:_judge()` runs the verifier after each judgment turn,
+  clearing the recurrence on a pass or threading the failure into the next occurrence's
+  prompt via `trigger.params["_loop_feedback"]` (the same trigger the recurrence-mint
+  already copies) on a fail. Caps are checked BEFORE any model call; a missing/broken
+  loop row degrades to a normal, unbounded judgment turn. Every turn is its own Episode.
 - **PTC — Programmatic Tool Calling** (`agents/ptc.py` + the `run_script` action) —
   one LLM turn writes a Python script that orchestrates N deterministic ACTIONS:
   `generate_stub()` renders `lhassa_actions.py` from the ACTIONS registry; the
@@ -241,7 +262,14 @@ an inline Approve/Deny keyboard; one tap launches the run through the dashboard'
 own `code_routes._stream_run` seam and reports start + completion — remote write
 access NEVER runs without the owner's tap), `/watch <pattern> -> <accion>` /
 `/watches` / `/unwatch <i>` (author watch rules from chat), `/goal <text>
-[--every …]` (mints a recurring judgment task) — all LLM-free. The chat think is
+[--every …] [--verify command:…|regex:… --turns N]` (mints a recurring judgment
+task; `--verify` gives it a real termination — a loop row, `core/step.py:_judge()`
+runs the verifier after each turn, clears the recurrence on a pass or threads the
+failure into the next turn via `_loop_feedback` on a fail, capped before any model
+call) — all LLM-free. `/moa <question>` is the one deliberate paid exception besides
+`/cv`: fans out to a panel (default `claude,codex,default`, `llm/moa.py`), a missing
+CLI shows ✗ in the footer, <2 answers skips synthesis, one cheap-seat completion
+names real disagreement otherwise. The chat think is
 TOOL-LESS and its instruction says so (it must never claim to search); live-data
 questions go through the **research bridge**: the model emits `[[research:
 <query>]]`, `telegram_inbound._apply_research_marker` mints a `research_reply`
@@ -458,7 +486,15 @@ over the WebSocket as `agent_started` / `agent_token` / `agent_done`;
 `GET /api/code/clis` lists installed CLIs + the auto-detected default,
 `GET /api/code/runs` lists recent runs. The dashboard "Run" section is the UI; the CLI
 equivalent is `lhassa code "<task>"`. The `lhassa-app` service includes `~/.local/bin`
-on PATH so it finds the `claude` CLI.
+on PATH so it finds the `claude` CLI. **Context packs** (`harness/context_pack.py`) —
+the body never starts cold: when the launch's cwd resolves to a known project,
+`ensure()` renders `~/.lhassa/projects/<id>/context/{VISION,ARCHITECTURE,RULES,MEMORY}.md`
+$0 from the project row + facts + runs + pending work (`MEMORY.md` = TRIED/VERIFIED/OPEN);
+digest-header staleness (`source_digest`) makes it a no-op when fresh. `agents/local_cli.py`
+prepends the pack's pointer (not its content) to the CLI prompt; a missing pack never
+blocks a launch. **LhassaBench** (`lhassa/bench/`) — 10 fixtures scored ONLY by the
+existing objective verifiers (never an LLM judge), `bench_runs` rows carry
+pass/metric/cost/duration; `lhassa bench run|history`.
 
 ## Skills (first-class, 3-layer)
 
