@@ -27,7 +27,8 @@ from typing import Iterator
 #   shells        : cli, api, voice, notify, org, dashboard  (user/world surfaces)
 #   spine         : core                                      (the do-and-sleep loop)
 #   interfaces    : memory, security, llm                     (mid layers / contracts)
-#   adapters      : harness, tools, agents, remote, health    (the rentable "hands")
+#   adapters      : harness, tools, agents, remote, health,    (the rentable "hands")
+#                   bench
 #   cv seam       : cv                                         (leaf file-I/O used by flows)
 #   calendar seam : calendar                                   (leaf .ics file-I/O used by notify)
 #   leaf infra    : registry.py, plugins.py                   (keystone — depend on nothing)
@@ -72,9 +73,13 @@ RULES: tuple[Rule, ...] = (
     # The "hands" (adapters) must not depend on the UI/messaging shells. ``voice``
     # is included; the single legitimate desktop-notifier edge is whitelisted in
     # ALLOWED_EXCEPTIONS below so this rule still blocks NEW voice coupling.
+    # ``bench`` (LhassaBench, Wave E) joins this set: it is an adapter over the
+    # existing swap points (agents/verify for scoring, llm/provider for the
+    # subjects under test) — a fixture-driven eval harness, not a world-facing
+    # surface — so it must never reach back into a shell either.
     Rule(
         "adapter-isolation",
-        frozenset({"harness", "tools", "agents", "remote", "health"}),
+        frozenset({"harness", "tools", "agents", "remote", "health", "bench"}),
         frozenset(SHELLS),
     ),
     # Swap-axis independence: the harness adapter (agentic body) must not import

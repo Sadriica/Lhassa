@@ -1,0 +1,10 @@
+id: factual_capital_france
+title: "Factual: capital of France"
+prompt: >
+  What is the capital of France? Reply with only the city name, nothing else.
+subject_kind: completion
+verify:
+  type: regex
+  pattern: '^\s*Paris\s*$'
+  flags: 10  # re.IGNORECASE | re.MULTILINE
+tags: [factual, structured]

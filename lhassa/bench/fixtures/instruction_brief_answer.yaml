@@ -1,0 +1,11 @@
+id: instruction_brief_answer
+title: "Instruction-following: strict word-count budget"
+prompt: >
+  Explain what a stack data structure is, in fewer than 15 words.
+subject_kind: completion
+verify:
+  type: metric
+  metric_fn: word_count
+  baseline: 15
+  higher_is_better: false
+tags: [instruction-following, conciseness]

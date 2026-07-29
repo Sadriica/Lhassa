@@ -1,0 +1,11 @@
+id: factual_three_bullets
+title: "Factual: exactly three bullet lines"
+prompt: >
+  List three benefits of drinking water. Reply with exactly three lines, each
+  starting with "- " (a dash and a space), nothing before or after.
+subject_kind: completion
+verify:
+  type: regex
+  pattern: '^- .+\n- .+\n- .+$'
+  flags: 8  # re.MULTILINE
+tags: [factual, structured]

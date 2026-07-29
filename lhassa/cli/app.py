@@ -33,6 +33,7 @@ quiet_logging()
 
 from lhassa.cli import agent  # noqa: E402  (must follow quiet_logging)
 from lhassa.cli import artifact_cmds as _artifact_cmds  # noqa: E402
+from lhassa.cli import bench_cmds as _bench_cmds  # noqa: E402
 from lhassa.cli import calendar_cmds as _calendar_cmds  # noqa: E402
 from lhassa.cli import capabilities as _capabilities  # noqa: E402
 from lhassa.cli import commands as _commands  # noqa: E402
@@ -292,6 +293,9 @@ app.add_typer(_task_cmds.task_app, name="task")
 
 # ── lhassa project … (the first-class workspace entity) ─────────────────────
 app.add_typer(_project_cmds.project_app, name="project")
+
+# ── lhassa bench … (eval-driven development: fixture × subject, verifier-scored) ──
+app.add_typer(_bench_cmds.bench_app, name="bench")
 
 # Attach the `lhassa tools` sub-app (self-written tools: list + propose).
 app.add_typer(_tools_cmds.tools_app, name="tools")

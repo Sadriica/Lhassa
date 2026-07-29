@@ -1,0 +1,11 @@
+id: instruction_marker_wrap
+title: "Instruction-following: wrap answer in markers"
+prompt: >
+  Repeat the word "lighthouse" exactly once, wrapped between the literal
+  markers [[START]] and [[END]], with nothing else outside the markers.
+subject_kind: completion
+verify:
+  type: regex
+  pattern: '\[\[START\]\]\s*lighthouse\s*\[\[END\]\]'
+  flags: 2  # re.IGNORECASE
+tags: [instruction-following, format]
