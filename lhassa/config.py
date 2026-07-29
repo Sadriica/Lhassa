@@ -501,6 +501,10 @@ class Config:
     # Knowledge-graph context layer (LightRAG-lite, Wave 3): OFF by default —
     # behavior is unchanged until the owner opts in (same rollout as layer 4).
     memory_graph_enabled: bool = os.getenv("LHASSA_MEMORY_GRAPH", "0").strip().lower() in ("1", "true", "yes", "on")
+    # Cheap-model triple extraction on kg_sync (subject-predicate-object edges
+    # with provenance). OFF by default: unset keeps kg_sync byte-identical to
+    # the $0 regex path.
+    kg_triples_enabled: bool = os.getenv("LHASSA_KG_TRIPLES", "0").strip().lower() in ("1", "true", "yes", "on")
     # API key for hosted embedding endpoints (Ollama is keyless; set for cloud).
     # NEVER write this to settings.env — it stays in .env (secret).
     embeddings_api_key: str = os.getenv("LHASSA_EMBEDDINGS_API_KEY", "")

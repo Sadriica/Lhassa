@@ -1015,6 +1015,44 @@ async def _validate_migration_007(db) -> None:
         raise MigrationValidationError(f"invalid loops schema: missing {sorted(missing)}")
 
 
+async def _migration_008_bench_runs(db) -> None:
+    """LhassaBench results: fixture x subject scored runs, deterministically.
+
+    Eval-driven development's substrate: every bench run records which fixture
+    ran against which subject (a provider, a route, a loop config), whether the
+    EXISTING objective verifier passed it, and what it cost — data the router
+    and the consciousness can later weigh. Append-only.
+    """
+    await db.execute("""
+        CREATE TABLE bench_runs (
+            id          TEXT PRIMARY KEY,
+            instance_id TEXT NOT NULL,
+            fixture_id  TEXT NOT NULL,
+            subject     TEXT NOT NULL,
+            passed      INTEGER NOT NULL,
+            metric      REAL,
+            detail      TEXT,
+            cost_usd    REAL NOT NULL DEFAULT 0.0,
+            duration_ms INTEGER,
+            created_at  TEXT NOT NULL
+        )
+    """)
+    await db.execute("""
+        CREATE INDEX bench_runs_by_fixture
+        ON bench_runs(instance_id, fixture_id, subject, created_at)
+    """)
+
+
+async def _validate_migration_008(db) -> None:
+    async with db.execute("PRAGMA table_info(bench_runs)") as cur:
+        actual = {row[1] for row in await cur.fetchall()}
+    required = {"id", "instance_id", "fixture_id", "subject", "passed",
+                "metric", "detail", "cost_usd", "duration_ms", "created_at"}
+    missing = required - actual
+    if missing:
+        raise MigrationValidationError(f"invalid bench_runs schema: missing {sorted(missing)}")
+
+
 MIGRATIONS = (
     Migration(1, "baseline", _migration_001_baseline, _validate_migration_001),
     Migration(2, "durable-flows", _migration_002_durable_flows, _validate_migration_002),
@@ -1023,6 +1061,7 @@ MIGRATIONS = (
     Migration(5, "project-brains", _migration_005_project_brains, _validate_migration_005),
     Migration(6, "knowledge-graph", _migration_006_knowledge_graph, _validate_migration_006),
     Migration(7, "loops", _migration_007_loops, _validate_migration_007),
+    Migration(8, "bench-runs", _migration_008_bench_runs, _validate_migration_008),
 )
 SCHEMA_VERSION = MIGRATIONS[-1].version
 
@@ -2926,3 +2965,106 @@ async def advance_loop(
         )
         await db.commit()
         return bool(cur.rowcount)
+
+
+# ── bench_runs (LhassaBench results — append-only) ───────────────────────────
+
+
+async def insert_bench_run(row: dict) -> str:
+    """Record one scored bench run. Returns its id."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            """INSERT INTO bench_runs(
+                   id, instance_id, fixture_id, subject, passed, metric,
+                   detail, cost_usd, duration_ms, created_at)
+               VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                row["id"],
+                row["instance_id"],
+                row["fixture_id"],
+                row["subject"],
+                1 if row.get("passed") else 0,
+                row.get("metric"),
+                (row.get("detail") or "")[:500],
+                float(row.get("cost_usd") or 0.0),
+                row.get("duration_ms"),
+                row["created_at"],
+            ),
+        )
+        await db.commit()
+    return row["id"]
+
+
+async def list_bench_runs(
+    instance_id: str, *, fixture_id: "Optional[str]" = None,
+    subject: "Optional[str]" = None, limit: int = 200,
+) -> "list[dict]":
+    """Bench rows (newest first), optionally filtered."""
+    sql = "SELECT * FROM bench_runs WHERE instance_id = ?"
+    params: list = [instance_id]
+    if fixture_id is not None:
+        sql += " AND fixture_id = ?"
+        params.append(fixture_id)
+    if subject is not None:
+        sql += " AND subject = ?"
+        params.append(subject)
+    sql += " ORDER BY created_at DESC LIMIT ?"
+    params.append(limit)
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(sql, params) as cur:
+            return [dict(row) for row in await cur.fetchall()]
+
+
+# ── kg entity merge (resolution — repoint edges, keep provenance) ────────────
+
+
+async def merge_kg_entities(instance_id: str, keep_id: str, drop_id: str) -> int:
+    """Merge entity ``drop_id`` into ``keep_id``: repoint every edge, then
+    remove the dropped entity. Edges that would collide accumulate weight into
+    the surviving edge (same ON CONFLICT rule as upsert). Returns edges moved.
+    """
+    if keep_id == drop_id:
+        return 0
+    moved = 0
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            "SELECT * FROM kg_edges WHERE instance_id = ? AND (from_id = ? OR to_id = ?)",
+            (instance_id, drop_id, drop_id),
+        ) as cur:
+            edges = [dict(r) for r in await cur.fetchall()]
+        for edge in edges:
+            new_from = keep_id if edge["from_id"] == drop_id else edge["from_id"]
+            new_to = keep_id if edge["to_id"] == drop_id else edge["to_id"]
+            if new_from == new_to:
+                # A self-edge born from the merge is meaningless — drop it.
+                await db.execute(
+                    "DELETE FROM kg_edges WHERE instance_id = ? AND from_id = ? AND to_id = ? AND kind = ?",
+                    (instance_id, edge["from_id"], edge["to_id"], edge["kind"]),
+                )
+                continue
+            await db.execute(
+                "DELETE FROM kg_edges WHERE instance_id = ? AND from_id = ? AND to_id = ? AND kind = ?",
+                (instance_id, edge["from_id"], edge["to_id"], edge["kind"]),
+            )
+            await db.execute(
+                """INSERT INTO kg_edges(
+                       instance_id, from_id, to_id, kind, weight, source,
+                       created_at, updated_at)
+                   VALUES(?, ?, ?, ?, ?, ?, ?, ?)
+                   ON CONFLICT(instance_id, from_id, to_id, kind)
+                   DO UPDATE SET weight = weight + excluded.weight,
+                                 updated_at = excluded.updated_at""",
+                (
+                    instance_id, new_from, new_to, edge["kind"], edge["weight"],
+                    edge.get("source"), edge["created_at"], edge["updated_at"],
+                ),
+            )
+            moved += 1
+        await db.execute(
+            "DELETE FROM kg_entities WHERE instance_id = ? AND id = ?",
+            (instance_id, drop_id),
+        )
+        await db.commit()
+    return moved
