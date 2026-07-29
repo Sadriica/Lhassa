@@ -967,6 +967,54 @@ async def _validate_migration_006(db) -> None:
             raise MigrationValidationError(f"invalid {table} schema: missing {sorted(missing)}")
 
 
+async def _migration_007_loops(db) -> None:
+    """Loop engineering's record: a bounded, verifier-terminated iteration.
+
+    A loop is the unit of WORK (a prompt is just one turn of it): a verifiable
+    goal, a turn/deadline cap enforced BEFORE any work, an independent verifier
+    spec (the doer never judges), and the last verdict whose detail seeds the
+    next turn. The loop row is thin state; TICKING reuses the tasks table (one
+    task per active loop) and the audit trail is episodes — one per turn, like
+    every other observable act. Statuses walk the loop-engineering stages:
+    discover|plan|execute|verify|iterate|done|failed|capped.
+    """
+    await db.execute("""
+        CREATE TABLE loops (
+            id            TEXT PRIMARY KEY,
+            instance_id   TEXT NOT NULL,
+            goal          TEXT NOT NULL,
+            kind          TEXT NOT NULL DEFAULT 'closed',
+            origin        TEXT,
+            status        TEXT NOT NULL DEFAULT 'plan',
+            turn          INTEGER NOT NULL DEFAULT 0,
+            max_turns     INTEGER NOT NULL DEFAULT 3,
+            deadline_at   TEXT,
+            verifier_spec TEXT,
+            last_verdict  TEXT,
+            task_id       TEXT,
+            created_at    TEXT NOT NULL,
+            updated_at    TEXT NOT NULL
+        )
+    """)
+    await db.execute("""
+        CREATE INDEX loops_by_instance
+        ON loops(instance_id, status)
+    """)
+
+
+async def _validate_migration_007(db) -> None:
+    async with db.execute("PRAGMA table_info(loops)") as cur:
+        actual = {row[1] for row in await cur.fetchall()}
+    required = {
+        "id", "instance_id", "goal", "kind", "origin", "status", "turn",
+        "max_turns", "deadline_at", "verifier_spec", "last_verdict",
+        "task_id", "created_at", "updated_at",
+    }
+    missing = required - actual
+    if missing:
+        raise MigrationValidationError(f"invalid loops schema: missing {sorted(missing)}")
+
+
 MIGRATIONS = (
     Migration(1, "baseline", _migration_001_baseline, _validate_migration_001),
     Migration(2, "durable-flows", _migration_002_durable_flows, _validate_migration_002),
@@ -974,6 +1022,7 @@ MIGRATIONS = (
     Migration(4, "projects", _migration_004_projects, _validate_migration_004),
     Migration(5, "project-brains", _migration_005_project_brains, _validate_migration_005),
     Migration(6, "knowledge-graph", _migration_006_knowledge_graph, _validate_migration_006),
+    Migration(7, "loops", _migration_007_loops, _validate_migration_007),
 )
 SCHEMA_VERSION = MIGRATIONS[-1].version
 
@@ -2770,3 +2819,110 @@ async def list_kg_entities(instance_id: str, limit: int = 200) -> "list[dict]":
             (instance_id, limit),
         ) as cur:
             return [dict(row) for row in await cur.fetchall()]
+
+
+# ── loops (bounded verifier-terminated iteration — loop engineering) ─────────
+
+
+async def insert_loop(row: dict) -> str:
+    """Insert one loop row. Returns its id. Caps live in the row from birth."""
+    for key in ("verifier_spec", "last_verdict"):
+        value = row.get(key)
+        if value is not None and not isinstance(value, str):
+            row[key] = json.dumps(value, ensure_ascii=False)
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            """INSERT INTO loops(
+                   id, instance_id, goal, kind, origin, status, turn, max_turns,
+                   deadline_at, verifier_spec, last_verdict, task_id,
+                   created_at, updated_at)
+               VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                row["id"],
+                row["instance_id"],
+                row["goal"],
+                row.get("kind") or "closed",
+                row.get("origin"),
+                row.get("status") or "plan",
+                int(row.get("turn") or 0),
+                int(row.get("max_turns") or 3),
+                row.get("deadline_at"),
+                row.get("verifier_spec"),
+                row.get("last_verdict"),
+                row.get("task_id"),
+                row["created_at"],
+                row["updated_at"],
+            ),
+        )
+        await db.commit()
+    return row["id"]
+
+
+async def get_loop(instance_id: str, loop_id: str) -> "Optional[dict]":
+    """One loop row (JSON columns decoded), or ``None``."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            "SELECT * FROM loops WHERE instance_id = ? AND id = ?",
+            (instance_id, loop_id),
+        ) as cur:
+            row = await cur.fetchone()
+    if row is None:
+        return None
+    out = dict(row)
+    out["verifier_spec"] = _loads(out.get("verifier_spec"), None)
+    out["last_verdict"] = _loads(out.get("last_verdict"), None)
+    return out
+
+
+async def list_loops(
+    instance_id: str, *, status: "Optional[str]" = None, limit: int = 50
+) -> "list[dict]":
+    """Loop rows (newest first); optionally filtered by status."""
+    sql = "SELECT * FROM loops WHERE instance_id = ?"
+    params: list = [instance_id]
+    if status is not None:
+        sql += " AND status = ?"
+        params.append(status)
+    sql += " ORDER BY created_at DESC LIMIT ?"
+    params.append(limit)
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(sql, params) as cur:
+            rows = [dict(row) for row in await cur.fetchall()]
+    for row in rows:
+        row["verifier_spec"] = _loads(row.get("verifier_spec"), None)
+        row["last_verdict"] = _loads(row.get("last_verdict"), None)
+    return rows
+
+
+async def advance_loop(
+    instance_id: str,
+    loop_id: str,
+    *,
+    status: "Optional[str]" = None,
+    verdict: "Optional[dict]" = None,
+    bump_turn: bool = False,
+) -> bool:
+    """Advance one loop: bump the turn, record the verdict, move the status.
+
+    Returns whether a row changed. The CALLER enforces caps before working;
+    this only records state.
+    """
+    sets, params = ["updated_at = ?"], [_now()]
+    if status is not None:
+        sets.append("status = ?")
+        params.append(status)
+    if verdict is not None:
+        sets.append("last_verdict = ?")
+        params.append(json.dumps(verdict, ensure_ascii=False))
+    if bump_turn:
+        sets.append("turn = turn + 1")
+    params.extend([instance_id, loop_id])
+    async with aiosqlite.connect(DB_PATH) as db:
+        cur = await db.execute(
+            f"UPDATE loops SET {', '.join(sets)} WHERE instance_id = ? AND id = ?",
+            params,
+        )
+        await db.commit()
+        return bool(cur.rowcount)
