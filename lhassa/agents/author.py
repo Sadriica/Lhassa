@@ -39,6 +39,7 @@ from lhassa.core import db as _db
 from lhassa.core.episode import Episode
 from lhassa.llm import router as _router
 from lhassa.llm.gateway import BudgetExceeded
+from lhassa.llm.moa import moa as _moa_consult
 from lhassa.llm.provider import ModelProvider, ProviderNotConfigured, get_model_provider
 
 # A cheap, mechanical writing task — plenty of budget for a small tool + test.
@@ -223,6 +224,43 @@ async def _forge_episode(
         logger.debug(f"propose_tool: could not log forge episode: {exc}")
 
 
+async def _moa_code_review(
+    name: str, description: str, files: dict[str, str], *, config: Any
+) -> Optional[dict[str, Any]]:
+    """One opt-in :func:`lhassa.llm.moa.moa` pass reviewing a GRADUATED candidate.
+
+    Advisory only — this runs AFTER the objective gates already passed, purely
+    to give the owner a panel opinion on the approval card; it never gates or
+    blocks graduation. Defensive: any failure (no panelists, moa() degrading,
+    an unexpected exception) returns ``None`` so the caller attaches nothing
+    rather than breaking a graduation that already earned its approval.
+    """
+    try:
+        listing = "\n\n".join(
+            f"--- {path} ---\n{content}" for path, content in files.items()
+        )
+        question = (
+            f"Review this self-authored tool named {name!r} (purpose: "
+            f"{description}) for correctness and safety concerns before a human "
+            f"approves it for use. It already passed automated tests and a "
+            f"quarantine sandbox run — focus on anything those checks would "
+            f"miss (edge cases, unsafe assumptions, unclear behavior).\n\n"
+            f"{listing}"
+        )
+        result = await _moa_consult(
+            [{"role": "user", "content": question}], config=config
+        )
+        return {
+            "text": result.text,
+            "panel": result.panel,
+            "aggregator_provider": result.aggregator_provider,
+            "total_cost_usd": result.total_cost_usd,
+        }
+    except Exception as exc:
+        logger.debug(f"propose_tool({name}): moa_verdict review degraded: {exc}")
+        return None
+
+
 async def propose_tool(
     name: str,
     description: str,
@@ -237,6 +275,7 @@ async def propose_tool(
     provider: Optional[ModelProvider] = None,
     model: Optional[str] = None,
     completion_fn: Any = None,
+    moa_verdict: bool = False,
     config: Any = Config,
 ) -> dict[str, Any]:
     """Author -> version -> gate a candidate tool, ITERATING up to ``max_turns``.
@@ -267,6 +306,17 @@ async def propose_tool(
     Only when a turn's gates all pass does this park a ``tool_graduation``
     approval (the same queue the ``POST /api/tools/{nombre}/graduate`` endpoint
     consumes) — nothing here auto-graduates a tool.
+
+    ``moa_verdict`` (default ``False`` — byte-identical behavior when unset) is
+    an OPT-IN extra: when a candidate graduates the objective gates AND this is
+    True, one extra :func:`lhassa.llm.moa.moa` consultation asks a panel of
+    models to review the authored code for correctness/safety concerns, and the
+    synthesized review is attached to the graduation approval's payload
+    (``moa_review``) so the owner sees the panel's opinion on the approval card.
+    The panel is advisory color for the human — it NEVER overrides the
+    objective gates, which remain the hard filter; a failed/degraded MoA
+    consultation still lets graduation proceed (the approval simply carries no
+    ``moa_review``).
 
     Degrades at every step: no authored files / no git / a mid-loop
     ``BudgetExceeded`` all stop the loop (``status="iterate"``, never raising)
@@ -384,10 +434,18 @@ async def propose_tool(
         if outcome.get("graduated"):
             from lhassa.security import approval as _approval
 
+            payload: dict[str, Any] = {
+                "accion": "tool_graduation", "tool": name, "branch": ref,
+            }
+            if moa_verdict:
+                review = await _moa_code_review(name, description, files, config=config)
+                if review is not None:
+                    payload["moa_review"] = review
+
             approval_id = await _approval.request_approval(
                 inst,
                 tipo="tool_graduation",
-                payload={"accion": "tool_graduation", "tool": name, "branch": ref},
+                payload=payload,
             )
             outcome["approval_id"] = approval_id
             await _advance(status="done", verdict={"passed": True})

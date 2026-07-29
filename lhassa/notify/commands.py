@@ -246,7 +246,7 @@ async def _cmd_start(args: str, *, config=None) -> str:
 # registered by a plugin but missing here still appears — see _cmd_help's final
 # "also available" line — so a drop-in command can never vanish from /help.
 _HELP_GROUPS: list[Tuple[str, list[str]]] = [
-    ("Chat & memory", ["ai", "recall", "memory", "knowledge", "remind", "event", "checkin", "today", "tomorrow"]),
+    ("Chat & memory", ["ai", "moa", "recall", "memory", "knowledge", "remind", "event", "checkin", "today", "tomorrow"]),
     ("Calendars", ["calendar", "calendars"]),
     ("Decisions", ["approvals", "approve", "deny"]),
     ("Watch & goals", ["watch", "watches", "unwatch", "goal", "temple"]),
@@ -259,6 +259,7 @@ DESCRIPTIONS: dict[str, str] = {
     "start": "Introduce myself.",
     "help": "This catalog.",
     "ai": "<question> — I search the web AND answer it specifically (not just links).",
+    "moa": "<question> — ask a panel of models (not just one) and synthesize their answers; costs more, use for high-stakes decisions.",
     "recall": "<text> — search past episodes.",
     "memory": "<query> — search durable facts.",
     "knowledge": "<query> — search your indexed notes/papers (document perception).",
@@ -1566,6 +1567,64 @@ async def _cmd_ai(args: str, *, config=None) -> str:
     except Exception as exc:
         logger.warning(f"commands: /ai failed: {exc}")
         return _oops("look that up and answer it")
+
+
+# ── /moa — mixture-of-agents: a panel consultation for expensive-to-be-wrong asks ──
+
+# Provider name -> the label shown in the panel footer. "default" is the
+# cost-gateway seat (deepseek, in practice) — the owner-facing name is more
+# honest than the internal registry key.
+_MOA_LABELS: dict[str, str] = {"default": "deepseek"}
+
+
+def _moa_label(name: str) -> str:
+    return _MOA_LABELS.get(name, name)
+
+
+def _moa_footer(result) -> str:
+    """A compact 'panel: claude ✓, codex ✓, deepseek ✗ (unavailable) · $0.0007' line."""
+    parts = []
+    for entry in result.panel:
+        label = _moa_label(entry.get("provider", "?"))
+        if entry.get("ok"):
+            parts.append(f"{label} ✓")
+        else:
+            err = (entry.get("error") or "failed")[:60]
+            parts.append(f"{label} ✗ ({err})")
+    panel_str = ", ".join(parts) if parts else "(no panelists)"
+    return f"panel: {panel_str} · ${result.total_cost_usd:.4f}"
+
+
+@register_command("moa")
+async def _cmd_moa(args: str, *, config=None) -> str:
+    """``/moa <question>`` — mixture-of-agents: ask a panel, get a synthesized verdict.
+
+    For a decision that is expensive to get wrong, one model's opinion isn't
+    enough: this fans ``<question>`` out to the owner's configured fleet
+    (:func:`lhassa.llm.moa.moa`, default ``claude,codex,default``) in
+    parallel and has ONE more (cheap) completion compare the answers and
+    synthesize a single verdict — honestly naming real disagreement. This is
+    an explicit, opt-in spend: it is never wired into the automatic think
+    path, only this command (and the forge's ``moa_verdict`` review). Never
+    raises.
+    """
+    question = (args or "").strip()
+    if not question:
+        return (
+            "Usage: /moa <question> — asks a panel of models (not just one) and "
+            "synthesizes their answers; costs more than a normal chat, so use it "
+            "for decisions that are expensive to get wrong."
+        )
+    try:
+        cfg = _config(config)
+        from lhassa.llm.moa import moa as _moa
+
+        result = await _moa([{"role": "user", "content": question}], config=cfg)
+    except Exception as exc:
+        logger.warning(f"commands: /moa failed: {exc}")
+        return _oops("run that through the panel")
+
+    return f"{result.text}\n\n{_moa_footer(result)}"
 
 
 # ── /remind — a timed reminder in plain words, parsed deterministically ($0) ──────
