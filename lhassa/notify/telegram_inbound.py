@@ -53,7 +53,15 @@ _BACKOFF_START = 1.0
 _BACKOFF_MAX = 60.0
 
 # A chat turn is a short answer, not a long job.
-_CHAT_MAX_TOKENS = 512
+_CHAT_MAX_TOKENS = 1024
+# A reasoning model (deepseek V4 Flash) spends its budget THINKING before it
+# writes; when the cap is hit mid-thought the content comes back EMPTY with real
+# tokens billed. One bounded retry with a bigger cap almost always recovers it.
+_CHAT_MAX_TOKENS_RETRY = 3072
+_EMPTY_REPLY = (
+    "My reply came out empty — I overthought it. Ask me again (shorter works "
+    "best) and I'll answer directly."
+)
 
 # Short fallback when the brain can't reach a model — sent verbatim to the chat.
 _FALLBACK_REPLY = "I can't reach my model right now — give it a moment and ask me again."
@@ -734,7 +742,24 @@ async def _brain_reply(text: str, *, config) -> str:
                 )
                 last_exc = exc
                 continue
-            reply = (result.text or "").strip() or _FALLBACK_REPLY
+            reply = (result.text or "").strip()
+            if not reply and (getattr(result, "output_tokens", 0) or 0) > 0:
+                # The model ANSWERED but with empty content (reasoning ate the
+                # cap — observed live with deepseek V4 Flash). Retry ONCE with
+                # a larger cap on the same provider; "can't reach my model"
+                # would be a lie here — the model was reached and billed.
+                try:
+                    result = await prov.complete(
+                        messages,
+                        model=mdl,
+                        max_tokens=_CHAT_MAX_TOKENS_RETRY,
+                        system=system,
+                    )
+                    reply = (result.text or "").strip()
+                except Exception as exc:
+                    logger.warning(f"Telegram inbound: empty-reply retry failed: {exc}")
+                reply = reply or _EMPTY_REPLY
+            reply = reply or _FALLBACK_REPLY
             reply = await _apply_research_marker(
                 reply, instance_id=instance_id, config=config
             )
@@ -1496,6 +1521,24 @@ def _gate_failure_reply(record: dict) -> str:
                 "I couldn't tailor it safely: a verification check didn't pass. "
                 "I didn't send a file."
             )
+    # No gate failed — the flow ran but produced no file. When a LIVE brain in
+    # the chain ASKED for something (observed 2026-07-30: "/cv <title>" → the
+    # analyst asked for the full posting and its question cascaded), the owner
+    # must SEE that ask — hiding it behind a generic line wastes the whole run.
+    last_words = ""
+    for step in reversed(record.get("steps", []) or []):
+        if step.get("kind") == "task":
+            out = step.get("output")
+            if isinstance(out, dict):
+                out = out.get("summary") or out.get("output") or ""
+            last_words = str(out or "").strip()
+            if last_words:
+                break
+    if last_words:
+        return (
+            "I couldn't produce a tailored CV — here is what the team said:\n\n"
+            f"{last_words[:600]}"
+        )
     return "I couldn't produce a tailored CV this time. Nothing was sent."
 
 
@@ -1627,6 +1670,18 @@ async def _answer_cv_command(text: str, *, config) -> None:
         if not posting:
             await telegram.send(
                 "Usage: /cv <job posting or target role> — I'll tailor your base CV.",
+                config=config,
+            )
+            return
+        # Preflight ($0): a bare title can't feed a six-brain tailoring run — the
+        # first analyst will just ask for the posting and (observed live,
+        # 2026-07-30) its QUESTION then cascades downstream as if it were the
+        # brief, wasting every turn after it. Ask here, before any brain wakes.
+        if len(posting) < 200:
+            await telegram.send(
+                "That looks like just a title. Paste the FULL job posting after "
+                "/cv (requirements included) and I'll tailor the CV to it — the "
+                "more of the posting I see, the sharper the result.",
                 config=config,
             )
             return

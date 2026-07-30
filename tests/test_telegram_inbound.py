@@ -1587,3 +1587,107 @@ def test_callback_query_approve_mint_task_runs_now_and_reports(tmp_path, monkeyp
     # resolve() released the task; the (patched-out) runner would pick it up.
     pending = asyncio.run(db.load_pending_tasks("inst_personal"))
     assert [t["id"] for t in pending] == ["t_prot"]
+
+
+def test_empty_reasoning_reply_retries_with_bigger_cap(monkeypatch):
+    """A reasoning model that bills tokens but returns EMPTY content (deepseek V4
+    Flash hitting max_tokens mid-thought — observed live 2026-07-30) must be
+    retried once with a bigger cap, and NEVER reported as 'can't reach my
+    model' — the model was reached and billed."""
+    payload = {
+        "ok": True,
+        "result": [
+            {"update_id": 500, "message": {"chat": {"id": 123}, "text": "hola"}}
+        ],
+    }
+    monkeypatch.setattr(
+        telegram_inbound.httpx, "AsyncClient", _client_returning(payload)
+    )
+
+    class _EmptyThenReal(_FakeProvider):
+        async def complete(self, messages, *, model=None, max_tokens=None, system=None):
+            self.calls.append({"max_tokens": max_tokens})
+            if len(self.calls) == 1:
+                return SimpleNamespace(text="", cost_usd=0.0004, output_tokens=512)
+            return SimpleNamespace(text="ahora sí respondo", cost_usd=0.0006, output_tokens=40)
+
+    prov = _EmptyThenReal()
+    prov.name = "default"
+    _patch_brain(monkeypatch)
+    import lhassa.llm.router as router_mod
+    monkeypatch.setattr(
+        router_mod, "decide",
+        lambda trigger, ctx, config: SimpleNamespace(provider=prov, model="m", reason="t"),
+    )
+    monkeypatch.setattr(telegram_inbound, "_fallback_chain", lambda config, primary: [])
+    sent = _patch_send(monkeypatch)
+
+    asyncio.run(telegram_inbound.poll_once(_cfg(), offset=None))
+    assert sent == ["ahora sí respondo"]
+    assert len(prov.calls) == 2
+    assert prov.calls[1]["max_tokens"] > prov.calls[0]["max_tokens"]
+
+
+def test_empty_reply_twice_gets_the_honest_empty_message(monkeypatch):
+    payload = {
+        "ok": True,
+        "result": [
+            {"update_id": 501, "message": {"chat": {"id": 123}, "text": "hola"}}
+        ],
+    }
+    monkeypatch.setattr(
+        telegram_inbound.httpx, "AsyncClient", _client_returning(payload)
+    )
+
+    class _AlwaysEmpty(_FakeProvider):
+        async def complete(self, messages, *, model=None, max_tokens=None, system=None):
+            self.calls.append({})
+            return SimpleNamespace(text="", cost_usd=0.0004, output_tokens=512)
+
+    prov = _AlwaysEmpty()
+    prov.name = "default"
+    _patch_brain(monkeypatch)
+    import lhassa.llm.router as router_mod
+    monkeypatch.setattr(
+        router_mod, "decide",
+        lambda trigger, ctx, config: SimpleNamespace(provider=prov, model="m", reason="t"),
+    )
+    monkeypatch.setattr(telegram_inbound, "_fallback_chain", lambda config, primary: [])
+    sent = _patch_send(monkeypatch)
+
+    asyncio.run(telegram_inbound.poll_once(_cfg(), offset=None))
+    assert sent == [telegram_inbound._EMPTY_REPLY]  # never the 'can't reach' lie
+
+
+def test_cv_with_bare_title_asks_for_the_posting_without_waking_brains(monkeypatch):
+    payload = {
+        "ok": True,
+        "result": [
+            {"update_id": 502, "message": {"chat": {"id": 123}, "text": "/cv Analista de datos"}}
+        ],
+    }
+    monkeypatch.setattr(
+        telegram_inbound.httpx, "AsyncClient", _client_returning(payload)
+    )
+    ran = []
+
+    async def fake_flow(**kw):
+        ran.append(kw)
+        return None, "flow-x"
+
+    monkeypatch.setattr(telegram_inbound, "_run_cv_flow", fake_flow)
+    sent = _patch_send(monkeypatch)
+    asyncio.run(telegram_inbound.poll_once(_cfg(), offset=None))
+    assert ran == []  # six brains stayed asleep
+    assert any("FULL job posting" in s for s in sent)
+
+
+def test_gate_failure_reply_relays_the_teams_actual_words():
+    record = {
+        "steps": [
+            {"kind": "task", "output": {"summary": "No vi el contenido de la convocatoria — ¿puedes pegar el posting?"}},
+            {"kind": "output", "output": "tex"},
+        ]
+    }
+    msg = telegram_inbound._gate_failure_reply(record)
+    assert "pegar el posting" in msg

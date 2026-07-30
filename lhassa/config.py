@@ -505,6 +505,11 @@ class Config:
     # with provenance). OFF by default: unset keeps kg_sync byte-identical to
     # the $0 regex path.
     kg_triples_enabled: bool = os.getenv("LHASSA_KG_TRIPLES", "0").strip().lower() in ("1", "true", "yes", "on")
+    # The notification voice: "plain" sends machine-built lines as-is;
+    # "template" reshapes them deterministically per notification kind ($0);
+    # "persona" adds ONE cheap-model re-voicing pass on top (degrades to
+    # template, the message ALWAYS arrives — same discipline as digest_style).
+    notify_style: str = os.getenv("LHASSA_NOTIFY_STYLE", "template")
     # API key for hosted embedding endpoints (Ollama is keyless; set for cloud).
     # NEVER write this to settings.env — it stays in .env (secret).
     embeddings_api_key: str = os.getenv("LHASSA_EMBEDDINGS_API_KEY", "")
