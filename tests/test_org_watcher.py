@@ -158,7 +158,7 @@ async def test_react_logs_episode_notifies_important_and_dedupes(tmp_path, monke
 
     calls: list[tuple] = []
 
-    async def fake_notify(text, *, level="info", config=None):
+    async def fake_notify(text, *, level="info", config=None, **_kwargs):
         calls.append((text, level))
         return True
 
@@ -191,7 +191,7 @@ async def test_react_run_event_logs_but_does_not_notify(tmp_path, monkeypatch):
 
     calls: list = []
 
-    async def fake_notify(text, *, level="info", config=None):
+    async def fake_notify(text, *, level="info", config=None, **_kwargs):
         calls.append(text)
         return True
 
@@ -214,7 +214,7 @@ async def test_react_notify_disabled_suppresses_alert(tmp_path, monkeypatch):
 
     calls: list = []
 
-    async def fake_notify(text, *, level="info", config=None):
+    async def fake_notify(text, *, level="info", config=None, **_kwargs):
         calls.append(text)
         return True
 
@@ -329,7 +329,7 @@ async def test_react_delegate_notes_folded_into_alert_text(tmp_path, monkeypatch
 
     calls = []
 
-    async def fake_notify(text, *, level="info", config=None):
+    async def fake_notify(text, *, level="info", config=None, **_kwargs):
         calls.append(text)
         return True
 
@@ -411,7 +411,7 @@ async def test_watch_loop_reacts_on_change_across_pokes(tmp_path, monkeypatch):
 
     calls: list = []
 
-    async def fake_notify(text, *, level="info", config=None):
+    async def fake_notify(text, *, level="info", config=None, **_kwargs):
         calls.append(text)
         return True
 

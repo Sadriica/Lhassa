@@ -299,9 +299,15 @@ async def deliver(
 
             delivered = await telegram_api.send_document(document, caption=caption, config=config)
         else:
+            from lhassa.notify import voice as _voice
             from lhassa.notify.dispatch import notify
 
-            delivered = await notify(text, level="info", config=config)
+            # Forward the delivery's kind into the voice layer when it maps to a
+            # notification kind (action-result, reminder…) so the message is
+            # framed in Lhassa's voice; artifact-only kinds fall back to the
+            # sniffer rather than forcing an unknown label.
+            voice_kind = kind if kind in _voice.KINDS else None
+            delivered = await notify(text, level="info", config=config, kind=voice_kind)
     except Exception as exc:  # the send seams already never raise, but be sure
         logger.warning("org-deliver: send failed: {}", exc)
         delivered = False

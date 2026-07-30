@@ -354,6 +354,23 @@ EDITABLE: list[dict] = [
         "restart": RESTART_NONE,
     },
     {
+        "key": "notify_style",
+        "attr": "notify_style",
+        "env_var": "LHASSA_NOTIFY_STYLE",
+        "type": "enum",
+        "options": ["plain", "template", "persona"],
+        "label": "Notification voice",
+        "help": (
+            "How outgoing notifications sound: plain = machine-built lines as-is; "
+            "template = deterministic per-kind reshaping in Lhassa's voice ($0); "
+            "persona = one cheap-model re-voicing pass on top (degrades to "
+            "template — the message always arrives)."
+        ),
+        "group": "Surfaces",
+        "default": "template",
+        "restart": RESTART_TELEGRAM,
+    },
+    {
         "key": "knowledge_roots",
         "attr": "knowledge_roots",
         "env_var": "LHASSA_KNOWLEDGE_ROOTS",

@@ -499,11 +499,12 @@ def test_cv_command_runs_against_disk_base(monkeypatch, tmp_path):
     _patch_send(monkeypatch)
     monkeypatch.setattr(cv, "compile_pdf", lambda p: None)  # no engine → send the .tex
 
-    asyncio.run(telegram_inbound._answer("/cv Backend role @ Globex", config=_cfg()))
+    posting = 'Backend role @ Globex. Requirements: 5+ years Python, FastAPI and async IO; PostgreSQL schema design and query tuning; Docker/Kubernetes deployment to GCP; event-driven architectures with Kafka; strong testing culture (pytest, CI gates); fluent English. Nice to have: Rust, Terraform, observability with Grafana.'
+    asyncio.run(telegram_inbound._answer("/cv " + posting, config=_cfg()))
 
     # No attachment → base_cv stays None (run_flow loads disk); posting is the summary.
     assert seen["base_cv"] is None
-    assert seen["inputs"] == {"summary": "Backend role @ Globex"}
+    assert seen["inputs"] == {"summary": posting}
     assert seen["company"] == "Globex"
     assert sent_docs == [str(out_file)]
 

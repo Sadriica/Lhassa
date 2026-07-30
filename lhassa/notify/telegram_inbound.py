@@ -333,8 +333,10 @@ def _consume_armed(chat_id: str) -> bool:
     return (time.time() - ts) <= _AWAIT_BASE_TTL
 # ``@ Company`` / ``company: X`` extractors for the optional company name in a caption.
 _COMPANY_RES = (
-    re.compile(r"company\s*[:=]\s*(?P<name>[^\n]+)", re.IGNORECASE),
-    re.compile(r"(?:^|\s)@\s*(?P<name>[^\n]+)"),
+    # A company NAME ends at a sentence/segment boundary — an unbounded tail
+    # swallowed the whole posting when /cv carried a full multi-sentence text.
+    re.compile(r"company\s*[:=]\s*(?P<name>[^\n.;|(]+)", re.IGNORECASE),
+    re.compile(r"(?:^|\s)@\s*(?P<name>[^\n.;|(]+)"),
 )
 
 # Natural "remind me" trigger — routed to the /remind parser when a time phrase

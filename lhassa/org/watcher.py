@@ -444,7 +444,7 @@ async def react(events: list[dict], *, department: str, config: Optional[Config]
                 # Lazy import: keep the module's import graph shell-agnostic.
                 from lhassa.notify.dispatch import notify
 
-                notified = await notify(message, level=level, config=config, **extra)
+                notified = await notify(message, level=level, config=config, kind="alert", **extra)
             _STATE["last_alert_fp"] = fp
     else:
         # Condition no longer present → forget it so a recurrence alerts afresh.

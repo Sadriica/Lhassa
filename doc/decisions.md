@@ -1,5 +1,38 @@
 # Lhassa — decisions log
 
+## 2026-07-30 — Hardening from real use II + the notification voice
+
+Owner-observed failures, root-caused from logs + episodes, all fixed same-day:
+
+- **"I can't reach my model" was a LIE** (`9dde4bb`): deepseek V4 Flash's
+  reasoning ate the 512-token chat cap → empty content WITH tokens billed → the
+  code conflated it with unreachability (4× live, 16:27-16:30 on 07-29's chat).
+  Now: cap 1024, ONE automatic retry at 3072 on empty-with-spend, and an honest
+  `_EMPTY_REPLY` when even that comes back blank.
+- **The /cv cascade** (same commit): `/cv <bare title>` woke six LIVE brains
+  (LHASSA_ORG_LIVE=1 is baked into the poller unit since the pilot); the
+  analyst rightly asked for the posting but its QUESTION cascaded downstream as
+  the next brains' input, and the final generic error HID the useful ask. Now:
+  a $0 preflight (<200 chars → ask for the full posting before any brain
+  wakes), and a fileless flow run RELAYS the team's actual words. Bonus fix:
+  `_parse_company`'s unbounded `@ tail` now stops at sentence boundaries.
+- **Embeddings 400 → mixed vectors** (`earlier commit today`): an over-long
+  input exceeded the embed model's context, 400'd, and that call's vectors
+  silently degraded to hashing INSIDE a store of real ones. Inputs are now
+  clipped to a hard bound before the remote call; a reindex purged the store.
+- **The notification voice** (`notify/voice.py`, owner-requested): every
+  outgoing notification passes ONE choke point (`dispatch.notify(kind=…)`) →
+  `voice.revoice`: deterministic per-kind TEMPLATES ($0 — "⚙️ check_spend:
+  check_spend: X" → "Done — Check-spend: X"; reminders "You asked me to remind
+  you: …"; alerts "Heads up: …"; approvals "Waiting on your word: …"; the
+  digest passes through verbatim, already voiced) + an opt-in PERSONA pass
+  (one cheap-model call, scribe-attributed episode, degrades to template — the
+  message ALWAYS arrives; mirrors digest_style). `notify_style`
+  (plain|template|persona, default template) is settings-editable. The
+  deliver→notify seam forwards its kind so action-results and reminders arrive
+  framed. Idempotent by prefix sentinel — nothing gets double-voiced.
+
+
 ## 2026-07-28 (tarde) — El plan "Inteligencia": loops, context packs, grafo real, MoA, bench
 
 Deep research over 10 owner-supplied sources (read IN FULL via the owner's
