@@ -69,6 +69,15 @@ Drafts are produced by the brain itself (`lhassa research draft <topic>` →
 `doc/notes/drafts/`) from an evidence pack with per-datum provenance, and are
 NEVER published without the owner's review — a draft header says so.
 
+## The corpus
+
+The knowledge base behind this line lives in [`../research/`](../research/):
+one document per studied idea/technology (loop engineering, graph engineering,
+retrieval-as-code, memory sovereignty, mixture-of-agents, token-efficient
+serialization, eval-driven agents, output quality), each taken down to the
+base with sources, the honest mapping to what Lhassa built, and the experiment
+that would verify it on our instruments.
+
 ## The principle
 
 The research line becomes true as a **documented byproduct of real work**.

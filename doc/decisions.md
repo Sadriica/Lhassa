@@ -1,5 +1,31 @@
 # Lhassa — decisions log
 
+## 2026-07-30 (noche) — El corpus research/: las ideas de los links, hasta la base
+
+Owner directive: the link-derived lines ALL belong to Lhassa's AI research;
+extract each idea's core + its NESTED resources and build a `research/` corpus
+with the full context down to the base. Executed: nested resources captured
+via the owner's Chrome + curl/WebFetch — the t.co chains resolved, the
+12-page graph-engineering PDF DOWNLOADED from Drive and read in full (it
+self-declares as an independent synthesis of Anthropic's public cookbook; the
+tweets over-attribute it — chain documented), the Memanto/jcode/toon/
+curriculum repos fetched, no-ai-slop's local clone mined (its eval.md rubric
+wasn't even in the tweet). Two login-walled X articles honestly marked
+uncaptured.
+
+Four parallel Sonnet writers produced 8 corpus documents (~2,000 lines) under
+a fixed seven-section structure — idea / mechanics-down-to-the-base / the
+AUTHORS' evidence (never presented as ours) / sources / code-verified mapping
+to Lhassa with honest divergences / NOT-yet-verified-by-us + the experiment
+that would / open questions — plus research/README.md (index + provenance
+notes + how the corpus feeds `lhassa research draft`). Notable finds while
+verifying: Lhassa already HAS an MCP client (tools/mcp_client.py — the gap is
+an MCP server + A2A); our verifiers-are-code is STRONGER than the source
+pattern's judge-model; six named increments from the PDF (entity
+descriptions, typed entities, profiles, k-hop>1, graph-grounded evaluator,
+monitoring signals) are now the graph line's backlog.
+
+
 ## 2026-07-30 (tarde) — La línea de investigación del producto + la máquina de evidencia
 
 Owner clarified the research structure: the five fields are the HOUSE's
