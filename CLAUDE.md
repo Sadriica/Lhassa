@@ -2,6 +2,12 @@
 
 ## What this is
 
+Lhassa is a product of **Witara** (`/home/w/Code/witara`, witara.site) — the
+owner's Colombian research house ("calm software; consejo, no control";
+founding docs in `witara/docs/soul/`). The house thesis IS Lhassa's origin:
+capability from criterio + engineering, never from burning compute — public
+text and positioning follow `doc/narrative.md`, which carries the house note.
+
 Lhassa is a persistent personal **brain** (a JARVIS): an identity-first core that
 **orchestrates** models and tools rather than being one. The execution model is
 **do-and-sleep** — state on disk + a `step()` function that advances it one tick,

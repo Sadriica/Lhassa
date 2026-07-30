@@ -6,6 +6,8 @@
 
 <p align="center"><b>Construye el cerebro, alquila el cuerpo.</b></p>
 
+<p align="center">Un proyecto de <a href="https://witara.site">Witara</a> — software calmado, consejo no control.</p>
+
 <p align="center">
   <a href="README.md">English</a> ·
   <a href="doc/architecture.md">Arquitectura</a> ·

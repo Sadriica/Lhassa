@@ -6,6 +6,8 @@
 
 <p align="center"><b>Build the brain, rent the body.</b></p>
 
+<p align="center">A <a href="https://witara.site">Witara</a> project — calm software, council not control.</p>
+
 <p align="center">
   <a href="README.es.md">Español</a> ·
   <a href="doc/README.md">Docs</a> ·
