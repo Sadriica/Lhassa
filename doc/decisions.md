@@ -1,5 +1,30 @@
 # Lhassa — decisions log
 
+## 2026-07-30 (final) — El departamento del geshe: los aides + la puerta /idea
+
+Owner asked whether the geshe's SUPPORT department existed — it didn't (the
+corpus work had been done by ad-hoc subagents). Built and seeded live:
+
+- **Four aides under the geshe** (`seeds/research.py`, seed `research`,
+  idempotent, ensures temple first): `collector` / `analyst` / `skeptic` /
+  `synthesist` — one per step of the corpus method, dept label `research`.
+  The skeptic is a separate brain BECAUSE the doer never judges.
+- **The idea-intake flow** (`flow-research-intake`): trigger → capture
+  sources (nested resources included) → mechanics down to the base → verify
+  claims (theirs-vs-ours, attribution chains) → synthesize the seven-section
+  corpus draft → an OBJECTIVE structure gate (regex árbitro on the method's
+  headers) → doc output. Runs through `delegate_flow` like every flow.
+- **The `/idea <text|link>` door** (`notify/commands.py`): acks immediately,
+  runs the flow in background, writes the draft to `doc/notes/drafts/idea-*`
+  behind the review header, and DELIVERS the result up the hierarchy via
+  `org/deliver` with the geshe as origin — no surface-direct send. A run that
+  reaches no draft RELAYS the team's actual words (the CV lesson applied at
+  birth).
+
+Live verification: `lhassa seed apply research` created all four aides under
+geshe in the real tree + saved the flow; re-apply is a no-op.
+
+
 ## 2026-07-30 (cierre) — El geshe: el cerebro del método de investigación
 
 Owner asked for a brain that owns HOW research is written, drafted, built and

@@ -85,6 +85,13 @@ Result: <numbers, with rows/ids>  ·  Verdict: <adopt / reject / inconclusive>
 
 - **The geshe** owns this method, the `draft_research_note` action, and the
   focus decisions it can make alone (which section-6 experiment is next).
+- **The geshe's aides** (its research department, seeded by `lhassa seed
+  apply research`) run the idea-intake flow — `collector` (capture sources,
+  nested resources included) → `analyst` (mechanics down to the base) →
+  `skeptic` (claims vs sources, theirs-vs-ours, attribution chains — the doer
+  never judges, so verification is its own brain) → `synthesist` (the
+  seven-section corpus draft), behind an objective structure gate. The door
+  is `/idea <text or link>` from chat.
 - **The owner** decides publication — a draft NEVER ships without review
   (the draft header says so), and adoption decisions stay with the human.
 - **The scribe** keeps the repo docs in sync AFTER an adoption; the guardian

@@ -126,5 +126,6 @@ def apply_all(config: "Optional[Config]" = None) -> dict:
 from lhassa.seeds import cv as _cv  # noqa: E402,F401  (self-registers "cv")
 from lhassa.seeds import digest as _digest  # noqa: E402,F401  (self-registers "digest")
 from lhassa.seeds import maintenance as _maintenance  # noqa: E402,F401  (self-registers "maintenance")
+from lhassa.seeds import research as _research  # noqa: E402,F401  (self-registers "research")
 from lhassa.seeds import personal as _personal  # noqa: E402,F401  (self-registers "personal")
 from lhassa.seeds import temple as _temple  # noqa: E402,F401  (self-registers "temple")

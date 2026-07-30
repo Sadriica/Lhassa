@@ -88,6 +88,13 @@ GESHE = "geshe"  # the research line — method, evidence-cited notes, focus
 #: All five monks, in a stable order (docs, creation, sync, maintenance, mind).
 TEMPLE_WORKERS: tuple[str, ...] = (SCRIBE, ARTIFICER, SYNCHRONIZER, GUARDIAN, ORACLE, GESHE)
 
+#: The geshe's AIDES — the research support department under the scholar-monk
+#: (seeded by ``seeds/research.py``). They mirror the corpus method's steps:
+#: capture sources → analyze mechanics → verify claims → synthesize the doc.
+#: The skeptic exists because the doer never judges — verification is a
+#: separate brain by design.
+GESHE_AIDES: tuple[str, ...] = ("collector", "analyst", "skeptic", "synthesist")
+
 #: Which monk owns which internal action. Resolved BEFORE the down-hop in
 #: :func:`resolve_worker`; an action absent here (or whose worker is missing
 #: from the topology) falls back to ``temple`` itself — the department.
