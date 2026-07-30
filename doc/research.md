@@ -69,6 +69,15 @@ Drafts are produced by the brain itself (`lhassa research draft <topic>` →
 `doc/notes/drafts/`) from an evidence pack with per-datum provenance, and are
 NEVER published without the owner's review — a draft header says so.
 
+## The owner of this line: the geshe
+
+The temple's scholar-monk (`geshe` — deliberately the one Tibetan id among
+the monks: the geshe is the monk who earned the doctorate) OWNS this line's
+method — how we write, draft, build and focus — codified in
+[`../research/METHOD.md`](../research/METHOD.md) and carried as its
+`research-method` skill so every research think applies it.
+`draft_research_note` is its action.
+
 ## The corpus
 
 The knowledge base behind this line lives in [`../research/`](../research/):

@@ -4,7 +4,7 @@ Mirrors :mod:`lhassa.seeds.cv`'s topology-provisioning shape (idempotent, goes
 through the validated org management API): a single department, ``temple``, a
 DIRECT child of Lhassa (``config.root_admin_id``) — distinct from ``interns``
 (the CV pipeline's workers) and ``personal`` (the owner's own department) —
-plus its five leaf WORKER brains (the "monks"), each owning a sub-domain:
+plus its six leaf WORKER brains (the "monks"), each owning a sub-domain:
 
   - ``scribe``       — docs (documentation upkeep).
   - ``artificer``       — internal creation (tools/skills/flows authoring, the
@@ -13,6 +13,8 @@ plus its five leaf WORKER brains (the "monks"), each owning a sub-domain:
   - ``guardian``       — self-maintenance (curate/review/distill).
   - ``oracle``         — the consciousness (repetition detection, the
     self-routing/self-improvement proposals).
+  - ``geshe``          — the research line (the method: how Lhassa writes,
+    drafts, builds and focuses its research; evidence-cited notes).
 
 :mod:`lhassa.org.temple` owns the ACTION→WORKER ownership map
 (:data:`lhassa.org.temple.ACTION_OWNERS`) and the down-execute-up loop that
@@ -60,6 +62,15 @@ TEMPLE_WORKERS: tuple[str, ...] = _TEMPLE_WORKERS
 #: A distinct role label for a worker brain — a leaf that executes, not a
 #: coordinating department.
 TEMPLE_WORKER_ROLE = "monk"
+
+#: Per-worker skill assignments. Most monks carry none (their domain is the
+#: action-ownership map); the GESHE carries the research-method skill — the
+#: 3-layer skill pattern: the NAME here → ~/.lhassa/skills/research-method/
+#: SKILL.md → loaded into its prompt at think time, so every geshe think
+#: writes and focuses research the house way.
+WORKER_SKILLS: dict[str, tuple[str, ...]] = {
+    "geshe": ("research-method",),
+}
 
 
 def _ensure_brain(
@@ -156,6 +167,7 @@ def seed_temple(config: "Optional[Config]" = None) -> dict:
                 role=TEMPLE_WORKER_ROLE,
                 parent=TEMPLE_ID,
                 department=TEMPLE_DEPARTMENT,
+                skills=WORKER_SKILLS.get(worker_id, ()),
                 config=cfg,
             )
             key = "workers_created" if created else "workers_existing"
@@ -169,8 +181,8 @@ def seed_temple(config: "Optional[Config]" = None) -> dict:
 
 @register_seed(
     "temple",
-    "Create the 'temple' department and its five worker brains (scribe/"
-    "artificer/synchronizer/guardian/oracle) — Lhassa's own inner workshop for "
+    "Create the 'temple' department and its six worker brains (scribe/"
+    "artificer/synchronizer/guardian/oracle/geshe) — Lhassa's own inner workshop for "
     "internal functions (docs, internal creation, synchronization, "
     "self-maintenance), a direct child of Lhassa in the topology.",
 )

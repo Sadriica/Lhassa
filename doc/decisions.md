@@ -1,5 +1,32 @@
 # Lhassa — decisions log
 
+## 2026-07-30 (cierre) — El geshe: el cerebro del método de investigación
+
+Owner asked for a brain that owns HOW research is written, drafted, built and
+focused — and picked the name: **geshe**, the Tibetan scholar-monk who earned
+the doctorate. Deliberately the ONE Tibetan id among the temple's monks
+(breaking the English-id convention as the list's single mythology touch —
+the role IS the mythology). Sixth monk, seeded idempotently.
+
+- **The method** — `research/METHOD.md` (the geshe's charter): FOCUS rules
+  (topics enter only from instrument signals, never fashion; the three limits
+  filter; comprobación designed BEFORE construction; one experiment per
+  theme), the BUILD path (capture→design→run→draft→owner-publishes, one
+  artifact per step; a negative result is a result), WRITE rules
+  (claim→cited evidence, theirs-vs-ours always labeled, calm/no-slop,
+  bilingual on publication), and per-artifact TEMPLATES (note / corpus doc /
+  experiment log). Standing rule: the method is subject to the method.
+- **Operative via the 3-layer skill pattern**: `research-method` SKILL.md
+  installed and assigned to geshe in the seed (WORKER_SKILLS map) — every
+  geshe think loads the method.
+- **Ownership moved**: `draft_research_note` scribe→geshe (research artifacts
+  are the scholar's, docs remain the scribe's). resolve_worker verified live.
+- **Lesson logged**: the 07-28 demo-brain "cleanup" had silently failed
+  (`org remove` requires --id; the error panels were mistaken for success) —
+  the two per-project reviewer brains were actually removed today, verified
+  by a zero-count in the tree. Panels are not verdicts; counts are.
+
+
 ## 2026-07-30 (noche) — El corpus research/: las ideas de los links, hasta la base
 
 Owner directive: the link-derived lines ALL belong to Lhassa's AI research;

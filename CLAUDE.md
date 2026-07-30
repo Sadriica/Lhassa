@@ -403,10 +403,13 @@ the API server down; approve/deny (`a`/`d` keys) go through the same
 child of Lhassa, seeded by `seeds/temple.py` (`lhassa seed apply temple`), that owns
 Lhassa's INTERNAL functions — docs, internal creation (tools/skills/flows authoring,
 the consciousness proposals), synchronization (repo/calendar/memory), and
-self-maintenance. `temple` has five leaf WORKER brains under it — its "monks" — each
+self-maintenance. `temple` has six leaf WORKER brains under it — its "monks" — each
 owning a sub-domain: `scribe` (docs), `artificer` (internal creation), `synchronizer`
-(sync), `guardian` (self-maintenance) and `oracle` (the consciousness — repetition
-detection, self-routing proposals); the same seed creates all five, idempotently.
+(sync), `guardian` (self-maintenance), `oracle` (the consciousness — repetition
+detection, self-routing proposals) and `geshe` (the research line — the scholar-monk,
+deliberately the one Tibetan id: it OWNS the research method in `research/METHOD.md`,
+carries it as its `research-method` skill, and owns `draft_research_note`); the same
+seed creates all six, idempotently.
 `org/temple.py:ACTION_OWNERS` is the deterministic action→monk ownership map for the
 maintenance seed's hygiene actions: `distill_memory`/`review_tools`/`curate_skills`/
 `kg_sync` → `guardian`, `detect_repetition`/`apply_feedback` → `oracle`,

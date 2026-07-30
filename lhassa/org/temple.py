@@ -79,9 +79,14 @@ ARTIFICER = "artificer"  # internal creation — tools/skills/flows authoring
 SYNCHRONIZER = "synchronizer"  # sync — repo/calendar/memory sync
 GUARDIAN = "guardian"  # self-maintenance — curate/review/distill
 ORACLE = "oracle"  # the consciousness — repetition detection, self-routing
+# The scholar-monk. Deliberately a TIBETAN id (a geshe is the monk who earned
+# the doctorate in philosophy) breaking the English-id convention — the one
+# mythology touch this list carries, because the research method IS its role:
+# how Lhassa writes, drafts, builds and focuses its research.
+GESHE = "geshe"  # the research line — method, evidence-cited notes, focus
 
 #: All five monks, in a stable order (docs, creation, sync, maintenance, mind).
-TEMPLE_WORKERS: tuple[str, ...] = (SCRIBE, ARTIFICER, SYNCHRONIZER, GUARDIAN, ORACLE)
+TEMPLE_WORKERS: tuple[str, ...] = (SCRIBE, ARTIFICER, SYNCHRONIZER, GUARDIAN, ORACLE, GESHE)
 
 #: Which monk owns which internal action. Resolved BEFORE the down-hop in
 #: :func:`resolve_worker`; an action absent here (or whose worker is missing
@@ -95,8 +100,10 @@ ACTION_OWNERS: dict[str, str] = {
     "review_tools": GUARDIAN,
     "curate_skills": GUARDIAN,
     "detect_repetition": ORACLE,
-    # Notes are docs — the scribe's domain.
-    "draft_research_note": SCRIBE,
+    # Research artifacts belong to the scholar-monk, not the docs scribe: the
+    # geshe owns HOW Lhassa writes, drafts and focuses its research (the
+    # method lives in research/METHOD.md and rides its research-method skill).
+    "draft_research_note": GESHE,
     # Feedback→autonomy is the consciousness reading its own reception — the
     # oracle's domain, like repetition detection.
     "apply_feedback": ORACLE,

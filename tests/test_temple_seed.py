@@ -49,7 +49,7 @@ def test_apply_temple_creates_department_under_lhassa(cfg):
     assert not top.is_leaf("temple")  # it now has 5 worker brains under it
 
 
-def test_apply_temple_creates_the_five_worker_brains(cfg):
+def test_apply_temple_creates_the_worker_brains(cfg):
     summary = seeds.apply_seed("temple", cfg)
 
     assert summary["errors"] == []
