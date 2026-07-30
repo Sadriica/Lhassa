@@ -168,8 +168,19 @@ class RemoteEmbedder:
     def fingerprint(self) -> str:
         return f"{self.backend}:{self._remote_name}"
 
+    # Hard per-text bound BEFORE the remote call. nomic-embed-text's context is
+    # 2048 tokens and ollama may load it shorter; an over-long input 400s and
+    # that call's vectors silently degrade to hashing — MIXED vector spaces in
+    # the store (the answer_cache has no model stamp to filter them). Clipping
+    # the tail loses little semantically and kills the whole failure class.
+    _MAX_EMBED_CHARS = 4000
+
     def embed(self, texts: list[str]) -> list[list[float]]:
         global _warned_fallback
+        texts = [
+            (t if len(t) <= self._MAX_EMBED_CHARS else t[: self._MAX_EMBED_CHARS])
+            for t in texts
+        ]
         try:
             result = self._embed_remote(texts)
             self.name = self._remote_name  # remote succeeded

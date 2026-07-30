@@ -308,3 +308,22 @@ def test_get_embedder_auto_still_prefers_legacy_knob_over_ollama_probe(monkeypat
     emb = get_embedder(Cfg)
     assert isinstance(emb, RemoteEmbedder)
     assert emb.backend == "openai"
+
+
+def test_remote_embedder_clips_oversized_inputs(monkeypatch):
+    """An over-long text must be clipped BEFORE the remote call — an unclipped
+    input 400s at the backend and silently mixes hashing vectors into a store
+    of real ones (the failure observed live on 2026-07-30)."""
+    from lhassa.memory.embeddings import RemoteEmbedder
+
+    seen = {}
+
+    def fake_remote(texts):
+        seen["lens"] = [len(t) for t in texts]
+        return [[0.1, 0.2] for _ in texts]
+
+    emb = RemoteEmbedder("nomic-embed-text", "http://localhost:11434")
+    monkeypatch.setattr(emb, "_embed_remote", fake_remote)
+    emb.embed(["short", "x" * 50_000])
+    assert seen["lens"][0] == 5
+    assert seen["lens"][1] == RemoteEmbedder._MAX_EMBED_CHARS
