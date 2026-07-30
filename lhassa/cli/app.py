@@ -46,6 +46,7 @@ from lhassa.cli import org_cmds as _org_cmds  # noqa: E402
 from lhassa.cli import seed_cmds as _seed_cmds  # noqa: E402
 from lhassa.cli import skills_cmds as _skills_cmds  # noqa: E402
 from lhassa.cli import project_cmds as _project_cmds  # noqa: E402
+from lhassa.cli import research_cmds as _research_cmds  # noqa: E402
 from lhassa.cli import task_cmds as _task_cmds  # noqa: E402
 from lhassa.cli import tools_cmds as _tools_cmds  # noqa: E402
 from lhassa.cli.theme import LHASSA_THEME, cost_markup, prompt_fragments  # noqa: E402
@@ -296,6 +297,9 @@ app.add_typer(_project_cmds.project_app, name="project")
 
 # ── lhassa bench … (eval-driven development: fixture × subject, verifier-scored) ──
 app.add_typer(_bench_cmds.bench_app, name="bench")
+
+# ── lhassa research … (the product's research line: evidence-cited note drafts) ──
+app.add_typer(_research_cmds.research_app, name="research")
 
 # Attach the `lhassa tools` sub-app (self-written tools: list + propose).
 app.add_typer(_tools_cmds.tools_app, name="tools")

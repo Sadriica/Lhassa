@@ -1,5 +1,30 @@
 # Lhassa — decisions log
 
+## 2026-07-30 (tarde) — La línea de investigación del producto + la máquina de evidencia
+
+Owner clarified the research structure: the five fields are the HOUSE's
+(Witara); each product carries its own line. Lhassa's line declared in
+`doc/research.md`: AI researched DOWN TO THE BASE (nothing adopted without a
+measured comparison — the bench is the tribunal; every public claim cites an
+instrument; reproducible on humble hardware; bilingual on publication),
+processes optimized as a standing program, knowledge GENERATED as a documented
+byproduct (the house principle made product-mechanical).
+
+The evidence machine: `draft_research_note` (actionpack, scribe-owned,
+temple-fronted, deliberate-not-scheduled) — `gather_evidence` assembles a $0
+pack with per-datum provenance (ledger spend, bench_runs, episode window,
+loops, decisions excerpts), then ONE routine-model pass drafts a note that may
+only state what the pack contains; no model → pack-only (the data is the
+value). Drafts land in `doc/notes/drafts/` behind a review-before-publishing
+header — the brain never publishes. CLI: `lhassa research draft|list`.
+
+First live run: Lhassa drafted its own debut piece (earned-autonomy) via the
+claude CLI at $0 — and the method held: the draft says plainly that the
+MECHANISM is sound but the RECORD is thin, names the redacted/missing data,
+and proposes the next measurement (approvals→outcomes join). Comprobación
+first, even against ourselves.
+
+
 ## 2026-07-30 — Hardening from real use II + the notification voice
 
 Owner-observed failures, root-caused from logs + episodes, all fixed same-day:

@@ -48,6 +48,7 @@ def register_all() -> None:
         _kg,
         _knowledge,
         _projects,
+        _research_note,
         _standing,
         _llm,
         _memory,
@@ -115,6 +116,7 @@ def register_all() -> None:
     _reg("kg_sync", _kg.kg_sync)
     _reg("kg_resolve", _kg.kg_resolve)
     _reg("attach_project_template", _standing.attach_project_template)
+    _reg("draft_research_note", _research_note.draft_research_note)
     _projects.register_sense()
     _standing.register_sense()
 

@@ -34,6 +34,7 @@ TEMPLE_ACTIONS: frozenset[str] = frozenset(
         "ingest_knowledge",
         "kg_sync",
         "kg_resolve",
+        "draft_research_note",
         "apply_feedback",
     }
 )

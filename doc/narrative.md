@@ -18,7 +18,9 @@ calm software, "consejo, no control". The house thesis is Lhassa's birth
 certificate: capability comes from criterio and engineering, not from burning
 compute; token-consumption-as-dependence is a bubble and Lhassa is built for
 the world after it. Public Lhassa text may name the house once (a byline, a
-footer) — the voice below stays Lhassa's own.
+footer) — the voice below stays Lhassa's own. The product's own research line
+(AI down to the base, comprobación-first, knowledge as documented byproduct)
+is declared in [`research.md`](research.md).
 
 ## The name and the mythology
 

@@ -7,6 +7,12 @@ owner's Colombian research house ("calm software; consejo, no control";
 founding docs in `witara/docs/soul/`). The house thesis IS Lhassa's origin:
 capability from criterio + engineering, never from burning compute — public
 text and positioning follow `doc/narrative.md`, which carries the house note.
+The product's own RESEARCH LINE is `doc/research.md`: AI down to the base
+(nothing adopted without a measured comparison — the bench is the tribunal),
+processes optimized as a standing program, and knowledge generated as a
+documented byproduct — `lhassa research draft <topic>` turns the instruments
+(bench/ledger/episodes/decisions) into evidence-cited note drafts
+(`doc/notes/drafts/`, never published without the owner's review).
 
 Lhassa is a persistent personal **brain** (a JARVIS): an identity-first core that
 **orchestrates** models and tools rather than being one. The execution model is

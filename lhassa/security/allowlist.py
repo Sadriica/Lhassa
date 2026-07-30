@@ -287,6 +287,14 @@ def build_allowlist(repos: "set[str] | str | None" = None) -> dict[str, ActionSp
             min_trust=TrustLevel.INTERNO,
             requires_approval=False,
         ),
+        # Research-note drafting: local instrument reads + ONE routine-model
+        # pass + a write confined to doc/notes/drafts (a draft is never
+        # published by the brain — the header says review-before-publishing).
+        "draft_research_note": ActionSpec(
+            objetivos=WILDCARD,
+            min_trust=TrustLevel.INTERNO,
+            requires_approval=False,
+        ),
         "kg_resolve": ActionSpec(
             objetivos=WILDCARD,
             min_trust=TrustLevel.INTERNO,

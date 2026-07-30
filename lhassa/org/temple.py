@@ -95,6 +95,8 @@ ACTION_OWNERS: dict[str, str] = {
     "review_tools": GUARDIAN,
     "curate_skills": GUARDIAN,
     "detect_repetition": ORACLE,
+    # Notes are docs — the scribe's domain.
+    "draft_research_note": SCRIBE,
     # Feedback→autonomy is the consciousness reading its own reception — the
     # oracle's domain, like repetition detection.
     "apply_feedback": ORACLE,
