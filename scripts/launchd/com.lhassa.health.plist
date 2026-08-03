@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.lhassa.health</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/USERNAME/Code/lhassa/scripts/lhassa-health</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>/Users/USERNAME/Code/lhassa</string>
+
+  <!-- Subscription CLIs (claude/codex/opencode) and Homebrew live outside the
+       minimal launchd PATH; the routine think path shells them. -->
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/Users/USERNAME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+
+  <key>RunAtLoad</key>
+  <true/>
+  <!-- systemd OnUnitActiveSec=900s; see README on why this is
+       approximate rather than equivalent. -->
+  <key>StartInterval</key>
+  <integer>900</integer>
+
+  <key>StandardOutPath</key>
+  <string>/tmp/com.lhassa.health.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>/tmp/com.lhassa.health.err.log</string>
+</dict>
+</plist>

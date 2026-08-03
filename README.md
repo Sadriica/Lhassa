@@ -161,6 +161,35 @@ Details and flags: [`doc/install.md`](doc/install.md#one-command-install).
 
 ## Full install (always-on)
 
+### Supported platforms
+
+| | Platform | What that means |
+|---|---|---|
+| **Tier 1** | **Linux** | The platform Lhassa is developed and deployed on. Full CI (Python suite, lint, dashboard E2E). Every surface works: systemd units, the `unshare`/`firejail`/`bwrap` quarantine, `notify-send` toasts, `/proc` readings. |
+| **Tier 2** | **macOS (Apple Silicon)** | The Python suite and lint run in CI. The brain, the CLI, the API/dashboard, Telegram and the local-model path (Ollama + local embeddings, which are plain HTTP) all work. Anything touching the host is best-effort — see the caveats below. |
+
+Windows is not a supported tier; parts of the code path handle it, none of it is tested.
+
+**macOS caveats, stated plainly:**
+
+- **The tool forge and PTC need a sandbox.** Lhassa's quarantine prefers
+  `unshare`/`firejail`/`bwrap`, none of which exist on macOS; it falls back to
+  `sandbox-exec`. When no sandbox is available at all, an unsandboxed run is
+  **refused** rather than downgraded — model-written code never executes
+  unconfined. On Linux the pre-existing warn-and-proceed behaviour is unchanged.
+- **Memory pressure is not the same number.** macOS accounts compressed,
+  purgeable and wired pages differently, so the `vm_stat`-derived figure is
+  reported with its source named and flagged as not comparable to Linux's
+  `/proc/meminfo` arithmetic. It is not presented as the same metric.
+- **Service health is approximate.** `launchctl` reports a job's *last exit
+  status*, not a persistent failed state the way a systemd unit has one. Only
+  `com.lhassa.*` labels are considered.
+- **launchd agents** live in [`scripts/launchd/`](scripts/launchd/) and mirror
+  `scripts/systemd/`; that directory's README documents where the mapping is
+  approximate rather than equivalent.
+- **Voice** (microphone capture) is the least portable surface and is untested
+  on macOS.
+
 ### Requirements
 
 System dependencies (install these first):

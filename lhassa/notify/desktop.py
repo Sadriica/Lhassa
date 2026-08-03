@@ -14,6 +14,7 @@ Discipline matches the rest of :mod:`lhassa.notify`:
 
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 
@@ -37,6 +38,21 @@ _URGENCY = {
 }
 
 
+def _platform_argv(title: str, message: str):
+    """Non-Linux toast argv from the host layer, else ``None``.
+
+    Consulted only off Linux so the tier-1 ``notify-send`` path is untouched.
+    """
+    from lhassa.host import current_platform_name, get_platform
+
+    if current_platform_name() == "linux":
+        return None
+    plat = get_platform()
+    if plat is None:
+        return None
+    return plat.notify_argv(title, message)
+
+
 @register_channel("desktop")
 class DesktopChannel:
     """Pop a desktop toast through ``notify-send`` (Linux/libnotify)."""
@@ -44,7 +60,14 @@ class DesktopChannel:
     name = "desktop"
 
     def is_configured(self, config=None) -> bool:
-        """True when the ``notify-send`` binary is available on ``PATH``."""
+        """True when this host has any desktop-toast mechanism.
+
+        ``notify-send`` on Linux; off Linux the host platform layer answers
+        (``osascript`` on macOS). Unconfigured stays SILENT by design — the
+        dispatcher simply skips the channel and Telegram still delivers.
+        """
+        if _platform_argv("probe", "probe") is not None:
+            return True
         return shutil.which(_NOTIFY_SEND) is not None
 
     async def send(self, text: str, *, level: str = "info", config=None, **kwargs) -> bool:
@@ -53,7 +76,7 @@ class DesktopChannel:
         ``**kwargs`` (e.g. Telegram's ``parse_mode`` / ``reply_markup``) has no
         equivalent on a desktop toast and is simply ignored.
         """
-        if shutil.which(_NOTIFY_SEND) is None:
+        if not self.is_configured(config):
             return False
         try:
             self._notify(text, level)
@@ -64,6 +87,16 @@ class DesktopChannel:
 
     @staticmethod
     def _notify(text: str, level: str) -> None:
+        argv = _platform_argv(_APP_NAME, text)
+        if argv is not None:
+            # The platform layer passes user text through the environment
+            # rather than interpolating it into a script — same discipline as
+            # ``voice/notifier.py``'s AppleScript call.
+            env = os.environ.copy()
+            env["_LHASSA_TITLE"] = _APP_NAME
+            env["_LHASSA_MSG"] = text
+            subprocess.run(argv, timeout=_TIMEOUT, capture_output=True, env=env)
+            return
         urgency = _URGENCY.get(str(level).lower(), "low")
         subprocess.run(
             [

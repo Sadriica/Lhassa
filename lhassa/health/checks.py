@@ -148,7 +148,27 @@ def parse_failed_units(text: str) -> list[str]:
 
 
 def check_failed_units() -> dict:
-    """Count failed systemd units (thin collector around the pure parser)."""
+    """Count failed managed services (thin collector around the pure parser).
+
+    systemd on Linux. Off Linux the host platform layer answers instead
+    (``launchctl`` on macOS); a platform that cannot answer reports "info" and
+    an empty list — which reads as "not checked", never as "none failed".
+    """
+    from lhassa.host import current_platform_name, get_platform
+
+    if current_platform_name() != "linux":
+        plat = get_platform()
+        services = plat.failed_services() if plat is not None else None
+        if services is None:
+            return _result(
+                "failed_units", "info", "Managed services not queryable here.", []
+            )
+        if not services:
+            return _result("failed_units", "info", "No failed managed services.", [])
+        level = "alert" if len(services) >= 3 else "warn"
+        summary = f"{len(services)} failed service(s): " + ", ".join(services[:5])
+        return _result("failed_units", level, summary, services)
+
     if not shutil.which("systemctl"):
         return _result("failed_units", "info", "systemctl not available.", [])
     try:
@@ -329,7 +349,43 @@ def check_mem_pressure(
     threshold: float = 90.0,
     swap_threshold: float = 50.0,
 ) -> dict:
-    """Report RAM/swap pressure from ``/proc/meminfo`` (thin collector)."""
+    """Report RAM/swap pressure from ``/proc/meminfo`` (thin collector).
+
+    Off Linux the host platform layer supplies the reading instead. That number
+    is NOT the same measurement: macOS accounts compressed, purgeable and wired
+    pages differently, so an 85% there does not mean what 85% means here. The
+    summary therefore NAMES its source and the payload carries
+    ``comparable: False`` — the reading is qualified rather than quietly
+    presented as the Linux figure.
+    """
+    from lhassa.host import current_platform_name, get_platform
+
+    if current_platform_name() != "linux":
+        plat = get_platform()
+        reading = plat.memory() if plat is not None else None
+        if reading is None:
+            return _result("mem_pressure", "info", "Memory info unavailable.", {})
+        levels = ["info"]
+        if reading.used_pct >= threshold:
+            levels.append("warn")
+        if reading.swap_pct >= swap_threshold:
+            levels.append("warn")
+        level = worst_level(levels)
+        state = "healthy" if level == "info" else "under pressure"
+        return _result(
+            "mem_pressure",
+            level,
+            f"Memory {state} — {reading.used_pct:.0f}% in use, "
+            f"{reading.swap_pct:.0f}% swap (via {reading.source}; "
+            "not comparable to Linux meminfo).",
+            {
+                "mem_used_pct": reading.used_pct,
+                "swap_used_pct": reading.swap_pct,
+                "source": reading.source,
+                "comparable": reading.comparable,
+            },
+        )
+
     path = Path(meminfo_path)
     try:
         text = path.read_text()

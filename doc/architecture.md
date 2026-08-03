@@ -22,7 +22,7 @@ guard test (`tests/test_architecture.py`) fails on any new layer-crossing import
 
 | Layer | Subpackages | Role |
 |---|---|---|
-| Leaf infra | `registry.py`, `plugins.py`, `config.py` | Generic machinery; imports no feature code |
+| Leaf infra | `registry.py`, `plugins.py`, `config.py`, `host.py` | Generic machinery; imports no feature code |
 | Spine | `core/` | The do-and-sleep loop: `step`, `heartbeat`, `episode`, `db`, `watchlist`, `actions`, `task` |
 | Interfaces | `memory/`, `security/`, `llm/`, `settings.py` | Reusable contracts: typed facts, trust/approval, `ModelProvider` + router, the editable-settings service |
 | Adapters (hands) | `harness/`, `tools/`, `agents/`, `skills/`, `remote/`, `health/` | The rentable body: harnesses, MCP/tools, specialist agents, first-class skills, the check-in local agent |
@@ -31,6 +31,43 @@ guard test (`tests/test_architecture.py`) fails on any new layer-crossing import
 The two swap axes are kept **independent**: `harness/` (agentic body) must not
 import `llm/` (think-directly providers). The reverse edge — `llm/router.py`
 *choosing* a harness — is the one intentional bridge.
+
+
+## The host platform layer (`host.py`)
+
+Lhassa reads a few facts from the machine it runs on — uptime, memory pressure,
+failed managed services, how to pop a desktop toast, which sandbox exists. Each
+is a different mechanism per platform, and each call site used to answer it its
+own way: a `shutil.which` guard here, a bare `open("/proc/uptime")` there, a
+module-level `platform.system()` branch elsewhere.
+
+`host.py` is the one place that knows. It is **leaf infra** — it imports the
+registry keystone and the standard library, nothing else from the package — so
+any layer may use it.
+
+- **Pure parser + injected input.** Every reading splits into a pure function
+  over text (`parse_proc_uptime`, `parse_vm_stat`, `parse_boottime`) and a thin
+  collector that supplies it. That is the pattern `health/checks.py` already
+  used for its injected `meminfo_path`, not a new one. Tests parametrise by
+  passing a platform or a reader, never by patching `platform.system()` — so a
+  Linux CI run genuinely covers the macOS branches.
+- **A registry, not a branch.** `PLATFORMS` + `@register_platform` means adding
+  a platform is a drop-in module and selecting one is configuration
+  (`LHASSA_PLATFORM`), never surgery. The existing module-level
+  `platform.system()` dispatch (`voice/notifier.py`, `agents/local_cli.py`,
+  `tools/vision.py`) is left where it is and lives *inside* the default
+  implementations — two idioms were not merged into a third.
+- **Honesty over completeness.** A reading that cannot be taken returns `None`,
+  never a plausible zero, because these values feed the judgment path: a wrong
+  number silently corrupts a decision, a missing one is reported as unavailable.
+  Where a platform's metric is genuinely different rather than merely absent
+  (macOS memory accounting), `MemoryReading.comparable` says so and the health
+  summary names its source.
+
+**Linux is tier 1, macOS (Apple Silicon) tier 2** — see the README for what each
+tier promises. The tier-1 paths are untouched by the layer: `quarantine.py`
+still tries `unshare`/`firejail`/`bwrap` first and only consults the layer off
+Linux, so the Linux selection chain is byte-identical.
 
 ## Data dir — `~/.lhassa/`
 
