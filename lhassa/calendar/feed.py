@@ -81,6 +81,17 @@ async def fetch_feed(
     except OSError:
         pass
 
+    # A calendar URL is owner-supplied and fetched on a SCHEDULE, so an
+    # unguarded feed turns the heartbeat into a repeating probe of whatever it
+    # names — loopback, link-local, cloud metadata. The same guard the research
+    # and web_fetch paths already cross applies here.
+    from lhassa.tools.net_safety import ssrf_check
+
+    unsafe = ssrf_check(url)
+    if unsafe:
+        logger.warning("calendar: refusing unsafe feed URL — {}", unsafe)
+        return None
+
     try:
         async with httpx.AsyncClient(timeout=20.0, follow_redirects=True) as client:
             resp = await client.get(url)

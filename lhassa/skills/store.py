@@ -136,7 +136,36 @@ class SkillStore:
         return Path(getattr(self._config, "skills_dir", "") or "")
 
     def folder_for(self, name: str) -> Path:
-        return self.root / (slugify(name) or name)
+        """The folder for ``name``, ALWAYS inside the store.
+
+        ``slugify`` returns "" for all-punctuation input (".." among them), and
+        the old fallback to the raw name then produced ``root/".."`` — the
+        store's PARENT. Since ``delete`` rmtree's whatever this returns, a skill
+        named ".." removed ``~/.lhassa`` and the brain DB with it. The name is
+        now flattened to a single path component and the result is re-checked
+        against the root, so no input can address anything outside it.
+        """
+        raw = (name or "").strip()
+        slug = slugify(raw)
+        if not slug:
+            # Keep a stable, collision-free stand-in for un-sluggable names
+            # instead of trusting the raw text as a path component.
+            import hashlib
+
+            slug = "skill-" + hashlib.sha256(raw.encode("utf-8")).hexdigest()[:12]
+        folder = (self.root / slug).resolve()
+        root = self.root.resolve()
+        if folder == root or root not in folder.parents:
+            raise ValueError(f"skill name {name!r} does not resolve inside the store")
+        return folder
+
+    def _inside(self, candidate: Path) -> bool:
+        """True when ``candidate`` really lives under the store root."""
+        try:
+            resolved = candidate.resolve()
+            return resolved != self.root.resolve() and self.root.resolve() in resolved.parents
+        except Exception:
+            return False
 
     # ── read ───────────────────────────────────────────────────────────────────
     def list_skills(self) -> list[Skill]:
@@ -162,7 +191,7 @@ class SkillStore:
         if not folder.exists() or not folder.is_dir():
             # Tolerate an exact (un-slugified) folder name too.
             alt = self.root / name
-            if alt.exists() and alt.is_dir():
+            if self._inside(alt) and alt.exists() and alt.is_dir():
                 folder = alt
             else:
                 return None
@@ -216,11 +245,16 @@ class SkillStore:
 
     def delete(self, name: str) -> bool:
         """Remove a skill folder. Returns ``True`` if something was removed."""
-        folder = self.folder_for(name)
+        try:
+            folder = self.folder_for(name)
+        except ValueError:
+            return False
         if not folder.exists():
             alt = self.root / name
-            folder = alt if alt.exists() else folder
-        if folder.exists() and folder.is_dir():
+            if self._inside(alt) and alt.exists():
+                folder = alt
+        # Belt and braces: never remove anything that is not under the root.
+        if self._inside(folder) and folder.exists() and folder.is_dir():
             shutil.rmtree(folder)
             return True
         return False

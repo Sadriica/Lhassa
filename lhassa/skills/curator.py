@@ -335,10 +335,20 @@ def restore(name: str, config: "Optional[Config]" = None) -> bool:
     try:
         cfg = _resolve_config(config)
         skills_dir = _skills_dir(cfg)
-        src = skills_dir / ARCHIVE_DIR / name
+        # Same boundary the store enforces: a crafted name must not address
+        # anything outside .archive/ (see skills/store.py:folder_for).
+        archive = (skills_dir / ARCHIVE_DIR).resolve()
+        src = (skills_dir / ARCHIVE_DIR / name).resolve()
+        if archive not in src.parents:
+            logger.warning(
+                "skills.curator: refusing restore of {} — outside archive", name
+            )
+            return False
         if not src.exists():
             return False
-        dest = skills_dir / name
+        dest = (skills_dir / name).resolve()
+        if skills_dir.resolve() not in dest.parents:
+            return False
         if dest.exists():
             return False
         shutil.move(str(src), str(dest))

@@ -218,6 +218,17 @@ async def watch_command(
     output contains `until_output_contains`, then notify.
     """
     import subprocess
+
+    # Same gate handle_shell crosses. This tool builds an identical
+    # subprocess.run(..., shell=True) from model-supplied text, so skipping the
+    # destructive-pattern check made `watch_command` a way around the guard the
+    # shell tool enforces — refuse before scheduling anything.
+    from lhassa.tools.guardrails import validate_shell_command
+
+    validation_error = validate_shell_command(command)
+    if validation_error:
+        return f"watch_command refused: {validation_error}"
+
     display = label or command[:60]
 
     async def _monitor():

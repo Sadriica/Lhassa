@@ -1,5 +1,42 @@
 # Lhassa — decisions log
 
+## 2026-08-03 — Round two: the traversal that could delete the brain
+
+A second wave of four reviewers closed the gaps the first six had not covered
+(all ~20 API routers, tools/remote/health, the rest of db.py plus skills/seeds/
+bench, and dashboard/voice/cli). It found the worst defect of the day.
+
+**CRITICAL — a skill name could delete `~/.lhassa`.** `SkillStore.folder_for`
+fell back to the RAW name whenever `slugify()` returned "" — and `slugify("..")`
+is "". So `DELETE /api/skills/..` (and `lhassa skills delete ..`) resolved to
+the store's PARENT and `shutil.rmtree`'d it: brain.db, the signing keys, the
+whole data dir. Two reviewers found this independently, and one verified that
+`GET /api/skills/%2e%2e` returned 200 reading the parent directory before the
+fix. Closed at the root: an unsluggable name becomes a stable sha256-derived
+folder INSIDE the store, and every resolved path is re-validated against the
+root. `get`, `delete` and `curator.restore` all cross the same boundary now,
+pinned by `tests/test_skills_traversal.py`.
+
+**`watch_command` bypassed the shell guardrail.** `handle_shell` routes every
+command through `validate_shell_command`; `watch_command` built an identical
+`subprocess.run(..., shell=True)` from model-supplied text and skipped it —
+a way around the destructive-pattern check the shell tool enforces.
+
+**Calendar feeds had no SSRF guard.** An owner-supplied feed URL is fetched on
+a SCHEDULE, so an unguarded one turns the heartbeat into a repeating probe of
+loopback/link-local/cloud-metadata addresses. It now crosses the same
+`ssrf_check` the research and web_fetch paths already did.
+
+Verified clean across the remainder: no unauthenticated route (all 24 routers
+sit under the middleware's prefixes), no unsigned path to `allow()`, no
+f-string SQL with user values, append-only tables genuinely append-only, seeds
+idempotent, bench scored only by objective verifiers, no
+`dangerouslySetInnerHTML` in the dashboard, the API token never in
+localStorage or a URL, and every CLI mutation going through the same seams as
+the API.
+
+Suite after both waves: 2375 passed.
+
 ## 2026-08-03 — Six reviewers in parallel: the philosophy sweep, phase by phase
 
 Six read-only reviewers ran in parallel, one per subsystem, each against the
