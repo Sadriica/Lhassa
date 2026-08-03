@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Local-git tool versioning — "versionado/rollback gratis" (§2.8).
 
 The brief gets versioning and rollback for free by treating each self-written tool

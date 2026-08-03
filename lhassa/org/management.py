@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Org MANAGEMENT — create brains, define their skills/limits, and shape the chart.
 
 This is the operations layer the owner drives through ``lhassa org`` (now) and the

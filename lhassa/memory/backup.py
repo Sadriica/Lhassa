@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 Incremental backup of the grande (brain.db) with restore-and-verify (§2.10).
 

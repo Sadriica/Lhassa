@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Runs screen — a DataTable of recent durable runs across all entities."""
 
 from __future__ import annotations

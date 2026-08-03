@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Artifacts — the durable record of a delivered WORK PRODUCT (§org: "Lhassa is
 the sender of record").
 

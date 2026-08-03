@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Deterministic personal agenda summaries.
 
 This is the reusable secretary layer. It reads only local state: pending tasks,

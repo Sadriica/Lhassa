@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Multi-machine: check-in (not push) + report routes (§2.5).
 
 The brain side of the "check-in, not push" loop. A thin local agent

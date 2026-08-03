@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Projects screen — projects table + a detail pane of that project's recent runs.
 
 ``entity_id = lhassa.core.projects.entity_tag(project_id)`` is the ONE spelling

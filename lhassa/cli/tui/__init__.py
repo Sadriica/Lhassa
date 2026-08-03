@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """``lhassa tui`` — a Textual terminal UI over the brain.
 
 Reads DIRECTLY off ``lhassa.core.db`` (the same seam ``cli/commands.py`` uses),

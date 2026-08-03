@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Evidence vocabulary — the oh-my-hermes-inspired claim ladder over a
 run-or-task-shaped row. A PURE DERIVED read, no new storage: everything it
 returns is computed off columns already on ``runs``/``tasks``/``run_steps``

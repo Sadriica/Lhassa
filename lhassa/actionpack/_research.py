@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """research_reply — fetch live web results and answer the owner over Telegram.
 
 The Telegram chat think is deliberately TOOL-LESS (fast, cheap) — it cannot see

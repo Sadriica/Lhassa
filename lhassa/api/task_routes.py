@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """FastAPI routes for tasks and the watchlist preview.
 
 Routes::

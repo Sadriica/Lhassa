@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """``lhassa skills`` — the admin surface for first-class SKILLS.
 
 A small, mostly-OFFLINE management sub-app over the skill store

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Operational read API for durable flow executions."""
 
 from fastapi import APIRouter, HTTPException, Query

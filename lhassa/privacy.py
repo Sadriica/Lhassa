@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 Pseudonymization hook (§3-Fase 0/6) — deterministic, regex-based PII scrubbing.
 

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """FastAPI routes for work-flows — the backend for the (later) canvas frontend.
 
 A thin shell over :mod:`lhassa.flows`: it validates request bodies and turns store /

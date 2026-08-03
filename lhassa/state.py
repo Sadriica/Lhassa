@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """AppState singleton — shared mutable state across voice pipeline, API, and scheduler."""
 
 import asyncio

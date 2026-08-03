@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 LedgerGateway — the single chokepoint every cloud-LLM call routes through.
 

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """``lhassa utility`` — the tribunal that asks whether a capability still serves.
 
 The read surface over :mod:`lhassa.agents.utility`. Where ``lhassa capabilities``

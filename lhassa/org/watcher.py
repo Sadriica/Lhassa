@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """The MONITOR WATCHER — an always-on, $0 "ear" for the environment.
 
 Where :mod:`lhassa.org.monitor` provides the *capability* to gather signals and

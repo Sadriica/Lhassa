@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """FastAPI routes for the calendar seam — upcoming events + configured feeds.
 
 A thin shell over :mod:`lhassa.calendar` (leaf infra) and

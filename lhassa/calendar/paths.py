@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Path resolution for the calendar seam — the single place ``.ics`` files live.
 
 Mirrors :mod:`lhassa.cv.paths`: one directory (``LHASSA_CALENDAR_DIR``, default

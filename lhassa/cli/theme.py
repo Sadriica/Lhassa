@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """The Lhasa color palette + Rich theme for the terminal CLI.
 
 Inspired by the city of Lhasa: temple **gold** (the brand), monk-robe deep **red**

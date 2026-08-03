@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """The ``temple`` seed — Lhassa's own inner workshop for INTERNAL functions.
 
 Mirrors :mod:`lhassa.seeds.cv`'s topology-provisioning shape (idempotent, goes

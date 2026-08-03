@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """The ``cv`` seed — recreate the "Impossible-to-reject CV" pipeline from code.
 
 This is the FIRST registered seed (see :mod:`lhassa.seeds`); future seeds drop in the

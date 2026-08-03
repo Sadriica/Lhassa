@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Projects — the first-class workspace entity Lhassa works ON.
 
 A project is a named, TYPED unit of the owner's work: a code repo, a research

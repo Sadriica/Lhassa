@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """The specialist registry — skills keyed by domain (§2.8).
 
 A :class:`Specialist` is **not** a fine-tuned model. It is the base model the whole

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Org MANAGEMENT routes — create brains, skills, limits, hierarchy (additive).
 
 The backend the dashboard org panel drives: read the chart + available skills,

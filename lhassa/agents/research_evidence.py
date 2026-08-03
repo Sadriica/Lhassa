@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Deterministic source custody for Lhassa's research line.
 
 Models do not fetch or bless sources here.  This module turns an ``/idea`` input

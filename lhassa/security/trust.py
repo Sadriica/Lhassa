@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Trust by origin + the WHO (§2.6).
 
 Two orthogonal facts about where an action came from:

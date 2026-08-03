@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Seed the personal secretary department and its morning/evening flows."""
 
 from __future__ import annotations

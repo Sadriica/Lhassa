@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Execution analytics routes for the dashboard.
 
 Episodes are narrative audit. These endpoints read the durable ``runs`` and

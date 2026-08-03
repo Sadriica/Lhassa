@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Transactional persistence primitives for durable flow execution.
 
 This module deliberately does not execute graphs.  It owns the operational

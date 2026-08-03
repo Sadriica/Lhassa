@@ -430,6 +430,24 @@ without surgery.
 
 ## License
 
-AGPL-3.0-or-later — see [LICENSE](LICENSE).
+**AGPL-3.0-or-later**, with one additional term under section 7(b) — see
+[LICENSE](LICENSE).
+
+**What that means if you self-host it.** Run Lhassa on your own machine, for
+yourself or inside your company, and you owe nothing: modify it, keep your
+changes private, use it however you like. The AGPL's extra obligation is
+narrow — it applies **only if you offer Lhassa to other people over a network
+as a service**. In that case, those users must be able to get the source of
+the version you are running, including your modifications.
+
+The additional 7(b) term requires you to keep the attribution notice
+("Lhassa — a Witara project", the license, and a link to the source) visible
+wherever the software already shows legal or version information: the CLI, the
+API and the dashboard. Nothing more — it grants no rights over the names and
+takes away no freedom the AGPL gives you.
+
+**Commercial licensing.** If the AGPL does not fit your situation, a separate
+commercial license is possible — contributions are gathered under a CLA (see
+[CONTRIBUTING.md](CONTRIBUTING.md)) precisely so that option stays open.
 
 <p align="center">— <i>The wheel turns all day; the ledger barely moves.</i> —</p>

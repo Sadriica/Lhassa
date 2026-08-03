@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 Web search — tries Brave Search API first, falls back to DuckDuckGo.
 

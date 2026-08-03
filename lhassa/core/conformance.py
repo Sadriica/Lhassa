@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Inner conformance contract: manifest identity and attestation validation."""
 
 from __future__ import annotations

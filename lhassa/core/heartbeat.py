@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 The heartbeat — the brain's pulse (§2.1).
 

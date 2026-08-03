@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Power subcommands for the Lhassa CLI.
 
 These operate **offline** against the local brain DB (``lhassa.core.db``) and the

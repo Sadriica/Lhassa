@@ -1,8 +1,70 @@
 # Lhassa — decisions log
 
+## 2026-08-03 — AGPL-3.0: soberanía, atribución y la opción comercial
+
+Lhassa is licensed under **AGPL-3.0-or-later**, with one additional term under
+section 7(b) requiring the attribution notice to stay visible.
+
+**Why AGPL.** A permissive licence gives away the one thing this project is
+about. A brain that is local-first and sovereign can be taken under MIT-style
+terms, closed, and offered back to its own users as a service — the exact
+capture the design exists to prevent. The
+AGPL closes that gap and closes only that: someone self-hosting Lhassa for
+themselves or inside their company owes nothing, and the network clause bites
+only when the software is offered to other people as a service.
+
+**Why not a permissive licence to attract contributors.** The nearest analogue,
+Nous Research's Hermes Agent, is MIT with ~225k stars and ~43.5k forks. You
+cannot out-permissive an incumbent that size; competing on licence terms is a
+race already lost. AGPL costs adoption from a base of zero stars while enabling
+a business — and companies that cannot deploy copyleft are a different customer
+from people who want something free, which is precisely the segmentation a
+commercial licence needs.
+
+**The 7(b) term is implemented, not merely declared.** An attribution clause is
+worth nothing if the notice is a decorative string. `lhassa/legal.py` is the one
+source of truth; the CLI version panel, `GET /api/status`, a dedicated
+`GET /api/legal` and the dashboard's about card all render it (the dashboard via
+`dashboard/src/legal.js`, kept in sync by test). `tests/test_legal_notice.py`
+fails if any surface stops showing it, or if the two copies drift. The term
+itself is minimal: preserve a notice, nothing more — it grants no rights over
+the names and removes no AGPL freedom.
+
+**The CLA is a draft, and it is the one asymmetric thing here.** It exists so a
+commercial licence can be offered later, which requires one party to hold
+sufficient rights. `CONTRIBUTING.md` says that in plain words rather than hiding
+it behind process language, and it is marked **not in force until a lawyer
+reviews it** — no external contribution has been accepted yet, so nothing is
+pending on it.
+
+Phase-1 audit found **no incompatibility**: zero GPL anywhere. Python deps are
+MIT/BSD/Apache-2.0; the only proprietary packages are NVIDIA CUDA libraries
+pulled exclusively by the optional `voice` extra (via `torch`), never
+distributed by Lhassa and absent from the default install. The 181 npm packages
+are 134 MIT / 19 ISC / 15 Apache-2.0 / 6 BSD-2 / 3 BSD-3 / 2 MPL-2.0 /
+1 Python-2.0 / 1 CC-BY-4.0 — all compatible.
+
+**Open decisions, deliberately not assumed:**
+
+- **Copyright holder stays `Sadriicaa`.** If Witara is incorporated, assigning
+  copyright to it is a later, separate change.
+- **`lhassa/_vendor/aiosqlite.py` needs a determination.** Its docstring says it
+  is an original subset implementation over stdlib `sqlite3`, written because
+  upstream's worker thread stalls — i.e. NOT vendored third-party code. If that
+  is right, the directory name is misleading and the file should carry an SPDX
+  header like everything else. It was left untouched pending that call, because
+  an API-compatible reimplementation can raise derivative-work questions that
+  are not mine to settle.
+- **The LICENSE body must be verified verbatim.** It was written from the
+  system's SPDX text (`/usr/share/licenses/spdx/AGPL-3.0-or-later.txt`) because
+  gnu.org was unreachable from this machine; the line wrapping differs between
+  renderings. Replace it with the canonical FSF file before publishing:
+  `curl -o LICENSE https://www.gnu.org/licenses/agpl-3.0.txt`, then re-append
+  the section 7 block.
+
 ## 2026-08-03 — macOS como tier 2: una capa de host, y una cuarentena que no cede
 
-The audience for a local-first, MIT-licensed brain runs local inference, and that
+The audience for a local-first, open-source brain runs local inference, and that
 audience is largely on Apple Silicon. macOS becomes a **tier-2** platform: the
 Python suite and lint run in CI, everything that is not hardware works, and what
 is best-effort says so. Linux stays tier 1 and its behaviour is unchanged.

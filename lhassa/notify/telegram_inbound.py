@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Inbound Telegram poller — turns Lhassa's Telegram chat into a command channel.
 
 Long-polls the Telegram Bot API ``getUpdates`` (offset-based) over httpx, answers

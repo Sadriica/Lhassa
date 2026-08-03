@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Document text extraction — bytes in, plain text out, for the CV work-flow bridge.
 
 The Telegram → CV bridge receives a CV as an uploaded document (a ``.tex`` source or

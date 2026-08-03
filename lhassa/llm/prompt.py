@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 from lhassa.persona import PERSONA_BLOCK
 
 BASE_PROMPT = PERSONA_BLOCK + """

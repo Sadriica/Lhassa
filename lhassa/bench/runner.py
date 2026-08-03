@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """LhassaBench — run fixtures against subjects, score with the real árbitro.
 
 The whole point of a benchmark for a brain that routes between providers/

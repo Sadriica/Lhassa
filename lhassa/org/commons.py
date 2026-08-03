@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """The commons — the ONE read-only cross-cutting source of truth (Fase 7).
 
 Policies, the org chart, shared data: one place every brain reads, that only the

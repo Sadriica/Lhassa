@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 La chica — the persistent working-memory cache, DERIVED from the grande (§2.3).
 

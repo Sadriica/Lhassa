@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Use-case ORG TEMPLATES — presets that recreate a whole working structure at once.
 
 A *template* is a named, multi-brain org preset the owner can apply in one move:

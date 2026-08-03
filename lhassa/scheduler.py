@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """DEPRECATED — the legacy 30s reminder poller. Retired; kept as a no-op shim.
 
 Reminders now go through the same do-and-sleep backbone as everything else:

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Fleet routes — the multi-machine fleet view (Phase-6, read-only).
 
 ``/api/fleet`` derives the known machines from existing reads: check-in episodes

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 The knowledge graph — a deterministic READ-MODEL over what the grande already
 stores. No new heavy storage, no model call: entities and edges are derived on

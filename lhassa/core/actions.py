@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 Fixed, deterministic actions — the "do" half of "hace y duerme" (§2.4).
 

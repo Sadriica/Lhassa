@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Brain/cross-cutting actions: notify, add_task, set_task_state, list_approvals,
 check_health, git_status_repos, compile_cv.
 """

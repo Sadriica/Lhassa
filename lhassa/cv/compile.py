@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Compile a tailored CV ``.tex`` into a PDF — the last mile of the CV seam.
 
 The Telegram → CV bridge exports a tailored ``.tex``; the owner would rather receive

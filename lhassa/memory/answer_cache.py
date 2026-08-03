@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """The answer cache — a $0 semantic cache over past chat answers.
 
 The Telegram chat think (``notify.telegram_inbound._brain_reply``) spends a real

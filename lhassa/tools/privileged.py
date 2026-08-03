@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Privileged command execution — scoped, allowlisted, and audited.
 
 lhassa may run a curated set of admin commands as root via ``sudo -n`` once the

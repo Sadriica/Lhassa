@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """``lhassa flows`` — inspect stored work-flows and apply the flow-templates gallery.
 
 A small, mostly-OFFLINE management surface over the flows file

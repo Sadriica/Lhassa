@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Runtime SETTINGS service — the panel/CLI editable knobs (slice BE).
 
 A thin, safe layer over :mod:`lhassa.config` that lets the dashboard and

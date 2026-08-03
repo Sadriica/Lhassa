@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Typed inter-brain messaging — the task queue between brains (Fase 7).
 
 Inter-brain communication is **typed messages, never free prose**. A closed

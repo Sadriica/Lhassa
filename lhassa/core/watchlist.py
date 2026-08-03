@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 The watchlist — the deterministic "what woke me?" check (§2.4).
 

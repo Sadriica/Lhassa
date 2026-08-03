@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Vision tool handlers (screen + image analysis)."""
 
 from __future__ import annotations

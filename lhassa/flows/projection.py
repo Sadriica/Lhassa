@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Best-effort analytics projection for operational flow records."""
 
 from loguru import logger

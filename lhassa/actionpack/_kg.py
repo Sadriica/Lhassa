@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """kg_sync / kg_resolve — the deterministic actions fronting the persisted
 knowledge graph.
 

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Skills routes — first-class SKILL.md CRUD + AI create/improve + recommend.
 
 CRUD + AI create/improve + offline recommendations over the SkillStore

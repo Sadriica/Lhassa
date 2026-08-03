@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Approval frontier routes — the HITL queue (§2.6, §2.9-(1)).
 
 The dashboard's first panel is "la cola de aprobaciones". GET returns the pending

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Overview routes — one defensive aggregate for the dashboard home.
 
 A single read-only digest for the dashboard's "home" surface and ``lhassa

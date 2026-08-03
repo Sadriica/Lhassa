@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 ccusage — cross-harness LLM accounting from the ``ccusage`` CLI's JSON output.
 

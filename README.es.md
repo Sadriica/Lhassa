@@ -284,6 +284,25 @@ VPS pequeño sin cirugía.
 
 ## Licencia
 
-AGPL-3.0-or-later — ver [LICENSE](LICENSE).
+**AGPL-3.0-or-later**, con un término adicional bajo la sección 7(b) — ver
+[LICENSE](LICENSE).
+
+**Qué significa si te lo auto-hospedás.** Si corrés Lhassa en tu propia máquina,
+para vos o dentro de tu empresa, no debés nada: modificalo, guardate tus cambios
+y usalo como quieras. La obligación extra de la AGPL es estrecha — aplica **solo
+si le ofrecés Lhassa a otras personas por red, como servicio**. En ese caso, esos
+usuarios deben poder obtener el código de la versión que estás corriendo,
+incluidas tus modificaciones.
+
+El término adicional 7(b) te pide conservar visible el aviso de atribución
+("Lhassa — a Witara project", la licencia y un enlace al código) allí donde el
+software ya muestra información legal o de versión: la CLI, la API y el
+dashboard. Nada más — no otorga derechos sobre los nombres ni te quita ninguna
+libertad que la AGPL te da.
+
+**Licenciamiento comercial.** Si la AGPL no encaja en tu caso, es posible una
+licencia comercial aparte — las contribuciones se recogen bajo un CLA (ver
+[CONTRIBUTING.md](CONTRIBUTING.md)) precisamente para mantener esa puerta
+abierta.
 
 <p align="center">— <i>La rueda gira todo el día; el ledger apenas se mueve.</i> —</p>

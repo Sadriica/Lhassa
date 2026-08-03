@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 The router — decides, in code, *how* the brain should think (§2.4).
 

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """ingest_knowledge — the deterministic action fronting document perception.
 
 Runs :func:`lhassa.memory.knowledge.ingest` and renders a one-line summary.

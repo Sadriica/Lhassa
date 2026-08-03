@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Leaf configuration for the CV file-I/O seam.
 
 Follows the codebase's class-level config convention: values are resolved from the

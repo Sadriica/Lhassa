@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Durable orchestration around the graph engine.
 
 The engine remains useful as an offline, injected-executor component.  This

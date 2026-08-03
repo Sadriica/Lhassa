@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 The PID/stream runner (§2.1, §2.7) — "lanza y duerme".
 

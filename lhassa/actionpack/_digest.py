@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """The ``send_digest`` action — Etapa 2's scheduled operative digest.
 
 A thin ``(params) -> str`` wrapper over :func:`lhassa.notify.digest.send_digest` so

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Telegram Bot API file helpers — send a local file, fetch an uploaded one.
 
 The text notifier (:mod:`lhassa.notify.telegram`) only sends ``sendMessage``. The

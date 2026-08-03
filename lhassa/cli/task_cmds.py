@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """``lhassa task`` — manage tasks (standing goals, scheduled work).
 
 Commands::

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Self-card — deterministic, $0 self-knowledge for the chat think.
 
 The Telegram chat model used to answer "what are you running on?" with a shrug:

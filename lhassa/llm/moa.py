@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 Mixture-of-Agents (MoA) — the same prompt to N providers in parallel, an
 aggregator synthesizes a single answer (Wave D, §doc/plan.md).

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Deterministic department routing — how the general picks a department (Fase 7).
 
 The general COORDINATES: given a goal, it must choose which department gets the

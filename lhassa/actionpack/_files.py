@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """list_dir / read_file — deterministic file perception, $0, roots-bounded.
 
 Reading a file or listing a directory needs NO model — these are the internal

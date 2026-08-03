@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """A crash-safe JSON store for NAMED calendar feeds — ``~/.lhassa/calendars.json``.
 
 An owner can have several calendars (institutional, personal, a project one) —

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """The scheduled operative digest — Lhassa's twice-daily check-in message.
 
 Composes a compact snapshot of the brain's day: the monitor's environment

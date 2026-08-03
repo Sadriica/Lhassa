@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """The :class:`SkillStore` over ``config.skills_dir`` + the org bridges.
 
 A skill is a folder ``<skills_dir>/<name>/`` holding a ``SKILL.md`` (or a

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 Objective verification gates — the árbitro's *correctness* layer (§2.8).
 

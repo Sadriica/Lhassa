@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """The notify voice — reshape machine-built notifications into Lhassa's own voice.
 
 Owner's ask, verbatim: *"a brain that, before sending notification/automation

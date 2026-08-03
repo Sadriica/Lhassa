@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """The machine side of the "check-in, not push" loop (§2.5).
 
 A thin local agent runs on each machine and talks *outward* to the brain over

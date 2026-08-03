@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 Typed facts in the grande — the durable "hechos" that pass through the owner (§2.3).
 

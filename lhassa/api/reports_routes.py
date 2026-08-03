@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Reports / projections routes — Phase-6 read-only dashboard surfaces.
 
 Rich dashboard surfaces for "madurez": what the brain has been doing

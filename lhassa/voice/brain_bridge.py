@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 Voice ↔ brain bridge (§3-Fase 6 — "voz reutilizando el esqueleto existente").
 

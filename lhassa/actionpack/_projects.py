@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """create_project — the deterministic action + the $0 project-detector sense.
 
 Two halves of one door:

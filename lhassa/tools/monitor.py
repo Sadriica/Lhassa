@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 Proactive monitoring tools — watch processes and files in the background,
 notify via voice (if active) or desktop when the condition is met.

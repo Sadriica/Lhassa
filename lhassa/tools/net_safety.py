@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Network-target safety shared by adapter and shell web readers.
 
 Refuses non-HTTP schemes and hosts resolving to loopback, private, unspecified,

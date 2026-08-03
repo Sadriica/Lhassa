@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """The real department executor — a department brain that actually thinks (Fase 7).
 
 Slice 1 shipped the two-brain core with an INJECTABLE executor and a deterministic

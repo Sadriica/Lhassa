@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """LhassaBench — a deterministic, $0-scoring eval harness (adapter layer).
 
 Runs the fixture set (:mod:`lhassa.bench.loader`) against named subjects

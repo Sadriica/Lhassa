@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 Vision tools — screenshot capture and image analysis via a vision LLM.
 

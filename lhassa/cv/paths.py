@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Path resolution for the CV seam — the single place CV file locations live.
 
 Every CV path derives from one directory (``LHASSA_CV_DIR``, default ``~/.lhassa/cv``):

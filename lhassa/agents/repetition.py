@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 Repeated-think detector — the $0 sense that spots automatable patterns (§2.8).
 

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """The PERSISTED knowledge graph (Wave 3, "LightRAG-lite") — entities + typed
 edges written to ``kg_entities``/``kg_edges`` (migration 6, ``core/db.py``), fed
 $0 from the SAME deterministic extraction :mod:`lhassa.memory.graph` already

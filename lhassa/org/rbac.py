@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """RBAC — a small, explicit role→permission matrix for the organizational layer.
 
 Pure and table-driven: no I/O, no DB, no LLM. It answers one question — "may this

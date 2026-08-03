@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """``lhassa org`` — manage the org TOPOLOGY (1..N brains, any hierarchy).
 
 A small, OFFLINE management surface over the topology file

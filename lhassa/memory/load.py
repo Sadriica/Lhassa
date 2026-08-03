@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 "Subir al despertar" — the layered load of the chica (live context) from the
 grande, up to a token budget (§2.3).

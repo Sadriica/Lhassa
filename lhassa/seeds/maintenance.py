@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """The ``maintenance`` seed — mint the recurring self-improvement/hygiene tasks.
 
 Five of the built-in deterministic actions only do anything useful if something

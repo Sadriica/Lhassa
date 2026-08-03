@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Graph-augmented retrieval — the "LightRAG-lite" read seam over
 ``memory/kg.py``'s persisted graph, layered on top of the EXISTING semantic
 (layer-4) retrieval :mod:`lhassa.memory.load` already does.

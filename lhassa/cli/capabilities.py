@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """``lhassa capabilities`` (alias ``doctor``) — surface Lhassa's elasticity.
 
 Lhassa is built to be **fully elastic and highly modular**: every swap point sits

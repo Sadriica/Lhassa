@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Deliver seam — "Lhassa is the sender of record" (§org: the hierarchy is the
 philosophy, not a feature).
 

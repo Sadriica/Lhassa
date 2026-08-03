@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """CV work-flow file-I/O seam — the fixed base CV in, a tailored ``.tex`` out.
 
 The "Impossible-to-reject CV" work-flow builds on a fixed, long base CV

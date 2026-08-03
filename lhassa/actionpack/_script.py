@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """The ``run_script`` action — Programmatic Tool Calling (PTC), Fase 3.
 
 A thin ``(params) -> str`` wrapper over :func:`lhassa.agents.ptc.run_script` so

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Calendar-derived world model — bootstrap facts about the owner's world
 (courses, recurring commitments, rhythm) FROM the calendar feed the brain
 already reads, without asking and without spending: deterministic, $0,

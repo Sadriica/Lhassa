@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """LLM cost routes — the gateway ledger, runtime limits, and cross-harness ccusage.
 
 The dashboard's cost surface. Reads the cost-gateway ledger (per-call tokens/cost),

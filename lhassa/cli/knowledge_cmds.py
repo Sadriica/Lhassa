@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """``lhassa knowledge`` — document perception from the terminal.
 
 Mirrors the ``lhassa calendar``/``lhassa memory`` sub-app pattern: a small

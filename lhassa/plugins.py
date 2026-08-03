@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 Drop-in plugin discovery — capabilities self-register WITHOUT editing core.
 

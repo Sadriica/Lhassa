@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """The skills curator (Fase 2) — usage telemetry + a deterministic $0 lifecycle.
 
 A Hermes-style curator: every skill read for use is tallied in a sidecar

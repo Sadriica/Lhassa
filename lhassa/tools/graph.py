@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 Microsoft Graph client — Outlook email and calendar via MSAL device flow.
 

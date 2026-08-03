@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """``lhassa memory`` — search durable facts, add one, and a guided onboarding.
 
 Three surfaces over the grande's typed facts (:mod:`lhassa.memory.facts`):
