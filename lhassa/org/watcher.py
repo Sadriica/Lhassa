@@ -519,32 +519,44 @@ async def watch_loop(config: Optional[Config] = None, *, once: bool = False) -> 
                 )
             )
             if integrity_due:
-                import json
-
                 from lhassa import actionpack
                 from lhassa.actionpack._temple import temple_run
 
                 # The watcher is only the clock/sensor. The work itself follows
                 # Lhassa → temple → guardian, then returns through org.deliver.
                 actionpack.register_all()
-                record = await temple_run(
+                await temple_run(
                     {
                         "action": "check_integrity",
                         "params": {"config": config, "trigger": "watcher"},
                         "config": config,
                         "instruction": "scheduled conformance pass",
                     },
-                    return_record=True,
                 )
+                # Read the structured verdict from the conformance_runs table —
+                # the source of truth — instead of parsing the action's return
+                # string. The action now answers in a sentence, because that
+                # string is ALSO what reaches the owner's screen, and a raw JSON
+                # dump is not a notification.
+                integrity = {
+                    "status": "error",
+                    "run_id": "unknown",
+                    "findings_critical": 1,
+                    "findings_warn": 0,
+                }
                 try:
-                    integrity = json.loads(str(record.get("result") or "{}"))
-                except (AttributeError, json.JSONDecodeError, TypeError, ValueError):
-                    integrity = {
-                        "status": "error",
-                        "run_id": "unknown",
-                        "findings_critical": 1,
-                        "findings_warn": 0,
-                    }
+                    from lhassa.core import db as _db
+
+                    row = await _db.latest_conformance_run(config.instance_id)
+                    if row:
+                        integrity = {
+                            "status": str(row.get("status") or "error"),
+                            "run_id": row.get("id") or "unknown",
+                            "findings_critical": int(row.get("findings_critical") or 0),
+                            "findings_warn": int(row.get("findings_warn") or 0),
+                        }
+                except Exception as exc:  # the watcher never crashes on a read
+                    logger.debug(f"watcher: could not read conformance run: {exc}")
                 _STATE["last_integrity_at"] = now
                 if integrity["status"] != "pass":
                     critical = int(integrity.get("findings_critical") or 0)

@@ -24,6 +24,15 @@ os.environ["LHASSA_CALENDAR_ICS_URL"] = ""
 # real ~/.lhassa/calendars.json (which would fetch their real feeds over the
 # network). Point it at a path that does not exist so the store degrades to [].
 os.environ["LHASSA_CALENDARS_FILE"] = "/nonexistent/lhassa-test/calendars.json"
+# Notifications must never LEAVE the test process. The desktop channel pops a
+# real `notify-send` toast on the owner's screen and the Telegram channel would
+# message their real chat — both were firing during the suite, because any test
+# that exercises a notify path (e.g. the goal-loop turn cap in core/step.py)
+# reaches the live dispatcher. The `log` channel is always configured and only
+# writes to the logger, so fan-out still happens and nothing escapes.
+os.environ["LHASSA_NOTIFY_CHANNELS"] = "log"
+os.environ["LHASSA_TELEGRAM_BOT_TOKEN"] = ""
+os.environ["LHASSA_TELEGRAM_CHAT_ID"] = ""
 
 import httpx  # noqa: E402
 import pytest  # noqa: E402

@@ -1,5 +1,36 @@
 # Lhassa — decisions log
 
+## 2026-08-03 — The owner stops receiving machine output
+
+Two separate defects reached the owner's screen as the same symptom: raw,
+unreadable notifications.
+
+**The test suite was firing real desktop toasts.** `tests/conftest.py` carefully
+neutralises the calendar feed, the embedder and the quarantine, but never
+touched notifications — so `LHASSA_NOTIFY_CHANNELS` kept its default of
+`telegram,desktop` and any test exercising a notify path went out through the
+LIVE dispatcher. The goal-loop turn cap in `core/step.py` does exactly that, so
+every full-suite run popped a real `notify-send` toast reading *"Goal loop
+loop_… capped: 'watch for READY' did not verify-pass"* — `watch for READY` being
+the fixture goal in `tests/test_loop_runtime.py`. The Telegram channel was
+equally unguarded: with a token in `.env`, a test could have messaged the
+owner's real chat. Fixed by pinning the suite to the `log` channel and blanking
+the Telegram credentials, so fan-out still runs and nothing escapes the process.
+
+This is why the message could not be found earlier: it leaves no episode, no
+loop row and no journal line, because pytest writes to a temporary DB and is not
+a systemd unit. It was only ever visible in dunst's history.
+
+**`check_integrity` answered in JSON.** It returned `json.dumps({...})` while
+every sibling action (`curate_skills`, `distill_memory`) returns a readable
+line — and that string travels through `org/deliver.py` all the way to the
+owner, so a notification read `guardian completed check_integrity:
+{"findings_critical": 1, …}`. The notify voice layer was working correctly; it
+prefixes ("Done — ") but cannot translate a payload it was handed. The action
+now answers in a sentence, and `org/watcher.py` reads the structured verdict
+from `conformance_runs` — the source of truth — instead of parsing a return
+string that was never meant for a machine and a person at once.
+
 ## 2026-08-03 — El CI de macOS corrige la auditoría que lo precedió
 
 The first real macOS CI run (triggered by the push to `main`) came back
