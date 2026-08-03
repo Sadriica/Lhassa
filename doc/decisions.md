@@ -1,5 +1,58 @@
 # Lhassa — decisions log
 
+## 2026-08-03 — macOS como tier 2: una capa de host, y una cuarentena que no cede
+
+The audience for a local-first, MIT-licensed brain runs local inference, and that
+audience is largely on Apple Silicon. macOS becomes a **tier-2** platform: the
+Python suite and lint run in CI, everything that is not hardware works, and what
+is best-effort says so. Linux stays tier 1 and its behaviour is unchanged.
+
+Phase 1 (evaluate-before-implementing) corrected two premises worth recording:
+
+- **There was almost no "silently wrong" to find.** The task assumed the system
+  surface would return plausible-but-wrong values off Linux. It does not:
+  `check_mem_pressure` on a missing `/proc/meminfo` returns *"Memory info
+  unavailable"*, and `/proc/uptime` was already wrapped to *"uptime unknown"*.
+  The repo's degrade-honestly discipline was stronger than the brief assumed.
+  `actionpack/_system.py`'s uptime read was rigid in STYLE (not injectable, so
+  not testable by injection) but never dishonest.
+- **The one real "silently wrong" was somewhere nobody looked:**
+  `security/quarantine.py`. None of `unshare`/`firejail`/`bwrap` exist on macOS,
+  so isolation would degrade to `"none"` and the run would proceed. On Linux
+  that is a rare misconfiguration; on macOS it would be the NORMAL state, which
+  would quietly turn *"authored code never executes outside quarantine"* into
+  running model-written code unconfined on the owner's machine — and the tool
+  forge and PTC are exactly what this audience exercises.
+
+What was built:
+
+- `host.py`, leaf infra: pure parsers (`parse_proc_uptime`, `parse_boottime`,
+  `parse_vm_stat`) plus thin collectors, and a `PLATFORMS` registry so adding a
+  platform is a drop-in and selecting one is configuration (`LHASSA_PLATFORM`),
+  never surgery. Tests parametrise by injection, so a Linux CI run really does
+  cover the macOS branches. The module-level `platform.system()` dispatch that
+  already existed in six modules was left alone and lives inside the default
+  implementations — two idioms, not a third.
+- **The quarantine fails closed off Linux.** `sandbox-exec` is added as a level;
+  when no sandbox is available at all the run is REFUSED. An operator who set
+  `LHASSA_QUARANTINE_ISOLATION=none` deliberately still gets their opt-out — the
+  refusal is for "none was available", not for "none was chosen". The Linux
+  selection chain is byte-identical: the layer is consulted only off Linux.
+- **A metric that differs is labelled, not converted.** macOS memory accounting
+  (compressed/purgeable/wired) is not Linux's arithmetic, so `MemoryReading`
+  carries `comparable=False`, the summary names its source, and no caller
+  compares the two numbers as if they were one.
+- `scripts/launchd/` mirrors `scripts/systemd/`, with the mapping documented as
+  APPROXIMATE: `StartInterval` measures from start (not end), and launchd has no
+  `Persistent=true`. A sleeping Mac fires every overdue job on wake — the same
+  class of bug fixed earlier today in `next_recurrence_due`, which already keeps
+  a schedule on its wall-clock slot across suspend.
+
+Linux verification: 2288 passed before, 2288 + the new platform tests after, no
+regression. **The macOS CI run itself is still outstanding** — GitHub Actions
+only runs on pushed commits and this work is deliberately uncommitted, so the
+matrix is written and validated but its first real result is pending.
+
 ## 2026-08-03 — El recall deja de recordar su propio papeleo
 
 `db.search_episodes` already demoted automation episodes below interactive ones

@@ -78,15 +78,19 @@ def system_snapshot(params: dict) -> str:
     try:
         from lhassa.health.checks import check_disk, check_failed_units, check_mem_pressure
 
-        # Uptime from /proc/uptime (seconds since boot, no subprocess needed).
-        try:
-            uptime_text = open("/proc/uptime").read().split()[0]
-            uptime_s = float(uptime_text)
+        # Uptime through the host platform layer (/proc/uptime on Linux,
+        # kern.boottime on macOS). An unreadable value stays "unknown" — it is
+        # never guessed, because this string feeds the judgment path.
+        from lhassa.host import get_platform
+
+        plat = get_platform()
+        uptime_s = plat.uptime_seconds() if plat is not None else None
+        if uptime_s is None:
+            uptime_str = "uptime unknown"
+        else:
             uptime_h = int(uptime_s // 3600)
             uptime_m = int((uptime_s % 3600) // 60)
             uptime_str = f"up {uptime_h}h{uptime_m:02d}m"
-        except Exception:
-            uptime_str = "uptime unknown"
 
         disk = check_disk()
         mem = check_mem_pressure()

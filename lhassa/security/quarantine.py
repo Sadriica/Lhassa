@@ -43,6 +43,8 @@ from typing import Optional, Sequence, Union
 
 from loguru import logger
 
+from lhassa.host import current_platform_name, get_platform
+
 # Cap on captured output so a noisy candidate cannot bloat a result/episode.
 _OUTPUT_CAP = 4000
 
@@ -129,6 +131,17 @@ def _select_isolation(workdir: Path) -> tuple[list[str], str]:
         ]
         if _sandbox_works(prefix, workdir):
             return (prefix, "bwrap")
+    # Non-Linux hosts: ask the platform layer for its own sandbox (macOS
+    # ``sandbox-exec``). Deliberately consulted ONLY off Linux, so the tier-1
+    # path above stays byte-identical — on Linux the three tools already ARE
+    # the whole chain, and re-probing them through the layer would change
+    # nothing but the cost.
+    if current_platform_name() != "linux":
+        plat = get_platform()
+        if plat is not None:
+            found = plat.sandbox_prefix(str(workdir))
+            if found is not None:
+                return (list(found[0]), found[1])
     return ([], "none")
 
 
@@ -176,6 +189,36 @@ async def run_in_quarantine(
     cmd = [*prefix, *_build_inner(argv_or_code)]
 
     if isolation == "none":
+        # Off Lhassa's tier-1 platform, an unsandboxed run is REFUSED rather
+        # than downgraded. On Linux, "none" is a rare misconfiguration (the
+        # three namespacing tools are all missing); on a platform with no
+        # sandbox of its own it would be the NORMAL state, which would quietly
+        # turn "authored code never executes outside quarantine" into a run of
+        # model-written code on the owner's machine. Linux keeps its existing
+        # warn-and-proceed behaviour untouched.
+        forced_off = (
+            os.getenv("LHASSA_QUARANTINE_ISOLATION") or ""
+        ).strip().lower() in {"none", "off", "0"}
+        # An operator who explicitly set LHASSA_QUARANTINE_ISOLATION=none has
+        # made a deliberate choice and keeps it on every platform; the refusal
+        # is for the case where no sandbox was AVAILABLE, which is the one that
+        # would silently become normal off Linux.
+        if current_platform_name() != "linux" and not forced_off:
+            if owns_dir:
+                shutil.rmtree(base, ignore_errors=True)
+            return QuarantineResult(
+                ok=False,
+                stdout="",
+                stderr=(
+                    "quarantine: refusing to run unsandboxed on platform "
+                    f"{current_platform_name()!r} — no sandbox available "
+                    "(install sandbox-exec support or run on Linux)"
+                ),
+                exit_code=None,
+                timed_out=False,
+                escaped=False,
+                isolation="none",
+            )
         logger.warning(
             "quarantine: no namespacing tool (unshare/firejail/bwrap); "
             "network block is best-effort only [SUPUESTO]"
