@@ -431,3 +431,44 @@ def _phrase_detect_repetition(result: str) -> Optional[str]:
     if proposed == 0:
         return "I looked for things I repeat too often — nothing new this time."
     return None
+
+
+@register_phrase("calendar_sync")
+def _phrase_calendar_sync(result: str) -> Optional[str]:
+    unsynced = _count(r"(\d+) unsynced", result)
+    delivered = _count(r"(\d+) delivered", result)
+    if unsynced is None:
+        return None
+    if unsynced == 0:
+        return "Your calendar and my reminders are in step — nothing to sync."
+    return (
+        f"I found {_plural(unsynced, 'calendar event')} I wasn't tracking and "
+        f"set up {delivered or 0} of them as reminders."
+    )
+
+
+@register_phrase("derive_world_facts")
+def _phrase_derive_world_facts(result: str) -> Optional[str]:
+    new = _count(r"(\d+) new", result)
+    if new is None:
+        return None
+    if new == 0:
+        return "I re-read your calendar for new routines — nothing I didn't already know."
+    return f"I learned {_plural(new, 'new thing')} about your routine from your calendar."
+
+
+@register_phrase("apply_feedback")
+def _phrase_apply_feedback(result: str) -> Optional[str]:
+    if "no scorable signals" in result:
+        return "I checked how my recent answers landed — not enough signal to tell yet."
+    return None
+
+
+@register_phrase("draft_research_note")
+def _phrase_draft_research_note(result: str) -> Optional[str]:
+    if "written to" in result:
+        return (
+            "I drafted a research note for you. It is review-only — nothing is "
+            "published until you read it."
+        )
+    return None

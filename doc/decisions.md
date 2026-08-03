@@ -1,5 +1,58 @@
 # Lhassa — decisions log
 
+## 2026-08-03 — Six reviewers in parallel: the philosophy sweep, phase by phase
+
+Six read-only reviewers ran in parallel, one per subsystem, each against the
+repo's own invariants, each required to VERIFY findings before reporting.
+Applied on `review/philosophy-sweep`; the two heaviest findings are recorded
+here and deliberately deferred to a fresh session rather than rushed.
+
+**Fixed in this pass:**
+
+- **The kill switch now actually stops everything** (`core/step.py`).
+  `KillSwitchActive` subclasses `BudgetExceeded`, and the budget branch walks
+  the $0 CLI fallback — so with the switch engaged the heartbeat still called
+  claude/codex/opencode. A hard stop now skips the fallback entirely.
+- **The fallback chain pseudonymizes** (`llm/router.py`). `pick_provider`
+  wrapped remote seats in `PseudonymizingProvider`; `fallback_chain` did not —
+  the one turn that failed over carried raw text to the cloud.
+- **`/recall` stops conflating "no matches" with "recall is broken"**
+  (`core/db.py:recall_available` + the command). Machine callers keep the
+  degrade-to-empty contract; the owner-facing surface answers honestly.
+- **Self-approval refused at the general seam** (`security/approval.py`).
+  Proposer ≠ approver existed only inside org delegation; the generic
+  `tipo="task"` approvals — the ones carrying `run_command`-class actions —
+  had no check.
+- **Registry/allowlist parity is now a test**, and it caught real drift on its
+  first run: `check_integrity` was registered but never allowlisted.
+- **Four more phrasebook entries** (calendar_sync, derive_world_facts,
+  apply_feedback, draft_research_note) — formats verified against the actions'
+  real return strings. `distill_memory`/`ingest_knowledge`/`kg_sync`/
+  `kg_resolve` still reach the owner raw: their success formats were not
+  verifiable this pass, and guessing regexes is how dead phrasings are born.
+- **Monitor episodes carry `dominio`** (`org/watcher.py`), and the monitor's
+  direct-to-owner alert is now a DOCUMENTED exception to the deliver-chain
+  invariant (it is Lhassa's own ear, like health/checks.py) instead of being
+  indistinguishable from a bug.
+- **`distill_episodes` gained its own boundary flag** (`memory_distill_enabled`)
+  so no future caller can spend tokens without an explicit toggle at the
+  memory-module edge.
+
+**Found, verified, and DEFERRED (the next session's first work):**
+
+- **CRITICAL — the local execution path never consults the allowlist.**
+  `allow()` is called only by PTC and the remote agent; the heartbeat's
+  fixed-action branch runs `actions.run` directly, so `ActionSpec.objetivos`
+  and `min_trust` are silently unenforced on the dominant path (verified live:
+  a `sync_repo` outside `LHASSA_ALLOWLIST_REPOS` runs anyway). The fix must
+  thread signed-task verification through `step.py` without breaking the
+  sense-generated triggers (repo_changed auto-sync) — heartbeat semantics,
+  not a patch to rush.
+- **`/ai` is a third paid command** alongside `/moa` and `/cv`; the docs name
+  only two. Update the catalog and add a closed-set test.
+- The autonomy-streak knob never engages on the local path (`mint_task` passes
+  no autonomy verdict) — fail-safe today, but the documented feature is inert.
+
 ## 2026-08-03 — The owner stops receiving machine output
 
 Two separate defects reached the owner's screen as the same symptom: raw,

@@ -39,6 +39,20 @@ REAL = {
         "detect_repetition: 4 pattern(s) found, 2 newly proposed",
         "detect_repetition: 4 pattern(s) found, 0 newly proposed",
     ],
+    "calendar_sync": [
+        "calendar_sync: 0 unsynced event(s), 0 delivered",
+        "calendar_sync: 3 unsynced event(s), 2 delivered",
+    ],
+    "derive_world_facts": [
+        "derive_world_facts: derived 5 world facts, 2 new",
+        "derive_world_facts: derived 5 world facts, 0 new",
+    ],
+    "apply_feedback": [
+        "apply_feedback: no scorable signals in the last 7d",
+    ],
+    "draft_research_note": [
+        "draft_research_note: draft written to doc/notes/drafts/x.md — review before publishing.",
+    ],
 }
 
 
@@ -103,3 +117,20 @@ def test_temple_delivery_uses_the_phrase(monkeypatch):
         "check_integrity", "check_integrity: fail — 1 critical (run conf_x)"
     )
     assert said is not None and "Something needs a look" in said
+
+
+# ── parity: every allowlisted action must also be a registered action ─────────
+
+
+def test_actions_registry_and_allowlist_do_not_drift():
+    """Today the two key sets match; nothing enforced it until now."""
+    from lhassa import actionpack
+
+    actionpack.register_all()
+    from lhassa.core.actions import ACTIONS
+    from lhassa.security.allowlist import ALLOWLIST
+
+    assert set(ACTIONS) <= set(ALLOWLIST), (
+        "registered actions missing from the allowlist: "
+        f"{sorted(set(ACTIONS) - set(ALLOWLIST))}"
+    )

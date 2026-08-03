@@ -403,6 +403,14 @@ async def react(events: list[dict], *, department: str, config: Optional[Config]
     with contextlib.suppress(Exception):
         await db.init_db()
         ep = Episode.begin(despertar_por="monitor", instance_id=instance_id)
+        # Attribution: the alert below deliberately does NOT ride org/deliver's
+        # per-hop chain — the monitor is Lhassa's own $0 ear (same documented
+        # exception class as health/checks.py), and wrapping every alert in
+        # deliver hops would refill the episode log with the very paperwork
+        # recall demotes. The audit trail is kept the cheap way instead: this
+        # episode names the observing department via dominio, so "who told the
+        # owner" is answerable without the extra hops.
+        ep.dominio = department
         ep.finish(
             decision="monitor: watch",
             accion=f"monitor:{department}",

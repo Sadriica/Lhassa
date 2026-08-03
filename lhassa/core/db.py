@@ -1388,6 +1388,25 @@ def _fts_query(query: str) -> str:
     return " ".join(quoted)
 
 
+async def recall_available(instance_id: str) -> bool:
+    """Whether the FTS5 recall index actually exists and is queryable.
+
+    ``search_episodes`` degrades to ``[]`` on ANY failure — the right contract
+    for its machine callers (context layers truncate an empty list and move
+    on), but at the one place the answer reaches the OWNER (``/recall``) an
+    empty list must not silently mean "the index is broken". This probe lets
+    that surface say "recall unavailable" instead of "no matches".
+    """
+    try:
+        async with aiosqlite.connect(DB_PATH) as db:
+            async with db.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='episodes_fts'"
+            ) as cur:
+                return (await cur.fetchone()) is not None
+    except Exception:
+        return False
+
+
 async def search_episodes(instance_id: str, query: str, n: int = 10) -> list[dict]:
     """BM25-ranked full-text search over ``instance_id``'s episode log.
 

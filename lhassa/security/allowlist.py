@@ -197,6 +197,14 @@ def build_allowlist(repos: "set[str] | str | None" = None) -> dict[str, ActionSp
             min_trust=TrustLevel.INTERNO,
             requires_approval=False,
         ),
+        # Read-only conformance pass over the DB + repo state; never an LLM.
+        # Was registered but missing here for months — the parity test in
+        # test_notify_phrasebook.py now makes that drift impossible.
+        "check_integrity": ActionSpec(
+            objetivos=WILDCARD,
+            min_trust=TrustLevel.INTERNO,
+            requires_approval=False,
+        ),
         "research_reply": ActionSpec(
             objetivos=WILDCARD,
             min_trust=TrustLevel.INTERNO,

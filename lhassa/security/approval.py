@@ -218,6 +218,29 @@ async def resolve(
     approved human action earns auto-approval and a denial resets its streak.
     ``by_actor`` is the human who resolved it (recorded for the audit trail).
     """
+    # Proposer ≠ approver, at the GENERAL seam. org/coordinator.py already
+    # enforces this for its own delegate flow, but the generic tipo="task"
+    # approvals — the ones carrying always_approve_actions like run_command —
+    # had no check: any caller reaching the endpoint could self-approve by
+    # naming any by_actor. High-risk only; routine approvals stay one-tap.
+    if approved:
+        try:
+            from lhassa.config import Config as _Cfg
+
+            row = await db.get_approval(instance_id, approval_id)
+            payload = (row or {}).get("payload") or {}
+            accion = str(payload.get("accion") or "")
+            proposer = str(payload.get("actor_id") or "")
+            high_risk = accion in set(getattr(_Cfg, "always_approve_actions", ()) or ())
+            if high_risk and proposer and by_actor and proposer == by_actor:
+                raise RuntimeError(
+                    f"self-approval refused: {by_actor!r} proposed this "
+                    f"high-risk {accion!r} approval and cannot also resolve it"
+                )
+        except RuntimeError:
+            raise
+        except Exception:
+            pass  # the guard must never break ordinary resolution
     ap = await db.get_approval(instance_id, approval_id)
     if not ap:
         raise KeyError(approval_id)

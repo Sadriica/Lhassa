@@ -33,7 +33,7 @@ from lhassa.core.episode import Episode
 from lhassa.harness import runner
 from lhassa.harness.adapter import get_adapter
 from lhassa.llm import router
-from lhassa.llm.gateway import BudgetExceeded
+from lhassa.llm.gateway import BudgetExceeded, KillSwitchActive
 from lhassa.llm.provider import ModelProvider, ProviderNotConfigured
 from lhassa.memory import load as memory_load
 
@@ -309,7 +309,14 @@ async def _judge(
         # budget); on ProviderNotConfigured (or any other failure) the full
         # configured chain is walked, including the cloud gateway.
         attempts: list[tuple] = []
-        if result is None and provider is None:
+        if isinstance(last_exc, KillSwitchActive):
+            # The kill switch is a HARD stop, not a budget signal. It subclasses
+            # BudgetExceeded, so without this branch the CLI fallback below
+            # would still call out to claude/codex/opencode with the switch
+            # engaged — the owner flips a switch expecting silence and the
+            # heartbeat keeps talking. No fallback: degrade to deferred.
+            attempts = []
+        elif result is None and provider is None:
             chain = router.fallback_chain(config, chosen)
             if isinstance(last_exc, BudgetExceeded):
                 chain = [

@@ -780,6 +780,14 @@ async def _cmd_recall(args: str, *, config=None) -> str:
         await _db.init_db()
         rows = await _db.search_episodes(instance_id, text, 5)
         if not rows:
+            # "Nothing matches" and "the index is broken" must not read the
+            # same — search_episodes degrades to [] on any failure, which is
+            # right for its machine callers but dishonest at the owner's door.
+            if not await _db.recall_available(instance_id):
+                return (
+                    "I can't search my memory right now — the recall index is "
+                    "unavailable on this machine."
+                )
             return f"No episodes match {text!r}."
 
         lines = [f"Recall for {text!r} ({len(rows)}):"]
