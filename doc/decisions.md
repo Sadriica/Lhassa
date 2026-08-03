@@ -1,5 +1,44 @@
 # Lhassa — decisions log
 
+## 2026-08-03 — Dos bugs de una máquina que duerme
+
+Investigating repeated notifications surfaced two defects that only appear on a
+laptop — the machine suspended 2684 times in 14 days — and both had been
+invisible because the code LOOKED correct.
+
+**The recurrence slot did not survive suspend.** `core/step.py` re-minted the
+next occurrence with `max(now, old_due + interval)`. The `old_due` anchor is
+right; the `max` destroys it. Suspend past more than one interval and every
+overdue recurring task re-anchors to the WAKE INSTANT instead of its wall-clock
+slot — so an 08:00 digest walked to whenever the lid was opened (observed:
+21:30 → 15:51 → 14:11 → 09:03), and because every overdue task re-anchors to the
+SAME instant, the deliberately-separated 08:00 and 21:00 schedules collapsed onto
+each other and fired as duplicates. The owner had been getting the digest twice,
+seconds apart, every day (09:05:29 + 09:05:19, 14:13:18 + 14:13:12, …).
+Extracted as `next_recurrence_due()`, which advances in WHOLE intervals: 08:00
+stays 08:00 across any downtime, and occurrences missed while suspended stay
+missed rather than replaying as a wake-up notification storm. 7 regression tests.
+The two already-collapsed pending rows were cancelled through
+`db.set_task_state` (not deleted — the table is a record) and the `digest` seed
+re-applied, restoring 08:00 + 21:00; `brain.db` backed up first.
+
+**The inbound poller's backoff could never fire.** `run_forever` had correct
+exponential backoff, but it only ran on exceptions ESCAPING `poll_once` — and
+`poll_once` is defensive: it catches the transport error and returns `offset`
+unchanged, which is byte-identical to a clean idle long-poll. The loop therefore
+could not tell "broken" from "idle" and spun at the speed of the failures:
+~45 `getUpdates` attempts per second with DNS down, burning CPU and battery and
+flooding the journal. Added `poll_cycle()` returning `(next_offset, ok)`;
+`poll_once` stays as the offset-only wrapper so its many existing callers are
+untouched. An idle cycle is explicitly `ok=True` — no updates is not a failure.
+
+Both were found while looking for something else: the owner reported repeated
+"Goal loop … did not verify-pass" notifications. That message has **never been
+emitted on this machine** — zero occurrences in the full user journal (back to
+2025-09-09), zero rows in `loops`, no task carrying `_loop_id`. Its only emitter
+(`core/step.py`) requires a loop row that has never existed. Recorded here as an
+open question rather than a fixed bug: the real text is still unidentified.
+
 ## 2026-08-03 — El tribunal de utilidad: el contrapeso que faltaba
 
 Every invariant Lhassa had was an invariant of RESTRAINT — deny-by-default,
