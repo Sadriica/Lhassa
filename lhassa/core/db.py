@@ -1392,9 +1392,14 @@ async def search_episodes(instance_id: str, query: str, n: int = 10) -> list[dic
 
     Returns up to ``n`` dicts: ``id``, ``despertar_por``, ``decision``, ``accion``,
     a ``resultado`` snippet (via FTS5 ``snippet()``), ``creado_en`` and ``rank``.
-    Automation episodes (``despertar_por`` == ``monitor`` or starting with
-    ``task:``) are ranked BELOW interactive ones for an equally-good match (a
-    CASE-based penalty added to the raw bm25 rank), never hidden. An empty/blank
+    Automation episodes are ranked BELOW interactive ones for an equally-good
+    match (a CASE-based penalty added to the raw bm25 rank), never hidden — the
+    row stays indexed and still wins if it is genuinely the better match. The
+    penalty is GRADED by how much outcome the episode actually carries:
+    ``monitor``, ``task:*`` and the org TRANSPORT hops (``org-deliver`` /
+    ``org-delegate`` — pure movement, no result) take the full 5.0, while
+    ``temple-execute`` takes only 2.0 because that hop ran the action and holds
+    its real ``resultado``. An empty/blank
     ``query`` returns ``[]`` with no query executed. If the FTS5 index is
     missing (older SQLite build), returns ``[]`` (debug-logged) rather than
     raising — recall degrades to "no results", never a crash.
@@ -1412,6 +1417,19 @@ async def search_episodes(instance_id: str, query: str, n: int = 10) -> list[dic
                bm25(episodes_fts) + (CASE
                    WHEN e.despertar_por = 'monitor' THEN 5.0
                    WHEN e.despertar_por LIKE 'task:%' THEN 5.0
+                   -- Org TRANSPORT: the hierarchy's own paperwork. These carry
+                   -- no outcome, only movement ('deliver:lhassa→owner',
+                   -- 'forward:guardian→temple', 'delegate:lhassa→temple→…').
+                   -- They are the single largest source of episodes (227 of 309
+                   -- in one measured week), so leaving them unpenalised let the
+                   -- brain's memory of its own life fill with its own memos.
+                   WHEN e.despertar_por = 'org-deliver' THEN 5.0
+                   WHEN e.despertar_por = 'org-delegate' THEN 5.0
+                   -- Org EXECUTION is penalised more gently: this is the hop
+                   -- that actually ran the action and carries the real
+                   -- resultado ('curate_skills → 3 stale skills archived'), so
+                   -- "what happened with curate_skills?" must still find it.
+                   WHEN e.despertar_por = 'temple-execute' THEN 2.0
                    ELSE 0.0
                END) AS rank
         FROM episodes_fts

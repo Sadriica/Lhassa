@@ -151,6 +151,87 @@ async def test_automation_episodes_are_demoted_not_hidden(tmp_path, monkeypatch)
     assert telegram_idx < task_idx
 
 
+@pytest.mark.asyncio
+async def test_org_transport_hops_are_demoted_below_interactive(tmp_path, monkeypatch):
+    """The hierarchy's own paperwork must not outrank a real conversation.
+
+    org-deliver/org-delegate were the single largest source of episodes (227 of
+    309 in one measured week) and used to compete on equal footing, so the
+    brain's memory of its own life filled with its own memos.
+    """
+    db = await _init_db(tmp_path, monkeypatch)
+    await _make_episode(
+        db, "inst_personal", despertar_por="org-deliver", resultado="quantumfizzle entregado"
+    )
+    await _make_episode(
+        db, "inst_personal", despertar_por="org-delegate", resultado="quantumfizzle delegado"
+    )
+    await _make_episode(
+        db, "inst_personal", despertar_por="telegram", resultado="quantumfizzle preguntado"
+    )
+
+    results = await db.search_episodes("inst_personal", "quantumfizzle", 10)
+    assert len(results) == 3  # demoted, not hidden
+
+    order = [r["despertar_por"] for r in results]
+    assert order.index("telegram") < order.index("org-deliver")
+    assert order.index("telegram") < order.index("org-delegate")
+
+
+@pytest.mark.asyncio
+async def test_org_execution_is_demoted_more_gently_than_transport(tmp_path, monkeypatch):
+    """temple-execute holds the real resultado, so it must outrank pure transport.
+
+    "What happened with curate_skills?" has to find the hop that actually ran it,
+    not the memo that says it was forwarded.
+    """
+    db = await _init_db(tmp_path, monkeypatch)
+    await _make_episode(
+        db, "inst_personal", despertar_por="org-deliver", resultado="quantumfizzle reenviado"
+    )
+    await _make_episode(
+        db, "inst_personal", despertar_por="temple-execute", resultado="quantumfizzle archivado"
+    )
+
+    results = await db.search_episodes("inst_personal", "quantumfizzle", 10)
+    order = [r["despertar_por"] for r in results]
+    assert order.index("temple-execute") < order.index("org-deliver")
+
+
+@pytest.mark.asyncio
+async def test_a_strong_automation_match_still_beats_a_weak_interactive_one(
+    tmp_path, monkeypatch
+):
+    """The penalty is a nudge, not a filter — relevance can still win.
+
+    This needs a REALISTIC corpus to be meaningful. bm25 is scored against
+    corpus statistics: with only two documents its IDF term collapses to ~0, so
+    the flat penalty dominates and the demotion behaves like a filter. Once
+    there is a real body of episodes the scores spread well past the penalty and
+    a strong automation match outranks a weak interactive one, as intended.
+    """
+    db = await _init_db(tmp_path, monkeypatch)
+    for n in range(200):
+        await _make_episode(
+            db,
+            "inst_personal",
+            despertar_por="org-deliver",
+            resultado=f"entrega rutinaria numero {n} sin relacion alguna",
+        )
+    await _make_episode(
+        db, "inst_personal", despertar_por="temple-execute",
+        resultado="quantumfizzle archivado",  # short + on-topic → strong match
+    )
+    await _make_episode(
+        db, "inst_personal", despertar_por="telegram",
+        resultado="quantumfizzle " + "relleno " * 300,  # diluted → weak match
+    )
+
+    results = await db.search_episodes("inst_personal", "quantumfizzle", 10)
+    assert len(results) == 2
+    assert results[0]["despertar_por"] == "temple-execute"
+
+
 # ── hostile query strings ──────────────────────────────────────────────────────
 
 

@@ -116,8 +116,21 @@ last time…" at `$0`, no model call, BM25-ranked.
   query into a safe FTS5 `MATCH` expression (each token individually quoted,
   so stray `AND`/`OR`/parentheses/quotes can never raise a syntax error),
   ranks by `bm25()`, and demotes (never hides) automation-originated episodes
-  (`despertar_por == "monitor"` or `task:*`) so interactive history surfaces
-  first.
+  so interactive history surfaces first. The penalty is **graded by how much
+  outcome the episode carries**, added to the raw bm25 rank:
+
+  | `despertar_por` | penalty | why |
+  |---|---|---|
+  | `monitor`, `task:*` | 5.0 | routine automation |
+  | `org-deliver`, `org-delegate` | 5.0 | pure transport — `deliver:`/`forward:`/`delegate:` hops record movement, not outcome, and are the largest single source of episodes |
+  | `temple-execute` | 2.0 | the hop that actually RAN the action and holds its real `resultado`, so "what happened with `curate_skills`?" still finds it |
+  | everything else | 0.0 | interactive |
+
+  Because the penalty is additive on bm25, at real corpus size a strong
+  automation match still outranks a weak interactive one — a nudge, not a
+  filter. (With only a handful of episodes bm25's IDF term collapses toward 0
+  and the flat penalty dominates instead; the behaviour is a ranking bias, not
+  a guarantee.)
 - **Reachable directly:**
   - Telegram **`/recall <text>`** (`lhassa/notify/commands.py`) — returns the
     top 5 matches, LLM-free.
