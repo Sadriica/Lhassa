@@ -1,5 +1,35 @@
 # Lhassa — decisions log
 
+## 2026-08-03 — El recall deja de recordar su propio papeleo
+
+`db.search_episodes` already demoted automation episodes below interactive ones
+(a flat +5.0 on the bm25 rank for `monitor`/`task:*`) — but that list predates
+the org hierarchy and was never updated. The result: `org-deliver` (152),
+`org-delegate` (38) and `temple-execute` (37) — 227 of one week's 309 episodes —
+competed on equal footing with the owner's actual conversations. Since this same
+function feeds `/recall` AND the lowest-priority context layer in
+`memory/load.py`, the brain's memory of its own life had filled with its own
+memos.
+
+The penalty is now GRADED by how much outcome an episode carries, rather than
+applied flat to everything automated:
+
+- **Transport takes the full 5.0** — `org-deliver`/`org-delegate` record only
+  movement (`deliver:lhassa→owner`, `forward:guardian→temple`,
+  `delegate:lhassa→temple→oracle`). No outcome, no recall value.
+- **Execution takes only 2.0** — `temple-execute` is the hop that actually ran
+  the action and carries the real `resultado` ("curate_skills → 3 stale skills
+  archived"), so "what happened with curate_skills?" must still find it instead
+  of the memo about forwarding it.
+
+Nothing is hidden and nothing is deleted: the rows stay indexed and still win
+when they genuinely match better. Writing the test for that claim corrected it —
+with only two documents bm25's IDF term collapses to ~0 and the flat penalty
+dominates, so the demotion behaves like a filter; it is only at real corpus size
+that scores spread past the penalty and "a nudge, not a filter" is actually
+true. The test now builds a 200-episode corpus so it asserts the real behaviour
+rather than a convenient one, and the caveat is recorded in its docstring.
+
 ## 2026-08-03 — Dos bugs de una máquina que duerme
 
 Investigating repeated notifications surfaced two defects that only appear on a

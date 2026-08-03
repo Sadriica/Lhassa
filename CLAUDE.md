@@ -146,8 +146,16 @@ capabilities` (alias `doctor`) shows everything wired and on/off.
 - **Episodic recall (layer 5, FTS5)** — `core/db.py` keeps an `episodes_fts`
   FTS5 index over the episode log (triggers + backfill in `init_db`; degrades if
   the SQLite build lacks FTS5). `db.search_episodes` is BM25-ranked,
-  hostile-input-safe, and *demotes* (never hides) automation episodes
-  (`monitor`/`task:*`). Surfaced as `GET /api/episodes/search`, the Telegram
+  hostile-input-safe, and *demotes* (never hides) automation episodes with a
+  penalty GRADED by how much outcome the episode carries: full 5.0 for
+  `monitor`, `task:*` and the org TRANSPORT hops (`org-deliver`/`org-delegate` —
+  pure movement, `deliver:`/`forward:`/`delegate:`, and the single largest
+  source of episodes), but only 2.0 for `temple-execute`, the hop that actually
+  RAN the action and holds its real `resultado`, so "what happened with
+  curate_skills?" still finds the answer rather than the memo about forwarding
+  it. The penalty is additive on bm25, so at real corpus size a strong
+  automation match still outranks a weak interactive one — a nudge, not a
+  filter. Surfaced as `GET /api/episodes/search`, the Telegram
   `/recall` command, and the LOWEST-priority context layer in `memory/load.py`
   (fires only when a `query` is given; truncates before everything else) — the
   brain recalls its own past experiences when it thinks, at $0.
