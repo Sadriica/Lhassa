@@ -293,3 +293,141 @@ async def revoice(text: str, *, kind: Optional[str] = None, config=None) -> str:
     except Exception as exc:
         logger.debug(f"notify-voice: persona pass degraded to template: {exc}")
         return templated
+
+
+# ── The phrasebook — deterministic, $0 translation of an action's outcome ──────
+#
+# `template()` frames a notification ("Heads up: …"); it does not TRANSLATE it.
+# So an internal action's own line reached the owner verbatim:
+#
+#     guardian completed check_integrity: fail — 1 critical (run conf_3bc1d93…)
+#
+# Every part of that is machine vocabulary: the action's name, "1 critical", an
+# opaque run id. The phrasebook turns a known action's outcome into a sentence a
+# person can act on, with NO model call.
+#
+# Two rules keep it honest:
+#   * an entry returns ``None`` when it cannot parse its own action's output —
+#     the caller then falls back to the raw line rather than inventing a summary;
+#   * unregistered actions simply have no entry, so nothing changes for them.
+#
+# Add one with @register_phrase("<action>") — a drop-in, like every other
+# registry in the codebase.
+
+PHRASES: "dict[str, Callable[[str], Optional[str]]]" = {}
+
+
+def register_phrase(action: str):
+    """Register the human phrasing for one action's result (decorator)."""
+
+    def _wrap(fn):
+        PHRASES[action] = fn
+        return fn
+
+    return _wrap
+
+
+def phrase(action: str, result: str) -> Optional[str]:
+    """A plain sentence for ``action``'s ``result``, or ``None`` if unknown.
+
+    Never raises: a phrasing that blows up degrades to ``None``, which the
+    caller reads as "say it the old way".
+    """
+    fn = PHRASES.get((action or "").strip())
+    if fn is None:
+        return None
+    try:
+        said = fn(str(result or ""))
+        return said.strip() if said and said.strip() else None
+    except Exception as exc:
+        logger.debug(f"notify-voice: phrase({action!r}) degraded: {exc}")
+        return None
+
+
+def _count(pattern: str, text: str) -> Optional[int]:
+    m = re.search(pattern, text)
+    return int(m.group(1)) if m else None
+
+
+def _plural(n: int, singular: str, plural: Optional[str] = None) -> str:
+    """"1 problem" / "2 problems" — a "(s)" suffix is what machines write."""
+    return f"{n} {singular if n == 1 else (plural or singular + 's')}"
+
+
+@register_phrase("check_integrity")
+def _phrase_check_integrity(result: str) -> Optional[str]:
+    """The owner does not know what a "contract" or a run id is; they know
+    whether something needs their attention, and what to type to see it."""
+    if "every contract passed" in result:
+        return "All my internal checks passed — nothing needs you."
+    critical = _count(r"(\d+) critical", result) or 0
+    warnings = _count(r"(\d+) warning", result) or 0
+    if not critical and not warnings:
+        return None
+    if critical and warnings:
+        what = f"{_plural(critical, 'serious problem')} and {warnings} minor"
+    elif critical:
+        what = _plural(critical, "serious problem")
+    else:
+        what = _plural(warnings, "minor problem")
+    return (
+        f"Something needs a look: {what} in my own internal checks. "
+        "Run `lhassa integrity findings` to see what failed."
+    )
+
+
+@register_phrase("curate_skills")
+def _phrase_curate_skills(result: str) -> Optional[str]:
+    # The action reports verb-first: "checked 12, stale 2, archived 3, …".
+    archived = _count(r"archived (\d+)", result)
+    stale = _count(r"stale (\d+)", result)
+    if archived:
+        return (
+            f"I tidied my skills: {_plural(archived, 'skill')} went unused for months, "
+            f"so I archived {'it' if archived == 1 else 'them'} — nothing was deleted."
+        )
+    if stale is not None and not stale:
+        return "I checked my skills — all still in use, nothing to tidy."
+    return None
+
+
+@register_phrase("review_tools")
+def _phrase_review_tools(result: str) -> Optional[str]:
+    if "none retired" in result:
+        return "I reviewed the tools I wrote myself — all still earning their keep."
+    retired = _count(r"retired (\d+)", result)
+    if retired:
+        return (
+            f"I retired {_plural(retired, 'tool')} I had written myself — "
+            "they stopped being useful."
+        )
+    return None
+
+
+@register_phrase("review_capabilities")
+def _phrase_review_capabilities(result: str) -> Optional[str]:
+    if "no dormant capabilities" in result:
+        return "Everything I can do is still being used."
+    proposed = _count(r"(\d+) proposed", result)
+    if proposed:
+        return (
+            f"I found {_plural(proposed, 'thing')} I can do that nobody uses. "
+            f"I left you a proposal to retire {'it' if proposed == 1 else 'them'} "
+            "— see /approvals."
+        )
+    return None
+
+
+@register_phrase("detect_repetition")
+def _phrase_detect_repetition(result: str) -> Optional[str]:
+    # The action reports "N pattern(s) found, M newly proposed".
+    proposed = _count(r"(\d+) newly proposed", result)
+    if proposed:
+        return (
+            f"I noticed {_plural(proposed, 'thing')} I keep doing over and over, "
+            f"and left you a proposal to make {'it' if proposed == 1 else 'them'} "
+            "automatic — see /approvals."
+        )
+    if proposed == 0:
+        return "I looked for things I repeat too often — nothing new this time."
+    return None

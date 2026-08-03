@@ -525,38 +525,46 @@ async def watch_loop(config: Optional[Config] = None, *, once: bool = False) -> 
                 # The watcher is only the clock/sensor. The work itself follows
                 # Lhassa → temple → guardian, then returns through org.deliver.
                 actionpack.register_all()
-                await temple_run(
+                record = await temple_run(
                     {
                         "action": "check_integrity",
                         "params": {"config": config, "trigger": "watcher"},
                         "config": config,
                         "instruction": "scheduled conformance pass",
                     },
+                    return_record=True,
                 )
                 # Read the structured verdict from the conformance_runs table —
                 # the source of truth — instead of parsing the action's return
-                # string. The action now answers in a sentence, because that
-                # string is ALSO what reaches the owner's screen, and a raw JSON
-                # dump is not a notification.
+                # string (the string is what reaches the owner's screen, and a
+                # raw JSON dump is not a notification). One guard first: when
+                # the action ERRORED, no completed run row was written, so the
+                # latest row is a stale, possibly-green PREVIOUS run — reading
+                # it would mask the failure as a pass. An error therefore
+                # fails closed here and never consults the table.
                 integrity = {
                     "status": "error",
                     "run_id": "unknown",
                     "findings_critical": 1,
                     "findings_warn": 0,
                 }
-                try:
-                    from lhassa.core import db as _db
+                action_errored = "check_integrity: error:" in str(
+                    (record or {}).get("result") or ""
+                )
+                if not action_errored:
+                    try:
+                        from lhassa.core import db as _db
 
-                    row = await _db.latest_conformance_run(config.instance_id)
-                    if row:
-                        integrity = {
-                            "status": str(row.get("status") or "error"),
-                            "run_id": row.get("id") or "unknown",
-                            "findings_critical": int(row.get("findings_critical") or 0),
-                            "findings_warn": int(row.get("findings_warn") or 0),
-                        }
-                except Exception as exc:  # the watcher never crashes on a read
-                    logger.debug(f"watcher: could not read conformance run: {exc}")
+                        row = await _db.latest_conformance_run(config.instance_id)
+                        if row:
+                            integrity = {
+                                "status": str(row.get("status") or "error"),
+                                "run_id": row.get("id") or "unknown",
+                                "findings_critical": int(row.get("findings_critical") or 0),
+                                "findings_warn": int(row.get("findings_warn") or 0),
+                            }
+                    except Exception as exc:  # the watcher never crashes on a read
+                        logger.debug(f"watcher: could not read conformance run: {exc}")
                 _STATE["last_integrity_at"] = now
                 if integrity["status"] != "pass":
                     critical = int(integrity.get("findings_critical") or 0)
