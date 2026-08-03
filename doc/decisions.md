@@ -31,7 +31,7 @@ now answers in a sentence, and `org/watcher.py` reads the structured verdict
 from `conformance_runs` — the source of truth — instead of parsing a return
 string that was never meant for a machine and a person at once.
 
-## 2026-08-03 — El CI de macOS corrige la auditoría que lo precedió
+## 2026-08-03 — macOS CI corrects the audit that preceded it
 
 The first real macOS CI run (triggered by the push to `main`) came back
 **9 failed, 2316 passed** — and its value was not that it found nine failures,
@@ -69,7 +69,7 @@ running on Linux "genuinely cover the macOS branches". They cover the branches
 that were written; they do not cover the assumptions that were never questioned.
 Only the real runner found those.
 
-## 2026-08-03 — AGPL-3.0: soberanía, atribución y la opción comercial
+## 2026-08-03 — AGPL-3.0: sovereignty, attribution, and the commercial option
 
 Lhassa is licensed under **AGPL-3.0-or-later**, with one additional term under
 section 7(b) requiring the attribution notice to stay visible.
@@ -131,7 +131,7 @@ are 134 MIT / 19 ISC / 15 Apache-2.0 / 6 BSD-2 / 3 BSD-3 / 2 MPL-2.0 /
   `curl -o LICENSE https://www.gnu.org/licenses/agpl-3.0.txt`, then re-append
   the section 7 block.
 
-## 2026-08-03 — macOS como tier 2: una capa de host, y una cuarentena que no cede
+## 2026-08-03 — macOS as tier 2: a host layer, and a quarantine that does not yield
 
 The audience for a local-first, open-source brain runs local inference, and that
 audience is largely on Apple Silicon. macOS becomes a **tier-2** platform: the
@@ -184,7 +184,7 @@ regression. **The macOS CI run itself is still outstanding** — GitHub Actions
 only runs on pushed commits and this work is deliberately uncommitted, so the
 matrix is written and validated but its first real result is pending.
 
-## 2026-08-03 — El recall deja de recordar su propio papeleo
+## 2026-08-03 — Recall stops remembering its own paperwork
 
 `db.search_episodes` already demoted automation episodes below interactive ones
 (a flat +5.0 on the bm25 rank for `monitor`/`task:*`) — but that list predates
@@ -214,7 +214,7 @@ that scores spread past the penalty and "a nudge, not a filter" is actually
 true. The test now builds a 200-episode corpus so it asserts the real behaviour
 rather than a convenient one, and the caveat is recorded in its docstring.
 
-## 2026-08-03 — Dos bugs de una máquina que duerme
+## 2026-08-03 — Two bugs of a machine that sleeps
 
 Investigating repeated notifications surfaced two defects that only appear on a
 laptop — the machine suspended 2684 times in 14 days — and both had been
@@ -253,7 +253,7 @@ emitted on this machine** — zero occurrences in the full user journal (back to
 (`core/step.py`) requires a loop row that has never existed. Recorded here as an
 open question rather than a fixed bug: the real text is still unidentified.
 
-## 2026-08-03 — El tribunal de utilidad: el contrapeso que faltaba
+## 2026-08-03 — The utility tribunal: the counterweight that was missing
 
 Every invariant Lhassa had was an invariant of RESTRAINT — deny-by-default,
 signed tasks, quarantine, provenance, integrity contracts. None asked **"is this
