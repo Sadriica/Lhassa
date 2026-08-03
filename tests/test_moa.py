@@ -82,6 +82,13 @@ async def test_fanout_is_honest_and_never_raises(monkeypatch):
         agg_calls["n"] += 1
         raise AssertionError("aggregator should not be reached with <2 answers")
 
+    # Which CLI binaries exist is a property of the HOST, so it is pinned by
+    # injection: this test needs `claude` absent and `codex` present. Leaving it
+    # to shutil.which made the outcome depend on the dev machine — macOS CI,
+    # where neither CLI is installed, caught it.
+    monkeypatch.setattr(
+        moa_mod, "_binary_missing", lambda name, config: name == "claude"
+    )
     monkeypatch.setattr(moa_mod, "get_model_provider", fake_get_model_provider)
     monkeypatch.setattr(moa_mod._router, "pick_provider", fake_pick_provider)
 
@@ -114,6 +121,13 @@ async def test_zero_answers_degrades_honestly(monkeypatch):
     def fake_get_model_provider(config, *, name=None):
         return codex
 
+    # Which CLI binaries exist is a property of the HOST, so it is pinned by
+    # injection: this test needs `claude` absent and `codex` present. Leaving it
+    # to shutil.which made the outcome depend on the dev machine — macOS CI,
+    # where neither CLI is installed, caught it.
+    monkeypatch.setattr(
+        moa_mod, "_binary_missing", lambda name, config: name == "claude"
+    )
     monkeypatch.setattr(moa_mod, "get_model_provider", fake_get_model_provider)
 
     result = await moa(
@@ -140,6 +154,13 @@ async def test_aggregation_synthesizes_and_sums_cost(monkeypatch):
     def fake_pick_provider(*, sensitive, config, hard=False):
         return aggregator
 
+    # Which CLI binaries exist is a property of the HOST, so it is pinned by
+    # injection: this test needs `claude` absent and `codex` present. Leaving it
+    # to shutil.which made the outcome depend on the dev machine — macOS CI,
+    # where neither CLI is installed, caught it.
+    monkeypatch.setattr(
+        moa_mod, "_binary_missing", lambda name, config: name == "claude"
+    )
     monkeypatch.setattr(moa_mod, "get_model_provider", fake_get_model_provider)
     monkeypatch.setattr(moa_mod._router, "pick_provider", fake_pick_provider)
 
@@ -167,6 +188,13 @@ async def test_aggregator_failure_degrades_to_first_panel_answer(monkeypatch):
     def fake_pick_provider(*, sensitive, config, hard=False):
         return aggregator
 
+    # Which CLI binaries exist is a property of the HOST, so it is pinned by
+    # injection: this test needs `claude` absent and `codex` present. Leaving it
+    # to shutil.which made the outcome depend on the dev machine — macOS CI,
+    # where neither CLI is installed, caught it.
+    monkeypatch.setattr(
+        moa_mod, "_binary_missing", lambda name, config: name == "claude"
+    )
     monkeypatch.setattr(moa_mod, "get_model_provider", fake_get_model_provider)
     monkeypatch.setattr(moa_mod._router, "pick_provider", fake_pick_provider)
 

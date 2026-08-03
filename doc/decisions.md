@@ -1,5 +1,43 @@
 # Lhassa — decisions log
 
+## 2026-08-03 — El CI de macOS corrige la auditoría que lo precedió
+
+The first real macOS CI run (triggered by the push to `main`) came back
+**9 failed, 2316 passed** — and its value was not that it found nine failures,
+but that it refuted two things the macOS evaluation had asserted.
+
+**A regression introduced by the platform layer itself.** `check_mem_pressure`
+dispatched to the host layer whenever the platform was not Linux — including
+when the caller had EXPLICITLY passed `meminfo_path`. A test injecting a
+meminfo fixture silently got a `vm_stat` reading instead. That violates the very
+contract the layer was documented as replicating ("pure parser + injected
+input"): a caller naming a file is asking for THAT file, on any platform. Fixed
+so an explicitly injected path always outranks platform dispatch.
+
+**A misclassification in the Phase-1 inventory.** `tools/privileged.py` was
+filed under "(d) strings only — do not touch". It is not: `allowlist()` filters
+its candidates through `shutil.which`, so the set is genuinely smaller on a host
+without systemd or pacman, and three tests asserting a hard-coded
+`{systemctl, journalctl, pacman, power-mode}` failed. The audit looked at the
+health/system surface and concluded there was almost no platform coupling left;
+it had simply not looked here.
+
+The rest were tests encoding the developer's own machine: the desktop-channel
+test expected `notify-send` (correct on Linux, wrong as a universal claim), and
+three `test_moa.py` tests depended on `claude`/`codex` being installed. All are
+now pinned by injection — `LHASSA_PLATFORM`, `_binary_missing`,
+`LHASSA_PRIVILEGED_ALLOW` — so they assert the same thing on any host.
+
+Verification is now run in two modes locally: the normal Linux suite, and one
+with `LHASSA_PLATFORM=darwin` and the CLI binaries stripped from `PATH`, which
+approximates the macOS runner. That second mode immediately caught a test of its
+own that depended on the ambient `LHASSA_PLATFORM`.
+
+**The honest lesson.** The macOS work claimed that injection-parametrised tests
+running on Linux "genuinely cover the macOS branches". They cover the branches
+that were written; they do not cover the assumptions that were never questioned.
+Only the real runner found those.
+
 ## 2026-08-03 — AGPL-3.0: soberanía, atribución y la opción comercial
 
 Lhassa is licensed under **AGPL-3.0-or-later**, with one additional term under

@@ -346,7 +346,7 @@ def meminfo_usage(fields: dict[str, int]) -> dict[str, float]:
 
 
 def check_mem_pressure(
-    meminfo_path: str | Path = "/proc/meminfo",
+    meminfo_path: str | Path | None = None,
     threshold: float = 90.0,
     swap_threshold: float = 50.0,
 ) -> dict:
@@ -361,7 +361,12 @@ def check_mem_pressure(
     """
     from lhassa.host import current_platform_name, get_platform
 
-    if current_platform_name() != "linux":
+    # An EXPLICITLY injected path always wins over platform dispatch. That is
+    # the point of the injected-path pattern: a caller (or a test) naming a
+    # meminfo file is asking for THAT file to be parsed, on any platform.
+    # Consulting the host layer regardless would silently ignore the argument —
+    # exactly the regression macOS CI caught.
+    if meminfo_path is None and current_platform_name() != "linux":
         plat = get_platform()
         reading = plat.memory() if plat is not None else None
         if reading is None:
@@ -387,7 +392,7 @@ def check_mem_pressure(
             },
         )
 
-    path = Path(meminfo_path)
+    path = Path(meminfo_path if meminfo_path is not None else "/proc/meminfo")
     try:
         text = path.read_text()
     except OSError as exc:
