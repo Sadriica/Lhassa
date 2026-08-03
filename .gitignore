@@ -21,6 +21,11 @@ ms_token_cache.json
 dashboard/node_modules/
 dashboard/dist/
 
+# Node / public site — build artifacts, never versioned. These were tracked by
+# mistake (163 MB, ~8.3k files of third-party packages); run `pnpm install` in
+# site/ to restore them.
+site/node_modules/
+
 # Playwright (e2e) artifacts
 dashboard/test-results/
 dashboard/playwright-report/
