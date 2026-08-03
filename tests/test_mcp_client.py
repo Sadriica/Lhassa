@@ -15,6 +15,23 @@ import pytest_asyncio  # noqa: F401
 from lhassa.tools import mcp_client as mc
 
 
+def _pipecat_available() -> bool:
+    """Whether ``FunctionSchema`` can be imported.
+
+    ``mcp_client._build_schema`` imports pipecat LAZILY and returns ``None``
+    when it is absent — the module is deliberately usable without the voice
+    extra (``lhassa mcp list`` must work on a headless install). A test that
+    asserts a schema unconditionally therefore encodes a dependency the code
+    explicitly does not have, and fails on any base-deps environment while
+    passing on a dev machine that happens to have pipecat installed.
+    """
+    try:
+        from pipecat.adapters.schemas.function_schema import FunctionSchema  # noqa: F401
+    except Exception:
+        return False
+    return True
+
+
 # ── fakes ───────────────────────────────────────────────────────────────────────
 
 class FakeTool:
@@ -100,11 +117,15 @@ async def test_load_mcp_tools_namespaces(tmp_path, monkeypatch):
     tools = await mc.load_mcp_tools(path=path)
     names = {t["name"] for t in tools}
     assert names == {"mcp__files__read", "mcp__files__write"}
-    # schema is built and namespaced too
     read = next(t for t in tools if t["name"] == "mcp__files__read")
-    assert read["schema"] is not None
-    assert read["schema"].name == "mcp__files__read"
+    # Namespacing is this test's actual subject — always asserted.
     assert read["server"] == "files" and read["tool"] == "read"
+    # The pipecat schema is OPTIONAL by design (see _pipecat_available).
+    if _pipecat_available():
+        assert read["schema"] is not None
+        assert read["schema"].name == "mcp__files__read"
+    else:
+        assert read["schema"] is None
 
 
 @pytest.mark.asyncio
