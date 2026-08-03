@@ -1971,101 +1971,57 @@ def _calendar_sync_reply(summary: str) -> str:
     )
 
 
-async def _run_idea_flow(idea: str, *, config) -> None:
-    """Run the idea-intake flow and deliver the draft UP the hierarchy. Never raises.
-
-    The whole loop is the standing principle made research: the flow runs
-    through :func:`lhassa.org.delegate.delegate_flow` (Lhassa → geshe's aides),
-    the synthesized draft lands in ``doc/notes/drafts/`` behind the
-    review-before-publishing header, and the owner is told via
-    :func:`lhassa.org.deliver.deliver` with the geshe as origin — never a
-    surface-direct send.
-    """
-    import re as _re
-
-    try:
-        from lhassa.actionpack._research_note import _DRAFT_HEADER, _drafts_dir
-        from lhassa.flows.store import FlowStore
-        from lhassa.org.delegate import delegate_flow
-        from lhassa.org.deliver import deliver
-
-        cfg = _config(config)
-        flow_id = getattr(cfg, "research_flow_id", None) or "flow-research-intake"
-        flow = FlowStore(cfg).get(flow_id)
-        if flow is None:
-            await deliver(
-                "I can't investigate that yet — the research flow isn't seeded "
-                "(run: lhassa seed apply research).",
-                kind="action-result", origin_department="geshe", config=cfg,
-            )
-            return
-        record = await delegate_flow(flow, inputs={"summary": idea}, config=cfg)
-
-        draft_text = ""
-        for step in (record or {}).get("steps", []) or []:
-            if step.get("kind") == "output":
-                payload = step.get("payload") or step.get("output") or ""
-                if isinstance(payload, dict):
-                    payload = payload.get("summary") or payload.get("output") or ""
-                draft_text = str(payload).strip()
-        if not draft_text:
-            # Relay the last aide's words instead of a mute failure (the same
-            # lesson the CV flow taught: hiding the team's ask wastes the run).
-            last = ""
-            for step in reversed((record or {}).get("steps", []) or []):
-                if step.get("kind") == "task":
-                    out = step.get("output")
-                    if isinstance(out, dict):
-                        out = out.get("summary") or ""
-                    last = str(out or "").strip()
-                    if last:
-                        break
-            await deliver(
-                "The idea intake didn't reach a draft — the team said:\n\n"
-                + (last[:500] or "(no output recorded)"),
-                kind="action-result", origin_department="geshe", config=cfg,
-            )
-            return
-
-        slug = _re.sub(r"[^a-z0-9]+", "-", idea.lower()).strip("-")[:60] or "idea"
-        drafts = _drafts_dir(cfg)
-        drafts.mkdir(parents=True, exist_ok=True)
-        path = drafts / f"idea-{slug}.md"
-        path.write_text(
-            f"{_DRAFT_HEADER}\n<!-- idea intake via /idea | flow: {flow_id} -->\n\n"
-            f"{draft_text}\n",
-            encoding="utf-8",
-        )
-        await deliver(
-            f"Idea investigated — corpus-style draft at {path} (review before "
-            "publishing; promote it into research/ if it holds).",
-            kind="action-result", origin_department="geshe", config=cfg,
-        )
-    except Exception as exc:
-        logger.warning(f"commands: /idea flow failed: {exc}")
-
-
 @register_command("idea")
 async def _cmd_idea(args: str, *, config=None) -> str:
     """``/idea <text or link>`` — hand an idea to the geshe's aid department.
 
-    Runs the idea-intake flow (collector → analyst → skeptic → synthesist,
-    structure-gated) in the background; the draft is delivered when ready.
+    Persists a signed ``research_intake`` task before acknowledging it.  The
+    immediate runner is only an optimization; the heartbeat owns retries.
     """
     idea = (args or "").strip()
     if not idea:
         return (
-            "Usage: /idea <the idea, claim or link> — the geshe's aides will "
-            "capture its sources, analyze it down to the base, verify the "
-            "claims and synthesize a corpus draft."
+            "Usage: /idea <the idea, claim or link> — first I'll capture its "
+            "sources and evaluate its theory, value, evidence and testability. "
+            "Only ideas that earn applied/rigorous investment continue into a "
+            "full corpus."
         )
-    import asyncio as _asyncio
+    try:
+        import asyncio as _asyncio
+        from datetime import datetime as _datetime, timezone as _timezone
 
-    _asyncio.create_task(_run_idea_flow(idea, config=config))
+        from lhassa.core import dispatch as _dispatch
+        from lhassa.security.trust import Origin as _Origin, TrustLevel as _TrustLevel
+
+        cfg = _config(config)
+        instance_id = getattr(cfg, "instance_id", None) or "inst_personal"
+        params = {"idea": idea}
+        task_id, estado = await _dispatch.mint_task(
+            instance_id,
+            "research_intake",
+            params=params,
+            origin=_Origin(trust=_TrustLevel.HUMANO, actor_id="telegram"),
+            due_at=_datetime.now(_timezone.utc).isoformat(),
+        )
+        if not task_id:
+            return "I couldn't persist that investigation just now. Try /idea again."
+        if estado == "pendiente":
+            _asyncio.create_task(
+                _dispatch.run_task_now(
+                    instance_id,
+                    task_id,
+                    "research_intake",
+                    params,
+                    despertar_por="telegram",
+                )
+            )
+    except Exception as exc:
+        logger.warning(f"commands: /idea mint failed: {exc}")
+        return "I couldn't persist that investigation just now. Try /idea again."
     return (
-        "🧭 Handing it to the geshe's aides (capture → analyze → verify → "
-        "synthesize). The draft arrives when the gate passes — this takes a "
-        "few minutes."
+        "🧭 Idea queued durably for the geshe's aides: source custody → "
+        "theory/rubric screening → investment decision. Every stage is logged; "
+        "only worthwhile ideas continue into full research and a versioned corpus."
     )
 
 

@@ -1,5 +1,129 @@
 # Lhassa — decisions log
 
+## 2026-07-30 — Integrity Watcher: la filosofía se convierte en contratos
+
+The existing monitor could see health/failure transitions but could not prove
+that a functioning system still respected Witara/Lhassa. Added a second,
+deterministic plane:
+
+- `org/integrity.py` defines manifest v1: DB schema, research event continuity
+  and earned investment, artifact presence, canonical research flows, product
+  adoption/approval chain, enforceable quarantine and approval age.
+- Migration 10 persists every run, check and finding append-only, plus a small
+  per-contract current projection. A warning is not green; only a completely
+  passing current manifest issues a time-bounded attestation.
+- The ordinary `$0` watcher runs integrity on a separate hourly cadence and
+  converts non-pass results into normal monitor events/alerts. Attestation
+  expiry observes the observer without a second daemon.
+- Product `apply-change` now fails closed unless the current manifest has a
+  fresh green attestation. This gives contracts authority only over the
+  dangerous transition they govern; routine/read-only operation stays
+  available.
+- Surfaces: `lhassa integrity contracts|check|status|findings`,
+  `/api/integrity`, `/api/integrity/check`, `/api/integrity/findings`, and the
+  overview's Integrity line.
+
+The guardian records and routes remediation but does not silently repair or
+weaken a contract. Thinking remains the exception: no integrity check calls an
+LLM.
+
+Implementation verification: 383 focused DB/flow/research/product/integrity/
+watcher/API/CLI/architecture tests pass; ruff and `git diff --check` are clean.
+
+## 2026-07-30 — Las ideas ahora se ganan su presupuesto de investigación
+
+The owner asked to reserve academic effort for technologies worth pursuing and
+made complete stage logs non-negotiable. `/idea` is now a durable funnel before
+it is a corpus factory:
+
+- A new two-brain assessment flow reconstructs the theoretical mechanism first,
+  then has the skeptic score nine criteria with rationales and custody source
+  ids. An `idea_assessment` verifier rejects incomplete rubrics and unsupported
+  positive theory/evidence claims.
+- The model does not decide investment. `core/idea_assessments.py` validates
+  against the real custody source registry, recomputes the weighted score and
+  deterministically routes `none→archive`, `exploration→watch`,
+  `applied→research`, or `rigorous→experiment`.
+- Migration 9 adds `idea_assessments`, the current query projection, and
+  `idea_assessment_events`, the append-only audit source. Creation and every
+  transition atomically append an event and update the projection. Evidence,
+  assessments and completed corpora are also registered artifacts.
+- Only `research`/`experiment` dispositions commission the existing full
+  collector→analyst→skeptic→synthesist corpus. Replays key on the evidence
+  digest and resume by state instead of duplicating history.
+- The funnel is visible through `lhassa research assessments`,
+  `lhassa research assessment <id>` and read-only
+  `/api/research/assessments[/{id}]`.
+
+## 2026-07-30 — Del corpus al producto: adopción, no auto-modificación
+
+Research may now lead to implementation without acquiring authority over the
+product. The boundary is encoded in `agents/product_change.py` and the
+`lhassa research propose-change/build-change/apply-change` commands:
+
+- A proposal accepts only an active `code` project and a corpus draft that
+  passes the LLM-free `research_corpus` gate. It freezes the source path and
+  SHA-256, records an append-only artifact snapshot, and parks an experiment
+  approval. No worktree or product change exists at proposal time.
+- The approved experiment runs from a git worktree under
+  `LHASSA_ADOPTION_DIR`, outside the product checkout. Its acceptance command
+  crosses the existing quarantine with a scrubbed environment; best-effort
+  (`isolation=none`) is insufficient and fails closed.
+- A passing gate produces an immutable candidate commit plus patch artifact,
+  then parks a *different* integration approval. Approval to learn is not
+  approval to ship.
+- Integration rechecks the approval/candidate pair, source and candidate
+  immutability, clean product checkout, and unchanged base commit. It creates a
+  merge commit and records an exact `git revert` rollback operation. Drift,
+  owner edits, missing isolation, failed verification, or absent approvals
+  stop the transition without merging.
+
+Verification at close: 85 research/approval/architecture/CLI tests and 258
+actionpack/dispatch/command/code/quarantine/versioning/gate tests pass; ruff and
+`git diff --check` are clean.
+
+## 2026-07-30 (post-review) — La investigación deja de ser ceremonia
+
+Owner approved a critical review of the new research line and asked to close
+every gap it identified. The philosophy stays; its claims are now enforced:
+
+- **Evidence before prose** — `agents/research_evidence.py` builds a bounded
+  MUNDO-trust custody bundle before the first aide thinks: explicit URLs or
+  Brave/DDG discovery, SSRF-checked manual redirects, HTTP/failure status,
+  requested/final URL, timestamp, content hash, visible text and a capped chase
+  of likely-primary nested resources. Search snippets are discovery, never
+  proof. `S1…Sn` ids are stable inside the bundle.
+- **No lossy telephone chain** — flow tasks opt into `input_mode=full` +
+  `preserve_context`; every aide sees the original bundle and every previous
+  stage in one flat dossier. The skeptic's prompt audits captured fragments,
+  not the analyst's confidence.
+- **A real árbitro** — the regex that only looked for `## Open questions` was
+  replaced by the LLM-free `research_corpus` verifier: seven sections exactly
+  once/in order, declared source ids, no unknown citations, every authors'
+  evidence bullet cited or `UNVERIFIED`, and Baseline/Instrument/Metric/Stop
+  rule required. It also rejects a small mechanical hype/slop vocabulary.
+- **Durable + content-addressed `/idea`** — the command first mints a signed
+  HUMANO `research_intake` task; `run_task_now` is merely the early heartbeat,
+  so a restart cannot erase the promise. Evidence and draft filenames carry
+  the bundle digest; the durable flow uses that digest as idempotency key, so
+  retries do not overwrite research history.
+- **Topic-scoped internal evidence** — research-note packs now filter bench,
+  episode and loop rows by topic, preserve row ids, apply the declared seven-day
+  episode window, and label global ledger/approval readings as operational
+  context rather than topic evidence.
+- **The first draft exposed the need** — `earned-autonomy.md` says cost fields
+  were redacted although its verbatim appendix contains them. That contradicts
+  the pack and proves a prompt is not a verifier; the draft remains explicitly
+  review-only rather than being rewritten as if the failure never happened.
+
+Offline verification at implementation close: 192 focused research/security/
+actionpack/architecture tests green; ruff and `git diff --check` clean. The full
+suite reaches 43% with no failure, then order-dependently hangs at
+`test_turn_cap_stops_before_any_model_call`; that file and its neighboring
+files pass in isolation, so the hang is recorded as pre-existing suite-state
+debt rather than disguised as a green full-suite result.
+
+
 ## 2026-07-30 (final) — El departamento del geshe: los aides + la puerta /idea
 
 Owner asked whether the geshe's SUPPORT department existed — it didn't (the

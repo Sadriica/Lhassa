@@ -6,6 +6,7 @@ valuable); the draft header demands review; never raises.
 """
 
 import asyncio
+from datetime import datetime, timezone
 from types import SimpleNamespace
 
 import pytest
@@ -36,15 +37,22 @@ def _cfg(tmp_path):
 def test_evidence_pack_carries_provenance(brain, tmp_path):
     db = brain
     asyncio.run(db.insert_bench_run({
-        "id": "b1", "instance_id": "inst_personal", "fixture_id": "fx",
-        "subject": "default", "passed": True, "metric": 1.0,
-        "cost_usd": 0.0001, "created_at": "2026-07-30T00:00:00+00:00",
+        "id": "b1", "instance_id": "inst_personal", "fixture_id": "earned_autonomy",
+        "subject": "autonomy-route", "passed": True, "metric": 1.0,
+        "cost_usd": 0.0001, "created_at": datetime.now(timezone.utc).isoformat(),
+    }))
+    asyncio.run(db.insert_bench_run({
+        "id": "b2", "instance_id": "inst_personal", "fixture_id": "unrelated",
+        "subject": "weather", "passed": True, "metric": 1.0,
+        "cost_usd": 0.0001, "created_at": datetime.now(timezone.utc).isoformat(),
     }))
     pack = asyncio.run(gather_evidence("earned autonomy", _cfg(tmp_path)))
     assert pack["topic"] == "earned autonomy"
     assert any("bench_runs" in s for s in pack["sources"])
-    assert pack["bench_runs"][0]["subject"] == "default"
+    assert [row["id"] for row in pack["bench_runs"]] == ["b1"]
+    assert pack["scope"]["episode_window_days"] == 7
     assert "episodes_window" in pack
+    assert "ledger_today" in pack["operational_context"]
 
 
 def test_draft_with_stub_model_writes_note_plus_appendix(brain, tmp_path):

@@ -118,11 +118,13 @@ from lhassa.api import (  # noqa: E402
     fleet_routes,
     flow_run_routes,
     flow_routes,
+    integrity_routes,
     llm_routes,
     memory_routes,
     org_routes,
     overview_routes,
     project_routes,
+    research_routes,
     relationship_routes,
     reports_routes,
     runtime_routes,
@@ -141,6 +143,7 @@ app.include_router(code_routes.router)
 app.include_router(relationship_routes.router)
 app.include_router(flow_routes.router)
 app.include_router(flow_run_routes.router)
+app.include_router(integrity_routes.router)
 app.include_router(runtime_routes.router)
 app.include_router(llm_routes.router)
 app.include_router(approval_routes.router)
@@ -157,6 +160,7 @@ app.include_router(overview_routes.router)
 app.include_router(artifacts_routes.router)
 app.include_router(calendar_routes.router)
 app.include_router(project_routes.router)
+app.include_router(research_routes.router)
 
 
 # ── WebSocket ──────────────────────────────────────────────────────────────────

@@ -193,6 +193,11 @@ def build_allowlist(repos: "set[str] | str | None" = None) -> dict[str, ActionSp
             min_trust=TrustLevel.INTERNO,
             requires_approval=False,  # read-only web search + a chat message
         ),
+        "research_intake": ActionSpec(
+            objetivos=WILDCARD,
+            min_trust=TrustLevel.HUMANO,
+            requires_approval=False,  # explicit /idea: source reads + review-only draft
+        ),
         "send_reminder": ActionSpec(
             objetivos=WILDCARD,
             min_trust=TrustLevel.INTERNO,

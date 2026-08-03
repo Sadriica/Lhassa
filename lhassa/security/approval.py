@@ -391,6 +391,27 @@ def describe(row: dict) -> dict:
                 "title": f"Run a coding agent: {preview}",
                 "detail": f"{cli} · {cwd} · write access to your files — approving launches it",
             }
+        if tipo == "product_change_experiment":
+            project = payload.get("project") or payload.get("project_id") or "?"
+            objective = str(payload.get("objective") or "?")
+            return {
+                "title": f"Experiment with a researched change in '{project}'",
+                "detail": (
+                    f"{objective[:100]} · external worktree only · approving does "
+                    "not merge anything"
+                ),
+            }
+        if tipo == "product_change_integration":
+            project = payload.get("project") or payload.get("project_id") or "?"
+            objective = str(payload.get("objective") or "?")
+            isolation = (payload.get("verification") or {}).get("isolation") or "?"
+            return {
+                "title": f"Integrate verified change into '{project}'",
+                "detail": (
+                    f"{objective[:100]} · gate passed in {isolation} · this approval "
+                    "is distinct from permission to experiment"
+                ),
+            }
         if tipo == "flow_gate":
             node = payload.get("node") or "?"
             return {

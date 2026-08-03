@@ -22,20 +22,59 @@ the corpus it feeds is [this folder](README.md).
 4. **One open front per theme.** A theme (loops, graph, memory…) carries at
    most one active experiment at a time; depth beats breadth.
 
+### The investment gate
+
+Full research effort is earned. Before the corpus, the analyst reconstructs
+the theoretical mechanism and assumptions from captured sources; the skeptic
+then fills the complete nine-criterion rubric. Scores use four deliberately
+coarse levels—0 absent/contradicted, 1 weak, 2 credible, 3 strong—so the number
+does not impersonate scientific precision. Every value keeps its rationale and
+source ids.
+
+The model never assigns its own budget. The LLM-free
+`core.idea_assessments.score_document` recomputes the weighted score, applies
+hard rejects, and chooses:
+
+- `none → archive`: retain the negative result; no further spend.
+- `exploration → watch`: theory brief only; revisit on new evidence.
+- `applied → research`: build the full corpus and applied protocol.
+- `rigorous → experiment`: fund the strongest reproducible protocol.
+
+The decision and every transition are logged in the grande before the next
+stage starts. The mutable projection is not the history:
+`idea_assessment_events` is append-only and reconstructs the complete funnel.
+
 ## How we BUILD (the shape of an investigation)
 
 Every investigation walks the same path, and each step leaves an artifact:
 
 | Step | Artifact | Where |
 |---|---|---|
-| 1. Capture the sources, down to the base | corpus document (7 fixed sections) | `research/<topic>.md` |
+| 0. Freeze what we actually inspected | source-custody bundle: requested/final URL, capture time/status, hash, bounded text, nested provenance | `doc/notes/drafts/idea-*.evidence.json` via `/idea` |
+| 0b. Earn the investment | theory brief + nine-criterion assessment + deterministic disposition | `idea_assessments` + append-only `idea_assessment_events` + `.assessment.json` |
+| 1. Capture the claims, down to the base | corpus document (7 fixed sections) whose `[S#]` ids resolve to that bundle | `research/<topic>.md` |
 | 2. Design the comprobación | the experiment in section 6 of the corpus doc, made concrete (baseline, instrument, metric, stop rule) | same doc, updated |
-| 3. Run it on OUR instruments | bench_runs / ledger / episodes rows | the grande |
-| 4. Draft the note from evidence | evidence-cited draft | `doc/notes/drafts/` via `lhassa research draft` |
+| 3. Run it on OUR instruments | topic-scoped bench_runs / ledger / episodes rows, with row ids and time window | the grande |
+| 4. Draft the note from evidence | evidence-cited draft + verbatim pack | `doc/notes/drafts/` via `lhassa research draft` |
 | 5. Owner review → publish | the public note, bilingual | the site (owner's act) |
 
 A step may end the investigation honestly ("the data does not support
 adoption") — a negative result is a result and may still become a note.
+
+### The custody rule
+
+A URL is not evidence that it was read. Search snippets are discovery metadata,
+not support. Before a research brain writes, `/idea` captures the bytes it could
+reach and assigns immutable `S1…Sn` ids; redirects are checked at every hop,
+failures/paywalls remain explicit, and likely-primary nested resources are chased
+under a hard cap. The bundle is MUNDO-trust and content-addressed. Its SHA-256
+versions the durable flow run and the draft, so a retry cannot silently replace
+the record an earlier conclusion used.
+
+Every later brain receives the whole dossier plus every prior stage. The skeptic
+audits captured fragments, not the analyst's confidence, and emits
+`claim → fragment/source → SUPPORTED/PARTIAL/UNVERIFIED`. This establishes
+traceability, not truth: only step 3 can turn an external claim into OUR result.
 
 ## How we WRITE (the voice of a research artifact)
 
@@ -70,7 +109,10 @@ The next measurement worth taking.
 ```
 
 **Corpus document** (`research/<topic>.md`): the seven fixed sections — see
-[README.md](README.md).
+[README.md](README.md). Its LLM-free `research_corpus` gate requires every
+section exactly once and in order, declared source ids, `[S#]` on evidence
+bullets (or `UNVERIFIED`), no citations to undeclared ids, and a section-6
+experiment that explicitly names Baseline / Instrument / Metric / Stop rule.
 
 **Experiment log** (inside the corpus doc's section 6 when an experiment
 runs):
@@ -91,7 +133,9 @@ Result: <numbers, with rows/ids>  ·  Verdict: <adopt / reject / inconclusive>
   `skeptic` (claims vs sources, theirs-vs-ours, attribution chains — the doer
   never judges, so verification is its own brain) → `synthesist` (the
   seven-section corpus draft), behind an objective structure gate. The door
-  is `/idea <text or link>` from chat.
+  is `/idea <text or link>` from chat. The door first mints a signed,
+  HUMANO-origin `research_intake` task; the immediate run is only an
+  optimization and the heartbeat can retry it after a restart.
 - **The owner** decides publication — a draft NEVER ships without review
   (the draft header says so), and adoption decisions stay with the human.
 - **The scribe** keeps the repo docs in sync AFTER an adoption; the guardian
@@ -103,3 +147,12 @@ Result: <numbers, with rows/ids>  ·  Verdict: <adopt / reject / inconclusive>
 The method is itself subject to the method: when a step repeatedly fails or
 produces slop, that is an instrument signal — the geshe revises this file and
 the revision is logged in `doc/decisions.md` like any other decision.
+
+## Adoption into the product
+
+A completed corpus does not mutate product code. A proposed implementation must
+cross the product-change protocol: a first human approval permits an experiment
+in an external worktree; an objective verifier runs in the safe place; a second,
+independent human approval permits integration. Failed or unisolated experiments
+remain artifacts and never reach the product. Integration records a merge commit
+and an exact rollback operation.

@@ -101,6 +101,24 @@ async def _overview_health() -> dict:
     return {"worst_level": digest.get("worst_level"), "ok": digest.get("ok")}
 
 
+async def _overview_integrity() -> dict:
+    """Latest executable-contract status and fresh-attestation verdict."""
+    from lhassa.core.conformance import attestation
+
+    await db.init_db()
+    verdict = await attestation(lhassa_config.Config.instance_id)
+    run = verdict.get("run") or {}
+    return {
+        "valid": verdict["valid"],
+        "reason": verdict["reason"],
+        "status": run.get("status"),
+        "run_id": run.get("id"),
+        "attestation_expires_at": run.get("attestation_expires_at"),
+        "findings_warn": run.get("findings_warn", 0),
+        "findings_critical": run.get("findings_critical", 0),
+    }
+
+
 async def _overview_activity() -> dict:
     """The last few episodes — what the brain has been doing, newest first."""
     await db.init_db()
@@ -250,6 +268,7 @@ _OVERVIEW_SECTIONS = {
     "approvals": _overview_approvals,
     "cost": _overview_cost,
     "health": _overview_health,
+    "integrity": _overview_integrity,
     "activity": _overview_activity,
     "tools": _overview_tools,
     "now_running": _overview_now_running,
@@ -270,6 +289,15 @@ _OVERVIEW_DEFAULTS: dict[str, object] = {
         "kill_switch": False,
     },
     "health": {"worst_level": "info", "ok": True},
+    "integrity": {
+        "valid": False,
+        "reason": "unavailable",
+        "status": None,
+        "run_id": None,
+        "attestation_expires_at": None,
+        "findings_warn": 0,
+        "findings_critical": 0,
+    },
     "activity": {"recent": [], "total": 0, "last_24h": 0, "recent_limit": 8, "window": "24h"},
     "tools": {"count": 0, "by_estado": {}},
     "now_running": [],

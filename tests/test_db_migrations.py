@@ -25,7 +25,18 @@ async def test_fresh_install_is_stamped_and_includes_knowledge(tmp_path, monkeyp
             "SELECT name FROM sqlite_master WHERE type='table'"
         ) as cur:
             tables = {row[0] for row in await cur.fetchall()}
-    assert {"episodes", "tasks", "facts", "knowledge"}.issubset(tables)
+    assert {
+        "episodes",
+        "tasks",
+        "facts",
+        "knowledge",
+        "idea_assessments",
+        "idea_assessment_events",
+        "conformance_runs",
+        "conformance_checks",
+        "conformance_findings",
+        "conformance_state",
+    }.issubset(tables)
 
     await db.init_db()
     async with aiosqlite.connect(db.DB_PATH) as conn:

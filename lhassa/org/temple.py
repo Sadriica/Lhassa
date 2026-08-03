@@ -5,14 +5,14 @@ is the UP-hop mirror for a *work product*. This module wires the SAME two seams
 together end to end for Lhassa's INTERNAL functions — docs, internal creation
 (tools/skills/flows authoring, the consciousness proposals), synchronization
 (repo/calendar/memory), and self-maintenance (curate/review/detect_repetition/
-distill) — through the ``temple`` department (Lhassa's inner temple, distinct
+distill/check_integrity) — through the ``temple`` department (Lhassa's inner temple, distinct
 from ``interns``/``personal``, see :mod:`lhassa.seeds.temple`).
 
 **The monks.** ``temple`` has five leaf worker brains under it (created by
 :mod:`lhassa.seeds.temple`), each OWNING a sub-domain: ``scribe`` (docs),
 ``artificer`` (internal creation — tools/skills/flows authoring), ``synchronizer``
 (sync — repo/calendar/memory), ``guardian`` (self-maintenance — curate/review/
-distill) and ``oracle`` (the consciousness — repetition detection, self-routing
+distill/conformance) and ``oracle`` (the consciousness — repetition detection, self-routing
 proposals). :data:`ACTION_OWNERS` maps each of the five deterministic maintenance
 actions to the monk that owns it; an unmapped action (or a topology missing the
 resolved worker) falls back to ``temple`` itself — the department never fails to
@@ -100,6 +100,9 @@ GESHE_AIDES: tuple[str, ...] = ("collector", "analyst", "skeptic", "synthesist")
 #: from the topology) falls back to ``temple`` itself — the department.
 ACTION_OWNERS: dict[str, str] = {
     "distill_memory": GUARDIAN,
+    # The watcher only provides cadence. Guardian owns the deterministic
+    # conformance pass and reports its result through temple to Lhassa.
+    "check_integrity": GUARDIAN,
     # The knowledge graph is stored signal turned durable structure — the
     # guardian's domain, like distill_memory.
     "kg_sync": GUARDIAN,

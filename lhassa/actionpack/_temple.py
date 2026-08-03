@@ -1,8 +1,8 @@
 """temple_run — the fixed action that routes internal hygiene work THROUGH temple.
 
-Seven deterministic actions (``distill_memory``, ``detect_repetition``,
-``review_tools``, ``curate_skills``, ``calendar_sync``, ``derive_world_facts``,
-``ingest_knowledge``) used to run bare on the heartbeat — a task minted with the action's own name,
+Deterministic actions such as ``distill_memory``, ``check_integrity`` and
+``curate_skills`` must not run as organizational orphans. Historical
+maintenance actions used to run bare on the heartbeat — a task minted with the action's own name,
 dispatched straight to ``core.actions.run`` with no org attribution. This
 module is the OTHER end of
 the down-execute-up seam :mod:`lhassa.org.temple` implements: ``temple_run`` is
@@ -36,11 +36,12 @@ TEMPLE_ACTIONS: frozenset[str] = frozenset(
         "kg_resolve",
         "draft_research_note",
         "apply_feedback",
+        "check_integrity",
     }
 )
 
 
-async def temple_run(params: dict) -> str:
+async def temple_run(params: dict, *, return_record: bool = False) -> str | dict:
     """Delegate one internal action to temple: down-hop, execute, deliver up.
 
     params:
@@ -50,6 +51,10 @@ async def temple_run(params: dict) -> str:
                                     down-hop episode (defaults to a generic
                                     "<action> maintenance pass").
         config                   — optional Config override (tests).
+        return_record            — internal caller seam: return the complete
+                                   down-execute-up record instead of its short
+                                   task-facing string. Fixed-action dispatch
+                                   never sets this.
 
     Never raises — any failure degrades to an explanatory string, matching
     every other action in this package.
@@ -72,6 +77,8 @@ async def temple_run(params: dict) -> str:
         record = await delegate_internal(
             action, inner_params, config=config, instruction=instruction
         )
+        if return_record:
+            return record
         result = record.get("result")
         delivered = record.get("delivered")
         return f"temple_run: {action} → {str(result)[:300]} (delivered={delivered})"

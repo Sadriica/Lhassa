@@ -10,19 +10,23 @@ already the value). Drafts land in ``doc/notes/drafts/<slug>.md`` with a
 review-before-publishing header — a draft is NEVER published by the brain.
 
 Deliberate, not scheduled: a note is an act, not a cadence — the doors are the
-CLI (``lhassa research draft``) and the temple. Owned by the SCRIBE monk.
+CLI (``lhassa research draft``) and the temple. Owned by the GESHE monk.
 """
 
 from __future__ import annotations
 
 import re
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 _MAX_DECISION_EXCERPTS = 6
 _MAX_BENCH_ROWS = 20
 _MAX_EPISODE_WINDOW_DAYS = 7
 _DRAFT_HEADER = "<!-- draft: evidence-cited, review before publishing -->"
+_TOPIC_STOPWORDS = {
+    "about", "after", "before", "from", "into", "note", "research", "that",
+    "the", "this", "with", "sobre", "para", "como", "desde", "nota",
+}
 
 
 def _slug(topic: str) -> str:
@@ -38,36 +42,104 @@ def _drafts_dir(config) -> Path:
     return Path(__file__).resolve().parents[2] / "doc" / "notes" / "drafts"
 
 
+def _topic_terms(topic: str) -> set[str]:
+    return {
+        word
+        for word in re.split(r"[^a-zA-Z0-9áéíóúñü]+", (topic or "").lower())
+        if len(word) >= 3 and word not in _TOPIC_STOPWORDS
+    }
+
+
+def _row_matches(row: dict, terms: set[str], fields: tuple[str, ...]) -> bool:
+    if not terms:
+        return False
+    haystack = " ".join(str(row.get(field) or "") for field in fields).lower()
+    return any(term in haystack for term in terms)
+
+
+def _within_window(value, cutoff: datetime) -> bool:
+    try:
+        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed >= cutoff
+    except Exception:
+        return False
+
+
 async def gather_evidence(topic: str, config) -> dict:
     """Assemble the evidence pack — deterministic, $0, provenance per datum.
 
     Never raises; a failing instrument contributes an honest ``error`` entry
     instead of silence, so the pack always says what it could and couldn't see.
     """
-    pack: dict = {"topic": topic, "gathered_at": datetime.now(timezone.utc).isoformat(), "sources": []}
+    gathered = datetime.now(timezone.utc)
+    terms = _topic_terms(topic)
+    cutoff = gathered - timedelta(days=_MAX_EPISODE_WINDOW_DAYS)
+    pack: dict = {
+        "topic": topic,
+        "gathered_at": gathered.isoformat(),
+        "scope": {
+            "topic_terms": sorted(terms),
+            "episode_window_days": _MAX_EPISODE_WINDOW_DAYS,
+            "rule": (
+                "instrument rows are included only when a topic term occurs "
+                "in their identifying fields"
+            ),
+        },
+        "sources": [],
+        "operational_context": {},
+    }
     instance_id = getattr(config, "instance_id", None) or "inst_personal"
 
     try:
         from lhassa.llm import gateway
 
         spend = await gateway.spend_summary(config)
-        pack["ledger_today"] = spend
-        pack["sources"].append("ledger: llm_gateway.spend_summary (today, UTC)")
+        pack["operational_context"]["ledger_today"] = spend
+        pack["sources"].append(
+            "operational context only: ledger spend_summary "
+            "(today UTC; not topic-attributed)"
+        )
     except Exception as exc:
-        pack["ledger_today"] = {"error": str(exc)}
+        pack["operational_context"]["ledger_today"] = {"error": str(exc)}
 
     try:
         from lhassa.core import db
 
         await db.init_db()
-        bench = await db.list_bench_runs(instance_id, limit=_MAX_BENCH_ROWS)
+        bench_all = await db.list_bench_runs(instance_id, limit=200)
+        bench = [
+            row
+            for row in bench_all
+            if _row_matches(row, terms, ("id", "fixture_id", "subject", "detail"))
+        ][:_MAX_BENCH_ROWS]
         pack["bench_runs"] = [
-            {k: r.get(k) for k in ("fixture_id", "subject", "passed", "metric", "cost_usd", "created_at")}
+            {
+                k: r.get(k)
+                for k in (
+                    "id", "fixture_id", "subject", "passed", "metric", "detail",
+                    "cost_usd", "duration_ms", "created_at",
+                )
+            }
             for r in bench
         ]
-        pack["sources"].append(f"bench_runs table (latest {len(bench)} rows)")
+        if bench:
+            pack["sources"].append(
+                f"bench_runs table ({len(bench)} topic-matched rows, ids preserved)"
+            )
 
-        recent = await db.load_recent_episodes(instance_id, 200)
+        recent_all = await db.load_recent_episodes(instance_id, 500)
+        recent = [
+            row
+            for row in recent_all
+            if _within_window(row.get("creado_en"), cutoff)
+            and _row_matches(
+                row,
+                terms,
+                ("id", "despertar_por", "decision", "accion", "resultado", "dominio"),
+            )
+        ]
         thinks = [e for e in recent if str(e.get("decision") or "").startswith("think:")]
         zero_cost = [e for e in recent if not e.get("costo_usd")]
         pack["episodes_window"] = {
@@ -75,10 +147,23 @@ async def gather_evidence(topic: str, config) -> dict:
             "thinks": len(thinks),
             "think_cost_usd": round(sum(float(e.get("costo_usd") or 0) for e in thinks), 6),
             "zero_cost_acts": len(zero_cost),
+            "row_ids": [e.get("id") for e in recent],
+            "since": cutoff.isoformat(),
         }
-        pack["sources"].append(f"episodes (latest {len(recent)} rows sampled)")
+        if recent:
+            pack["sources"].append(
+                f"episodes ({len(recent)} topic-matched rows since "
+                f"{cutoff.date()}, ids preserved)"
+            )
 
-        loops = await db.list_loops(instance_id, limit=50)
+        loops_all = await db.list_loops(instance_id, limit=200)
+        loops = [
+            row
+            for row in loops_all
+            if _row_matches(
+                row, terms, ("id", "goal", "kind", "origin", "last_verdict")
+            )
+        ][:50]
         if loops:
             done = [x for x in loops if x.get("status") == "done"]
             pack["loops"] = {
@@ -86,11 +171,12 @@ async def gather_evidence(topic: str, config) -> dict:
                 "done": len(done),
                 "capped": len([x for x in loops if x.get("status") == "capped"]),
                 "avg_turns_done": round(sum(x.get("turn") or 0 for x in done) / len(done), 2) if done else None,
+                "row_ids": [x.get("id") for x in loops],
             }
-            pack["sources"].append(f"loops table ({len(loops)} rows)")
+            pack["sources"].append(f"loops table ({len(loops)} topic-matched rows)")
 
         approvals = await db.load_pending_approvals(instance_id)
-        pack["approvals_pending"] = len(approvals)
+        pack["operational_context"]["approvals_pending"] = len(approvals)
         tools = []
         try:
             from lhassa.agents import versioning
@@ -99,8 +185,7 @@ async def gather_evidence(topic: str, config) -> dict:
         except Exception:
             pass
         if tools:
-            pack["self_written_tools"] = len(tools)
-            pack["sources"].append("tools table")
+            pack["operational_context"]["self_written_tools"] = len(tools)
     except Exception as exc:
         pack["db_error"] = str(exc)
 
@@ -177,7 +262,11 @@ async def draft_research_note(params: dict) -> str:
                     "method): calm, no hype, claim → cited evidence. HARD RULE: every "
                     "number and factual claim MUST come from the EVIDENCE PACK below — "
                     "if the pack doesn't support a claim, write what's missing instead "
-                    f"of inventing it. Write in {'Spanish' if lang == 'es' else 'English'}. "
+                    "of inventing it. Rows are topic evidence only when listed under "
+                    "bench_runs, episodes_window row_ids, loops, or decisions_excerpts; "
+                    "operational_context is global context and MUST NOT be presented as "
+                    "evidence for the topic. Check every value against the verbatim pack. "
+                    f"Write in {'Spanish' if lang == 'es' else 'English'}. "
                     "Structure: a one-paragraph thesis, the evidence (cite the pack's "
                     "source names inline), what we do NOT yet know, and the next "
                     "measurement worth taking. 400-700 words."
