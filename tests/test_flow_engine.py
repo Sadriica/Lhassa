@@ -1,0 +1,405 @@
+"""Work-flow ENGINE tests — offline, with an injected executor (no live model)."""
+
+import json
+
+import pytest
+
+from lhassa.flows.engine import eval_when, resolve_brain, run_flow
+from lhassa.flows.model import Flow, FlowEdge, FlowNode, NodeKind
+
+
+@pytest.fixture
+def offline_env(tmp_path, monkeypatch):
+    """A temp topology for routing + LHASSA_ORG_LIVE forced off."""
+    import lhassa.config as config_mod
+
+    monkeypatch.delenv("LHASSA_ORG_LIVE", raising=False)
+    topo = tmp_path / "org.json"
+    topo.write_text(json.dumps([
+        {"id": "general", "role": "general", "department": None, "parent": None},
+        {"id": "dept:optimization", "role": "department",
+         "department": "optimization", "parent": "general"},
+        {"id": "dept:finance", "role": "department",
+         "department": "finance", "parent": "general"},
+    ]))
+    monkeypatch.setattr(config_mod.Config, "org_topology_file", str(topo))
+    return config_mod.Config()
+
+
+def _recording_executor(calls):
+    async def _exec(goal, *, department, config, **kw):
+        calls.append({"goal": goal, "department": department})
+        return {"ok": True, "summary": f"done:{goal}", "department": department}
+    return _exec
+
+
+# ── eval_when ──────────────────────────────────────────────────────────────────
+def test_eval_when_basics():
+    assert eval_when(None, {}) is True
+    assert eval_when({"field": "passed", "op": "truthy"}, {"passed": True}) is True
+    assert eval_when({"field": "passed", "op": "falsy"}, {"passed": True}) is False
+    assert eval_when({"field": "status", "op": "eq", "value": "ok"}, {"status": "ok"}) is True
+    assert eval_when({"op": "bogus"}, {}) is False  # unknown op → not taken, no raise
+
+
+# ── hybrid routing ─────────────────────────────────────────────────────────────
+def test_resolve_brain_pinned(offline_env):
+    node = FlowNode("w", NodeKind.TASK, {"brain": "dept:finance", "skill": "optimization"})
+    dept, pinned = resolve_brain(node, None, offline_env)
+    assert (dept, pinned) == ("dept:finance", True)
+
+
+def test_resolve_brain_auto_routes_by_skill(offline_env):
+    node = FlowNode("w", NodeKind.TASK, {"skill": "optimization latency"})
+    dept, pinned = resolve_brain(node, None, offline_env)
+    assert pinned is False
+    assert dept == "optimization"  # routed to the optimization leaf
+
+
+# ── a full run: trigger → task → gate → output, threading data ─────────────────
+def _linear_flow():
+    return Flow(
+        id="f",
+        name="line",
+        nodes=[
+            FlowNode("t", NodeKind.TRIGGER, {"type": "manual"}),
+            FlowNode("w", NodeKind.TASK, {"skill": "optimization", "prompt": "improve {input}"}),
+            FlowNode("g", NodeKind.GATE, {"type": "verify", "spec": {"type": "regex", "pattern": "done"}}),
+            FlowNode("o", NodeKind.OUTPUT, {"type": "log", "target": "audit"}),
+        ],
+        edges=[FlowEdge("t", "w"), FlowEdge("w", "g"), FlowEdge("g", "o")],
+    )
+
+
+@pytest.mark.asyncio
+async def test_run_linear_flow_threads_data_and_records_gate(offline_env):
+    calls = []
+    rec = await run_flow(
+        _linear_flow(), inputs={"summary": "slow query"},
+        config=offline_env, executor=_recording_executor(calls),
+    )
+    assert rec["status"] == "completed"
+    kinds = [s["kind"] for s in rec["steps"]]
+    assert kinds == ["trigger", "task", "gate", "output"]
+
+    # data flows along the edge: the trigger input is interpolated into the task goal
+    assert calls[0]["goal"] == "improve slow query"
+    assert calls[0]["department"] == "optimization"
+
+    # the task output threads into the verify gate, which passes ("done:..." matches "done")
+    gate_step = next(s for s in rec["steps"] if s["kind"] == "gate")
+    assert gate_step["gate"] == "verify" and gate_step["passed"] is True
+
+    # the output node records the result
+    out_step = next(s for s in rec["steps"] if s["kind"] == "output")
+    assert out_step["output_type"] == "log" and out_step["target"] == "audit"
+
+
+@pytest.mark.asyncio
+async def test_opt_in_full_context_preserves_initial_dossier_and_every_stage(offline_env):
+    calls = []
+
+    async def executor(goal, *, department, config, **kwargs):
+        calls.append((department, goal))
+        return {"summary": f"{department}-output", "model": "stub", "cost_usd": 0}
+
+    flow = Flow(
+        id="research-context",
+        name="research context",
+        nodes=[
+            FlowNode("t", NodeKind.TRIGGER, {"type": "manual"}),
+            FlowNode(
+                "collector",
+                NodeKind.TASK,
+                {
+                    "brain": "collector",
+                    "prompt": "COLLECT {input}",
+                    "input_mode": "full",
+                    "preserve_context": True,
+                },
+            ),
+            FlowNode(
+                "analyst",
+                NodeKind.TASK,
+                {
+                    "brain": "analyst",
+                    "prompt": "ANALYZE {input}",
+                    "input_mode": "full",
+                    "preserve_context": True,
+                },
+            ),
+        ],
+        edges=[FlowEdge("t", "collector"), FlowEdge("collector", "analyst")],
+    )
+    record = await run_flow(
+        flow,
+        inputs={
+            "summary": "the idea",
+            "evidence_bundle": {"sources": [{"id": "S1", "sha256": "abc"}]},
+        },
+        config=offline_env,
+        executor=executor,
+    )
+    assert record["status"] == "completed"
+    assert '"sha256": "abc"' in calls[0][1]
+    assert '"sha256": "abc"' in calls[1][1]
+    assert "collector-output" in calls[1][1]
+    assert record["output"]["research_context"]["stages"][-1]["brain"] == "analyst"
+
+
+@pytest.mark.asyncio
+async def test_failing_gate_stops_the_path(offline_env):
+    flow = _linear_flow()
+    flow.node("g").config["spec"] = {"type": "regex", "pattern": "NEVER_MATCHES"}
+    calls = []
+    rec = await run_flow(flow, config=offline_env, executor=_recording_executor(calls))
+    assert rec["status"] == "completed"  # a non-pass is recorded data, not a crash
+    gate_step = next(s for s in rec["steps"] if s["kind"] == "gate")
+    assert gate_step["passed"] is False
+    # the output after the gate is never reached
+    assert not any(s["kind"] == "output" for s in rec["steps"])
+
+
+@pytest.mark.asyncio
+async def test_branch_takes_one_edge(offline_env):
+    flow = Flow(
+        id="b",
+        name="branch",
+        nodes=[
+            FlowNode("t", NodeKind.TRIGGER, {"type": "manual"}),
+            FlowNode("br", NodeKind.BRANCH, {}),
+            FlowNode("yes", NodeKind.OUTPUT, {"type": "log", "target": "yes"}),
+            FlowNode("no", NodeKind.OUTPUT, {"type": "log", "target": "no"}),
+        ],
+        edges=[
+            FlowEdge("t", "br"),
+            FlowEdge("br", "yes", when={"field": "go", "op": "eq", "value": True}),
+            FlowEdge("br", "no"),  # unconditional = else
+        ],
+    )
+    rec = await run_flow(flow, inputs={"go": True}, config=offline_env)
+    targets = [s.get("target") for s in rec["steps"] if s["kind"] == "output"]
+    assert targets == ["yes"]  # only the matching branch ran
+    branch_step = next(s for s in rec["steps"] if s["kind"] == "branch")
+    assert branch_step["chosen_edge"] == "yes"
+
+
+@pytest.mark.asyncio
+async def test_pinned_brain_overrides_routing(offline_env):
+    flow = Flow(
+        id="p", name="pin",
+        nodes=[
+            FlowNode("t", NodeKind.TRIGGER, {"type": "manual"}),
+            FlowNode("w", NodeKind.TASK, {"brain": "dept:finance", "prompt": "report"}),
+        ],
+        edges=[FlowEdge("t", "w")],
+    )
+    calls = []
+    rec = await run_flow(flow, config=offline_env, executor=_recording_executor(calls))
+    assert calls[0]["department"] == "dept:finance"
+    task_step = next(s for s in rec["steps"] if s["kind"] == "task")
+    assert task_step["pinned"] is True
+
+
+@pytest.mark.asyncio
+async def test_node_error_becomes_failed_step(offline_env):
+    async def boom(goal, *, department, config, **kw):
+        raise RuntimeError("provider exploded")
+
+    flow = Flow(
+        id="e", name="err",
+        nodes=[
+            FlowNode("t", NodeKind.TRIGGER, {"type": "manual"}),
+            FlowNode("w", NodeKind.TASK, {"skill": "optimization"}),
+            FlowNode("o", NodeKind.OUTPUT, {"type": "log"}),
+        ],
+        edges=[FlowEdge("t", "w"), FlowEdge("w", "o")],
+    )
+    rec = await run_flow(flow, config=offline_env, executor=boom)
+    assert rec["status"] == "failed"
+    task_step = next(s for s in rec["steps"] if s["kind"] == "task")
+    assert task_step["ok"] is False and "provider exploded" in task_step["error"]
+    # the path stopped at the error — the output is not reached
+    assert not any(s["kind"] == "output" for s in rec["steps"])
+
+
+@pytest.mark.asyncio
+async def test_invalid_flow_is_a_failed_run_not_a_raise(offline_env):
+    flow = Flow(id="x", name="bad", nodes=[], edges=[])  # no trigger
+    rec = await run_flow(flow, config=offline_env)
+    assert rec["status"] == "failed"
+    assert rec["steps"][0]["ok"] is False
+
+
+@pytest.mark.asyncio
+async def test_default_executor_offline_stub(offline_env):
+    """With no injected executor and LHASSA_ORG_LIVE off, the org stub runs ($0)."""
+    flow = Flow(
+        id="d", name="default",
+        nodes=[
+            FlowNode("t", NodeKind.TRIGGER, {"type": "manual"}),
+            FlowNode("w", NodeKind.TASK, {"skill": "optimization", "prompt": "go"}),
+        ],
+        edges=[FlowEdge("t", "w")],
+    )
+    rec = await run_flow(flow, config=offline_env)
+    task_step = next(s for s in rec["steps"] if s["kind"] == "task")
+    assert task_step["ok"] is True
+    assert "[offline]" in task_step["result"]["summary"]
+
+
+@pytest.mark.asyncio
+async def test_durable_approval_pauses_retries_and_resumes_from_cursor(
+    offline_env, monkeypatch
+):
+    from lhassa.security import approval
+
+    async def unexpected_parking(*args, **kwargs):
+        raise AssertionError("durable parking belongs to the checkpoint hook")
+
+    monkeypatch.setattr(approval, "request_approval", unexpected_parking)
+    flow = Flow(
+        id="durable",
+        name="durable approval",
+        nodes=[
+            FlowNode("t", NodeKind.TRIGGER, {"type": "manual"}),
+            FlowNode("w", NodeKind.TASK, {"skill": "optimization", "prompt": "do {input}"}),
+            FlowNode("g", NodeKind.GATE, {"type": "approval"}),
+            FlowNode("o", NodeKind.OUTPUT, {"type": "log", "target": "audit"}),
+        ],
+        edges=[FlowEdge("t", "w"), FlowEdge("w", "g"), FlowEdge("g", "o")],
+    )
+    calls = []
+    checkpoints = []
+
+    async def save(cursor):
+        # A checkpoint must be detached and persistable without a custom encoder.
+        checkpoints.append(json.loads(json.dumps(cursor)))
+
+    first = await run_flow(
+        flow,
+        inputs={"summary": "seed"},
+        config=offline_env,
+        executor=_recording_executor(calls),
+        run_id="run_fixed",
+        checkpoint_hook=save,
+        approval_context={
+            "requested_by": "owner",
+            "run_id": "untrusted",
+            "flow_id": "untrusted",
+            "node_id": "untrusted",
+        },
+    )
+
+    assert first["status"] == "waiting_approval"
+    assert first["finished_at"] is None
+    assert [step["node"] for step in first["steps"]] == ["t", "w", "g"]
+    assert first["steps"][-1]["status"] == "needs_approval"
+    cursor = first["resume_state"]
+    gate_data = first["steps"][1]["result"]
+    assert cursor["frontier"] == [{"node": "g", "data": gate_data}]
+    assert "g" not in cursor["visited"]
+    assert cursor["pending_approval"]["node_id"] == "g"
+    assert json.loads(json.dumps(cursor)) == cursor
+
+    approval_id = first["steps"][-1]["approval_id"]
+    approval_payload = {
+        "accion": "flow_gate",
+        "node": "g",
+        "node_id": "g",
+        "data": gate_data,
+        "run_id": "run_fixed",
+        "flow_id": "durable",
+        "requested_by": "owner",
+    }
+    assert first["steps"][-1]["approval_payload"] == approval_payload
+    assert cursor["pending_approval"] == {
+        "node_id": "g",
+        "approval_id": approval_id,
+        "approval_payload": approval_payload,
+        "step_index": 2,
+    }
+
+    # Reclaiming before a decision replays the gate, but neither the deterministic
+    # parking command nor the gate step changes or duplicates.
+    retried = await run_flow(
+        flow,
+        config=offline_env,
+        executor=_recording_executor(calls),
+        run_id="run_fixed",
+        resume_state=cursor,
+        checkpoint_hook=save,
+        approval_context={"requested_by": "owner"},
+    )
+    assert retried["status"] == "waiting_approval"
+    assert len([step for step in retried["steps"] if step["node"] == "g"]) == 1
+    assert retried["steps"][-1]["approval_id"] == approval_id
+    assert retried["resume_state"]["pending_approval"]["approval_payload"] == approval_payload
+
+    resumed = await run_flow(
+        flow,
+        config=offline_env,
+        executor=_recording_executor(calls),
+        run_id="run_fixed",
+        resume_state=retried["resume_state"],
+        checkpoint_hook=save,
+        approval_decisions={"g": True},
+    )
+    assert resumed["status"] == "completed"
+    assert resumed["finished_at"] is not None
+    assert [step["node"] for step in resumed["steps"]] == ["t", "w", "g", "o"]
+    gate = resumed["steps"][2]
+    assert gate["passed"] is True
+    assert gate["needs_approval"] is False
+    assert gate["approval_id"] == approval_id
+    assert gate["approval_payload"] == approval_payload
+    assert len(calls) == 1
+    assert resumed["resume_state"]["frontier"] == []
+    assert resumed["resume_state"]["status"] == "completed"
+
+
+@pytest.mark.asyncio
+async def test_durable_parking_is_deferred_while_legacy_remains_best_effort(
+    offline_env, monkeypatch
+):
+    from lhassa.security import approval
+
+    calls = []
+
+    async def cannot_park(*args, **kwargs):
+        calls.append((args, kwargs))
+        raise RuntimeError("database unavailable")
+
+    monkeypatch.setattr(approval, "request_approval", cannot_park)
+    flow = Flow(
+        id="approval-failure",
+        name="approval failure",
+        nodes=[
+            FlowNode("t", NodeKind.TRIGGER, {}),
+            FlowNode("g", NodeKind.GATE, {"type": "approval"}),
+        ],
+        edges=[FlowEdge("t", "g")],
+    )
+
+    legacy = await run_flow(flow, config=offline_env)
+    assert legacy["status"] == "completed"
+    assert legacy["steps"][-1]["status"] == "needs_approval"
+    assert legacy["steps"][-1]["approval_id"] is None
+    assert len(calls) == 1
+
+    async def checkpoint(_cursor):
+        return None
+
+    durable = await run_flow(
+        flow,
+        config=offline_env,
+        run_id="run_cannot_park",
+        checkpoint_hook=checkpoint,
+    )
+    assert durable["status"] == "waiting_approval"
+    assert durable["steps"][-1]["status"] == "needs_approval"
+    assert durable["steps"][-1]["approval_id"].startswith("ap_flow_")
+    assert durable["resume_state"]["pending_approval"]["approval_payload"][
+        "run_id"
+    ] == "run_cannot_park"
+    assert len(calls) == 1

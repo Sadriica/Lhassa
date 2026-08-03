@@ -1,0 +1,185 @@
+# Calendar — two ways to connect
+
+Lhassa can read your calendar into `/today` and the daily briefing, and turn a
+reminder into a calendar event. There are **two paths** — pick the one your
+account allows. If you're unsure which fits, just ask Lhassa (`/ai how do I
+connect my calendar?`) and it will walk you through it.
+
+## Path A — ICS (no admin, works for everyone)
+
+The zero-friction path: files and feeds, no app registration, no API, no IT
+approval. Ideal for **institutional calendars** an admin would otherwise gate.
+
+**Write** — a tappable event file. Built in, nothing to configure:
+- `/remind <what> <when>` gives you an internal reminder **and** delivers a
+  `.ics` file. `/event <what> <when>` delivers just the file. One tap adds it to
+  any calendar (institutional Outlook, Google, iPhone).
+- Grounded in `lhassa/calendar/ics.py`; the file rides the sender-of-record seam
+  (`org/deliver.py`) — a registered artifact with a per-brain delivery log.
+
+**Read** — subscribe to your calendar's published feed:
+1. Get the secret ICS URL from your calendar. In Outlook web: **Settings →
+   Calendar → Shared calendars → Publish a calendar → pick the calendar → copy
+   the ICS link**. (Google Calendar: Settings → *Integrate calendar* → *Secret
+   address in iCal format*.)
+2. Put it in `.env` (it is a secret — read access to your calendar; it lives in
+   the gitignored `.env`, never in the repo):
+   ```
+   LHASSA_CALENDAR_ICS_URL=<your secret .ics link>
+   ```
+3. `/today`, `/tomorrow` and the briefing now show your real events alongside
+   tasks — e.g. `📅 15:00 Algorithms 201 · Room 204`.
+
+Read-only, `$0`, deterministic (`lhassa/calendar/feed.py`): the feed is fetched
+and cached (`LHASSA_CALENDAR_FEED_TTL`, 1h default; a stale copy is served if the
+network is down), parsed with no model. Recurring weekly classes, Windows
+timezones (e.g. `SA Pacific Standard Time` = Bogotá) and all-day events are
+handled; exotic monthly/yearly recurrences are best-effort.
+
+### Asking about it in chat
+
+Once a feed is connected, just ask — "¿qué hay en mi calendario el viernes?" /
+"what do I have tomorrow?" is answered **deterministically, $0, no model, no
+web search** by `lhassa/calendar/query.py`: a date parse (hoy/mañana/pasado
+mañana, a weekday name, esta semana/este fin de semana/la próxima semana, and
+their English equivalents) + an event lookup over `calendar.feed.upcoming` +
+a grouped template reply, grounded ONLY in your own events. It short-circuits
+in Telegram before any model or the research bridge could run (see
+`doc/telegram.md`), and `/calendar view <when>` triggers it explicitly.
+
+### Multiple calendars
+
+`LHASSA_CALENDAR_ICS_URL` above is a convenience shortcut for the common case of
+**one** calendar. If you have several — an institutional one, a personal one, a
+project one — subscribe each with a **name** so `/today` shows which calendar
+each event is from:
+
+```
+/calendar add Work   <your institutional secret .ics link>
+/calendar add Personal <your personal secret .ics link>
+/calendars               # list what's configured (name + a masked url)
+/calendar remove Work   # drop one
+```
+
+(the CLI equivalent is `lhassa calendar add|list|remove`). Once more than one
+calendar is configured, `/today` tags each event with its source:
+
+```
+📅 15:00 Algorithms 201 · Work · Room 204
+📅 19:00 Team sync · Personal
+```
+
+With a single calendar configured (the env var alone, or exactly one added
+entry) the name is omitted — it would just be redundant noise.
+
+Under the hood: the named calendars live in a small JSON store
+(`~/.lhassa/calendars.json`, `LHASSA_CALENDARS_FILE`) — a list of
+`{"name", "url"}`. The env var is merged in automatically as an implicit
+`"default"` feed whenever it's set and its url isn't already stored under a
+name, so nothing breaks for someone using only `.env`. Each feed keeps its OWN
+cache file (keyed by a hash of its url) so two calendars never clobber each
+other's cached copy; a single unreachable feed is skipped — the rest still show.
+
+### Master calendar
+
+With several calendars subscribed (see above), pick ONE as your **master** —
+the calendar everything else should agree with:
+
+```
+/calendar primary Work   # designate the master calendar
+/calendar sync            # find events on your other calendars missing from it
+```
+
+`/calendar sync` runs a `$0`, deterministic diff (no model): it reads every
+subscribed feed, partitions by your master calendar, and looks for events on a
+*secondary* calendar that don't have a matching event on the master. A match is
+by normalized event name (case/whitespace-insensitive) **and** a start time
+within a few minutes — so a renamed event (same time, different title) reads as
+"unsynced" rather than being silently guessed at; you always get to review each
+candidate yourself. For every unsynced event, Lhassa sends you a tappable
+`.ics` — one tap adds it to your master calendar. Already-delivered events are
+never re-sent on a later sync.
+
+There is also a **daily automatic sync**: the `maintenance` seed schedules
+`calendar_sync` once a day (`lhassa seed apply maintenance`). It's a no-op
+until you set a master calendar, so it's safe to leave scheduled even before
+you've configured one.
+
+### Calendar-derived world model
+
+Lhassa also **learns your world from your calendar** — no asking, no
+spending. `lhassa/calendar/derive.py` reads the same feed(s) `/today` already
+reads and, `$0` and deterministic (no model, stdlib only), derives:
+
+- **Courses / recurring commitments** — a summary that repeats at least 3
+  times on a regular weekly-ish cadence becomes a durable fact, e.g. a
+  Tuesday 15:00 "Algorithms 201" in "Room 204" → *"Has a recurring weekly
+  commitment 'Algorithms 201' (Tue 15:00, Room 204) — likely a course or class
+  this term."* A room/building-looking location (sala/bloque/aula/room/...)
+  is what upgrades the phrasing to "likely a course"; without that signal
+  it's phrased as a plain commitment. A small denylist (lunch/breaks/coffee)
+  is filtered out — a recurring "Almuerzo" is never mistaken for a course.
+- **Rhythm** — one fact like *"Your calendar is busiest on Mon mornings."*,
+  only when one weekday+time-of-day bucket clearly dominates the window
+  (weak/uniform signal yields no rhythm fact at all).
+- **People** — deliberately skipped for now: the feed parser doesn't capture
+  ORGANIZER/ATTENDEE fields, so a "you meet often with X" fact would be
+  fabricated rather than derived. A documented future extension.
+
+Each derived fact is written to the grande as a `dato` (`procedencia
+calendar-derived`) via `derive_world_facts` — deduped against existing facts
+(a case-insensitive substring overlap skips the write, same idiom as the
+Telegram `[[remember: …]]` marker) so re-running it as the calendar
+reshuffles week to week never piles up duplicates. Once written, these facts
+are ordinary grande facts: `/recall`, `/memory`, and the knowledge graph
+(`/api/memory/graph`) surface them exactly like any other fact — the brain's
+world-model grounding, not a separate store.
+
+It runs through the temple, like every other internal hygiene action:
+`guardian` (the self-maintenance monk, same domain as `distill_memory`) owns
+it, and the `maintenance` seed schedules it weekly (`lhassa seed apply
+maintenance`) — a clean no-op with no calendar configured, so it's safe to
+leave scheduled unconditionally. On demand: `/temple derive` (or `/temple
+learn calendar`) runs it immediately; `/temple schedule` shows its cadence
+alongside the other temple jobs.
+
+## Path B — Microsoft Graph app (read + write via API)
+
+For accounts where you **can** register an app (personal Outlook.com, or an org
+that permits it). Full two-way sync — Lhassa reads and writes events through the
+Graph API directly (`lhassa/tools/graph.py`, `read_calendar` / `create_event`).
+
+1. Register an app at [portal.azure.com](https://portal.azure.com) →
+   App registrations → New registration (name it, "any org directory + personal
+   accounts", no redirect URI). Under **Authentication**, turn on **Allow public
+   client flows**. Under **API permissions**, add the delegated Microsoft Graph
+   permissions `Mail.Read`, `Mail.Send`, `Calendars.Read`, `Calendars.ReadWrite`.
+2. Copy the **Application (client) ID** → `MS_CLIENT_ID`, and the **Directory
+   (tenant) ID** → `MS_TENANT_ID` (use `common` for a personal Outlook.com
+   account).
+   ```
+   MS_CLIENT_ID=<application client id>
+   MS_TENANT_ID=<directory tenant id, or "common">
+   ```
+3. First use: Lhassa prints a `microsoft.com/devicelogin` URL + code; you
+   authenticate once in a browser and the token is cached
+   (`~/.lhassa/ms_token_cache.json`, auto-refreshed).
+
+**The org-account caveat:** many organizations block user consent or app
+registration entirely. If you hit "needs admin approval", either an IT admin
+grants consent (the *Grant admin consent* button on API permissions), or you use
+**Path A** — the ICS feed reads the same institutional calendar with no approval.
+
+## Which to pick
+
+| | Path A — ICS | Path B — Graph app |
+|---|---|---|
+| Registration / admin | none | app + possible admin consent |
+| Read your calendar | ✅ feed | ✅ API |
+| Write events | ✅ tappable `.ics` file | ✅ direct to the calendar |
+| Institutional accounts | always works | only if IT allows |
+| Freshness | cached (minutes) | real time |
+
+Both are `$0` and deterministic — creating/reading events never touches a model.
+Path A is the default recommendation for institutional calendars; Path B is the
+smoother experience when your account permits it.

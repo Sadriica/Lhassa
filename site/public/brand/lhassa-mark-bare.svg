@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 48 48">
+  <!-- Lhassa mark v3: the Potala abstracted. White battered walls stepping up,
+       the Red Palace at the heart, gold kept to the roof and finial. -->
+  <circle cx="24" cy="6" r="1.6" fill="#a23e34"/>
+  <rect x="23.4" y="8.4" width="1.2" height="3.1" rx="0.6" fill="#d9a521"/>
+  <path fill="#d9a521" d="M17.6 12.9h12.8l1.3 2.7H16.3l1.3-2.7z"/>
+  <path fill="#a23e34" d="M18.6 17h10.8l0.9 6.4H17.7L18.6 17z"/>
+  <path fill="#ece4d3" d="M15.2 24.8h17.6l1.1 5H14.1l1.1-5z"/>
+  <path fill="#ece4d3" d="M12.4 31.2h23.2l1.3 5.4H11.1l1.3-5.4z"/>
+  <path fill="#ece4d3" d="M9.6 38h28.8l1.5 5.6H8.1L9.6 38z"/>
+</svg>

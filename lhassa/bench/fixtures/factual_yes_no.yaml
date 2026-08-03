@@ -1,0 +1,11 @@
+id: factual_yes_no
+title: "Factual: single-word yes/no answer"
+prompt: >
+  Is the sky typically blue during a clear day? Reply with exactly one word:
+  Yes or No.
+subject_kind: completion
+verify:
+  type: regex
+  pattern: '^\s*(Yes|No)\s*$'
+  flags: 10  # re.IGNORECASE | re.MULTILINE
+tags: [factual, structured]

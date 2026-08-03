@@ -1,0 +1,41 @@
+# Lhassa — the MONITOR WATCHER: an always-on, $0 "ear".
+#
+# A standing, deterministic loop that watches the environment cheaply (episodes,
+# health, flow runs, pending approvals, failures) and only wakes the brain /
+# alerts when something notable happens. Idle ticks cost ZERO tokens — no LLM, no
+# cloud. The only place a token can be spent is an optional live "think", which is
+# OFF unless BOTH LHASSA_MONITOR_THINK=1 and LHASSA_ORG_LIVE=1.
+#
+# Gated by LHASSA_MONITOR_ENABLED: with it off the module logs once and exits, so
+# enabling the service is how the watcher is turned on.
+#
+# Install as a USER unit (do NOT install system-wide):
+#   cp scripts/systemd/lhassa-monitor.service ~/.config/systemd/user/
+#   systemctl --user daemon-reload
+#   # opt in (either export it here via an Environment= line, or in your .env):
+#   #   LHASSA_MONITOR_ENABLED=1
+#   systemctl --user enable --now lhassa-monitor.service
+#   journalctl --user -u lhassa-monitor -f       # watch it
+#
+# Adjust the paths below if your checkout or venv live elsewhere.
+[Unit]
+Description=Lhassa monitor watcher (always-on, $0 environment ear)
+After=graphical-session.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/Code/lhassa
+ExecStart=%h/Code/lhassa/.venv/bin/python -m lhassa.org.watcher
+Restart=on-failure
+RestartSec=10
+# Opt the watcher in (the module no-ops + exits without this).
+Environment=LHASSA_MONITOR_ENABLED=1
+# subscription CLIs (claude lives in ~/.local/bin) — needed when the live think /
+# delegation path is enabled; harmless otherwise.
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin:/usr/local/sbin:/usr/sbin
+# Optional: uncomment to spend a token on a richer live analysis per reaction.
+# Environment=LHASSA_MONITOR_THINK=1
+# Environment=LHASSA_ORG_LIVE=1
+
+[Install]
+WantedBy=default.target

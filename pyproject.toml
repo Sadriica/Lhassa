@@ -1,0 +1,75 @@
+[project]
+name = "lhassa"
+version = "0.8.0"
+description = "Lhassa — a personal do-and-sleep AI brain: a heartbeat loop that orchestrates models and harnesses behind interfaces, with memory, an organizational layer, and CLI / Telegram / dashboard / voice surfaces"
+license = "AGPL-3.0-or-later"
+license-files = ["LICENSE"]
+requires-python = ">=3.13"
+dependencies = [
+    # Core
+    "loguru>=0.7.0",
+    "python-dotenv>=1.0.0",
+    # LLM clients — used directly by agents (all providers)
+    "openai>=1.0.0",            # covers groq (openai-compat), openai, openrouter, ollama, cerebras
+    "anthropic>=0.50.0",        # Anthropic Claude direct client
+    # Web tools
+    "ddgs>=9.0.0", # fallback search when Brave key is not set (successor of duckduckgo-search)
+    "httpx>=0.27.0",            # Brave Search, GitHub API, Microsoft Graph
+    "pypdf>=4.0.0",             # pure-Python PDF text extraction (CV work-flow bridge)
+    # Dashboard API
+    "fastapi>=0.110.0",
+    "starlette<1.0.0",
+    "uvicorn[standard]>=0.29.0",
+    # Microsoft Graph (Outlook email + calendar)
+    "msal>=1.28.0",
+    "psutil>=7.2.2",
+    # Integrations — Model Context Protocol (the official Python SDK).
+    # Imported lazily/defensively; the brain works with no MCP servers configured.
+    "mcp>=1.0.0",
+    # Terminal CLI (lightweight — no voice deps)
+    "typer>=0.12.0",
+    "rich>=13.0.0",
+    "prompt_toolkit>=3.0.0",
+    "textual>=8.2.8",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+# Ship the importable package; main.py stays a top-level script run via `python main.py`.
+packages = ["lhassa"]
+
+[project.scripts]
+lhassa = "lhassa.cli:main"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "ruff>=0.4.0",
+]
+# Optional: exact token counting for the memory budget. estimate_tokens() uses
+# tiktoken's cl100k_base when present and falls back to a char heuristic otherwise,
+# so this is never required — install with `uv sync --extra tokens` to enable it.
+tokens = [
+    "tiktoken>=0.7.0",
+]
+# Voice pipeline (STT → LLM → TTS) — only the laptop/desktop voice surface needs
+# this. The default install (API/heartbeat/telegram/monitor/CLI) never imports
+# pipecat or torch; every import site is guarded (lazy import or TYPE_CHECKING).
+# Install with `uv sync --extra voice` to restore the voice surface.
+# Pipecat bundles LLM services for groq, anthropic, openai, openrouter, ollama, cerebras.
+voice = [
+    "pipecat-ai[cartesia,deepgram,groq,local,silero]>=0.0.108",
+    "torch>=2.0.0",             # required by Silero VAD
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.uv]
+# To use CPU-only PyTorch and avoid the large CUDA wheel:
+#   uv add torch --extra-index-url https://download.pytorch.org/whl/cpu

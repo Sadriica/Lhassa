@@ -1,0 +1,41 @@
+#!/usr/bin/env python3
+"""
+Lhassa — LLM-free PC-state check runner.
+
+Runs every background system check once, writes JSON snapshots under
+``~/.lhassa/health/``, fires desktop notifications for anything at warn/alert,
+and prints a short templated digest. No LLM, no cloud — pure local checks.
+
+Usage:
+  uv run python scripts/lhassa-health        # run all checks + print digest
+  uv run python scripts/lhassa-health --quiet # run checks, no terminal output
+  uv run python scripts/lhassa-health --no-notify  # don't fire notify-send
+"""
+
+import sys
+from pathlib import Path
+
+# Make `lhassa` importable when this file is run directly (not via -m).
+_ROOT = Path(__file__).resolve().parent.parent
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
+
+from lhassa.health.checks import format_digest, run_all  # noqa: E402
+
+
+def main() -> int:
+    args = set(sys.argv[1:])
+    notify = "--no-notify" not in args
+    quiet = "--quiet" in args
+
+    digest = run_all(notify=notify)
+
+    if not quiet:
+        print(format_digest(digest))
+
+    # Exit non-zero when something needs attention, so systemd/cron can react.
+    return 0 if digest["ok"] else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -1,0 +1,104 @@
+# Lhassa — Docker Compose topology.
+#
+# One image, several roles (selected by LHASSA_RUN). Secrets come from .env
+# (never baked into the image); persistent data lives in the named volume.
+#
+#   docker compose build
+#   docker compose up -d            # api + heartbeat
+#   docker compose --profile telegram up -d   # also start the Telegram poller
+#   docker compose --profile monitor up -d    # also start the monitor watcher
+#
+# See doc/deployment.md for the portability caveats (voice, opencode, secrets)
+# and doc/portability.md for the full laptop→VPS coupling audit.
+
+services:
+  # ── Dashboard + REST API + scheduler ──────────────────────────────────────
+  lhassa:
+    build: .
+    image: lhassa:dev
+    env_file:
+      - .env
+    environment:
+      # Bind inside the container on all interfaces; the published port below
+      # controls host exposure. (Overrides any LHASSA_API_HOST in .env.)
+      LHASSA_API_HOST: "0.0.0.0"
+      LHASSA_RUN: "api"
+    ports:
+      # Published to localhost only — the dashboard is unauthenticated and can
+      # drive privileged actions. Change to "7766:7766" to expose on the LAN
+      # (only if you understand the risk).
+      - "127.0.0.1:7766:7766"
+    volumes:
+      - lhassa-data:/data
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - "CMD"
+        - "python"
+        - "-c"
+        - "import os,sys,urllib.request; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:'+os.getenv('LHASSA_API_PORT','7766')+'/api/status', timeout=3).status==200 else 1)"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  # ── Heartbeat (the brain's "hace y duerme" tick) ──────────────────────────
+  # Compose has no cron, so this service loops the beat in-process every
+  # LHASSA_HEARTBEAT_INTERVAL seconds (default 900 = 15 min). Each beat is a
+  # fresh process that re-reads .env. To use the host scheduler instead, set
+  # LHASSA_HEARTBEAT_INTERVAL=0 (one beat then exit) and drive it from cron /
+  # a systemd timer — see doc/deployment.md.
+  heartbeat:
+    build: .
+    image: lhassa:dev
+    env_file:
+      - .env
+    environment:
+      LHASSA_RUN: "heartbeat"
+      LHASSA_HEARTBEAT_INTERVAL: "900"
+    volumes:
+      - lhassa-data:/data
+    restart: unless-stopped
+    depends_on:
+      - lhassa
+
+  # ── Telegram inbound poller (optional) ────────────────────────────────────
+  # Enable with:  docker compose --profile telegram up -d
+  # Requires LHASSA_TELEGRAM_BOT_TOKEN + LHASSA_TELEGRAM_CHAT_ID in .env.
+  telegram:
+    build: .
+    image: lhassa:dev
+    profiles: ["telegram"]
+    env_file:
+      - .env
+    environment:
+      LHASSA_RUN: "telegram"
+      LHASSA_TELEGRAM_POLL: "1"
+    volumes:
+      - lhassa-data:/data
+    restart: unless-stopped
+    depends_on:
+      - lhassa
+
+  # ── Monitor watcher (optional) ────────────────────────────────────────────
+  # The always-on $0 "ear" (org.watcher). Enable with:
+  #   docker compose --profile monitor up -d
+  # Gated by LHASSA_MONITOR_ENABLED=1 in .env — without it the process logs once
+  # and exits cleanly (same opt-in discipline as the telegram poller), so Compose
+  # will keep restarting it harmlessly until the flag is set.
+  monitor:
+    build: .
+    image: lhassa:dev
+    profiles: ["monitor"]
+    env_file:
+      - .env
+    environment:
+      LHASSA_RUN: "monitor"
+    volumes:
+      - lhassa-data:/data
+    restart: unless-stopped
+    depends_on:
+      - lhassa
+
+volumes:
+  lhassa-data:

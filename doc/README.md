@@ -1,0 +1,42 @@
+# Lhassa docs
+
+Lhassa is a persistent personal AI brain — build the brain, rent the body. It
+lives on one machine, thinks only when it is worth the spend, and orchestrates
+rented models and tools instead of being one. These docs are organized by what
+you are trying to do, not by subsystem.
+
+## Start here
+
+- [`getting-started.md`](getting-started.md) — install it, wake it, wire Telegram, open the dashboard.
+
+## Understand it
+
+- [`concepts.md`](concepts.md) — the core ideas: do-and-sleep, the two memories, the árbitro, the org.
+- [`security.md`](security.md) — trust, approvals, the allowlist, quarantine and the gates.
+- [`architecture.md`](architecture.md) — current high-level overview (layers, data dir, phases, diagrams).
+- [`architecture-layers.md`](architecture-layers.md) — the modularity guard: layers + forbidden import directions.
+- [`narrative.md`](narrative.md) — the narrative & voice book (the flag, the pillars, tone, vocabulary).
+- [`lhassa-brief.md`](lhassa-brief.md) — the implementation spec, in Spanish.
+- [`decisions.md`](decisions.md) — the running decisions log, phase by phase.
+- [`plan.md`](plan.md) — the CURRENT plan (the "mileage" waves) and what remains.
+- [`roadmap.md`](roadmap.md) — archived pre-brain plan (archaeology only).
+
+## Use it
+
+- [`cli.md`](cli.md) — every `lhassa` subcommand, flags and examples.
+- [`telegram.md`](telegram.md) — the bot: commands, the digest, approvals from chat.
+- [`dashboard.md`](dashboard.md) — the React dashboard: sections, WebSocket, auth.
+- [`memory.md`](memory.md) — the grande, the chica, and semantic (layer 4) facts.
+- [`tools.md`](tools.md) — self-written tools: quarantine, the gates, graduation.
+- [`agents.md`](agents.md) — background/agentic execution (`lhassa code`, the harnesses).
+- [`scheduler.md`](scheduler.md) — recurring tasks, the heartbeat, deferred retries.
+- [`outlook.md`](outlook.md) — Outlook email/calendar setup (Azure app registration).
+- [`examples.md`](examples.md) — worked end-to-end scenarios.
+- [`voice-interaction.md`](voice-interaction.md) — voice, an opt-in surface (off by default).
+
+## Operate it
+
+- [`install.md`](install.md) — the always-on Linux install (systemd user units, boot lingering).
+- [`configuration.md`](configuration.md) — every `LHASSA_*` env var and setting.
+- [`deployment.md`](deployment.md) — the Docker image, Compose roles, secrets.
+- [`portability.md`](portability.md) — the VPS-portability audit: couplings, status, blockers.

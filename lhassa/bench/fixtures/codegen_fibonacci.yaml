@@ -1,0 +1,11 @@
+id: codegen_fibonacci
+title: "Code-gen: fibonacci function signature"
+prompt: >
+  Write a Python function named `fibonacci` that takes a single argument `n`
+  and returns the nth Fibonacci number (0-indexed). Reply with only the code,
+  no explanation.
+subject_kind: completion
+verify:
+  type: regex
+  pattern: 'def\s+fibonacci\s*\(\s*n\s*\)'
+tags: [codegen, python]
