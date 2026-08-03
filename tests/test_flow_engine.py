@@ -96,6 +96,58 @@ async def test_run_linear_flow_threads_data_and_records_gate(offline_env):
 
 
 @pytest.mark.asyncio
+async def test_opt_in_full_context_preserves_initial_dossier_and_every_stage(offline_env):
+    calls = []
+
+    async def executor(goal, *, department, config, **kwargs):
+        calls.append((department, goal))
+        return {"summary": f"{department}-output", "model": "stub", "cost_usd": 0}
+
+    flow = Flow(
+        id="research-context",
+        name="research context",
+        nodes=[
+            FlowNode("t", NodeKind.TRIGGER, {"type": "manual"}),
+            FlowNode(
+                "collector",
+                NodeKind.TASK,
+                {
+                    "brain": "collector",
+                    "prompt": "COLLECT {input}",
+                    "input_mode": "full",
+                    "preserve_context": True,
+                },
+            ),
+            FlowNode(
+                "analyst",
+                NodeKind.TASK,
+                {
+                    "brain": "analyst",
+                    "prompt": "ANALYZE {input}",
+                    "input_mode": "full",
+                    "preserve_context": True,
+                },
+            ),
+        ],
+        edges=[FlowEdge("t", "collector"), FlowEdge("collector", "analyst")],
+    )
+    record = await run_flow(
+        flow,
+        inputs={
+            "summary": "the idea",
+            "evidence_bundle": {"sources": [{"id": "S1", "sha256": "abc"}]},
+        },
+        config=offline_env,
+        executor=executor,
+    )
+    assert record["status"] == "completed"
+    assert '"sha256": "abc"' in calls[0][1]
+    assert '"sha256": "abc"' in calls[1][1]
+    assert "collector-output" in calls[1][1]
+    assert record["output"]["research_context"]["stages"][-1]["brain"] == "analyst"
+
+
+@pytest.mark.asyncio
 async def test_failing_gate_stops_the_path(offline_env):
     flow = _linear_flow()
     flow.node("g").config["spec"] = {"type": "regex", "pattern": "NEVER_MATCHES"}

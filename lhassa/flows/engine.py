@@ -200,7 +200,13 @@ async def _run_task(
     cfg = node.config or {}
     department, pinned = resolve_brain(node, data, config)
     prompt = cfg.get("prompt") or cfg.get("goal") or ""
-    goal = _format_goal(prompt, data, base_cv=base_cv, company=company) or department
+    goal = _format_goal(
+        prompt,
+        data,
+        base_cv=base_cv,
+        company=company,
+        input_mode=str(cfg.get("input_mode") or "summary"),
+    ) or department
     max_tokens = cfg.get("max_tokens")
     try:
         max_tokens = int(max_tokens) if max_tokens is not None else None
@@ -216,10 +222,70 @@ async def _run_task(
         "live": _live_enabled(),
         "result": result,
     }
-    return extra, result
+    data_out = _append_task_context(data, result, department) if cfg.get(
+        "preserve_context"
+    ) else result
+    return extra, data_out
 
 
-def _format_goal(prompt: str, data: Any, *, base_cv: str = "", company: str = "") -> str:
+def _format_input(data: Any, mode: str = "summary") -> str:
+    """Render upstream data for ``{input}``.
+
+    Historical flows use ``summary`` mode.  ``full`` is an explicit research/
+    audit mode that serialises the complete JSON-safe dossier so a later worker
+    cannot silently lose the original sources or an earlier worker's output.
+    """
+    if mode.strip().lower() == "full":
+        try:
+            return json.dumps(data, ensure_ascii=False, default=str, indent=2)
+        except Exception:
+            return str(data)
+    summary = data
+    if isinstance(data, dict):
+        summary = data.get("summary", data.get("output", data))
+    return str(summary)
+
+
+def _append_task_context(data: Any, result: Any, department: str) -> dict:
+    """Append one task result to a bounded cumulative dossier.
+
+    This is opt-in through ``config.preserve_context``.  It deliberately keeps a
+    single initial payload plus a flat stage list, avoiding the exponentially
+    nested ``input -> result -> input`` shape that a naive accumulator creates.
+    """
+    if isinstance(data, dict) and isinstance(data.get("research_context"), dict):
+        context = _json_safe(data["research_context"])
+    else:
+        context = {"initial": _json_safe(data), "stages": []}
+    stages = list(context.get("stages") or [])
+    result_dict = result if isinstance(result, dict) else {"summary": str(result)}
+    stages.append(
+        {
+            "brain": department,
+            "summary": str(
+                result_dict.get("summary", result_dict.get("output", result_dict))
+            ),
+            "model": result_dict.get("model"),
+            "cost_usd": float(result_dict.get("cost_usd") or 0.0),
+        }
+    )
+    context["stages"] = stages
+    return {
+        "summary": str(
+            result_dict.get("summary", result_dict.get("output", result_dict))
+        ),
+        "research_context": context,
+    }
+
+
+def _format_goal(
+    prompt: str,
+    data: Any,
+    *,
+    base_cv: str = "",
+    company: str = "",
+    input_mode: str = "summary",
+) -> str:
     """Build a task's goal by interpolating the available placeholders into ``prompt``.
 
     Placeholders (each substituted only if present, so behaviour for a prompt that
@@ -232,11 +298,8 @@ def _format_goal(prompt: str, data: Any, *, base_cv: str = "", company: str = ""
     prompt = str(prompt or "").strip()
     if not prompt:
         return ""
-    summary = data
-    if isinstance(data, dict):
-        summary = data.get("summary", data.get("output", data))
     replacements = {
-        "{input}": str(summary),
+        "{input}": _format_input(data, input_mode),
         "{base_cv}": base_cv or "",
         "{company}": company or "",
     }

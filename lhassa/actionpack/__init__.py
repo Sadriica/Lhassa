@@ -45,9 +45,11 @@ def register_all() -> None:
         _digest,
         _feedback,
         _files,
+        _integrity,
         _kg,
         _knowledge,
         _projects,
+        _research_intake,
         _research_note,
         _standing,
         _llm,
@@ -115,8 +117,10 @@ def register_all() -> None:
     _reg("create_project", _projects.create_project_action)
     _reg("kg_sync", _kg.kg_sync)
     _reg("kg_resolve", _kg.kg_resolve)
+    _reg("check_integrity", _integrity.check_integrity)
     _reg("attach_project_template", _standing.attach_project_template)
     _reg("draft_research_note", _research_note.draft_research_note)
+    _reg("research_intake", _research_intake.research_intake)
     _projects.register_sense()
     _standing.register_sense()
 

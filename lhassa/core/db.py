@@ -1053,6 +1053,191 @@ async def _validate_migration_008(db) -> None:
         raise MigrationValidationError(f"invalid bench_runs schema: missing {sorted(missing)}")
 
 
+async def _migration_009_idea_assessments(db) -> None:
+    """Durable research funnel: queryable state plus an immutable event stream.
+
+    ``idea_assessments`` is the current projection used by surfaces. Every
+    transition is first recorded in ``idea_assessment_events``; the latter is
+    append-only and is the audit source of truth.
+    """
+    await db.execute("""
+        CREATE TABLE idea_assessments (
+            id                TEXT PRIMARY KEY,
+            instance_id       TEXT NOT NULL,
+            idea              TEXT NOT NULL,
+            evidence_digest   TEXT NOT NULL,
+            evidence_path     TEXT,
+            status            TEXT NOT NULL,
+            investment_level  TEXT,
+            decision          TEXT,
+            weighted_score    REAL,
+            criteria          TEXT,
+            theory            TEXT,
+            uncertainties     TEXT,
+            assessment_path   TEXT,
+            assessment_run_id TEXT,
+            research_run_id   TEXT,
+            draft_path        TEXT,
+            created_at        TEXT NOT NULL,
+            updated_at        TEXT NOT NULL
+        )
+    """)
+    await db.execute("""
+        CREATE UNIQUE INDEX idea_assessments_by_evidence
+        ON idea_assessments(instance_id, evidence_digest)
+    """)
+    await db.execute("""
+        CREATE INDEX idea_assessments_by_state
+        ON idea_assessments(instance_id, status, investment_level, updated_at)
+    """)
+    await db.execute("""
+        CREATE TABLE idea_assessment_events (
+            id             TEXT PRIMARY KEY,
+            instance_id    TEXT NOT NULL,
+            assessment_id  TEXT NOT NULL,
+            stage          TEXT NOT NULL,
+            from_status    TEXT,
+            to_status      TEXT NOT NULL,
+            payload        TEXT,
+            created_at     TEXT NOT NULL
+        )
+    """)
+    await db.execute("""
+        CREATE INDEX idea_assessment_events_by_assessment
+        ON idea_assessment_events(instance_id, assessment_id, created_at, id)
+    """)
+
+
+async def _validate_migration_009(db) -> None:
+    expected = {
+        "idea_assessments": {
+            "id", "instance_id", "idea", "evidence_digest", "evidence_path",
+            "status", "investment_level", "decision", "weighted_score",
+            "criteria", "theory", "uncertainties", "assessment_path",
+            "assessment_run_id", "research_run_id", "draft_path", "created_at",
+            "updated_at",
+        },
+        "idea_assessment_events": {
+            "id", "instance_id", "assessment_id", "stage", "from_status",
+            "to_status", "payload", "created_at",
+        },
+    }
+    for table, required in expected.items():
+        async with db.execute(f"PRAGMA table_info({table})") as cur:
+            actual = {row[1] for row in await cur.fetchall()}
+        missing = required - actual
+        if missing:
+            raise MigrationValidationError(
+                f"invalid {table} schema: missing {sorted(missing)}"
+            )
+
+
+async def _migration_010_conformance(db) -> None:
+    """Executable philosophy: integrity runs, checks, findings and projection."""
+    await db.execute("""
+        CREATE TABLE conformance_runs (
+            id                     TEXT PRIMARY KEY,
+            instance_id            TEXT NOT NULL,
+            manifest_version       INTEGER NOT NULL,
+            trigger                TEXT NOT NULL,
+            status                 TEXT NOT NULL,
+            checks_total           INTEGER NOT NULL DEFAULT 0,
+            checks_passed          INTEGER NOT NULL DEFAULT 0,
+            findings_warn          INTEGER NOT NULL DEFAULT 0,
+            findings_critical      INTEGER NOT NULL DEFAULT 0,
+            started_at             TEXT NOT NULL,
+            finished_at            TEXT,
+            attestation_expires_at TEXT
+        )
+    """)
+    await db.execute("""
+        CREATE INDEX conformance_runs_by_instance
+        ON conformance_runs(instance_id, started_at)
+    """)
+    await db.execute("""
+        CREATE TABLE conformance_checks (
+            id           TEXT PRIMARY KEY,
+            instance_id  TEXT NOT NULL,
+            run_id       TEXT NOT NULL,
+            contract_id  TEXT NOT NULL,
+            version      INTEGER NOT NULL,
+            severity     TEXT NOT NULL,
+            passed       INTEGER NOT NULL,
+            summary      TEXT NOT NULL,
+            evidence     TEXT,
+            duration_ms  INTEGER NOT NULL DEFAULT 0,
+            created_at   TEXT NOT NULL
+        )
+    """)
+    await db.execute("""
+        CREATE INDEX conformance_checks_by_run
+        ON conformance_checks(instance_id, run_id, contract_id)
+    """)
+    await db.execute("""
+        CREATE TABLE conformance_findings (
+            id           TEXT PRIMARY KEY,
+            instance_id  TEXT NOT NULL,
+            run_id       TEXT NOT NULL,
+            check_id     TEXT NOT NULL,
+            contract_id  TEXT NOT NULL,
+            severity     TEXT NOT NULL,
+            summary      TEXT NOT NULL,
+            evidence     TEXT,
+            created_at   TEXT NOT NULL
+        )
+    """)
+    await db.execute("""
+        CREATE INDEX conformance_findings_by_instance
+        ON conformance_findings(instance_id, created_at)
+    """)
+    await db.execute("""
+        CREATE TABLE conformance_state (
+            instance_id       TEXT NOT NULL,
+            contract_id       TEXT NOT NULL,
+            contract_version  INTEGER NOT NULL,
+            last_run_id       TEXT NOT NULL,
+            passed            INTEGER NOT NULL,
+            severity          TEXT NOT NULL,
+            summary           TEXT NOT NULL,
+            evidence          TEXT,
+            checked_at        TEXT NOT NULL,
+            PRIMARY KEY(instance_id, contract_id)
+        )
+    """)
+
+
+async def _validate_migration_010(db) -> None:
+    expected = {
+        "conformance_runs": {
+            "id", "instance_id", "manifest_version", "trigger", "status",
+            "checks_total", "checks_passed", "findings_warn",
+            "findings_critical", "started_at", "finished_at",
+            "attestation_expires_at",
+        },
+        "conformance_checks": {
+            "id", "instance_id", "run_id", "contract_id", "version",
+            "severity", "passed", "summary", "evidence", "duration_ms",
+            "created_at",
+        },
+        "conformance_findings": {
+            "id", "instance_id", "run_id", "check_id", "contract_id",
+            "severity", "summary", "evidence", "created_at",
+        },
+        "conformance_state": {
+            "instance_id", "contract_id", "contract_version", "last_run_id",
+            "passed", "severity", "summary", "evidence", "checked_at",
+        },
+    }
+    for table, required in expected.items():
+        async with db.execute(f"PRAGMA table_info({table})") as cur:
+            actual = {row[1] for row in await cur.fetchall()}
+        missing = required - actual
+        if missing:
+            raise MigrationValidationError(
+                f"invalid {table} schema: missing {sorted(missing)}"
+            )
+
+
 MIGRATIONS = (
     Migration(1, "baseline", _migration_001_baseline, _validate_migration_001),
     Migration(2, "durable-flows", _migration_002_durable_flows, _validate_migration_002),
@@ -1062,6 +1247,13 @@ MIGRATIONS = (
     Migration(6, "knowledge-graph", _migration_006_knowledge_graph, _validate_migration_006),
     Migration(7, "loops", _migration_007_loops, _validate_migration_007),
     Migration(8, "bench-runs", _migration_008_bench_runs, _validate_migration_008),
+    Migration(
+        9,
+        "idea-assessments",
+        _migration_009_idea_assessments,
+        _validate_migration_009,
+    ),
+    Migration(10, "conformance", _migration_010_conformance, _validate_migration_010),
 )
 SCHEMA_VERSION = MIGRATIONS[-1].version
 
@@ -2107,6 +2299,398 @@ async def list_artifacts(instance_id: str, *, limit: int = 50) -> list[dict]:
     for row in rows:
         row["paths"] = _loads(row.get("paths"), [])
         row["metadata"] = _loads(row.get("metadata"), {})
+    return rows
+
+
+# ── idea assessment funnel (projection + append-only events) ──────────────────
+
+_IDEA_JSON_FIELDS = ("criteria", "theory", "uncertainties")
+_IDEA_UPDATE_FIELDS = {
+    "evidence_path", "investment_level", "decision", "weighted_score",
+    "criteria", "theory", "uncertainties", "assessment_path",
+    "assessment_run_id", "research_run_id", "draft_path",
+}
+
+
+def _decode_idea_assessment(row: dict) -> dict:
+    out = dict(row)
+    for field in _IDEA_JSON_FIELDS:
+        default = [] if field == "uncertainties" else {}
+        out[field] = _loads(out.get(field), default)
+    return out
+
+
+async def create_idea_assessment(
+    instance_id: str,
+    *,
+    idea: str,
+    evidence_digest: str,
+    evidence_path: Optional[str] = None,
+    payload: Optional[dict] = None,
+) -> dict:
+    """Create the funnel projection and its first immutable event, idempotently."""
+    now = _now()
+    assessment_id = _new_id("idea")
+    event_id = _new_id("ievt")
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        await conn.execute("BEGIN IMMEDIATE")
+        try:
+            async with conn.execute(
+                """SELECT * FROM idea_assessments
+                   WHERE instance_id = ? AND evidence_digest = ?""",
+                (instance_id, evidence_digest),
+            ) as cur:
+                existing = await cur.fetchone()
+            if existing is not None:
+                await conn.commit()
+                return _decode_idea_assessment(dict(existing))
+            await conn.execute(
+                """INSERT INTO idea_assessments(
+                       id, instance_id, idea, evidence_digest, evidence_path,
+                       status, created_at, updated_at)
+                   VALUES(?, ?, ?, ?, ?, 'captured', ?, ?)""",
+                (
+                    assessment_id,
+                    instance_id,
+                    idea,
+                    evidence_digest,
+                    evidence_path,
+                    now,
+                    now,
+                ),
+            )
+            await conn.execute(
+                """INSERT INTO idea_assessment_events(
+                       id, instance_id, assessment_id, stage, from_status,
+                       to_status, payload, created_at)
+                   VALUES(?, ?, ?, 'evidence_captured', NULL, 'captured', ?, ?)""",
+                (
+                    event_id,
+                    instance_id,
+                    assessment_id,
+                    _dumps(payload or {}),
+                    now,
+                ),
+            )
+            await conn.commit()
+        except BaseException:
+            await conn.rollback()
+            raise
+    return await get_idea_assessment(instance_id, assessment_id)  # type: ignore[return-value]
+
+
+async def transition_idea_assessment(
+    instance_id: str,
+    assessment_id: str,
+    *,
+    stage: str,
+    to_status: str,
+    updates: Optional[dict] = None,
+    payload: Optional[dict] = None,
+    expected_status: Optional[str] = None,
+) -> dict:
+    """Atomically append a stage event and advance the queryable projection."""
+    clean_updates = {
+        key: value
+        for key, value in (updates or {}).items()
+        if key in _IDEA_UPDATE_FIELDS
+    }
+    now = _now()
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        await conn.execute("BEGIN IMMEDIATE")
+        try:
+            async with conn.execute(
+                """SELECT * FROM idea_assessments
+                   WHERE instance_id = ? AND id = ?""",
+                (instance_id, assessment_id),
+            ) as cur:
+                current = await cur.fetchone()
+            if current is None:
+                raise KeyError(assessment_id)
+            from_status = str(current["status"])
+            if expected_status is not None and from_status != expected_status:
+                raise ValueError(
+                    f"idea assessment {assessment_id} is {from_status!r}, "
+                    f"expected {expected_status!r}"
+                )
+
+            columns = ["status = ?", "updated_at = ?"]
+            values: list[Any] = [to_status, now]
+            for key, value in clean_updates.items():
+                columns.append(f"{key} = ?")
+                values.append(_dumps(value) if key in _IDEA_JSON_FIELDS else value)
+            values.extend([instance_id, assessment_id])
+            await conn.execute(
+                f"""UPDATE idea_assessments SET {", ".join(columns)}
+                    WHERE instance_id = ? AND id = ?""",
+                values,
+            )
+            event_payload = dict(payload or {})
+            if clean_updates:
+                event_payload.setdefault("updates", clean_updates)
+            await conn.execute(
+                """INSERT INTO idea_assessment_events(
+                       id, instance_id, assessment_id, stage, from_status,
+                       to_status, payload, created_at)
+                   VALUES(?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    _new_id("ievt"),
+                    instance_id,
+                    assessment_id,
+                    stage,
+                    from_status,
+                    to_status,
+                    _dumps(event_payload),
+                    now,
+                ),
+            )
+            await conn.commit()
+        except BaseException:
+            await conn.rollback()
+            raise
+    return await get_idea_assessment(instance_id, assessment_id)  # type: ignore[return-value]
+
+
+async def get_idea_assessment(
+    instance_id: str, assessment_id: str
+) -> Optional[dict]:
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        async with conn.execute(
+            """SELECT * FROM idea_assessments
+               WHERE instance_id = ? AND id = ?""",
+            (instance_id, assessment_id),
+        ) as cur:
+            row = await cur.fetchone()
+    return _decode_idea_assessment(dict(row)) if row is not None else None
+
+
+async def find_idea_assessment_by_draft(
+    instance_id: str, draft_path: str
+) -> Optional[dict]:
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        async with conn.execute(
+            """SELECT * FROM idea_assessments
+               WHERE instance_id = ? AND draft_path = ?
+               ORDER BY updated_at DESC LIMIT 1""",
+            (instance_id, draft_path),
+        ) as cur:
+            row = await cur.fetchone()
+    return _decode_idea_assessment(dict(row)) if row is not None else None
+
+
+async def list_idea_assessments(
+    instance_id: str,
+    *,
+    status: Optional[str] = None,
+    limit: int = 100,
+) -> list[dict]:
+    sql = "SELECT * FROM idea_assessments WHERE instance_id = ?"
+    args: list[Any] = [instance_id]
+    if status:
+        sql += " AND status = ?"
+        args.append(status)
+    sql += " ORDER BY updated_at DESC, id DESC LIMIT ?"
+    args.append(max(1, min(int(limit), 500)))
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        async with conn.execute(sql, args) as cur:
+            rows = [dict(row) for row in await cur.fetchall()]
+    return [_decode_idea_assessment(row) for row in rows]
+
+
+async def list_idea_assessment_events(
+    instance_id: str, assessment_id: str
+) -> list[dict]:
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        async with conn.execute(
+            """SELECT * FROM idea_assessment_events
+               WHERE instance_id = ? AND assessment_id = ?
+               ORDER BY created_at, id""",
+            (instance_id, assessment_id),
+        ) as cur:
+            rows = [dict(row) for row in await cur.fetchall()]
+    for row in rows:
+        row["payload"] = _loads(row.get("payload"), {})
+    return rows
+
+
+# ── conformance: executable contracts + append-only evidence ─────────────────
+
+async def start_conformance_run(
+    instance_id: str, *, manifest_version: int, trigger: str
+) -> str:
+    run_id = _new_id("conf")
+    async with aiosqlite.connect(DB_PATH) as conn:
+        await conn.execute(
+            """INSERT INTO conformance_runs(
+                   id, instance_id, manifest_version, trigger, status, started_at)
+               VALUES(?, ?, ?, ?, 'running', ?)""",
+            (run_id, instance_id, manifest_version, trigger, _now()),
+        )
+        await conn.commit()
+    return run_id
+
+
+async def record_conformance_check(
+    instance_id: str,
+    run_id: str,
+    *,
+    contract_id: str,
+    version: int,
+    severity: str,
+    passed: bool,
+    summary: str,
+    evidence: Optional[dict] = None,
+    duration_ms: int = 0,
+) -> str:
+    """Append one check/finding and update its current-state projection atomically."""
+    check_id = _new_id("cchk")
+    now = _now()
+    evidence_json = _dumps(evidence or {})
+    async with aiosqlite.connect(DB_PATH) as conn:
+        await conn.execute("BEGIN IMMEDIATE")
+        try:
+            await conn.execute(
+                """INSERT INTO conformance_checks(
+                       id, instance_id, run_id, contract_id, version, severity,
+                       passed, summary, evidence, duration_ms, created_at)
+                   VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    check_id, instance_id, run_id, contract_id, version,
+                    severity, int(bool(passed)), summary, evidence_json,
+                    int(duration_ms), now,
+                ),
+            )
+            if not passed:
+                await conn.execute(
+                    """INSERT INTO conformance_findings(
+                           id, instance_id, run_id, check_id, contract_id,
+                           severity, summary, evidence, created_at)
+                       VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (
+                        _new_id("finding"), instance_id, run_id, check_id,
+                        contract_id, severity, summary, evidence_json, now,
+                    ),
+                )
+            await conn.execute(
+                """INSERT INTO conformance_state(
+                       instance_id, contract_id, contract_version, last_run_id,
+                       passed, severity, summary, evidence, checked_at)
+                   VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)
+                   ON CONFLICT(instance_id, contract_id) DO UPDATE SET
+                       contract_version=excluded.contract_version,
+                       last_run_id=excluded.last_run_id,
+                       passed=excluded.passed,
+                       severity=excluded.severity,
+                       summary=excluded.summary,
+                       evidence=excluded.evidence,
+                       checked_at=excluded.checked_at""",
+                (
+                    instance_id, contract_id, version, run_id, int(bool(passed)),
+                    severity, summary, evidence_json, now,
+                ),
+            )
+            await conn.commit()
+        except BaseException:
+            await conn.rollback()
+            raise
+    return check_id
+
+
+async def finish_conformance_run(
+    instance_id: str,
+    run_id: str,
+    *,
+    status: str,
+    checks_total: int,
+    checks_passed: int,
+    findings_warn: int,
+    findings_critical: int,
+    attestation_expires_at: Optional[str],
+) -> bool:
+    async with aiosqlite.connect(DB_PATH) as conn:
+        cur = await conn.execute(
+            """UPDATE conformance_runs SET
+                   status=?, checks_total=?, checks_passed=?, findings_warn=?,
+                   findings_critical=?, finished_at=?,
+                   attestation_expires_at=?
+               WHERE instance_id=? AND id=? AND status='running'""",
+            (
+                status, checks_total, checks_passed, findings_warn,
+                findings_critical, _now(), attestation_expires_at,
+                instance_id, run_id,
+            ),
+        )
+        await conn.commit()
+    return cur.rowcount == 1
+
+
+async def latest_conformance_run(instance_id: str) -> Optional[dict]:
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        async with conn.execute(
+            """SELECT * FROM conformance_runs
+               WHERE instance_id=? AND status!='running'
+               ORDER BY started_at DESC, id DESC LIMIT 1""",
+            (instance_id,),
+        ) as cur:
+            row = await cur.fetchone()
+    return dict(row) if row is not None else None
+
+
+async def list_conformance_checks(
+    instance_id: str, *, run_id: Optional[str] = None, limit: int = 200
+) -> list[dict]:
+    sql = "SELECT * FROM conformance_checks WHERE instance_id=?"
+    args: list[Any] = [instance_id]
+    if run_id:
+        sql += " AND run_id=?"
+        args.append(run_id)
+    sql += " ORDER BY created_at DESC, id DESC LIMIT ?"
+    args.append(max(1, min(int(limit), 1000)))
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        async with conn.execute(sql, args) as cur:
+            rows = [dict(row) for row in await cur.fetchall()]
+    for row in rows:
+        row["evidence"] = _loads(row.get("evidence"), {})
+        row["passed"] = bool(row.get("passed"))
+    return rows
+
+
+async def list_conformance_findings(
+    instance_id: str, *, limit: int = 200
+) -> list[dict]:
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        async with conn.execute(
+            """SELECT * FROM conformance_findings WHERE instance_id=?
+               ORDER BY created_at DESC, id DESC LIMIT ?""",
+            (instance_id, max(1, min(int(limit), 1000))),
+        ) as cur:
+            rows = [dict(row) for row in await cur.fetchall()]
+    for row in rows:
+        row["evidence"] = _loads(row.get("evidence"), {})
+    return rows
+
+
+async def get_conformance_state(instance_id: str) -> list[dict]:
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        async with conn.execute(
+            """SELECT * FROM conformance_state WHERE instance_id=?
+               ORDER BY contract_id""",
+            (instance_id,),
+        ) as cur:
+            rows = [dict(row) for row in await cur.fetchall()]
+    for row in rows:
+        row["evidence"] = _loads(row.get("evidence"), {})
+        row["passed"] = bool(row.get("passed"))
     return rows
 
 

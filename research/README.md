@@ -6,6 +6,11 @@ we study, taken **down to the base** — how it actually works, what evidence
 its authors present (labeled as theirs), how it maps to what Lhassa really
 built, and what WE have not yet verified with our own instruments.
 
+Ideas do not enter the corpus merely because they are interesting. `/idea`
+first produces an evidence-bound assessment and deterministic investment level;
+only `applied` and `rigorous` ideas receive a full corpus. Archived, watched and
+failed ideas remain queryable results with complete event logs.
+
 Every document follows the same seven sections:
 
 1. **The idea in one sentence**
@@ -52,3 +57,12 @@ these techniques in Lhassa, read the document, check section 5 for what
 already exists, and section 6 for what must be measured first. When an
 experiment from section 6 runs, its results feed a technical note
 (`lhassa research draft <topic>` → `doc/notes/drafts/`).
+
+New material enters through `/idea <text|link>`. Before any model writes,
+Lhassa creates a versioned `idea-<slug>-<digest>.evidence.json` custody bundle
+with `S1…Sn` captures (URL, redirect destination, timestamp, status, SHA-256,
+bounded visible text, nested-source provenance). The four aides receive that
+same bundle cumulatively. A draft is recorded only after the LLM-free
+`research_corpus` gate checks all seven sections, declared/cited source ids,
+evidence bullets, and a concrete experiment design. Passing that gate means
+“method-complete draft,” never “externally proven result.”

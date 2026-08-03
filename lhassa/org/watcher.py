@@ -17,6 +17,10 @@ Design (agreed with the owner):
     ``monitor_idle_interval`` seconds (default 300); while something IS running
     (an ``agent_runs`` entry in a running status) it listens on the short
     ``monitor_active_interval`` (default 15) so a failure/finish is caught quickly.
+  * **Sensor, not governor.** The watcher decides only when the deterministic
+    conformance pass is due. It invokes the closed ``temple_run`` gateway;
+    Temple delegates ``check_integrity`` to ``guardian``, which executes and
+    reports upward through the normal down-execute-up hierarchy.
   * **React on transition, not on persistence.** :func:`detect_events` diffs two
     snapshots into notable events; :func:`react` always logs a deterministic monitor
     Episode and pushes a Telegram alert only for *important* events (failures /
@@ -63,6 +67,7 @@ _KIND_HEALTH = "health_worsened"
 _KIND_APPROVALS = "approvals_new"
 _KIND_RUN_STARTED = "run_started"
 _KIND_RUN_FINISHED = "run_finished"
+_KIND_CONFORMANCE = "conformance_failed"
 
 # Backoff ceiling for the never-crash loop (seconds).
 _BACKOFF_CAP = 60.0
@@ -74,7 +79,12 @@ _BACKOFF_CAP = 60.0
 #   delegated_fps     — fingerprints of monitor delegations already minted as
 #                       org_run tasks, so a STANDING finding is not re-minted
 #                       every tick (mirrors ``last_alert_fp``'s de-dupe spirit).
-_STATE: dict = {"prev": None, "last_alert_fp": None, "delegated_fps": set()}
+_STATE: dict = {
+    "prev": None,
+    "last_alert_fp": None,
+    "delegated_fps": set(),
+    "last_integrity_at": 0.0,
+}
 
 
 def _live_enabled() -> bool:
@@ -246,6 +256,8 @@ def _is_important(event: dict) -> bool:
     """
     kind = event.get("kind")
     if kind in (_KIND_FAILURES, _KIND_APPROVALS):
+        return True
+    if kind == _KIND_CONFORMANCE:
         return True
     if kind == _KIND_HEALTH:
         return event.get("level") == "alert"
@@ -492,6 +504,61 @@ async def watch_loop(config: Optional[Config] = None, *, once: bool = False) -> 
         try:
             curr = _capture(config)
             events = detect_events(_STATE.get("prev"), curr)
+            now = asyncio.get_running_loop().time()
+            last_integrity = float(_STATE.get("last_integrity_at") or 0.0)
+            integrity_due = (
+                getattr(config, "integrity_enabled", False)
+                and (
+                    not last_integrity
+                    or now - last_integrity
+                    >= max(
+                        60.0,
+                        float(getattr(config, "integrity_interval", 3600.0)),
+                    )
+                )
+            )
+            if integrity_due:
+                import json
+
+                from lhassa import actionpack
+                from lhassa.actionpack._temple import temple_run
+
+                # The watcher is only the clock/sensor. The work itself follows
+                # Lhassa → temple → guardian, then returns through org.deliver.
+                actionpack.register_all()
+                record = await temple_run(
+                    {
+                        "action": "check_integrity",
+                        "params": {"config": config, "trigger": "watcher"},
+                        "config": config,
+                        "instruction": "scheduled conformance pass",
+                    },
+                    return_record=True,
+                )
+                try:
+                    integrity = json.loads(str(record.get("result") or "{}"))
+                except (AttributeError, json.JSONDecodeError, TypeError, ValueError):
+                    integrity = {
+                        "status": "error",
+                        "run_id": "unknown",
+                        "findings_critical": 1,
+                        "findings_warn": 0,
+                    }
+                _STATE["last_integrity_at"] = now
+                if integrity["status"] != "pass":
+                    critical = int(integrity.get("findings_critical") or 0)
+                    warnings = int(integrity.get("findings_warn") or 0)
+                    events.append(
+                        {
+                            "kind": _KIND_CONFORMANCE,
+                            "level": "alert" if critical else "warn",
+                            "summary": (
+                                f"integrity={integrity['status']}: "
+                                f"{critical} critical, {warnings} warning finding(s) "
+                                f"(run {integrity.get('run_id') or 'unknown'})"
+                            ),
+                        }
+                    )
             if events:
                 await react(events, department=getattr(config, "monitor_department", "interns"), config=config)
             _STATE["prev"] = curr

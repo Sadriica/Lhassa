@@ -413,6 +413,15 @@ class Config:
     # Only used when agent_backend=claude_code.
     # Defaults to the cwd where Lhassa was launched if not set.
     agent_dir: str = os.getenv("LHASSA_AGENT_DIR", "")
+    # Product-change experiments never run in the product checkout.  They live
+    # in an external git worktree under this root until a second approval
+    # explicitly integrates the verified candidate.
+    adoption_dir: str = os.getenv(
+        "LHASSA_ADOPTION_DIR", str(Path.home() / ".lhassa" / "adoptions")
+    )
+    research_assessment_flow_id: str = os.getenv(
+        "LHASSA_RESEARCH_ASSESSMENT_FLOW_ID", "flow-idea-assessment"
+    )
 
     # ── Local AI coding CLI (run_ai_cli tool) ─────────────────────────────────
     # Which local AI coding CLI the run_ai_cli tool dispatches tasks to, taking
@@ -699,6 +708,18 @@ class Config:
     monitor_active_interval: float = _safe_float(
         os.getenv("LHASSA_MONITOR_ACTIVE_INTERVAL", "15"), 15.0
     )
+    integrity_enabled: bool = os.getenv(
+        "LHASSA_INTEGRITY_ENABLED", "1"
+    ).strip().lower() not in ("0", "false", "off", "")
+    integrity_interval: float = _safe_float(
+        os.getenv("LHASSA_INTEGRITY_INTERVAL", "3600"), 3600.0
+    )
+    integrity_attestation_ttl: float = _safe_float(
+        os.getenv("LHASSA_INTEGRITY_ATTESTATION_TTL", "7200"), 7200.0
+    )
+    integrity_enforce_product_changes: bool = os.getenv(
+        "LHASSA_INTEGRITY_ENFORCE_PRODUCT_CHANGES", "1"
+    ).strip().lower() not in ("0", "false", "off", "")
     # The department the watcher attributes its episodes/alerts to.
     monitor_department: str = os.getenv("LHASSA_MONITOR_DEPARTMENT", "interns")
     # Push a Telegram/desktop alert for important events (failures / health-alert /

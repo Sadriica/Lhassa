@@ -54,6 +54,39 @@ guiding principle: never a vision page).
 | Episode log | `episodes` (+ FTS5 recall) | What happened, when, at what cost, decided by whom? |
 | Decisions log | `doc/decisions.md` | Why is it built this way? |
 | Loops table | `loops` | Do bounded iterations converge, and in how many turns? |
+| Source custody | `doc/notes/drafts/idea-*.evidence.json` | What bytes did we actually inspect, from which URL/redirect chain, when, and under which hash? |
+
+`/idea <text|link>` is the intake door. It persists a signed task before
+acknowledging it and captures sources before prose. Before commissioning a full
+corpus, it runs a theory-first assessment over nine explicit criteria:
+strategic value, architectural fit, theoretical grounding, evidence quality,
+testability, novelty, reusable knowledge, feasibility and reversibility. Each
+criterion carries a 0–3 score, rationale and captured source ids (or an explicit
+`UNVERIFIED`). The model proposes the rubric; deterministic code recomputes the
+weighted result and assigns the investment budget.
+
+| Investment | Disposition | What happens |
+|---|---|---|
+| `none` | `archive` | Retain the record; spend no more. |
+| `exploration` | `watch` | Keep the theory/evidence brief; wait for a stronger signal. |
+| `applied` | `research` | Commission the full corpus and applied experiment design. |
+| `rigorous` | `experiment` | Commission the corpus with academic-grade experimental intent. |
+
+Only the last two continue through collector → analyst → skeptic → synthesist
+and write content-addressed evidence/draft pairs. The corpus gate checks method
+shape and citation discipline; it does not pretend that a citation makes an
+external claim true.
+
+Every stage is durable. `idea_assessments` is the queryable current projection;
+`idea_assessment_events` is the append-only audit stream. Assessment JSON,
+custody and corpus are registered artifacts. Inspect them through:
+
+```bash
+lhassa research assessments
+lhassa research assessment <idea-id>
+```
+
+or `GET /api/research/assessments[/{idea-id}]`.
 
 ## The note queue
 
@@ -68,6 +101,9 @@ guiding principle: never a vision page).
 Drafts are produced by the brain itself (`lhassa research draft <topic>` →
 `doc/notes/drafts/`) from an evidence pack with per-datum provenance, and are
 NEVER published without the owner's review — a draft header says so.
+Instrument rows in that pack are topic-filtered, keep their row ids, and use a
+real seven-day episode window; global spend/approval readings are labeled
+operational context rather than evidence for the topic.
 
 ## The owner of this line: the geshe
 
@@ -92,3 +128,30 @@ that would verify it on our instruments.
 The research line becomes true as a **documented byproduct of real work**.
 The instruments run every day; a note is written when the data already tells
 the story.
+
+## From research to a product change
+
+A corpus draft is publishable knowledge, not permission to edit a product.
+Adoption is a separate, two-approval protocol:
+
+1. `lhassa research propose-change <project> <draft> --objective "..." --verify "..."`
+   re-runs the objective corpus gate, locks the draft by SHA-256, records a
+   `product_change` artifact, and parks an **experiment approval**.
+2. After that approval, `lhassa research build-change <change-id>` creates a git
+   worktree under `LHASSA_ADOPTION_DIR` (outside the product checkout) and launches
+   the coding agent with that worktree as its workspace. The acceptance command
+   runs through the existing secret-scrubbed, network-isolated quarantine. If
+   enforceable isolation is not available, the gate fails closed.
+3. A passing experiment becomes an immutable candidate commit and parks a
+   separate **integration approval**. Nothing merges as a side effect of the
+   experiment approval.
+4. `lhassa research apply-change <change-id>` checks that the research, candidate,
+   product base, and clean checkout are unchanged, then creates a merge commit.
+   The adoption record stores the exact `git revert` rollback command.
+
+This makes the direction one-way and explicit:
+
+`world evidence → internal corpus → approved external experiment → objective gate → approved product change`
+
+Research can recommend. It cannot authorize its own implementation or judge its
+own result.

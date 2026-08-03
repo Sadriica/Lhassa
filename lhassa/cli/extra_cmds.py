@@ -74,6 +74,7 @@ def render_overview(data: dict) -> str:
     approvals = data.get("approvals", {}) or {}
     cost = data.get("cost", {}) or {}
     health = data.get("health", {}) or {}
+    integrity = data.get("integrity", {}) or {}
     activity = data.get("activity", {}) or {}
     tools = data.get("tools", {}) or {}
     errors = data.get("errors", {}) or {}
@@ -110,6 +111,13 @@ def render_overview(data: dict) -> str:
     worst = str(health.get("worst_level") or "info")
     hstyle = "success" if health.get("ok") else "warn"
     lines.append(f"  [title]Health[/]     [{hstyle}]{worst}[/] [dim]·[/] ok={_flag(bool(health.get('ok')))}")
+    istyle = "success" if integrity.get("valid") else "warn"
+    lines.append(
+        f"  [title]Integrity[/]  [{istyle}]"
+        f"{escape(str(integrity.get('status') or 'unattested'))}[/] "
+        f"[dim]·[/] {_flag(bool(integrity.get('valid')))} "
+        f"[dim]{escape(str(integrity.get('reason') or ''))}[/]"
+    )
 
     by_estado = tools.get("by_estado") or {}
     estado_str = ", ".join(f"{k}={v}" for k, v in by_estado.items()) or "—"

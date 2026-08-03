@@ -476,6 +476,20 @@ from Telegram (`/cv <posting>` → tailors the on-disk `cv_largo.tex` → replie
 tectonic-compiled PDF), guarded by a `contact_preserved` gate (an objective, LLM-free árbitro
 that fails if the model altered the candidate's email/phone).
 
+**Research intake hardening.** `/idea <text|link>` mints the signed
+`research_intake` action before acknowledging it (HUMANO origin, no extra
+approval because the owner explicitly invoked it); the immediate runner is
+only an early heartbeat. `agents/research_evidence.py` freezes a bounded
+MUNDO-trust custody bundle before any model call (requested/final URL, capture
+status/time, SHA-256, text, nested provenance). The canonical research flow
+uses opt-in full cumulative context so collector → analyst → skeptic →
+synthesist all retain that bundle and every stage. Its `research_corpus`
+verifier is LLM-free and checks seven-section order, declared/cited `S#` ids,
+evidence citation coverage, and Baseline/Instrument/Metric/Stop rule. Evidence
+and draft filenames are content-addressed; the durable flow run uses the bundle
+digest as its idempotency key. `draft_research_note` filters instrument rows by
+topic, preserves row ids, and labels global readings as operational context.
+
 ## The monitor role (`org/monitor.py` + `org/watcher.py`)
 
 **Standing principle — "monitor" is a first-class, constant role.** `org/monitor.py`:

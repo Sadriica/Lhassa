@@ -233,6 +233,7 @@ def test_resolve_worker_maps_each_maintenance_action_to_its_monk():
     assert temple.resolve_worker("curate_skills", topo) == "guardian"
     assert temple.resolve_worker("review_tools", topo) == "guardian"
     assert temple.resolve_worker("distill_memory", topo) == "guardian"
+    assert temple.resolve_worker("check_integrity", topo) == "guardian"
     assert temple.resolve_worker("detect_repetition", topo) == "oracle"
     assert temple.resolve_worker("calendar_sync", topo) == "synchronizer"
 
