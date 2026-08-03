@@ -1712,6 +1712,31 @@ async def poll_once(config=None, *, offset=None):
     and makes **no network call**. Accepts only messages from the configured chat
     id, answers each through the brain, and advances the offset past every update
     seen (so even ignored updates are not re-fetched). Never raises.
+
+    This is the OFFSET-ONLY view, kept for callers that only care about the
+    cursor. It cannot distinguish a failed cycle from an idle one — both return
+    ``offset`` unchanged — so a polling LOOP must use :func:`poll_cycle`, which
+    reports success separately. See that function for why.
+    """
+    cycle_offset, _ok = await poll_cycle(config=config, offset=offset)
+    return cycle_offset
+
+
+async def poll_cycle(config=None, *, offset=None):
+    """One ``getUpdates`` cycle as ``(next_offset, ok)``.
+
+    ``ok`` is False when the cycle failed (transport error or a non-200), True
+    otherwise — INCLUDING a clean long-poll that simply saw no updates.
+
+    This distinction is the whole point. :func:`poll_once` returns ``offset``
+    unchanged both when the network is down and when nothing happened, so a
+    loop built on it cannot tell "broken" from "idle" and spins as fast as the
+    failures come back. With DNS down that measured ~45 getUpdates attempts per
+    second — a laptop burning CPU and battery and flooding the journal, while
+    ``run_forever``'s exponential backoff sat unused because ``poll_once``
+    never raised. Returning ``ok`` is what lets the loop actually back off.
+
+    Never raises.
     """
     if config is None:
         from lhassa.config import Config
@@ -1719,7 +1744,7 @@ async def poll_once(config=None, *, offset=None):
         config = Config()
 
     if not _enabled(config):
-        return offset
+        return offset, True  # disabled is not a failure — nothing to back off from
 
     token = (getattr(config, "telegram_bot_token", "") or "").strip()
     allowed_chat = str(getattr(config, "telegram_chat_id", "") or "").strip()
@@ -1733,24 +1758,24 @@ async def poll_once(config=None, *, offset=None):
             response = await client.get(url, params=params)
     except Exception as exc:  # transport error — keep the offset, let caller retry
         logger.warning(f"Telegram inbound: getUpdates failed (transport): {exc}")
-        return offset
+        return offset, False
 
     if response.status_code != 200:
         logger.warning(
             f"Telegram inbound: getUpdates HTTP {response.status_code} "
             f"{response.text[:200]}"
         )
-        return offset
+        return offset, False
 
     try:
         data = response.json()
     except Exception:
         logger.warning("Telegram inbound: could not decode getUpdates JSON")
-        return offset
+        return offset, False
 
     if not isinstance(data, dict) or not data.get("ok"):
         logger.warning(f"Telegram inbound: getUpdates rejected: {str(data)[:200]}")
-        return offset
+        return offset, False
 
     updates = data.get("result") or []
     new_offset = offset
@@ -1795,7 +1820,7 @@ async def poll_once(config=None, *, offset=None):
             logger.warning(f"Telegram inbound: skipping bad update: {exc}")
             continue
 
-    return new_offset
+    return new_offset, True
 
 
 async def run_forever(config=None) -> None:
@@ -1838,11 +1863,20 @@ async def run_forever(config=None) -> None:
     backoff = _BACKOFF_START
     while True:
         try:
-            new_offset = await poll_once(config=config, offset=offset)
+            new_offset, ok = await poll_cycle(config=config, offset=offset)
             if new_offset != offset:
                 offset = new_offset
-            backoff = _BACKOFF_START  # a clean cycle resets the backoff
-        except Exception as exc:  # poll_once is defensive, but belt-and-braces
+            if ok:
+                backoff = _BACKOFF_START  # a clean cycle resets the backoff
+            else:
+                # poll_cycle already logged WHY. Without this sleep the loop
+                # spins at the speed of the failure (measured ~45 attempts/s
+                # with DNS down) — the backoff below existed but could never
+                # fire, because poll_once swallows transport errors instead of
+                # raising. Sleep BEFORE growing it so the first retry is quick.
+                await asyncio.sleep(backoff)
+                backoff = min(backoff * 2, _BACKOFF_MAX)
+        except Exception as exc:  # poll_cycle is defensive, but belt-and-braces
             logger.warning(f"Telegram inbound: poll cycle error: {exc}")
             await asyncio.sleep(backoff)
             backoff = min(backoff * 2, _BACKOFF_MAX)

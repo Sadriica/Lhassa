@@ -95,6 +95,35 @@ def _judgment_query(trigger: "watchlist.Trigger") -> str:
     return trigger.objetivo or f"{trigger.kind}:{trigger.action}"
 
 
+def next_recurrence_due(old_due, now, interval_seconds: int):
+    """The next occurrence of a recurring task — ADVANCED IN WHOLE INTERVALS.
+
+    A bare ``max(now, old_due + interval)`` looks equivalent and is not: on a
+    machine that suspends (a laptop), any downtime longer than one interval
+    makes every overdue recurrence re-anchor to the WAKE INSTANT instead of its
+    wall-clock slot. An 08:00 daily digest then walks to whenever the lid was
+    opened — and because every overdue task re-anchors to the SAME instant,
+    schedules that were deliberately apart (08:00 + 21:00) collapse onto each
+    other and fire as duplicates from then on. That is not hypothetical: it is
+    how the owner's twice-daily digest ended up arriving twice, seconds apart.
+
+    Stepping by whole intervals keeps 08:00 at 08:00 across any downtime.
+    Occurrences missed while suspended stay MISSED — they are deliberately not
+    replayed in a catch-up burst, which would be a notification storm on wake.
+
+    A non-positive ``interval_seconds`` degrades to ``now`` rather than looping.
+    """
+    from datetime import timedelta as _td
+
+    if interval_seconds <= 0:
+        return now
+    next_due = old_due + _td(seconds=interval_seconds)
+    if next_due <= now:
+        missed = (now - next_due).total_seconds() // interval_seconds + 1
+        next_due += _td(seconds=interval_seconds * missed)
+    return next_due
+
+
 async def _notify_loop_capped(instance_id: str, loop_id: str, goal: str) -> None:
     """Notify the owner once via the existing notify path — the registered
     ``notify`` fixed action (``actionpack/_brain.py:notify``), so ``core/``
@@ -597,7 +626,7 @@ async def step(
             if estado == "hecha" and trigger.recurrence:
                 try:
                     _interval = float(trigger.recurrence)
-                    from datetime import datetime, timezone, timedelta
+                    from datetime import datetime, timezone
                     now_dt = datetime.now(timezone.utc)
                     if trigger.due_at:
                         try:
@@ -608,7 +637,7 @@ async def step(
                             old_due = now_dt
                     else:
                         old_due = now_dt
-                    next_due = max(now_dt, old_due + timedelta(seconds=_interval))
+                    next_due = next_recurrence_due(old_due, now_dt, _interval)
                     next_due_iso = next_due.isoformat()
                     from lhassa.security.trust import Origin, TrustLevel
                     origin = Origin(
