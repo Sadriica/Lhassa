@@ -280,7 +280,15 @@ async def delegate_internal(
         try:
             from lhassa.org import deliver as deliver_mod
 
-            summary = f"{worker} completed {action}: {str(result)[:300]}"
+            # Actions answer with their own name as a prefix by convention
+            # ("curate_skills: 3 stale skills archived"), and this line already
+            # names the action — so the raw join stutters:
+            # "guardian completed check_integrity: check_integrity: fail…".
+            # Drop the redundant prefix; the owner reads this.
+            body = str(result)
+            if body.startswith(f"{action}:"):
+                body = body[len(action) + 1:].lstrip()
+            summary = f"{worker} completed {action}: {body[:300]}"
             delivered, _artifact_id = await deliver_mod.deliver(
                 text=summary,
                 kind="internal",
