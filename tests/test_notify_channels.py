@@ -169,6 +169,10 @@ def test_desktop_send_invokes_notify_send(monkeypatch):
     d = ch.CHANNELS.get("desktop")
     calls = []
 
+    # The desktop channel dispatches per platform (notify-send on Linux,
+    # osascript elsewhere), so the platform is PINNED by injection rather than
+    # left to whatever host the suite runs on — macOS CI caught this.
+    monkeypatch.setenv("LHASSA_PLATFORM", "linux")
     monkeypatch.setattr(desktop.shutil, "which", lambda _b: "/usr/bin/notify-send")
     monkeypatch.setattr(
         desktop.subprocess, "run", lambda *a, **k: calls.append((a, k))
@@ -242,3 +246,21 @@ def test_dispatch_never_raises_on_channel_error(add_channel):
     # The raising channel is swallowed; the next channel still delivers → True.
     assert asyncio.run(dispatch.notify("x", config=_cfg("raiser, after"))) is True
     assert good.sent == [("x", "info")]
+
+
+def test_desktop_send_uses_osascript_off_linux(monkeypatch):
+    """The macOS counterpart — same seam, other platform, pinned by injection."""
+    d = ch.CHANNELS.get("desktop")
+    calls = []
+
+    monkeypatch.setenv("LHASSA_PLATFORM", "darwin")
+    monkeypatch.setattr(desktop.shutil, "which", lambda _b: "/usr/bin/" + _b)
+    monkeypatch.setattr(desktop.subprocess, "run", lambda *a, **k: calls.append((a, k)))
+
+    ok = asyncio.run(d.send("hola mac", level="error"))
+    assert ok is True
+    argv = calls[0][0][0]
+    assert argv[0] == "osascript"
+    # The message rides the environment, never interpolated into the script.
+    assert "hola mac" not in " ".join(argv)
+    assert calls[0][1]["env"]["_LHASSA_MSG"] == "hola mac"

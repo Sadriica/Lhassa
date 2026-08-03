@@ -67,7 +67,11 @@ def test_parse_vm_stat_is_clamped_to_a_percentage():
 # ── platform selection is configuration, not surgery ─────────────────────────
 
 
-def test_current_platform_takes_an_injected_system():
+def test_current_platform_takes_an_injected_system(monkeypatch):
+    # The env override deliberately outranks the injected system (see the next
+    # test), so it is cleared here — otherwise this test silently depends on
+    # whatever LHASSA_PLATFORM the suite happens to run under.
+    monkeypatch.delenv("LHASSA_PLATFORM", raising=False)
     assert host.current_platform_name(system="Darwin") == "darwin"
     assert host.current_platform_name(system="Linux") == "linux"
 
