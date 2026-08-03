@@ -169,9 +169,11 @@ past this list without every addition being echoed here):
 | `distill_memory` | `guardian` |
 | `review_tools` | `guardian` |
 | `curate_skills` | `guardian` |
+| `review_capabilities` | `guardian` |
 | `detect_repetition` | `oracle` |
 | `calendar_sync` | `synchronizer` |
 | `kg_sync` | `guardian` |
+| versioned integrity contracts / conformance findings | `guardian` |
 
 An action absent from the map, or whose resolved worker is missing from the
 topology, falls back to `temple` itself — the department is always someone.

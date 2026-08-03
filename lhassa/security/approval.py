@@ -293,7 +293,8 @@ def describe(row: dict) -> dict:
     ``request_approval`` caller writes (``mint_action``, ``mint_script``,
     ``mint_memory``, ``mint_schedule``, ``seed_cache`` — the self-improvement
     consciousness's :func:`lhassa.agents.repetition.recommend_intervention`
-    kinds — plus ``tool_graduation``, ``flow_gate``, ``org_task``, dispatch/
+    kinds — plus ``retire_capability`` (the utility tribunal),
+    ``tool_graduation``, ``flow_gate``, ``org_task``, dispatch/
     remote tasks) and degrades to
     ``tipo``+``accion`` for anything unknown. Never raises.
     """
@@ -374,6 +375,30 @@ def describe(row: dict) -> dict:
             bits.append("approving handles them free")
             return {
                 "title": f"Route {capability} questions to the $0 handler",
+                "detail": " · ".join(bits),
+            }
+        if tipo == "retire_capability":
+            cap = payload.get("capability") or "?"
+            state = str(payload.get("state") or "")
+            bits = []
+            if state == "unused":
+                bits.append("never used, by anyone")
+            else:
+                owner_uses = payload.get("owner_uses")
+                days = payload.get("days_since_owner_use")
+                if days is not None:
+                    try:
+                        bits.append(f"no owner use in {float(days):.0f}d")
+                    except (TypeError, ValueError):
+                        pass
+                elif not owner_uses:
+                    bits.append("no owner use on record")
+                self_uses = payload.get("self_uses")
+                if self_uses:
+                    bits.append(f"ran {self_uses}× only because Lhassa scheduled it")
+            bits.append("approving records the retirement; pin it to keep it")
+            return {
+                "title": f"Retire capability '{cap}'",
                 "detail": " · ".join(bits),
             }
         if tipo == "tool_graduation":

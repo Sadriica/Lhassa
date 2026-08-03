@@ -62,6 +62,7 @@ def register_all() -> None:
         _selfimprove,
         _system,
         _temple,
+        _utility,
     )
 
     # Defensive guard: skip any action that is already in the registry.
@@ -139,6 +140,10 @@ def register_all() -> None:
 
     # ── Skills curator (deterministic lifecycle sweep) ─────────────────────────
     _reg("curate_skills", _curate.curate_skills)
+
+    # ── Utility tribunal — the counterweight: does a capability still SERVE?
+    # (agents/utility.py, $0 derived read over the episode log) ───────────────
+    _reg("review_capabilities", _utility.review_capabilities)
 
     # ── Temple — internal hygiene work routed down-execute-up through the
     # temple department (see lhassa.org.temple / lhassa.seeds.temple) ────────

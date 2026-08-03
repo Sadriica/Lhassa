@@ -109,6 +109,9 @@ ACTION_OWNERS: dict[str, str] = {
     "kg_resolve": GUARDIAN,
     "review_tools": GUARDIAN,
     "curate_skills": GUARDIAN,
+    # The utility tribunal is self-maintenance of the same family as
+    # review_tools/curate_skills — it asks whether a capability still serves.
+    "review_capabilities": GUARDIAN,
     "detect_repetition": ORACLE,
     # Research artifacts belong to the scholar-monk, not the docs scribe: the
     # geshe owns HOW Lhassa writes, drafts and focuses its research (the

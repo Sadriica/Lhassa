@@ -29,6 +29,7 @@ TEMPLE_ACTIONS: frozenset[str] = frozenset(
         "detect_repetition",
         "review_tools",
         "curate_skills",
+        "review_capabilities",
         "calendar_sync",
         "derive_world_facts",
         "ingest_knowledge",

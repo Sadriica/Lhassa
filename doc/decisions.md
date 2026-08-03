@@ -1,5 +1,58 @@
 # Lhassa — decisions log
 
+## 2026-08-03 — El tribunal de utilidad: el contrapeso que faltaba
+
+Every invariant Lhassa had was an invariant of RESTRAINT — deny-by-default,
+signed tasks, quarantine, provenance, integrity contracts. None asked **"is this
+used?"**, so the system optimised what it measured and accreted capability it
+never exercised. Its own instruments said so: in the seven days before this
+change, 227 of 309 episodes (73%) were hierarchy bookkeeping, and owner-facing
+thinks per week ran 41 → 34 → 4 → 14 → 8 while ~2000 lines of self-governance
+machinery went in. `agents/utility.py` is the counterweight, deliberately built
+as the mirror of `skills/curator.py`: the curator gives SKILLS a usage
+lifecycle; this gives CAPABILITIES (registered actions) the same discipline.
+
+- **No new storage.** A skill read leaves no trace, so the curator needs a
+  sidecar. A capability leaves an Episode. So this is a pure derived read over
+  the append-only log — the choice `memory/evidence.py` already makes.
+- **Owner-driven vs self-driven is the whole point.** Counting bare uses would
+  call a capability "active" because Lhassa's own maintenance seed schedules it
+  — exactly the self-referential trap. Each use is bucketed by wake source into
+  owner / self / unknown against a closed, documented heuristic vocabulary.
+- **Two ledgers, maxed not summed.** The episode's wake source misses deferred
+  work the owner asked for (`/remind` mints today, fires next week from
+  `task:*`). The task row keeps the real provenance in `origen_actor`, so that
+  counts too. The ledgers overlap, so they combine with `max()` — an inflated
+  count in the module whose job is honest measurement would be the worst
+  possible bug. `origen_trust` is deliberately NOT the signal: a seed mints at
+  HUMANO trust too (`seed:digest`); trust answers "how much may this do", never
+  "who asked for it".
+- **It proposes; it never retires.** A registered action lives in code. The
+  `review_capabilities` action parks ONE `retire_capability` approval per
+  capability, once ever (watch_state-deduped), capped at 5 per sweep with the
+  remainder REPORTED, never silently dropped. Guardian owns it (weekly, via
+  `temple_run`), so it rides the same down-execute-up hop as its siblings.
+- **A young brain is not put on trial:** nothing is proposed until the instance
+  has more than `utility_grace_days` (14) of episode history — the curator's
+  mtime-fallback idea, applied to time-in-service.
+- Surfaces: `lhassa utility survey [--all] [--json]` and `lhassa utility
+  docket`; `LHASSA_UTILITY_PINNED` is the deliberate-dormancy escape hatch.
+
+First live verdict on the owner's own brain: of 43 registered capabilities,
+**3 are owner-driven** (`research_reply` 18, `send_reminder` 8, `check_spend` 1),
+13 are self-driven, and 27 have never been used by anyone. The instrument found
+its own first defect during that run — `send_reminder` read as self-driven
+because its execution is deferred — which is what forced the task-ledger pass.
+
+**Correction to the 2026-07-30 (post-review) entry.** That entry recorded the
+full suite as order-dependently hanging at `test_turn_cap_stops_before_any_
+model_call` after reaching 43%. Reverified this session: the full suite runs to
+completion, **2245 passed in 104–124s**, both with and without flags, and
+`pytest-randomly` is not even installed (only `pytest-asyncio`), so the earlier
+`-p no:randomly` reading was a no-op. The hang does not reproduce. A recorded
+debt that no longer exists is as corrosive as a hidden one — the original entry
+stands as written, corrected here rather than edited away.
+
 ## 2026-07-30 — Integrity Watcher: la filosofía se convierte en contratos
 
 The existing monitor could see health/failure transitions but could not prove
