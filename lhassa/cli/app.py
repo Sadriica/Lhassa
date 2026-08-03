@@ -41,6 +41,7 @@ from lhassa.cli import config_cmds as _config_cmds  # noqa: E402
 from lhassa.cli import extra_cmds as _extra_cmds  # noqa: E402
 from lhassa.cli import flow_cmds as _flow_cmds  # noqa: E402
 from lhassa.cli import integrity_cmds as _integrity_cmds  # noqa: E402
+from lhassa.cli import utility_cmds as _utility_cmds  # noqa: E402
 from lhassa.cli import knowledge_cmds as _knowledge_cmds  # noqa: E402
 from lhassa.cli import memory_cmds as _memory_cmds  # noqa: E402
 from lhassa.cli import org_cmds as _org_cmds  # noqa: E402
@@ -302,6 +303,9 @@ app.add_typer(_bench_cmds.bench_app, name="bench")
 # ── lhassa research … (the product's research line: evidence-cited note drafts) ──
 app.add_typer(_research_cmds.research_app, name="research")
 app.add_typer(_integrity_cmds.integrity_app, name="integrity")
+
+# ── lhassa utility … (the tribunal: which capabilities still SERVE the owner) ──
+app.add_typer(_utility_cmds.utility_app, name="utility")
 
 # Attach the `lhassa tools` sub-app (self-written tools: list + propose).
 app.add_typer(_tools_cmds.tools_app, name="tools")

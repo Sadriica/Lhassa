@@ -59,6 +59,9 @@ _RECURRING_ACTIONS: tuple[tuple[str, int], ...] = (
     ("apply_feedback", 86400),
     ("review_tools", 604800),
     ("curate_skills", 604800),
+    # The utility tribunal — weekly for the same reason as the two above: a
+    # capability needs time to accrue real usage before "unused" means anything.
+    ("review_capabilities", 604800),
     ("kg_sync", 604800),
     ("kg_resolve", 604800),
     ("calendar_sync", 86400),

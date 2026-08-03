@@ -188,6 +188,14 @@ def build_allowlist(repos: "set[str] | str | None" = None) -> dict[str, ActionSp
             min_trust=TrustLevel.INTERNO,
             requires_approval=False,  # deterministic sweep; never deletes, pinned exempt
         ),
+        # The utility tribunal: a read over the episode log that only PARKS a
+        # retire_capability approval. It never unregisters or deletes anything,
+        # so it needs no HITL gate of its own — the approval IS the gate.
+        "review_capabilities": ActionSpec(
+            objetivos=WILDCARD,
+            min_trust=TrustLevel.INTERNO,
+            requires_approval=False,
+        ),
         "research_reply": ActionSpec(
             objetivos=WILDCARD,
             min_trust=TrustLevel.INTERNO,

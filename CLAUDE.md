@@ -227,6 +227,22 @@ deterministic, $0, degrade-to-normal-think on any failure:
   refuses (409) tools that didn't pass the gates. `review_tools` applies
   `should_retire`/`retire`. Authored code never executes outside quarantine before
   graduating.
+- **The utility tribunal** (`agents/utility.py` + the `review_capabilities` action)
+  — the COUNTERWEIGHT to every restraint invariant. All the others ask "is this
+  safe/honest?"; this one asks **"is this used?"**, so the system stops accreting
+  capability it never exercises. A pure derived read over the episode log ($0, no
+  LLM, no new storage — a capability leaves an Episode, unlike a skill read): each
+  use is bucketed by wake source into **owner** / **self** / unknown against a
+  closed documented vocabulary, so a capability that only runs because Lhassa's own
+  maintenance seed scheduled it reports as `self_driven` — running, but not earning
+  its place. A second pass over `tasks.origen_actor` catches deferred work the owner
+  asked for (`/remind` mints today, fires next week from `task:*`); the two ledgers
+  overlap so they combine with `max()`, never a sum. `origen_trust` is deliberately
+  NOT the signal (a seed mints at HUMANO trust too). It **proposes, never retires**:
+  one `retire_capability` approval per capability, once ever, capped per sweep with
+  the remainder reported. Guardian owns it weekly through `temple_run`; nothing is
+  tried before `utility_grace_days` (14) of history; `LHASSA_UTILITY_PINNED` is the
+  deliberate-dormancy exemption. `lhassa utility survey|docket`.
 - **Loops** (`core/db.py`'s `loops` table) — the unit of work past a single think is a
   bounded, verifier-terminated loop, never an unbounded "call the model until it feels
   done." `agents/author.py:propose_tool(..., max_turns=3)` iterates: a failing gate's

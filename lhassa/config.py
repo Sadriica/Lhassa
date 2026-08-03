@@ -682,6 +682,18 @@ class Config:
     skill_stale_days: int = _safe_int(os.getenv("LHASSA_SKILL_STALE_DAYS", "30"), 30)
     skill_archive_days: int = _safe_int(os.getenv("LHASSA_SKILL_ARCHIVE_DAYS", "90"), 90)
 
+    # The utility tribunal (``agents/utility.py``) — the curator's discipline
+    # applied to CAPABILITIES (registered actions). A capability with no
+    # OWNER-driven use in this many days is reported "self_driven": it runs,
+    # but only because Lhassa scheduled it for itself.
+    utility_dormant_days: int = _safe_int(os.getenv("LHASSA_UTILITY_DORMANT_DAYS", "30"), 30)
+    # Nothing is put on trial until the instance has this much episode history —
+    # a young brain has not had TIME to use anything.
+    utility_grace_days: int = _safe_int(os.getenv("LHASSA_UTILITY_GRACE_DAYS", "14"), 14)
+    # Capabilities the owner declared deliberately dormant (comma-separated) —
+    # surveyed, never proposed for retirement. The curator's "pinned", for actions.
+    utility_pinned: str = os.getenv("LHASSA_UTILITY_PINNED", "")
+
     # ── Modularity — registries, channels, plugins (elastic & modular) ────────
     # Which notify CHANNELS are active (comma-separated); each is a registered,
     # swappable channel. Empty entries are ignored; unknown names are skipped with

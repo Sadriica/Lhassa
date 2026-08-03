@@ -54,10 +54,26 @@ lhassa code "refactor the parser" --cli codex
 | `tools propose <name>` | Have the routine model author a candidate tool, run it through quarantine + the gates, and park a graduation approval on a full pass | `lhassa tools propose clean_downloads --desc "sort ~/Downloads by type"` |
 | `bench run` | Score one or more subjects against the LhassaBench fixtures, printing a pass-rate table | `lhassa bench run --subject claude --subject codex` |
 | `bench history` | Recent `bench_runs` rows for a fixture/subject | `lhassa bench history --fixture codegen_fibonacci --limit 20` |
+| `utility survey` | Which capabilities still SERVE the owner — owner-driven vs self-driven use per registered action, least-earned first | `lhassa utility survey --all --json` |
+| `utility docket` | The retirement docket: unused or self-driven, unpinned, past the grace period | `lhassa utility docket` |
 | `fleet` | Known machines with their last check-in and desired state | `lhassa fleet` |
 | `version` | Version, Python runtime, and a few key toggles | `lhassa version` |
 
 `watch --once` renders a single frame and exits.
+
+**`lhassa utility`** is the counterweight to `lhassa capabilities`: that one
+answers "what is wired?", this one answers "what is EARNING its place?". It is a
+pure derived read over the episode log ($0, no LLM, no new storage — a capability
+leaves an Episode). Each use is bucketed by wake source into **owner** (a human
+reached for it) or **self** (Lhassa scheduled or delegated it to itself), plus a
+pass over `tasks.origen_actor` so deferred work the owner asked for still counts
+(`/remind` mints today and fires next week). A capability with only self-driven
+use reports `self_driven` — running, but not earning its place. `survey` hides
+actively owner-driven capabilities unless `--all`; `docket` lists only what is
+proposed for retirement. Nothing is ever retired automatically: the weekly
+`review_capabilities` action parks one `retire_capability` approval per
+capability, once, and `LHASSA_UTILITY_PINNED` exempts anything you want kept
+deliberately dormant.
 
 `tools propose` without `--baseline` cannot graduate — this is BY DESIGN, not
 a bug: gate 3 ("mejor") requires beating a concrete numeric baseline, and a
