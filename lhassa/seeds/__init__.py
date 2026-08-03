@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """SEEDS — reproducible BOOTSTRAP units, backed by the keystone :class:`Registry`.
 
 A *seed* recreates a whole working structure on a fresh machine from code, with no

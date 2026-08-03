@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """``lhassa research`` — the product's research line from the terminal.
 
 Commands::

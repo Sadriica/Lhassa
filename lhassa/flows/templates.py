@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Work-flow TEMPLATES — a gallery of generic, instructive flow presets.
 
 The flows counterpart of :mod:`lhassa.org.templates`: a named catalog of

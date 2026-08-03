@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """The org CHART — a config-driven brain TOPOLOGY (Fase 7, slice E).
 
 Slices 1–2 shipped the minimal two-brain core (one ``general`` + departments). This

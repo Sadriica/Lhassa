@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 LLM provider factory — selects the right Pipecat service and async client
 based on LHASSA_LLM_PROVIDER.

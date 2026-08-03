@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Runtime routes — status, health, metrics, and whole-state export/import.
 
 The dashboard's runtime surface: the liveness ``/api/status`` + ``/api/health``
@@ -19,6 +20,8 @@ Two deliberate seams keep behaviour identical to the pre-split server:
 import time
 from dataclasses import asdict
 
+from lhassa import legal as _legal
+
 from fastapi import APIRouter, HTTPException, Query
 
 import lhassa.config as lhassa_config
@@ -39,7 +42,22 @@ async def get_status():
         "metrics": state.metrics,
         "agent_count": len(state.agent_runs),
         "uptime_seconds": int(time.time() - _START_TIME),
+        # Appropriate Legal Notice — required by the AGPL-3.0 section 7(b) term
+        # in LICENSE. Rendered from lhassa.legal, asserted by
+        # tests/test_legal_notice.py; do not inline or remove it.
+        "legal": _legal.notice_dict(),
     }
+
+
+@router.get("/api/legal")
+async def get_legal():
+    """The Appropriate Legal Notice, on its own endpoint.
+
+    Section 13 of the AGPL requires a network-deployed instance to offer its
+    users the corresponding source. This is that offer, machine-readable and
+    always available.
+    """
+    return _legal.notice_dict()
 
 
 @router.get("/api/metrics")

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """The organizational layer (Fase 7) — a coordinated two-brain core.
 
 This package is the foundation/skeleton of Lhassa's organizational layer: a

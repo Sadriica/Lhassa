@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """The ``research`` seed — the geshe's aid department + the idea-intake flow.
 
 The geshe (the temple's scholar-monk, owner of ``research/METHOD.md``) gains

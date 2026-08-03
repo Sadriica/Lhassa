@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 GitHub tools — read repos, issues, PRs, and create comments via the GitHub REST API.
 Requires GITHUB_TOKEN in .env (Settings → Developer settings → Personal access tokens).

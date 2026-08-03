@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 review_capabilities — the utility tribunal's weekly sitting (deterministic, $0).
 

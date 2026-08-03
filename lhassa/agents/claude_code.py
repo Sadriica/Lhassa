@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 ClaudeCliAgent — runs any agent type through the Claude Code CLI (claude --print).
 

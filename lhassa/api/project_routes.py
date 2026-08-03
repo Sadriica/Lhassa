@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Projects routes — the read/list surface over the project entity
 (§core.projects: "a named, TYPED unit of the owner's work").
 

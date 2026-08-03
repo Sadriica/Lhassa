@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """The $0 feedback signal — did an answer land, WITHOUT ever asking the owner.
 
 Lhassa never shows a thumbs-up/down. This module infers, from behavior already

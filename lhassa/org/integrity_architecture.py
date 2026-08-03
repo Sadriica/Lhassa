@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Runtime import-boundary scanner used by the integrity manifest."""
 
 from __future__ import annotations

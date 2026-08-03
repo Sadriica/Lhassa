@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Desktop notification channel — a libnotify (``notify-send``) toast on Linux.
 
 A registered :class:`~lhassa.notify.channels.Channel` that pops a desktop toast via

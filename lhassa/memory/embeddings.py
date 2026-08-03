@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 Pluggable, offline-capable embedders for memory layer 4 (semantic retrieval).
 

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Agent-delegation tool handlers (background agents + local AI CLIs)."""
 
 from __future__ import annotations

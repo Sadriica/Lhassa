@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 Axis 2 — the ``HarnessAdapter`` seam (§2.2): delegated agentic *code* work.
 

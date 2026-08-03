@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Net actions: web_fetch, ping_url.
 
 Both share the SSRF guard from _ssrf.py. Content retrieved by web_fetch is

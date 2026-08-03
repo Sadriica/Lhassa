@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Memory actions: add_fact, backup_memory, consolidate_memory."""
 
 from __future__ import annotations

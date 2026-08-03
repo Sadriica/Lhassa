@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """The resident heartbeat loop: import once, beat forever (§2.1).
 
 The oneshot ``scripts/lhassa-heartbeat`` pays the ~400ms interpreter + import

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Reading the base CV and writing tailored exports — the CV file-I/O seam.
 
 This is the one module that touches CV files on disk, so paths never scatter across

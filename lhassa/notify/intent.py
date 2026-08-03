@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Deterministic chat-intent classifier — the router for the answer cache.
 
 "Thinking is the EXCEPTION" (§CLAUDE.md): before a Telegram turn spends a model

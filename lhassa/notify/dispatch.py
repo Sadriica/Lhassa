@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Notification dispatcher — the single fan-out entry point for outbound alerts.
 
 Other modules call :func:`notify` rather than poking a channel adapter directly.

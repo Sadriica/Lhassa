@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """The approval frontier — the human-in-the-loop gate, by flow not by global knob.
 
 This is the third piece of the brain's árbitro (§2.6, §2.9-(1) the approval queue,

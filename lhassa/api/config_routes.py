@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Runtime settings routes — the panel's editable allowlist (§ settings service).
 
 GET the effective read model (current value + default + overridden, masked) and

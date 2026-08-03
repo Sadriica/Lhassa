@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """The autonomy knob — friction that lowers with repeated human approval (§2.6, #9).
 
 "La autonomía se gana con evidencia. Supervisado primero; perilla que baja con

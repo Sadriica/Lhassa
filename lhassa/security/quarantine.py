@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 Cuarentena — wall #1 of the three walls (§2.6) and gate #1 "Segura" of the
 self-improvement 2b pipeline (§2.8).

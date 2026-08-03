@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Typed org RELATIONSHIPS API — the dashboard backend for the overlay graph.
 
 A self-contained :class:`fastapi.APIRouter` (``router``) the integrator mounts with

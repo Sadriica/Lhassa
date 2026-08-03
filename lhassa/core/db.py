@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 Async SQLite store for the "grande" — the append-only source of truth.
 

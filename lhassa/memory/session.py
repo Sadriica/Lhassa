@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 Session lifecycle — called on shutdown to extract facts and save a summary.
 The fact-extraction LLM call is routed through the cost gateway

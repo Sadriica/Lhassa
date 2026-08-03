@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 Las cuatro compuertas de la auto-mejora 2b (§2.8).
 

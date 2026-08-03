@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Integrity Watcher — deterministic conformance to Lhassa/Witara contracts.
 
 This is not another reasoning agent. Each versioned contract returns observable

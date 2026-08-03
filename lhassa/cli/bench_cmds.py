@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """``lhassa bench`` — LhassaBench, the deterministic $0-scoring eval harness.
 
 Commands::

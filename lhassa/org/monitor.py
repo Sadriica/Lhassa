@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """The environment MONITOR & continuous-improvement SUPERVISOR (Fase 7).
 
 A brain can be more than an executor: it can be the one **everyone reports to** —

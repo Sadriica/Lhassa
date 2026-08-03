@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """The thin local agent — the machine's half of "check-in, not push" (§2.5).
 
 Runs ON a machine, talks OUTWARD to the brain over HTTP. The flow per heartbeat:

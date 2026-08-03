@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 LocalCliAgent — drive any of several local AI coding CLIs as a subprocess.
 

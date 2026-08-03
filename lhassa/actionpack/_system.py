@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """System actions: run_command, system_snapshot, power_mode.
 
 run_command is the one action that requires human approval (requires_approval=True

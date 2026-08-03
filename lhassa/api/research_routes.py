@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Read-only research-funnel projections and their immutable event logs."""
 
 from fastapi import APIRouter, HTTPException, Query

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Context packs — the rented body starts a run with the RIGHT context.
 
 Every time Lhassa hands a task to a local AI CLI (claude/codex/opencode via

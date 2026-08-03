@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 Notification router — speaks via TTS when the voice pipeline is active,
 falls back to a desktop notification when idle.

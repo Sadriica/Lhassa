@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """The ``digest`` seed — schedule Etapa 2's twice-daily operative digest.
 
 Mints two recurring ``send_digest`` tasks (see :mod:`lhassa.actionpack._digest` /

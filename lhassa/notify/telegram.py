@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Telegram notifier — a credential-gated adapter over the Telegram Bot API.
 
 Mirrors the ``github_token`` discipline (§ the token-gated GitHub-remote hooks):

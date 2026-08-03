@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """apply_feedback — the deterministic action fronting the feedback→knob bridge.
 
 Runs :func:`lhassa.security.autonomy.apply_feedback` and renders a one-line

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """temple_run — the fixed action that routes internal hygiene work THROUGH temple.
 
 Deterministic actions such as ``distill_memory``, ``check_integrity`` and

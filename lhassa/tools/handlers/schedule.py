@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Reminder / scheduling tool handlers.
 
 ``schedule_reminder`` / ``list_reminders`` mint and read ``send_reminder`` tasks

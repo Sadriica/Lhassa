@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """``lhassa project`` — the first-class workspace entity from the terminal.
 
 Commands::

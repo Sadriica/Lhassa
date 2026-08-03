@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Deterministic delegation seam — a flow run flows THROUGH the org hierarchy.
 
 The Telegram bridge and the flow API used to call :func:`lhassa.flows.engine.run_flow`

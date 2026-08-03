@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """The two-brain core — a general that coordinates and a department that executes.
 
 This is the minimal hierarchy where every Fase-7 problem appears with exactly TWO

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 Seed the grande with the default facts (Apéndice B) for an instance.
 

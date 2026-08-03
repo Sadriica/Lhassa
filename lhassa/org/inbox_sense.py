@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """The org inbox → watchlist sense (Etapa 3): closes enqueue → heartbeat.
 
 ``org.messaging`` already has a real, durable per-instance inbox

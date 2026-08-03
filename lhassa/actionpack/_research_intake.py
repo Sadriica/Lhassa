@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Durable ``/idea`` intake: evidence custody → research flow → versioned draft.
 
 The Telegram surface mints this action before acknowledging the request.  That

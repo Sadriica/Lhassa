@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """set_config — natural-language settings changes through the ONE settings seam.
 
 The owner says "agrega ~/Documents a tus carpetas de lectura" in chat; the model

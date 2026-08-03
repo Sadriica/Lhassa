@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Personal secretary department and its canonical briefing flows.
 
 The department is stable: ``personal`` owns owner-facing agenda, check-ins and

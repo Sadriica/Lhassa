@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """ResearchAgent — specialised in research, synthesis, and information analysis."""
 
 from lhassa.agents.base import BaseAgent

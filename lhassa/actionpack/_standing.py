@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Standing brains (Wave 1) — a project's review brains attach AUTOMATICALLY.
 
 Two halves of one door, mirroring ``actionpack/_projects.py``:

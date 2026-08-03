@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """The :class:`Skill` model + SKILL.md / JSON (de)serialisation.
 
 A skill follows the **SKILL.md** convention (skills.md / Agent-Skills /

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """The temple internal-delegation loop — Lhassa's own inner workshop.
 
 :mod:`lhassa.org.delegate` is the DOWN-hop exemplar for a *flow*; :mod:`lhassa.org.deliver`

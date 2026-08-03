@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { NOTICE, SOURCE_URL } from '../legal.js'
 
 // The Settings panel — the editable runtime allowlist.
 //   GET   /api/config            → { settings:[…], groups:[…], available:{…} }
@@ -707,6 +708,15 @@ function AboutCard() {
         </p>
         <p className="text-[11px] mt-1" style={{ color: 'var(--lh-text-faint)' }}>
           More on how I'm told: <span className="lh-mono">README.md</span> in the repo.
+        </p>
+        {/* Appropriate Legal Notice — required by the AGPL-3.0 section 7(b)
+            term in LICENSE. Rendered from src/legal.js, asserted by
+            tests/test_legal_notice.py; do not inline or remove it. */}
+        <p className="text-[11px] mt-2" style={{ color: 'var(--lh-text-faint)' }}>
+          {NOTICE}{' '}
+          <a href={SOURCE_URL} target="_blank" rel="noreferrer" className="underline">
+            Source
+          </a>
         </p>
       </div>
     </div>

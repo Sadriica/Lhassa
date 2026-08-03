@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 The utility tribunal — the $0 sense that asks whether a capability still serves.
 

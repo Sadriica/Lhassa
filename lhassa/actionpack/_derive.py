@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """``derive_world_facts`` — persist the calendar-derived world model.
 
 Shell-side half of the calendar-derived world model: calls

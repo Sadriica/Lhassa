@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Boot-time setup for the Lhassa CLI — quiet logging before the heavy imports.
 
 The CLI entry does not go through ``main.py`` (which configures loguru), so loguru's

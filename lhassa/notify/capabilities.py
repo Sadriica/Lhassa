@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """The capability catalog — the self-routing consciousness's SHELL half.
 
 Lhassa's self-improvement loop (:mod:`lhassa.agents.repetition`) has always found

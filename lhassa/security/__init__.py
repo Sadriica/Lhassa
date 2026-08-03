@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Security primitives — the three walls that guard remote execution (§2.6).
 
 Phase-0 ships the deterministic order-execution wall:

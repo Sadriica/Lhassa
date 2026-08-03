@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Action commands for the Lhassa CLI (additive to the default chat/REPL).
 
 These extend the terminal surface beyond the read-only power subcommands
@@ -31,6 +32,7 @@ from rich.console import Console
 from rich.markup import escape
 from rich.panel import Panel
 
+from lhassa import legal as _legal
 from lhassa.cli.theme import LHASSA_THEME, PANEL_KWARGS
 
 _ON = "✓"
@@ -175,10 +177,13 @@ def version_info() -> dict:
     from lhassa.config import Config
 
     config = Config()
+    from lhassa import legal as _lg
+
     return {
         "version": version,
         "python": platform.python_version(),
         "instance_id": Config.instance_id,
+        "legal": _lg.notice_dict(),
         "toggles": {
             "voice": bool(getattr(config, "voice_enabled", False)),
             "memory_layer4": bool(getattr(config, "memory_layer4_enabled", False)),
@@ -203,7 +208,12 @@ def version_cmd(
         Panel(
             f"[title]Version[/] [value]{info['version']}[/] [dim]· Python {info['python']}[/]\n"
             f"[dim]instance[/] [model]{escape(str(info['instance_id']))}[/]\n"
-            f"[dim]toggles[/] {flags}",
+            f"[dim]toggles[/] {flags}\n"
+            # Appropriate Legal Notice — required by the AGPL-3.0 section 7(b)
+            # term in LICENSE. Rendered from lhassa.legal, asserted by
+            # tests/test_legal_notice.py; do not inline or remove it.
+            f"[dim]{escape(_legal.NOTICE.splitlines()[0])}[/]\n"
+            f"[dim]{escape(_legal.NOTICE.splitlines()[1])}[/]",
             title="[brand]Lhassa[/]",
             **PANEL_KWARGS,
         )

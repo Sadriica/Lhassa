@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Work-flows — an n8n-style graph that wires trigger → task → gate → output.
 
 A *work-flow* is a small directed graph (a DAG) whose nodes are typed work and

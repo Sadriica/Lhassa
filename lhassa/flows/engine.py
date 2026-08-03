@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """A small, offline-testable executor for work-flows.
 
 :func:`run_flow` walks the graph from its single trigger along the edges, executing

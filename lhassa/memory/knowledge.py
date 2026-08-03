@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Document perception — the brain reads the OWNER'S OWN documents, $0, local.
 
 The owner points Lhassa at a small set of KNOWLEDGE ROOTS (``config.knowledge_roots``,

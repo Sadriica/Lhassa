@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """LhassaBench fixture loading — YAML on disk, validated eagerly.
 
 Each fixture is one self-contained YAML file under ``lhassa/bench/fixtures/``:

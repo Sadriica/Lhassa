@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """The ``send_reminder`` action — delivers a reminder minted by ``schedule_reminder``.
 
 A thin ``(params) -> str`` wrapper over :func:`lhassa.org.deliver.deliver` (the

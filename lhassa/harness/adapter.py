@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 ``HarnessAdapter`` — the Axis-2 interface (§2.2): delegated agentic code work.
 

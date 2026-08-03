@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Outbound notifications for Lhassa.
 
 A thin, credential-gated adapter layer plus a fan-out :func:`notify` dispatcher

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Read an institutional calendar's ICS feed — the READ half of the calendar seam.
 
 Leaf infrastructure (pure stdlib + httpx, imports NO shell): fetch a published

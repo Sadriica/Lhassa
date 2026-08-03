@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 Mute strategy that silences user audio while Lhassa is speaking,
 EXCEPT when a wake phrase is detected — in that case the frame is allowed through

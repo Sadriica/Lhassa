@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """``lhassa seed`` — apply reproducible BOOTSTRAP seeds (the elastic seed registry).
 
 A small, OFFLINE surface over :mod:`lhassa.seeds`: list the registered seeds and

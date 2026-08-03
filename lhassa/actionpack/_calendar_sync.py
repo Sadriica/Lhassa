@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """``calendar_sync`` — the master-calendar reconcile action.
 
 Runs :func:`lhassa.calendar.reconcile.find_unsynced` ($0, deterministic — a set

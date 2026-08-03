@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 Semantic consolidation — the cheap-LLM second pass over the chica (§2.3, Fase 2).
 

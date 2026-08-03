@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Overview screen — the brain at a glance.
 
 A static snapshot on mount: instance id, the last episode (time + accion,

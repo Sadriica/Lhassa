@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Approvals screen — the pending queue, rendered through the ONE describe()
 helper (never bare ids), with in-place approve/deny.
 

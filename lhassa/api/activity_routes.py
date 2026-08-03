@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Activity routes — agents, scheduled tasks, and the audit log (read-only).
 
 The dashboard's "what has the brain been doing" reads:

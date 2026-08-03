@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """The deny-by-default order-execution wall (§2.6, wall #2).
 
 This is the machine's guard: a task runs ONLY if it clears every check. Nothing

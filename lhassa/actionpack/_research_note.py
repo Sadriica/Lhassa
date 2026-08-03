@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """draft_research_note — the evidence machine behind Lhassa's research line.
 
 The house principle (doc/research.md): knowledge is a documented byproduct of

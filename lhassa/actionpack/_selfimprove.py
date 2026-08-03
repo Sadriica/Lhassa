@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Self-improvement actions: detect_repetition, review_tools (§2.8, Etapa 4).
 
 These close the auto-mejora loop end to end. Both are deterministic and $0 —

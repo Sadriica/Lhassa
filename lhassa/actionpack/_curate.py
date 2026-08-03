@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """The ``curate_skills`` action — Fase 2's deterministic, $0 skill lifecycle sweep.
 
 A thin ``(params) -> str`` wrapper over :func:`lhassa.skills.curator.run_transitions`

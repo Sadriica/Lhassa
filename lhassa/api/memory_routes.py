@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Memory routes — the dashboard's read view of the grande (facts + sessions).
 
 Thin read-only wrappers over the memory store: the typed facts and the recent

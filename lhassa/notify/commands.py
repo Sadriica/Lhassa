@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Slash commands for the inbound Telegram chat — a modular command registry.
 
 The owner's standing principle is that Lhassa must be **fully elastic and highly

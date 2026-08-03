@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 A tiny, generic, dependency-free registry — the reusable foundation for every
 swap point in Lhassa (channels, org departments, providers, harnesses,

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Offline demo of the organizational layer — ``python -m lhassa.org``.
 
 Wires a general + the registered departments with an INJECTED fake executor (so it

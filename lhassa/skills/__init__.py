@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """First-class SKILLS for Lhassa (slice M).
 
 A *skill* is a reusable, model-agnostic capability bundle the brain (and any

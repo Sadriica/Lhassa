@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Research-to-product adoption, with two human gates and an external worktree.
 
 Research is knowledge, not authority to mutate a product.  This module makes the

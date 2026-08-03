@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Monitor tool handlers (watch process / file / command)."""
 
 from __future__ import annotations

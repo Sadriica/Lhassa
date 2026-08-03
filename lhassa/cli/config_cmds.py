@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """``lhassa config`` — read and change the runtime SETTINGS allowlist.
 
 A small, offline surface over :mod:`lhassa.settings`: list the editable settings

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Personal daily check-ins stored in the grande as typed facts.
 
 This is the first secretary-shaped memory: short owner-authored notes from the

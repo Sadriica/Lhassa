@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 Lhassa' persona — the single source of truth for personality and voice.
 

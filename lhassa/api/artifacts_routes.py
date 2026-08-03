@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Artifacts routes — the read surface over the delivery chain's registry
 (§org: "Lhassa is the sender of record").
 

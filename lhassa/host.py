@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 The host platform layer — where Lhassa asks the machine about itself.
 

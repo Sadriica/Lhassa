@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Quarantine-room routes — the self-written tools and their gate state (§2.9-(2)).
 
 GET lists the tools table (the quarantine-room data: name/domain/estado/metrics/

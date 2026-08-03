@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Typed org RELATIONSHIPS — the overlay graph (Fase 7).
 
 The org chart is a directed GRAPH: the command TREE (who-commands-whom, in

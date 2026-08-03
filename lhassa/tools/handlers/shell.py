@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Shell / privileged-command tool handlers."""
 
 from __future__ import annotations

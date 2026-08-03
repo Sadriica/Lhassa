@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """The work-flow graph model: nodes, edges, a flow, validation, JSON round-trip.
 
 A flow is a directed acyclic graph. Nodes are one of a CLOSED set of kinds

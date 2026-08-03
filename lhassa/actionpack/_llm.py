@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """LLM spend visibility action: check_spend ("spend as a signal")."""
 
 from __future__ import annotations

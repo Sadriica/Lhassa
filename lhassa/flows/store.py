@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """A crash-safe JSON store for work-flows, keyed by id, over ``config.flows_file``.
 
 The file is a single JSON object mapping ``flow_id`` → flow dict. The store keeps

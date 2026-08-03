@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Durable, evidence-bound triage before expensive research.
 
 The model may propose criterion scores, but it does not decide the budget.

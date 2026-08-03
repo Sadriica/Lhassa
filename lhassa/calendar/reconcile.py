@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Master-calendar reconcile — the $0, deterministic diff engine.
 
 An owner with several calendars (institutional, personal, a project one) picks

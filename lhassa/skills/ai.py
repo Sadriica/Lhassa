@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """AI operations + the offline seed CATALOG for skills.
 
 Three capabilities power the admin surface's "create/improve WITH AI" and

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """``lhassa calendar`` — manage named calendar feeds from the terminal.
 
 Mirrors the ``lhassa flows``/``lhassa memory`` sub-app pattern: a small Typer

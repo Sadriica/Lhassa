@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Ed25519 signing for remote execution (§2.6) — "firmar > cifrar".
 
 Authenticity, not secrecy: the channel is a TLS/WireGuard tunnel; the signature

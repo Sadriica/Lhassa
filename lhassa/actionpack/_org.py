@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """org_run — the fixed action a real delegation resolves to (Etapa 3).
 
 A judgment's ``delegate`` key (``core/dispatch.py``) and a monitor's

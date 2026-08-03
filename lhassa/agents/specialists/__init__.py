@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Domain specialists — **skills, NOT fine-tuning** (§2.8).
 
 A *specialist* is the same base model the rest of the brain uses, plus three things

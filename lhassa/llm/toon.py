@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """TOON (Token-Oriented Object Notation) encoder — Wave 5, build-and-shelve.
 
 **Deliberately UNWIRED.** Nothing in the repo calls this module today. The

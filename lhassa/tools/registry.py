@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 Lhassa tool registry — the public seam that composes the LLM-visible schemas and
 async handlers for all tools.

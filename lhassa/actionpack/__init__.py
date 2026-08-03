@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 actionpack — the built-in set of deterministic actions (Phase 3; org_run Etapa 3).
 

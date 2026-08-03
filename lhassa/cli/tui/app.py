@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """``LhassaTui`` — the Textual application shell for ``lhassa tui``.
 
 A tabbed layout over the four screens (Overview / Projects / Runs /

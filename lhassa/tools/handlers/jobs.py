@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Job/internship application tracking tool handler (postulaciones)."""
 
 from __future__ import annotations

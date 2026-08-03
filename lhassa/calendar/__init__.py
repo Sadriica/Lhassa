@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Calendar-event file-I/O seam — a downloadable ``.ics`` in, a tappable file out.
 
 One tap on the ``.ics`` this package writes adds an event to ANY calendar

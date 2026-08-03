@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Deterministic integrity action owned by the temple guardian."""
 
 from __future__ import annotations

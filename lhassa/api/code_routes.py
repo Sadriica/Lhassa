@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """
 Code routes — launch an agentic coding task through a local AI CLI and stream it.
 
