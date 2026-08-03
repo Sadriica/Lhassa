@@ -1,0 +1,11 @@
+id: codegen_is_palindrome
+title: "Code-gen: is_palindrome function signature"
+prompt: >
+  Write a Python function named `is_palindrome` that takes a single string
+  argument `s` and returns True if `s` reads the same forwards and backwards.
+  Reply with only the code, no explanation.
+subject_kind: completion
+verify:
+  type: regex
+  pattern: 'def\s+is_palindrome\s*\(\s*s\s*\)'
+tags: [codegen, python]

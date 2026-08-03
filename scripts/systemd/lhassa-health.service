@@ -1,0 +1,16 @@
+# Lhassa — LLM-free PC-state health checks (oneshot, triggered by the timer).
+#
+# Install as a USER unit (do NOT install system-wide):
+#   cp scripts/systemd/lhassa-health.{service,timer} ~/.config/systemd/user/
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now lhassa-health.timer
+#
+# Adjust the paths below if your checkout or venv live elsewhere.
+[Unit]
+Description=Lhassa LLM-free PC-state health checks
+After=graphical-session.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/Code/lhassa
+ExecStart=%h/Code/lhassa/.venv/bin/python %h/Code/lhassa/scripts/lhassa-health

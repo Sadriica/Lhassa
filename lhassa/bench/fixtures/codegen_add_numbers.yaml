@@ -1,0 +1,10 @@
+id: codegen_add_numbers
+title: "Code-gen: add_numbers function signature"
+prompt: >
+  Write a Python function named `add_numbers` that takes two arguments `a` and
+  `b` and returns their sum. Reply with only the code, no explanation.
+subject_kind: completion
+verify:
+  type: regex
+  pattern: 'def\s+add_numbers\s*\(\s*a\s*,\s*b\s*\)'
+tags: [codegen, python]

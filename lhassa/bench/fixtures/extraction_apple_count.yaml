@@ -1,0 +1,11 @@
+id: extraction_apple_count
+title: "Extraction: total count from inline text"
+prompt: >
+  Extract the total number of apples mentioned in this text and reply with
+  only the digits, nothing else: "Tom bought 3 apples and later bought 4 more
+  apples, holding 7 apples in total."
+subject_kind: completion
+verify:
+  type: regex
+  pattern: '^\s*7\s*$'
+tags: [extraction]

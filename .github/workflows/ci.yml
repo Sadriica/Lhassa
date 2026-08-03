@@ -1,0 +1,80 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  test:
+    # Linux is tier 1: the full matrix entry (Python + lint + dashboard E2E) and
+    # the platform Lhassa is developed and deployed on. macOS (Apple Silicon) is
+    # tier 2: the Python suite and lint run, hardware-touching surfaces are
+    # best-effort. macOS runners are ARM64 and free for public repositories.
+    name: test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Setup Node
+        if: matrix.os == 'ubuntu-latest'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: dashboard/package-lock.json
+
+      - name: Install Python dependencies
+        run: uv sync --extra dev
+
+      - name: Install dashboard dependencies
+        if: matrix.os == 'ubuntu-latest'
+        working-directory: dashboard
+        run: npm ci
+
+      - name: Install Playwright browser
+        if: matrix.os == 'ubuntu-latest'
+        working-directory: dashboard
+        run: npx playwright install --with-deps chromium
+
+      - name: Run Python tests
+        run: uv run pytest -q -p no:cacheprovider
+
+      - name: Run Python lint
+        run: uv run ruff check .
+
+      - name: Run dashboard lint
+        if: matrix.os == 'ubuntu-latest'
+        working-directory: dashboard
+        run: npm run lint
+
+      - name: Run dashboard E2E tests
+        if: matrix.os == 'ubuntu-latest'
+        working-directory: dashboard
+        run: npm run test:e2e
+
+      - name: Upload Playwright artifacts
+        if: failure() && matrix.os == 'ubuntu-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-artifacts
+          path: |
+            dashboard/test-results
+            dashboard/playwright-report
+          if-no-files-found: ignore

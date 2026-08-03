@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+# Lhassa — the brain's heartbeat runner (§2.1).
+#
+# Advances the persistent brain one tick under the "hace y duerme" pattern:
+# ensures the brain DB, runs step() once via core.heartbeat.beat(), prints a
+# one-line summary, and exits. No LLM, no cloud — a routine beat is deterministic
+# and costs zero tokens. Fired by the systemd USER timer
+# (scripts/systemd/lhassa-heartbeat.timer).
+#
+# Usage:
+#   scripts/lhassa-heartbeat                # one beat + print summary
+#   scripts/lhassa-heartbeat --quiet        # one beat, no terminal output
+#   scripts/lhassa-heartbeat --loop [secs]  # resident mode: import once, then
+#                                            # beat + sleep <secs> forever
+#                                            # (default 900; SIGTERM/SIGINT stop
+#                                            # it cleanly after the current tick)
+set -euo pipefail
+
+# Resolve the repo root from this script's location, and prefer the venv python.
+LHASSA_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+export LHASSA_ROOT
+PY="$LHASSA_ROOT/.venv/bin/python"
+if [ ! -x "$PY" ]; then
+  PY="python3"
+fi
+
+exec "$PY" - "$@" <<'PYEOF'
+import asyncio
+import os
+import sys
+
+# Make `lhassa` importable regardless of where the script was launched from.
+sys.path.insert(0, os.environ.get("LHASSA_ROOT", os.getcwd()))
+
+from lhassa.core.heartbeat import beat
+from lhassa.core.heartbeat_loop import run_loop, summarize_beat
+from lhassa import actionpack
+actionpack.register_all()
+
+argv = sys.argv[1:]
+quiet = "--quiet" in argv
+
+if "--loop" in argv:
+    idx = argv.index("--loop")
+    nxt = argv[idx + 1] if idx + 1 < len(argv) else None
+    if nxt is not None and not nxt.startswith("-"):
+        interval = float(nxt)
+    else:
+        interval = float(os.environ.get("LHASSA_HEARTBEAT_INTERVAL", "900"))
+    asyncio.run(run_loop(interval, quiet=quiet))
+else:
+    summary = asyncio.run(beat())
+    if not quiet:
+        print(summarize_beat(summary))
+PYEOF

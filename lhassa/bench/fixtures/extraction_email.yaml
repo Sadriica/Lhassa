@@ -1,0 +1,12 @@
+id: extraction_email
+title: "Extraction: pull the email address out of inline text"
+prompt: >
+  Extract the email address from this text and reply with only the email
+  address, nothing else: "Contact Maria at maria.gomez@example.com for
+  details."
+subject_kind: completion
+verify:
+  type: regex
+  pattern: '^\s*maria\.gomez@example\.com\s*$'
+  flags: 2  # re.IGNORECASE
+tags: [extraction]
