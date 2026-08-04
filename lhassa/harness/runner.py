@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+from collections import deque
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
@@ -37,6 +38,10 @@ try:
 except ValueError:
     _DEFAULT_TIMEOUT = 1800
 
+# How many trailing stderr lines to keep for diagnostics (bounded — never grows
+# unbounded even if the CLI floods stderr).
+_STDERR_TAIL_LINES = 40
+
 
 @dataclass
 class _RunningJob:
@@ -50,6 +55,9 @@ class _RunningJob:
     cost_usd: float = 0.0
     estado: str = "running"
     task: Optional[asyncio.Task] = field(default=None)
+    # Bounded ring of the most recent stderr lines — diagnostics for a failed/
+    # timed-out run without ever growing unbounded (§ stderr-drain fix).
+    stderr_tail: deque = field(default_factory=lambda: deque(maxlen=_STDERR_TAIL_LINES))
 
 
 # Module-level registry of live jobs (apuntadores vivos — §2.3). supervise() reaps
@@ -135,10 +143,18 @@ async def launch(
 
 
 async def _stream(adapter: HarnessAdapter, rj: _RunningJob, timeout: int) -> None:
-    """Drain the process, parse + broadcast events, accumulate cost. Never raises."""
+    """Drain the process, parse + broadcast events, accumulate cost. Never raises.
+
+    Drains stdout AND stderr concurrently. A CLI that writes a lot to stderr
+    (crash traces, warnings, a chatty --verbose) would otherwise fill the pipe
+    buffer and block the child forever once it's full — the parent only read
+    stdout, so the child's write() to stderr never returns and the job hangs
+    past its own timeout (the timeout only bounds our await, not the child).
+    Draining both concurrently avoids that deadlock.
+    """
     proc = rj.proc
 
-    async def _drain() -> None:
+    async def _drain_stdout() -> None:
         while True:
             line_bytes = await proc.stdout.readline()  # type: ignore[union-attr]
             if not line_bytes:
@@ -157,6 +173,20 @@ async def _stream(adapter: HarnessAdapter, rj: _RunningJob, timeout: int) -> Non
                 "type": "agent_token", "run_id": rj.job_id,
                 "token": ev.payload, "kind": ev.kind,
             })
+
+    async def _drain_stderr() -> None:
+        # Never surfaced as agent output/events — just kept as a bounded tail
+        # for diagnostics, purely so the pipe never fills up and blocks the
+        # child. `readline` degrades to plain bytes decode; a broken pipe or
+        # closed stream just ends the loop.
+        while True:
+            line_bytes = await proc.stderr.readline()  # type: ignore[union-attr]
+            if not line_bytes:
+                break
+            rj.stderr_tail.append(line_bytes.decode(errors="replace").rstrip("\n"))
+
+    async def _drain() -> None:
+        await asyncio.gather(_drain_stdout(), _drain_stderr())
         await proc.wait()  # type: ignore[union-attr]
 
     try:
@@ -164,10 +194,14 @@ async def _stream(adapter: HarnessAdapter, rj: _RunningJob, timeout: int) -> Non
         rc = getattr(proc, "returncode", 0)
         if rj.estado != "error":
             rj.estado = "done" if rc in (0, None) else "error"
+        elif rj.stderr_tail:
+            rj.run.output += "\n(stderr) " + "\n".join(rj.stderr_tail)
     except asyncio.TimeoutError:
         _kill(proc)
         rj.estado = "error"
         rj.run.output += f"\n(timed out after {timeout}s)"
+        if rj.stderr_tail:
+            rj.run.output += "\n(stderr) " + "\n".join(rj.stderr_tail)
         logger.warning(f"[harness/{rj.harness}] job {rj.job_id} timed out — killed")
     except asyncio.CancelledError:
         _kill(proc)
@@ -176,6 +210,8 @@ async def _stream(adapter: HarnessAdapter, rj: _RunningJob, timeout: int) -> Non
     except Exception as exc:  # never let the background task crash silently
         rj.estado = "error"
         rj.run.output += f"\n{exc}"
+        if rj.stderr_tail:
+            rj.run.output += "\n(stderr) " + "\n".join(rj.stderr_tail)
         logger.error(f"[harness/{rj.harness}] job {rj.job_id} stream error: {exc}")
 
 

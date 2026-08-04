@@ -1,8 +1,13 @@
 """
 Tests for Phase-4 slice 4.A — the HarnessAdapter seam, the PID/stream runner, and
 the router's delegate axis. Fully offline: subprocess and shutil.which are mocked,
-the brain DB is a tmp file. NO real subprocess, network, or LLM.
+the brain DB is a tmp file. NO real subprocess, network, or LLM — except the one
+stderr-drain deadlock test below, which needs a real OS pipe (a fake in-memory
+stream has no buffer limit and can never reproduce the deadlock).
 """
+
+import asyncio
+import sys
 
 import pytest
 import pytest_asyncio  # noqa: F401
@@ -73,7 +78,9 @@ def _none_installed(monkeypatch):
 # ── build_command per CLI ────────────────────────────────────────────────────────
 
 def test_build_command_opencode():
-    assert OpenCodeAdapter().build_command("do x") == ["opencode", "run", "do x"]
+    assert OpenCodeAdapter().build_command("do x") == [
+        "opencode", "run", "--format", "json", "do x",
+    ]
 
 
 def test_build_command_claude_stream_json_default():
@@ -88,7 +95,7 @@ def test_build_command_claude_plain():
 
 
 def test_build_command_codex():
-    assert CodexAdapter().build_command("do x") == ["codex", "exec", "do x"]
+    assert CodexAdapter().build_command("do x") == ["codex", "exec", "--json", "do x"]
 
 
 # ── static facts + protocol conformance ──────────────────────────────────────────
@@ -323,6 +330,65 @@ async def test_supervise_marks_error_on_nonzero_exit(tmp_path, monkeypatch):
 
     rows = await _jobs(db)
     assert rows[0]["estado"] == "error"
+
+
+# ── runner._stream — draining stderr concurrently avoids a pipe-full deadlock ────
+
+@pytest.mark.asyncio
+async def test_stream_drains_stderr_without_deadlock(monkeypatch):
+    """A CLI that floods stderr must not block the parent forever.
+
+    Uses a REAL subprocess (a fake in-memory stream has no OS pipe buffer, so it
+    can never reproduce this). The child writes well over the typical 64KB pipe
+    buffer to stderr (in newline-delimited chunks, so a single ``readline()``
+    never trips the stream reader's own line-length limit) *before* writing
+    anything to stdout or exiting. If the
+    parent only drains stdout, the child's stderr write() never returns and
+    ``_stream`` hangs past its own ``timeout`` (the timeout only bounds our own
+    await, not a blocked child process) — so this test itself is wrapped in a
+    short ``asyncio.wait_for`` as a safety net, and should complete well within
+    it once stderr is drained concurrently.
+    """
+
+    async def fake_broadcast(ev):
+        pass
+
+    monkeypatch.setattr(runner.state, "broadcast", fake_broadcast)
+
+    code = (
+        "import sys\n"
+        "for _ in range(400):\n"
+        "    sys.stderr.write('x' * 1000 + '\\n')\n"
+        "sys.stderr.flush()\n"
+        "print('done')\n"
+    )
+    proc = await asyncio.create_subprocess_exec(
+        sys.executable, "-c", code,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+
+    class _TextAdapter:
+        name = "textcli"
+
+        def parse_line(self, raw):
+            clean = raw.strip()
+            return RunEvent(kind="text", payload=clean) if clean else None
+
+    from lhassa.state import AgentRun
+
+    run = AgentRun(id="j_stderrtest", name="test", status="running", task="test")
+    rj = runner._RunningJob(
+        job_id="j_stderrtest", instance_id="inst_personal",
+        harness="textcli", proc=proc, run=run,
+    )
+
+    # A big internal timeout: if the fix is broken, the deadlock would outlast
+    # it — this test's own wait_for is the thing that actually bounds the run.
+    await asyncio.wait_for(runner._stream(_TextAdapter(), rj, timeout=30), timeout=5)
+
+    assert rj.estado == "done"
+    assert "done" in rj.run.output
 
 
 # ── unavailable harness degrades to an error job (no subprocess, no raise) ────────

@@ -10,8 +10,11 @@ Each adapter is a thin, *trivially editable* description of one coding CLI:
 
 Plus three static facts the router reasons over: ``name``, ``model_locked`` (is the
 muscle tied to one model family?) and ``billing`` ("metered" | "subscription" |
-"free"). Keep the per-CLI argv/flags below easy to edit; flag assumptions that have
-not been smoke-tested are marked ``[SUPUESTO]``.
+"free"). Keep the per-CLI argv/flags below easy to edit; each ``build_command``
+notes which flags were checked against the real installed CLI's ``--help`` output
+and which remain ``[SUPUESTO]`` (only the shape of a CLI's own JSON event stream —
+never smoke-tested with a live run, since this is a read-only flag audit; any
+mismatch degrades safely to a plain text event, never breaks streaming).
 """
 
 from __future__ import annotations
@@ -155,10 +158,15 @@ class OpenCodeAdapter(_BaseAdapter):
     binary = "opencode"
 
     def build_command(self, prompt: str, **opts) -> list[str]:
-        # [SUPUESTO] `opencode run <prompt>` runs non-interactively with the prompt
-        # as a single positional arg. If a build emits stream-json, parse_line
-        # already handles it; otherwise plain lines degrade to text events.
-        return ["opencode", "run", prompt]
+        # Verified via `opencode run --help`: `opencode run [message..]` is the
+        # documented non-interactive subcommand, and `--format json` (also in
+        # --help) switches it from the default human-formatted output to JSONL
+        # events on stdout, which `parse_line` already knows how to read.
+        # [SUPUESTO] only on the exact field names inside opencode's JSON events
+        # (not smoke-tested with a live run, per this task's read-only scope) —
+        # an unrecognized shape still degrades safely to a plain text event via
+        # `_event_from_json`'s fallback, so a mismatch never breaks streaming.
+        return ["opencode", "run", "--format", "json", prompt]
 
 
 class ClaudeCodeAdapter(_BaseAdapter):
@@ -171,8 +179,14 @@ class ClaudeCodeAdapter(_BaseAdapter):
 
     def build_command(self, prompt: str, *, stream_json: bool = True, **opts) -> list[str]:
         if stream_json:
-            # [SUPUESTO] `--output-format stream-json` requires `--verbose` under
-            # `--print`. Structured events let the runner accumulate live cost.
+            # Verified via `claude --help`: `-p/--print`, `--output-format
+            # stream-json` and `--verbose` all exist as documented flags on this
+            # machine's installed `claude` CLI. Structured events let the runner
+            # accumulate live cost. [SUPUESTO] only on the specific runtime
+            # constraint that `--verbose` is required when `--print` is combined
+            # with `--output-format=stream-json` — that requirement is not
+            # stated in --help itself (it is a known runtime behavior of this
+            # CLI), and this task never launches a real run to confirm it.
             return ["claude", "--print", "--output-format", "stream-json",
                     "--verbose", prompt]
         return ["claude", "--print", prompt]
@@ -187,9 +201,15 @@ class CodexAdapter(_BaseAdapter):
     binary = "codex"
 
     def build_command(self, prompt: str, **opts) -> list[str]:
-        # [SUPUESTO] `codex exec <prompt>` is the non-interactive subcommand; it
-        # streams plain lines (parse_line still handles JSON if a build emits it).
-        return ["codex", "exec", prompt]
+        # Verified via `codex exec --help`: `codex exec <prompt>` is the
+        # documented non-interactive subcommand, and `--json` (also in --help)
+        # prints events to stdout as JSONL instead of plain text, which
+        # `parse_line` already knows how to read.
+        # [SUPUESTO] only on the exact field names inside codex's JSON events
+        # (not smoke-tested with a live run, per this task's read-only scope) —
+        # an unrecognized shape still degrades safely to a plain text event via
+        # `_event_from_json`'s fallback, so a mismatch never breaks streaming.
+        return ["codex", "exec", "--json", prompt]
 
 
 # ── registry / detection ─────────────────────────────────────────────────────────
