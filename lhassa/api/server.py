@@ -10,6 +10,7 @@ The REST surface lives in the per-domain ``*_routes`` modules alongside this one
 """
 
 import asyncio
+import hmac
 import json
 from dataclasses import asdict
 
@@ -51,6 +52,28 @@ def _cors_origins() -> list[str]:
     ]
 
 
+# Methods/headers actually used by the REST surface (see api/*_routes.py). When an
+# explicit ``LHASSA_API_CORS_ORIGINS`` is configured (a production deployment naming
+# real origins), CORS is tightened to this closed set instead of "*". The default
+# (unconfigured, localhost-only) origins keep the permissive "*" behavior — that
+# path is already gated by the loopback/token check above and dev tooling (Vite,
+# curl, etc.) benefits from not having to match headers/methods exactly.
+_CORS_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
+_CORS_HEADERS = ["Authorization", "Content-Type", "X-Lhassa-Api-Token"]
+
+
+def _cors_configured() -> bool:
+    return bool(getattr(Config, "api_cors_origins", ""))
+
+
+def _cors_methods() -> list[str]:
+    return _CORS_METHODS if _cors_configured() else ["*"]
+
+
+def _cors_headers() -> list[str]:
+    return _CORS_HEADERS if _cors_configured() else ["*"]
+
+
 _LOCAL_HOSTS = {"127.0.0.1", "::1", "localhost", "testclient"}
 
 
@@ -59,7 +82,9 @@ def _is_loopback(host: str | None) -> bool:
 
 
 def _authorized(token: str, provided: str | None) -> bool:
-    return bool(token) and bool(provided) and provided == token
+    if not token or not provided:
+        return False
+    return hmac.compare_digest(provided.encode("utf-8"), token.encode("utf-8"))
 
 
 def _http_token(request: Request) -> str | None:
@@ -107,8 +132,8 @@ async def require_local_or_token(request: Request, call_next):
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins(),
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=_cors_methods(),
+    allow_headers=_cors_headers(),
 )
 
 # ── Feature routers (each owns a cohesive slice of the REST surface) ──────────

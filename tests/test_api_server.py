@@ -6,6 +6,65 @@ from dataclasses import asdict
 from fastapi.testclient import TestClient
 
 
+def test_authorized_rejects_mismatched_token():
+    from lhassa.api.server import _authorized
+
+    assert _authorized("secret", "not-secret") is False
+    assert _authorized("secret", "secret") is True
+
+
+def test_authorized_rejects_empty_token_or_provided():
+    from lhassa.api.server import _authorized
+
+    assert _authorized("", "anything") is False
+    assert _authorized("secret", "") is False
+    assert _authorized("secret", None) is False
+    assert _authorized("", "") is False
+
+
+def test_authorized_uses_constant_time_compare(monkeypatch):
+    """Regression guard: the comparison must go through hmac.compare_digest,
+    not Python's ``==``, so timing does not leak how much of the token matched."""
+    import lhassa.api.server as server
+
+    calls = {}
+
+    def fake_compare_digest(a, b):
+        calls["called"] = True
+        return a == b
+
+    monkeypatch.setattr(server.hmac, "compare_digest", fake_compare_digest)
+
+    assert server._authorized("secret", "secret") is True
+    assert calls.get("called") is True
+
+
+def test_cors_methods_and_headers_permissive_by_default(monkeypatch):
+    import lhassa.api.server as server
+
+    monkeypatch.setattr(server.Config, "api_cors_origins", "", raising=False)
+
+    assert server._cors_methods() == ["*"]
+    assert server._cors_headers() == ["*"]
+
+
+def test_cors_methods_and_headers_restricted_when_origins_configured(monkeypatch):
+    import lhassa.api.server as server
+
+    monkeypatch.setattr(
+        server.Config, "api_cors_origins", "https://dashboard.example.com", raising=False
+    )
+
+    methods = server._cors_methods()
+    headers = server._cors_headers()
+
+    assert "*" not in methods
+    assert set(methods) == {"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"}
+    assert "*" not in headers
+    assert "Authorization" in headers
+    assert "Content-Type" in headers
+
+
 def test_status_and_audit_endpoints(monkeypatch):
     from lhassa.api.server import app
     from lhassa.state import AuditEvent, state
