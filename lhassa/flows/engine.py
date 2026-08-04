@@ -60,6 +60,11 @@ from loguru import logger
 
 from lhassa.config import Config
 from lhassa.flows.model import Flow, FlowNode, NodeKind
+from lhassa.flows.registries import (
+    resolve_context,
+    resolve_output_handler,
+    resolve_router,
+)
 
 # An executor seam: ``async (goal, *, department, config) -> dict``. Defaults to the
 # org's department brain (offline + $0 unless LHASSA_ORG_LIVE). Injected in tests.
@@ -129,35 +134,12 @@ def eval_when(when: Optional[dict], ctx: dict) -> bool:
 def resolve_brain(node: FlowNode, data: Any, config: Config) -> tuple[str, bool]:
     """Resolve which brain a ``task`` node runs on. Returns ``(department, pinned)``.
 
-    HYBRID: a pinned ``config.brain`` wins (``pinned=True``). Otherwise the node's
-    ``skill``/``domain`` (falling back to the prompt or the upstream data) auto-routes
-    through the org topology to a leaf department, reusing the org's deterministic
-    keyword routing. Any routing failure degrades to the skill text (or ``"general"``)
-    so a task always has a target and never raises here.
+    A thin, backward-compatible wrapper over :mod:`lhassa.flows.registries` —
+    ``TASK_ROUTERS`` (default ``org_topology``, selectable per node via
+    ``config.router``). Kept as a public function/import path for existing
+    callers and tests.
     """
-    cfg = node.config or {}
-    pinned = (cfg.get("brain") or "").strip()
-    if pinned:
-        return pinned, True
-
-    skill = (cfg.get("skill") or cfg.get("domain") or "").strip()
-    routing_text = skill or str(cfg.get("prompt") or data or "").strip()
-    try:
-        from lhassa.org import topology as topo_mod
-        from lhassa.org.coordinator import route_in_topology
-
-        topology = topo_mod.load_topology(config)
-        node_id = topology.root().id
-        # Walk down one level at a time until a leaf — route_in_topology is single-hop.
-        for _ in range(64):
-            if topology.is_leaf(node_id):
-                break
-            node_id = route_in_topology(topology, node_id, routing_text)
-        leaf = topology.node(node_id)
-        return (leaf.department or leaf.id), False
-    except Exception as exc:
-        logger.debug("flows: auto-route degraded to skill text ({}): {}", routing_text, exc)
-        return (skill or "general"), False
+    return resolve_router(node)(node, data, config)
 
 
 async def _default_executor(
@@ -421,9 +403,13 @@ def _run_output(
 ) -> dict:
     """Record an output node — best-effort, never raises.
 
-    Types: ``notify`` / ``doc`` / ``log`` record the payload; ``tex`` additionally
-    EXPORTS a tailored ``.tex`` file for the CV work-flow via :func:`lhassa.cv.export`
-    and records the written path (``{"output": "tex", "path": "…/out/{id}_{company}.tex"}``).
+    ``notify`` / ``doc`` / ``log`` (and any other unregistered type) record the
+    payload as a plain log entry. A type registered in
+    :mod:`lhassa.flows.registries` (``OUTPUT_HANDLERS`` — ``tex`` by default,
+    which EXPORTS a tailored ``.tex`` file for the CV work-flow via
+    :func:`lhassa.cv.export`) additionally runs that handler and merges its
+    record fields (e.g. ``{"output": "tex", "path": "…/out/{id}_{company}.tex"}``).
+    An unregistered type degrades to the plain log record — never a ``KeyError``.
     """
     cfg = node.config or {}
     out_type = str(cfg.get("type") or "log").lower()
@@ -433,25 +419,15 @@ def _run_output(
         payload = data.get("summary", data.get("output", data))
     record = {"output_type": out_type, "target": target, "payload": _safe(payload)}
 
-    if out_type == "tex":
+    handler = resolve_output_handler(out_type)
+    if handler is not None:
         try:
-            from lhassa import cv
-
-            artifact = payload if isinstance(payload, str) else str(payload)
-            artifact = cv.clean_latex(artifact)  # strip prose/fences → compile-ready .tex
-            # Deterministically restore the owner's contact block from the base
-            # CV — the model never has to reproduce it, and the contact_preserved
-            # gate downstream always passes ($0; best-effort, degrades to no-op).
-            artifact = cv.restore_contact(artifact, cv.load_base())
-            path = cv.export(artifact, company=company, run_id=run_id)
-            record["output"] = "tex"
-            record["path"] = str(path)
-            logger.info("flows: output[tex] {} → {}", node.id, path)
+            record.update(handler(node, payload, company=company, run_id=run_id))
             return record
-        except Exception as exc:  # writing a file is best-effort; never crash the run
-            record["output"] = "tex"
+        except Exception as exc:  # a handler is best-effort; never crash the run
+            record["output"] = out_type
             record["error"] = str(exc)
-            logger.warning("flows: output[tex] {} could not export: {}", node.id, exc)
+            logger.warning("flows: output[{}] {} handler failed: {}", out_type, node.id, exc)
             return record
 
     logger.info("flows: output[{}] {} → {}", out_type, node.id, target)
@@ -523,6 +499,7 @@ async def run_flow(
     executor: Optional[Executor] = None,
     company: Optional[str] = None,
     base_cv: Optional[str] = None,
+    context: Optional[str] = None,
     run_id: Optional[str] = None,
     resume_state: Optional[dict] = None,
     checkpoint_hook: Optional[CheckpointHook] = None,
@@ -542,6 +519,11 @@ async def run_flow(
     ``cv.load_base()`` from disk. ``None`` (the default) keeps the historical
     load-from-disk behaviour, so existing callers are unchanged.
 
+    ``context`` selects the :mod:`lhassa.flows.registries` context provider that
+    resolves ``{base_cv}``/``{company}`` (default ``"cv"`` — today's behaviour,
+    unchanged). A flow may instead set ``config.context`` on the trigger node
+    (checked first); an unknown provider degrades to the default, never raises.
+
     Durable execution is opt-in. ``run_id`` fixes the execution identity;
     ``resume_state`` restores a cursor previously returned as ``record["resume_state"]``;
     and ``checkpoint_hook`` receives a detached JSON cursor after every node.
@@ -556,18 +538,26 @@ async def run_flow(
         config = _Config()
     executor = executor or _default_executor
 
-    # Resolve the fixed base CV once (for {base_cv} interpolation + the contact gate)
-    # and the company (override → context → "untitled"). Both degrade gracefully.
-    # A caller-supplied ``base_cv`` wins (e.g. an uploaded CV); otherwise read disk.
-    if base_cv is None:
+    # Resolve the fixed base CV (for {base_cv} interpolation + the contact gate)
+    # and the company (override → context → "untitled") through the registered
+    # context provider (default "cv" — today's behaviour, unchanged). Degrades
+    # gracefully on any failure so a broken CV seam never crashes a run.
+    provider_name = context
+    if provider_name is None:
         try:
-            from lhassa import cv
-
-            base_cv = cv.load_base() or ""
-        except Exception as exc:  # a broken CV seam must never crash a run
-            logger.debug("flows: base CV unavailable ({})", exc)
-            base_cv = ""
-    resolved_company = resolve_company(company, inputs)
+            trigger_cfg = flow.trigger().config or {}
+            provider_name = trigger_cfg.get("context")
+        except Exception:
+            provider_name = None
+    ctx = await resolve_context(
+        provider_name,
+        inputs=inputs,
+        company_override=company,
+        base_cv_override=base_cv,
+        config=config,
+    )
+    base_cv = ctx.get("base_cv", base_cv or "")
+    resolved_company = str(ctx.get("company") or resolve_company(company, inputs))
     durable = any(
         value is not None
         for value in (
