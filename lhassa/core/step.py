@@ -685,7 +685,27 @@ async def step(
             n_rejected += 1
             continue
 
+        # An action that structurally CANNOT act (a feature flag off, nothing
+        # configured to read) is skipped outright: no run, and deliberately no
+        # episode. Logging "nothing was possible" once a day per dead action —
+        # each one dragging a full delivery trail behind it — filled the log with
+        # rows that never described an event, and that log is what episodic
+        # recall reads. Silence must mean nothing happened.
+        #
+        # The task still completes, so a RECURRING action keeps its schedule and
+        # resumes by itself the day the owner configures what it needs. The
+        # reasons stay visible in `lhassa capabilities`, which is where "why
+        # isn't this running?" is answered now that the log stays quiet.
+        skipped_reason = ""
         if trigger.maps_to_fixed_action():
+            skipped_reason = actions.precondition_unmet(
+                trigger.action, trigger.params
+            )
+
+        if skipped_reason:
+            ran_model = False
+            n_skipped += 1
+        elif trigger.maps_to_fixed_action():
             # Fixed deterministic action — no LLM (§2.4).
             gate = await _allow_fixed_action(
                 trigger, instance_id, action=trigger.action, params=trigger.params
@@ -778,7 +798,8 @@ async def step(
                     else:
                         n_deferred += 1
 
-        await ep.append()
+        if not skipped_reason:
+            await ep.append()
 
         # Mark the originating task done so the next tick doesn't re-fire it.
         if trigger.task_id is not None:

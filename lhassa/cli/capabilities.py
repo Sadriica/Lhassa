@@ -107,7 +107,14 @@ def _collect_registries(errors: dict, config: Any) -> dict:
     def _actions() -> dict:
         from lhassa.core import actions
 
-        return {"registered": list(actions.ACTIONS)}
+        # `blocked` names actions that are registered but structurally cannot
+        # act right now (a flag off, nothing configured). They are skipped by
+        # the heartbeat WITHOUT leaving an episode, so this is where "why isn't
+        # it running?" gets its answer.
+        return {
+            "registered": list(actions.ACTIONS),
+            "blocked": actions.blocked_actions(),
+        }
 
     def _departments() -> dict:
         from lhassa.org import routing
@@ -291,6 +298,16 @@ def render(data: dict) -> str:
     _row("Actions", "actions")
     _row("Departments", "departments")
     console.print(table)
+
+    blocked = (reg.get("actions", {}) or {}).get("blocked", {}) or {}
+    if blocked:
+        console.print()
+        console.print(
+            "[dim]Blocked — registered, skipped while they cannot act "
+            "(no episode is logged):[/dim]"
+        )
+        for name, reason in sorted(blocked.items()):
+            console.print(f"  [dim]{name} — {reason}[/dim]")
 
     # Channels: also show the configured subset (distinct from active order).
     chan = reg.get("channels", {}) or {}

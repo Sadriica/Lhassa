@@ -43,6 +43,34 @@ TEMPLE_ACTIONS: frozenset[str] = frozenset(
 )
 
 
+def temple_run_possible(params: dict) -> str:
+    """``temple_run`` is exactly as capable as the action it fronts.
+
+    Registering this lets the heartbeat skip the whole wrapper — no task
+    episode, no hops — instead of only short-circuiting once inside it.
+    """
+    try:
+        from lhassa.core.actions import precondition_unmet
+
+        if not isinstance(params, dict):
+            return ""
+        action = str(params.get("action") or "").strip()
+        if not action:
+            return ""
+        inner = params.get("params")
+        inner = dict(inner) if isinstance(inner, dict) else {}
+        if params.get("config") is not None:
+            inner["config"] = params["config"]
+        return precondition_unmet(action, inner)
+    except Exception:
+        return ""
+
+
+#: Marks a run that never happened because the action could not possibly act.
+#: Callers match on this rather than on the sentence around it.
+SKIPPED_PREFIX = "temple_run: skipped "
+
+
 async def temple_run(params: dict, *, return_record: bool = False) -> str | dict:
     """Delegate one internal action to temple: down-hop, execute, deliver up.
 
@@ -73,6 +101,17 @@ async def temple_run(params: dict, *, return_record: bool = False) -> str | dict
             inner_params = {}
         instruction = str(params.get("instruction") or f"{action} maintenance pass")
         config = params.get("config")
+
+        # An inner action that structurally cannot act is skipped BEFORE the
+        # down-execute-up loop starts, so it costs neither a delegation hop nor
+        # a delivery trail — a no-op used to pay for six episodes to report that
+        # nothing was possible. `SKIPPED_PREFIX` lets the caller recognise this
+        # without parsing prose.
+        from lhassa.core.actions import precondition_unmet
+
+        unmet = precondition_unmet(action, {**inner_params, "config": config})
+        if unmet:
+            return f"{SKIPPED_PREFIX}{action} — {unmet}"
 
         from lhassa.org.temple import delegate_internal
 

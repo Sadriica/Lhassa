@@ -21,6 +21,18 @@ Never raises.
 from __future__ import annotations
 
 
+def kg_possible(params: dict) -> str:
+    """Blocked while the persisted knowledge graph is off — both kg actions no-op."""
+    try:
+        from lhassa.config import Config
+
+        cfg = (params or {}).get("config") or Config
+        enabled = getattr(cfg, "memory_graph_enabled", False)
+        return "" if enabled else "knowledge graph disabled (LHASSA_MEMORY_GRAPH)"
+    except Exception:
+        return ""
+
+
 async def kg_sync(params: dict) -> str:
     """Feed the persisted knowledge graph from facts+episodes. Never raises.
 

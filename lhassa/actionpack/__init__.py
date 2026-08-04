@@ -119,6 +119,17 @@ def register_all() -> None:
     _reg("create_project", _projects.create_project_action)
     _reg("kg_sync", _kg.kg_sync)
     _reg("kg_resolve", _kg.kg_resolve)
+
+    # Preconditions — an action that structurally CANNOT act is skipped by the
+    # heartbeat instead of running to a no-op and paying a full delivery trail
+    # for saying nothing. Declared beside the registration, never inside core.
+    from lhassa.core.actions import register_precondition
+
+    register_precondition("calendar_sync", _calendar_sync.calendar_sync_possible)
+    register_precondition("ingest_knowledge", _knowledge.ingest_knowledge_possible)
+    register_precondition("kg_sync", _kg.kg_possible)
+    register_precondition("kg_resolve", _kg.kg_possible)
+    register_precondition("temple_run", _temple.temple_run_possible)
     _reg("check_integrity", _integrity.check_integrity)
     _reg("attach_project_template", _standing.attach_project_template)
     _reg("draft_research_note", _research_note.draft_research_note)

@@ -262,6 +262,64 @@ register_action("tracking_postulaciones", tracking_postulaciones)
 ACTIONS: "Any" = _REGISTRY.as_mapping()
 
 
+# ── preconditions (an action that CANNOT act should not run) ─────────────────────
+
+#: ``name -> callable(params) -> str``. The callable returns "" when the action
+#: can do its job, or a SHORT reason why it structurally cannot right now.
+_PRECONDITIONS: "dict[str, Callable[[dict], str]]" = {}
+
+
+def register_precondition(name: str, fn: "Callable[[dict], str]") -> None:
+    """Declare when ``name`` is capable of doing anything at all.
+
+    A precondition answers "could this possibly produce a result?", NOT "should
+    this run?" — it is for the structurally impossible case: a feature flag off,
+    nothing configured to read. Four scheduled actions were running on a daily
+    cadence with no calendar, no knowledge roots and the graph disabled, and each
+    no-op still cost a full down-execute-up delivery trail; between them they were
+    13% of the episode log, saying nothing. Silence in the log should mean nothing
+    happened, so the fix is to not run them, not to log the emptiness better.
+
+    Registered separately from the action so nothing about the action changes,
+    and so the day the owner configures a calendar it simply starts working again
+    with no code edit. Applies to any registered action; unregistered names are
+    always runnable.
+    """
+    _PRECONDITIONS[name] = fn
+
+
+def precondition_unmet(action: str, params: "dict | None" = None) -> str:
+    """Why ``action`` cannot act right now, or ``""`` when it can.
+
+    FAIL-OPEN by design: no precondition, or one that raises, means runnable. A
+    buggy capability check must never be able to silence a working action —
+    running an action that then reports a no-op is a far cheaper mistake than
+    silently disabling maintenance.
+    """
+    fn = _PRECONDITIONS.get(action)
+    if fn is None:
+        return ""
+    try:
+        return str(fn(params or {}) or "")
+    except Exception:
+        return ""
+
+
+def blocked_actions(params: "dict | None" = None) -> "dict[str, str]":
+    """Every registered action that currently cannot act, mapped to its reason.
+
+    The discoverability half of the skip: because a skipped action leaves NO
+    episode, "why isn't calendar_sync running?" has to be answerable somewhere,
+    and that somewhere is ``lhassa capabilities``.
+    """
+    out: "dict[str, str]" = {}
+    for name in sorted(_REGISTRY.as_mapping()):
+        reason = precondition_unmet(name, params)
+        if reason:
+            out[name] = reason
+    return out
+
+
 async def run(action: str, params: dict, episode: Any = None) -> str:
     """
     Dispatch ``action`` to the deterministic registry. Unknown action → safe

@@ -12,6 +12,20 @@ no roots are configured, so it is safe to schedule unconditionally (see the
 from __future__ import annotations
 
 
+def ingest_knowledge_possible(params: dict) -> str:
+    """Blocked while no knowledge roots are configured — there is nothing to read."""
+    try:
+        from lhassa.config import Config
+
+        cfg = (params or {}).get("config") or Config
+        roots = getattr(cfg, "knowledge_roots", "") or ""
+        if isinstance(roots, str):
+            roots = [r for r in roots.split(",") if r.strip()]
+        return "" if roots else "no knowledge roots configured (LHASSA_KNOWLEDGE_ROOTS)"
+    except Exception:
+        return ""
+
+
 async def ingest_knowledge(params: dict) -> str:
     """Index the owner's configured knowledge roots. Never raises.
 

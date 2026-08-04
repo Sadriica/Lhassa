@@ -41,6 +41,17 @@ def _stable_key(candidate: dict) -> str:
     return _reconcile.stable_uid(candidate.get("summary") or "", start)
 
 
+def calendar_sync_possible(params: dict) -> str:
+    """Blocked while no calendar feed is configured — nothing to reconcile against."""
+    try:
+        config = (params or {}).get("config") or Config
+        if _cal_store.get_primary(config):
+            return ""
+        return "no calendar feed configured (LHASSA_CALENDAR_ICS_URL / calendars.json)"
+    except Exception:
+        return ""
+
+
 async def calendar_sync(params: dict) -> str:
     """Find events unsynced from the master calendar and deliver each as a
     tappable ``.ics``. Never raises.

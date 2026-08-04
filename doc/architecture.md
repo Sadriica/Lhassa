@@ -107,6 +107,36 @@ Built additively over an existing skeleton (extend, never rewrite). From
 | 6 | Maturity (continuous) | `LocalModelProvider` + PII pseudonymization + router routine→local; memory **layer 4** (semantic embeddings); CLI power subcommands + Telegram + opencode heartbeat + voice brain-bridge |
 | 7 | Org layer | Typed inter-brain messages, read-only commons, RBAC, `GeneralBrain` (coordinates) / `DepartmentBrain` (executes), the validated topology tree (1..N brains) + coordinator/routing/executor + `lhassa org` |
 
+## Action preconditions — silence means nothing happened
+
+A registered action may declare a **precondition** (`core/actions.py:
+register_precondition`) answering one narrow question: *could this possibly
+produce a result right now?* Not "should it run" — that is the allowlist's and
+the approval frontier's job — but whether a feature flag is off or nothing is
+configured for it to read.
+
+When a precondition is unmet, `core/step.py` does not dispatch the action **and
+emits no episode at all**. This is deliberate. Three scheduled actions were
+running daily against a disabled knowledge graph and unset knowledge roots;
+none of them ever failed and none of them could ever succeed, yet each no-op
+still paid a full down-execute-up delivery trail. Those rows described no event,
+and the episode log is what episodic recall reads — so the fix is to not run
+them, not to phrase the emptiness better.
+
+Two invariants make the skip safe:
+
+- **The task still completes**, so a recurring action keeps its schedule and
+  resumes by itself the day the owner configures what it needs. (A skip that
+  left the task unfinished would kill the recurrence — the same failure mode as
+  a signature refusal; see `doc/decisions.md`, 2026-08-04.)
+- **Fail-open**: a missing precondition, or one that raises, means runnable. A
+  buggy capability check must never be able to silence a working action.
+
+Because a skip is invisible in the log by design, the reasons are surfaced by
+`lhassa capabilities`, which lists every blocked action and why. `temple_run`
+registers a precondition that defers to the inner action it fronts, so the
+wrapper is skipped whole rather than short-circuiting after its hops.
+
 ## Diagram — the loop, the seams, the tree
 
 ```
