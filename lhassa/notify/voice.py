@@ -14,18 +14,38 @@ into something a person would actually read. It sits behind
 :func:`lhassa.notify.dispatch.notify` (the ONE fan-out choke point), so every
 channel gets the same voiced text — no per-channel special-casing.
 
-Three deterministic layers, same degrade discipline as the digest's
+**One source of voice.** Every lead phrase this module uses comes from
+:data:`lhassa.persona.LEAD_PHRASES` (and its Spanish mirror) — the SAME table
+:func:`lhassa.persona.format_alert` draws from. Before this module and
+``persona.py`` were unified they carried duplicated, silently-drifting copies
+of the same phrases ("Heads up: " here vs "Heads up — " there); the
+deterministic plane consulted its own near-copy instead of the one place that
+actually defines Lhassa's voice. There is now exactly one vocabulary.
+
+Four deterministic layers, same degrade discipline as the digest's
 ``digest_style`` (:mod:`lhassa.notify.digest`):
 
   * :func:`classify` — an explicit ``kind`` always wins; otherwise a cheap,
     regex-only sniff of the text. $0, never raises.
   * :func:`template` — the $0 reshaping layer. Per-kind deterministic templates
     (the ``TEMPLATES`` registry): strip robotic prefixes, dedupe a doubled
-    action name, naturalize obvious ``key=value`` tails, and add ONE line of
-    first-person framing. When unsure, it passes the text through verbatim
-    with only the framing added — it NEVER drops information. Idempotent: a
-    text that already carries the framing (ours, or the monitor's own
+    action name, naturalize obvious ``key=value`` tails, look up a natural
+    first-person lead per action via :mod:`lhassa.notify.phrasebook` (with an
+    intent-based outer framing — "Done — " / "Heads up — " / "I learned
+    something — ", point 5 of Stream 4, not one blanket framing for every
+    action-result). When unsure, it passes the text through verbatim with
+    only the framing added — it NEVER drops information. Idempotent: a text
+    that already carries a known lead phrase (ours, or the monitor's own
     :func:`lhassa.persona.format_alert` leads) is returned unchanged.
+  * **Identity reaches the $0 plane** (no model): :func:`template` also
+    localizes the lead phrase to the owner's language
+    (``config.digest_language``, reused as the general notify-language
+    signal — ``LEAD_PHRASES_ES`` if it starts with ``"es"``) and applies the
+    identity's own directives — concretely, a "keep it concise" directive
+    (loaded via :func:`lhassa.persona.load_identity`) caps the rendered
+    length. Both are pure post-processing over already-templated text; a
+    broken identity registry degrades to the untouched text, never a raised
+    exception.
   * :func:`revoice` — the style switch (``config.notify_style``):
     ``"plain"`` leaves the text untouched, ``"template"`` (the default) applies
     :func:`template`, ``"persona"`` adds ONE cheap-model re-voicing pass on top
@@ -49,39 +69,41 @@ from typing import Callable, Optional
 
 from loguru import logger
 
+from lhassa import persona
+from lhassa.notify import phrasebook
+
 # The closed set of notification kinds this module understands. ``classify``
 # always returns one of these; ``template`` treats anything else as "generic".
 KINDS = ("alert", "reminder", "action-result", "approval", "report", "generic")
 
 # One-line first-person framings, added ONCE per kind (never for "report" or
-# "generic" — those pass through as-is beyond the light cleanup below). These
-# same strings are also the idempotency sentinel: a text that already starts
-# with one of these (ours, or the pre-existing monitor leads from
-# ``lhassa.persona.format_alert``) is considered already voiced and returned
-# unchanged rather than double-framed.
-_FRAMING: dict[str, str] = {
-    "reminder": "You asked me to remind you: ",
-    "action-result": "Done — ",
-    "alert": "Heads up: ",
-    "approval": "Waiting on your word: ",
-}
+# "generic" — those pass through as-is beyond the light cleanup below).
+# Sourced from :data:`lhassa.persona.LEAD_PHRASES` — the one vocabulary (see
+# module docstring). Extra keys in that table not in ``KINDS`` (e.g.
+# ``"learned"``, used only for the action-result intent framing below) are
+# simply unused here.
+_FRAMING: dict[str, str] = persona.LEAD_PHRASES
 
-# Extra known lead phrases that count as "already voiced" even though they
-# were not produced by this module — chiefly ``persona.format_alert``'s own
-# leads ("Heads up — ...", "Something needs a look — ...") so a watcher alert
-# that is already Lhassa-voiced is not re-wrapped with a second framing line.
-_EXTRA_LEADS = (
-    "something needs a look",
-    "heads up",
+# The idempotency sentinel: a text that already starts with ANY known lead
+# phrase — ours, or ``persona.format_alert``'s own leads (which now draw from
+# the exact same table) — is considered already voiced and returned unchanged
+# rather than double-framed. English and Spanish leads both count, so a
+# reprocessed already-localized message stays a no-op.
+_ALL_LEADS = tuple(
+    sorted(
+        {
+            p.strip().lower()
+            for table in (persona.LEAD_PHRASES, persona.LEAD_PHRASES_ES)
+            for p in table.values()
+            if p.strip()
+        }
+    )
 )
 
 
 def _already_voiced(text: str) -> bool:
     low = text.strip().lower()
-    for framing in _FRAMING.values():
-        if low.startswith(framing.strip().lower()):
-            return True
-    return any(low.startswith(lead) for lead in _EXTRA_LEADS)
+    return any(low.startswith(lead) for lead in _ALL_LEADS)
 
 
 def classify(text: str, kind: Optional[str] = None) -> str:
@@ -131,13 +153,13 @@ def _naturalize_kv(text: str) -> str:
     return _KV_RE.sub(lambda m: f"{m.group(1)}: {m.group(2)}", text)
 
 
-def _clean_action_result(text: str) -> str:
-    """Strip the ``⚙️`` prefix and dedupe a doubled action name.
+def _extract_action(text: str) -> "tuple[str | None, str]":
+    """Pull ``(action_name, rest)`` out of a machine-built action-result line.
 
-    ``"⚙️ check_spend: check_spend: 2040 output tokens..."`` becomes
-    ``"Check-spend: 2040 output tokens..."``. When the shape doesn't match, the
-    text is naturalized (key=value tails only) and passed through — NEVER
-    dropped.
+    Handles the doubled-name shape (``"check_spend: check_spend: rest"``) and
+    the plain leading-name shape (``"check_spend: rest"``); strips a leading
+    ``⚙️`` first. Returns ``(None, naturalized_text)`` when neither shape
+    matches — the caller falls back to passing the text through untouched.
     """
     t = text.strip()
     if t.startswith("⚙️"):
@@ -145,13 +167,34 @@ def _clean_action_result(text: str) -> str:
 
     m = _DOUBLED_ACTION_RE.match(t)
     if m:
-        return f"{_title_action(m.group(1))}: {_naturalize_kv(m.group(2))}"
+        return m.group(1), _naturalize_kv(m.group(2))
 
     m = _LEADING_ACTION_RE.match(t)
     if m:
-        return f"{_title_action(m.group(1))}: {_naturalize_kv(m.group(2))}"
+        return m.group(1), _naturalize_kv(m.group(2))
 
-    return _naturalize_kv(t)
+    return None, _naturalize_kv(t)
+
+
+def _clean_action_result(text: str) -> str:
+    """Turn a machine-built action-result line into a natural sentence.
+
+    ``"⚙️ check_spend: check_spend: 2040 output tokens..."`` becomes
+    ``"I checked spend: 2040 output tokens..."`` when ``check_spend`` has a
+    :mod:`lhassa.notify.phrasebook` entry (the obligation — see that module's
+    parity test), or falls back to the mechanical
+    ``"Check-spend: 2040 output tokens..."`` rendering for an action this
+    table doesn't (yet) know. When the shape doesn't match at all, the text is
+    naturalized (key=value tails only) and passed through — NEVER dropped.
+    """
+    action, rest = _extract_action(text)
+    if action is None:
+        return rest
+
+    lead = phrasebook.phrase_for(action)
+    if lead:
+        return f"{lead}: {rest}" if rest else lead
+    return f"{_title_action(action)}: {rest}" if rest else _title_action(action)
 
 
 def _template_report(text: str, _kind: str) -> str:
@@ -161,7 +204,14 @@ def _template_report(text: str, _kind: str) -> str:
 
 
 def _template_action_result(text: str, kind: str) -> str:
-    return _FRAMING[kind] + _clean_action_result(text)
+    # Templates by INTENT, not only by kind (Stream 4, point 5): most
+    # action-results are "I finished something" ("Done — "), but a few are
+    # "something needs your attention" ("Heads up — ") or "I learned
+    # something" — see lhassa.notify.phrasebook.intent_for.
+    action, _rest = _extract_action(text)
+    intent = phrasebook.intent_for(action) if action else kind
+    framing = _FRAMING.get(intent, _FRAMING[kind])
+    return framing + _clean_action_result(text)
 
 
 def _template_framed(text: str, kind: str) -> str:
@@ -186,26 +236,81 @@ TEMPLATES: dict[str, Callable[[str, str], str]] = {
 }
 
 
-def template(text: str, kind: str) -> str:
+# ── Identity reaches the $0 plane (no model) ────────────────────────────────
+# The owner's language and hard limits, applied as pure deterministic
+# post-processing over already-templated text — never a raise, never a cost.
+
+# A directive naming any of these (case-insensitive substring) is read as
+# "keep notifications brief" — the same signal an English "keep it concise"
+# or "be brief" directive would give. The default personal identity carries
+# "responder conciso por defecto" out of the box (see persona.py), so this is
+# live for the owner today, not a hypothetical.
+_CONCISE_MARKERS = ("conciso", "concise", "brief", "breve")
+_CONCISE_MAX_CHARS = 480
+
+
+def _localize_lead(text: str, config) -> str:
+    """Swap an English lead phrase for its Spanish mirror when the owner's
+    configured notify language calls for it (``config.digest_language``,
+    reused as the general $0 notify-language signal — no separate model call
+    needed to know which language the owner reads in)."""
+    if not text or config is None:
+        return text
+    lang = (getattr(config, "digest_language", "") or "").strip().lower()
+    if not lang.startswith("es"):
+        return text
+    for key, en_lead in persona.LEAD_PHRASES.items():
+        if en_lead and text.startswith(en_lead):
+            return persona.LEAD_PHRASES_ES.get(key, en_lead) + text[len(en_lead):]
+    return text
+
+
+def _apply_identity_limits(text: str, config) -> str:
+    """Apply the loaded identity's directives to templated text — concretely,
+    a "keep it concise" directive caps the length. Any failure (a broken
+    identity registry) leaves ``text`` untouched; identity must never cost a
+    notification."""
+    if not text:
+        return text
+    try:
+        instance_id = getattr(config, "instance_id", None) if config is not None else None
+        identity = persona.load_identity(instance_id)
+        concise = any(
+            marker in directive.lower()
+            for directive in identity.directives
+            for marker in _CONCISE_MARKERS
+        )
+        if concise and len(text) > _CONCISE_MAX_CHARS:
+            return text[: _CONCISE_MAX_CHARS - 1].rstrip() + "…"
+    except Exception as exc:  # identity must never cost a notification
+        logger.debug(f"notify-voice: identity limits skipped: {exc}")
+    return text
+
+
+def template(text: str, kind: str, config=None) -> str:
     """The $0 deterministic reshaping layer for one notification ``kind``.
 
     Idempotent: re-voicing an already-voiced text (starts with a known framing
-    or lead phrase) is a no-op — returns ``text`` unchanged. Unrecognized
-    ``kind`` falls back to the generic (light-touch, no framing) template.
-    Never raises; never drops information.
+    or lead phrase) is a no-op — returns ``text`` unchanged (only localized,
+    never re-framed or re-truncated). Unrecognized ``kind`` falls back to the
+    generic (light-touch, no framing) template. ``config``, when given, lets
+    the owner's identity reach this $0 plane — see :func:`_localize_lead` /
+    :func:`_apply_identity_limits`. Never raises; never drops information.
     """
     if not text or not text.strip():
         return text
     t = text
     if kind != "report" and _already_voiced(t):
-        return text
+        return _localize_lead(t, config)
 
     fn = TEMPLATES.get(kind, _template_generic)
     try:
-        return fn(t, kind)
+        out = fn(t, kind)
     except Exception as exc:  # the $0 layer must never break a notification
         logger.debug(f"notify-voice: template({kind!r}) degraded to verbatim: {exc}")
         return text
+    out = _localize_lead(out, config)
+    return _apply_identity_limits(out, config)
 
 
 # ── The persona layer (one cheap-model pass, opt-in via notify_style) ──────
@@ -283,7 +388,7 @@ async def revoice(text: str, *, kind: Optional[str] = None, config=None) -> str:
         return text
 
     resolved_kind = classify(text, kind)
-    templated = template(text, resolved_kind)
+    templated = template(text, resolved_kind, config)
 
     if style != "persona":
         return templated

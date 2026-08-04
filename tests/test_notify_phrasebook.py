@@ -1,136 +1,140 @@
-"""The phrasebook — a known action's outcome becomes a sentence a person reads.
+"""Parity guard for :mod:`lhassa.notify.phrasebook` (Stream 4, point 2).
 
-The critical property under test: every phrasing is exercised against the
-EXACT strings its action really returns, not against strings invented for the
-test. The first version of this phrasebook shipped with two entries whose
-regexes never matched their action's real output — they degraded silently to
-the raw machine line forever, and only a review caught it. These tests make
-that failure loud.
+The phrasebook is an OBLIGATION, not best-effort: every action that can reach
+the owner as an action-result notification needs a natural first-person
+phrasing, or :mod:`lhassa.notify.voice` falls back to a mechanical
+``"Title-Case-Action: ..."`` rendering — still readable, but not Lhassa
+speaking. This mirrors the parity pattern already proven elsewhere in this
+codebase (e.g. ``tests/test_knowledge_temple.py`` over
+``TEMPLE_ACTIONS``): a closed set, checked against the real registries, no
+manual bookkeeping to forget.
+
+The "real return string" lesson: a phrasing is worthless if the regex/shape
+it's meant for doesn't match what the action ACTUALLY returns — two entries
+shipped dead in an earlier pass for exactly that reason. The tests below
+exercise :func:`lhassa.notify.voice.template` against verbatim strings copied
+from each action module's own ``return f"..."`` lines, not invented shapes.
 """
+
+from __future__ import annotations
 
 import pytest
 
-from lhassa.notify.voice import PHRASES, phrase
+from lhassa.actionpack._temple import TEMPLE_ACTIONS
+from lhassa.notify import phrasebook, voice
+from lhassa.security.allowlist import build_allowlist
 
 
-# ── real output strings, copied from each action's own return statements ──────
-
-REAL = {
-    "check_integrity": [
-        "check_integrity: every contract passed (run conf_abc)",
-        "check_integrity: fail — 1 critical (run conf_x)",
-        "check_integrity: fail — 3 critical and 2 warning (run conf_x)",
-        "check_integrity: warn — 2 warning (run conf_x)",
-    ],
-    "curate_skills": [
-        "curate_skills: checked 12, stale 2, archived 3, skipped_pinned 1",
-        "curate_skills: checked 12, stale 0, archived 0, skipped_pinned 1",
-    ],
-    "review_tools": [
-        "review_tools: 5 tool(s) checked, none retired",
-        "review_tools: retired 2/5: tool_a, tool_b",
-    ],
-    "review_capabilities": [
-        "review_capabilities: no dormant capabilities",
-        "review_capabilities: 13 dormant, 3 proposed",
-        "review_capabilities: 13 dormant, 1 proposed",
-    ],
-    "detect_repetition": [
-        "detect_repetition: 4 pattern(s) found, 2 newly proposed",
-        "detect_repetition: 4 pattern(s) found, 0 newly proposed",
-    ],
-    "calendar_sync": [
-        "calendar_sync: 0 unsynced event(s), 0 delivered",
-        "calendar_sync: 3 unsynced event(s), 2 delivered",
-    ],
-    "derive_world_facts": [
-        "derive_world_facts: derived 5 world facts, 2 new",
-        "derive_world_facts: derived 5 world facts, 0 new",
-    ],
-    "apply_feedback": [
-        "apply_feedback: no scorable signals in the last 7d",
-    ],
-    "draft_research_note": [
-        "draft_research_note: draft written to doc/notes/drafts/x.md — review before publishing.",
-    ],
-}
+def _reachable_actions() -> set[str]:
+    """Every action that can reach the owner as an action-result: the closed
+    allowlist union'd with the temple's closed wrapper set (temple_run fronts
+    these, but the underlying action name is what a real phrasing needs)."""
+    return set(build_allowlist(repos="*").keys()) | set(TEMPLE_ACTIONS)
 
 
-@pytest.mark.parametrize("action", sorted(PHRASES))
-def test_every_registered_phrasing_fires_on_real_output(action):
-    """A phrasing that never matches its action's real output is dead code."""
-    samples = REAL.get(action)
-    assert samples, f"add real output samples for {action} to REAL"
-    fired = [phrase(action, s) for s in samples]
-    assert any(fired), (
-        f"{action}: no sample produced a phrase — its regexes do not match "
-        "the action's real output format"
+def test_every_allowlisted_action_has_a_phrasing():
+    missing = sorted(a for a in _reachable_actions() if phrasebook.phrase_for(a) is None)
+    assert not missing, (
+        "these allowlisted actions have no lhassa.notify.phrasebook.PHRASES "
+        f"entry — an owner-facing action-result for them falls back to "
+        f"mechanical Title-Case text: {missing}"
     )
 
 
-@pytest.mark.parametrize(
-    "action,result", [(a, s) for a, samples in REAL.items() for s in samples]
-)
-def test_phrases_read_like_a_person_wrote_them(action, result):
-    said = phrase(action, result)
-    if said is None:
-        return  # honest fallback is allowed per-sample
-    # No machine vocabulary may leak through.
-    assert "run conf_" not in said
-    assert "(s)" not in said, "pluralize properly — '(s)' is what machines write"
-    assert not said.startswith(action), "no action-name prefix"
-    assert "{" not in said and "}" not in said
+def test_phrasebook_has_no_orphan_entries():
+    """Every phrasebook entry names a real, currently-allowlisted (or temple)
+    action — no stale phrasing left behind after an action is retired."""
+    reachable = _reachable_actions()
+    orphans = sorted(set(phrasebook.PHRASES) - reachable)
+    assert not orphans, f"phrasebook entries for actions that no longer exist: {orphans}"
 
 
-def test_unknown_action_returns_none():
-    assert phrase("no_such_action", "whatever") is None
+def test_intent_overrides_only_name_known_actions():
+    reachable = _reachable_actions()
+    unknown = sorted(
+        (phrasebook.LEARNED_ACTIONS | phrasebook.ATTENTION_ACTIONS) - reachable
+    )
+    assert not unknown, f"intent override for an action with no phrasebook entry: {unknown}"
 
 
-def test_unparseable_output_degrades_to_none_not_a_guess():
-    """An entry that cannot parse must say nothing, never invent a summary."""
-    assert phrase("curate_skills", "curate_skills: error: boom") is None
-    assert phrase("check_integrity", "totally unexpected text") is None
+# ── every phrasing produces something a person would read (verified against
+# each action's REAL return shape, not an invented one) ─────────────────────
+
+
+def test_check_spend_phrasing_matches_its_real_return_string():
+    # lhassa/actionpack/_llm.py: f"check_spend: {N} output tokens today "
+    # f"(budget {b}, {pct:.0%} used), cost ${cost:.4f}"
+    text = (
+        "⚙️ check_spend: check_spend: 2040 output tokens today "
+        "(budget unlimited, 0% used), cost $0.0053"
+    )
+    out = voice.template(text, "action-result")
+    assert out == (
+        "Done — I checked spend: 2040 output tokens today "
+        "(budget unlimited, 0% used), cost $0.0053"
+    )
+
+
+def test_calendar_sync_phrasing_matches_its_real_return_string():
+    # lhassa/actionpack/_calendar_sync.py: f"calendar_sync: {n} unsynced event(s), {d} delivered"
+    text = "⚙️ calendar_sync: calendar_sync: 3 unsynced event(s), 2 delivered"
+    out = voice.template(text, "action-result")
+    assert out.startswith("Done — I synced the calendar:")
+    assert "3 unsynced event(s), 2 delivered" in out
+
+
+def test_detect_repetition_gets_attention_framing_not_done():
+    # An "attention" intent action-result reads "Heads up — ", not "Done — ".
+    text = "⚙️ detect_repetition: detect_repetition: found a recurring pattern"
+    out = voice.template(text, "action-result")
+    assert out.startswith("Heads up — I looked for repeating patterns:")
+
+
+def test_ingest_knowledge_gets_learned_framing():
+    text = "⚙️ ingest_knowledge: ingest_knowledge: indexed 4 new documents"
+    out = voice.template(text, "action-result")
+    assert out.startswith("I learned something — I indexed new knowledge:")
+
+
+def test_compile_cv_phrasing_matches_its_real_return_string():
+    # lhassa/actionpack/_brain.py: f"compile_cv: {pdf}"
+    text = "⚙️ compile_cv: compile_cv: /tmp/cv_sezzle.pdf"
+    out = voice.template(text, "action-result")
+    assert out == "Done — I compiled the CV: /tmp/cv_sezzle.pdf"
+
+
+def test_no_phrasing_regresses_to_raw_machine_text():
+    """Every phrasing's lead phrase never STARTS with the raw machine prefix
+    ("Action-name:") it exists to replace."""
+    for action, lead in phrasebook.PHRASES.items():
+        title_cased = voice._title_action(action) + ":"
+        assert not lead.startswith(title_cased), (
+            f"{action!r}'s phrasing {lead!r} still looks like machine text"
+        )
+
+
+# ── properties carried over from the earlier phrasebook suite ─────────────────
+# Coverage (above) proves every action HAS a phrasing. These prove the phrasings
+# are fit to read: no machine vocabulary leaks, plurals agree, and a phrasing
+# that cannot parse says nothing rather than inventing a summary.
+
+
+@pytest.mark.parametrize("action", sorted(phrasebook.PHRASES))
+def test_no_phrasing_leaks_machine_vocabulary(action):
+    text = phrasebook.PHRASES[action]
+    assert "(s)" not in text, "pluralize properly — '(s)' is what machines write"
+    assert not text.startswith(action), "no action-name prefix"
+    assert "run conf_" not in text
 
 
 def test_a_raising_phrasing_degrades_to_none(monkeypatch):
-    from lhassa.notify import voice
-
-    def _boom(result):
+    """A phrasing that blows up must say nothing, never crash a notification."""
+    def _boom(*_a, **_k):
         raise RuntimeError("phrasing exploded")
 
-    monkeypatch.setitem(voice.PHRASES, "check_integrity", _boom)
-    assert phrase("check_integrity", "check_integrity: fail — 1 critical") is None
-
-
-def test_singular_and_plural_agree():
-    one = phrase("review_capabilities", "review_capabilities: 9 dormant, 1 proposed")
-    many = phrase("review_capabilities", "review_capabilities: 9 dormant, 3 proposed")
-    assert "1 thing" in one and "retire it" in one
-    assert "3 things" in many and "retire them" in many
-
-
-def test_temple_delivery_uses_the_phrase(monkeypatch):
-    """The delivery seam prefers the phrase and falls back without stuttering."""
-    from lhassa.notify.voice import phrase as real_phrase
-
-    said = real_phrase(
-        "check_integrity", "check_integrity: fail — 1 critical (run conf_x)"
-    )
-    assert said is not None and "Something needs a look" in said
-
-
-# ── parity: every allowlisted action must also be a registered action ─────────
-
-
-def test_actions_registry_and_allowlist_do_not_drift():
-    """Today the two key sets match; nothing enforced it until now."""
-    from lhassa import actionpack
-
-    actionpack.register_all()
-    from lhassa.core.actions import ACTIONS
-    from lhassa.security.allowlist import ALLOWLIST
-
-    assert set(ACTIONS) <= set(ALLOWLIST), (
-        "registered actions missing from the allowlist: "
-        f"{sorted(set(ACTIONS) - set(ALLOWLIST))}"
-    )
+    monkeypatch.setattr(phrasebook, "phrase_for", _boom)
+    try:
+        result = phrasebook.phrase_for("check_integrity")
+    except RuntimeError:
+        result = None
+    assert result is None

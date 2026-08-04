@@ -122,6 +122,54 @@ from `conformance_runs` — the source of truth — instead of parsing a return
 string that was never meant for a machine and a person at once.
 
 ## 2026-08-03 — macOS CI corrects the audit that preceded it
+## 2026-08-03 — A real voice: the $0 plane finally speaks as Lhassa (Stream 4)
+
+Root cause, confirmed: the deterministic notification plane never consulted
+`persona.py`. `notify/voice.py`'s lead phrases and `persona.format_alert`'s
+lead phrases were two hand-maintained near-copies ("Heads up: " vs
+"Heads up — ") that were free to drift, and `notify_style="template"` (the
+default) never touched `persona.py` at all — only the opt-in, off-by-default
+persona pass did. So the messages the owner actually received never carried
+Lhassa's identity unless a model call happened to be spent on them.
+
+Fixed, all deterministic, zero model calls:
+
+1. **One source of voice.** `persona.LEAD_PHRASES` (+ a Spanish mirror,
+   `LEAD_PHRASES_ES`) is now the single vocabulary; `notify/voice.py` imports
+   it instead of carrying its own `_FRAMING` dict, and `persona.format_alert`
+   draws from the same table via a severity→lead mapping. The duplicated
+   strings are gone.
+2. **The phrasebook is an obligation.** New `notify/phrasebook.py` gives every
+   allowlisted action (the union of `security.allowlist.build_allowlist()` and
+   `actionpack._temple.TEMPLE_ACTIONS`) a natural first-person lead, plus
+   intent overrides (`LEARNED_ACTIONS`, `ATTENTION_ACTIONS`) so an
+   action-result reads as "Done — ", "Heads up — ", or "I learned
+   something — " depending on what actually happened, not one blanket
+   framing. `tests/test_notify_phrasebook.py` is the parity guard — it fails
+   the moment a new allowlisted action ships with no phrasing.
+3. **Identity reaches the $0 plane.** `voice.template()` now takes an optional
+   `config` and applies two deterministic identity effects with no model call:
+   localizes the lead phrase to the owner's language
+   (`config.digest_language`, reused as the general notify-language signal),
+   and caps notification length when the loaded identity carries a
+   "keep it concise" directive (`persona.load_identity`) — live today, since
+   the default personal identity already carries
+   "responder conciso por defecto".
+4. **Closed the `org/deliver.py` document bypass.** A delivered document's
+   caption used to go straight to `telegram_api.send_document`, skipping
+   `revoice()` entirely — the one surface where machine text could still
+   reach the owner. The caption now routes through the same voice layer a
+   text-only delivery already gets.
+5. **Templates by intent, not only by kind** — implemented as point 2's
+   intent overrides rather than a separate mechanism, since kind-level
+   framing was already too coarse for action-results specifically.
+
+Full suite: 2338 passed, ruff clean. `tests/test_notify_voice.py` and
+`tests/test_persona.py` were updated where the unified "Heads up — " phrasing
+(dash, not colon) changed an asserted string; behavior for `format_alert`
+itself is unchanged (verified by existing tests).
+
+## 2026-08-03 — El CI de macOS corrige la auditoría que lo precedió
 
 The first real macOS CI run (triggered by the push to `main`) came back
 **9 failed, 2316 passed** — and its value was not that it found nine failures,
@@ -160,6 +208,7 @@ that were written; they do not cover the assumptions that were never questioned.
 Only the real runner found those.
 
 ## 2026-08-03 — AGPL-3.0: sovereignty, attribution, and the commercial option
+## 2026-08-03 — AGPL-3.0: soberanía, atribución y la opción comercial
 
 Lhassa is licensed under **AGPL-3.0-or-later**, with one additional term under
 section 7(b) requiring the attribution notice to stay visible.
@@ -222,6 +271,7 @@ are 134 MIT / 19 ISC / 15 Apache-2.0 / 6 BSD-2 / 3 BSD-3 / 2 MPL-2.0 /
   the section 7 block.
 
 ## 2026-08-03 — macOS as tier 2: a host layer, and a quarantine that does not yield
+## 2026-08-03 — macOS como tier 2: una capa de host, y una cuarentena que no cede
 
 The audience for a local-first, open-source brain runs local inference, and that
 audience is largely on Apple Silicon. macOS becomes a **tier-2** platform: the
@@ -275,6 +325,7 @@ only runs on pushed commits and this work is deliberately uncommitted, so the
 matrix is written and validated but its first real result is pending.
 
 ## 2026-08-03 — Recall stops remembering its own paperwork
+## 2026-08-03 — El recall deja de recordar su propio papeleo
 
 `db.search_episodes` already demoted automation episodes below interactive ones
 (a flat +5.0 on the bm25 rank for `monitor`/`task:*`) — but that list predates
@@ -305,6 +356,7 @@ true. The test now builds a 200-episode corpus so it asserts the real behaviour
 rather than a convenient one, and the caveat is recorded in its docstring.
 
 ## 2026-08-03 — Two bugs of a machine that sleeps
+## 2026-08-03 — Dos bugs de una máquina que duerme
 
 Investigating repeated notifications surfaced two defects that only appear on a
 laptop — the machine suspended 2684 times in 14 days — and both had been
@@ -344,6 +396,7 @@ emitted on this machine** — zero occurrences in the full user journal (back to
 open question rather than a fixed bug: the real text is still unidentified.
 
 ## 2026-08-03 — The utility tribunal: the counterweight that was missing
+## 2026-08-03 — El tribunal de utilidad: el contrapeso que faltaba
 
 Every invariant Lhassa had was an invariant of RESTRAINT — deny-by-default,
 signed tasks, quarantine, provenance, integrity contracts. None asked **"is this
