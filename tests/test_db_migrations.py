@@ -175,3 +175,101 @@ async def test_malformed_legacy_schema_is_not_stamped(tmp_path, monkeypatch):
             assert await cur.fetchone() is None
     assert "firma" not in columns
     assert "due_at" not in columns
+
+
+# ── migration 11: multiuser (actor_id + shared resources) ──────────────────────
+
+
+@pytest.mark.asyncio
+async def test_multiuser_migration_adds_actor_id_and_shared_tables(tmp_path, monkeypatch):
+    import lhassa.core.db as db
+
+    monkeypatch.setattr(db, "DB_PATH", tmp_path / "brain.db")
+    await db.init_db()
+
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        for table in ("approvals", "facts", "knowledge"):
+            async with conn.execute(f"PRAGMA table_info({table})") as cur:
+                cols = {row[1] for row in await cur.fetchall()}
+            assert "actor_id" in cols
+        async with conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' "
+            "AND name IN ('shared_resources', 'resource_subscriptions')"
+        ) as cur:
+            tables = {row[0] for row in await cur.fetchall()}
+    assert tables == {"shared_resources", "resource_subscriptions"}
+
+
+@pytest.mark.asyncio
+async def test_multiuser_migration_backfills_existing_rows(tmp_path, monkeypatch):
+    """A pre-Phase-A database (schema version 10) with an existing approval,
+    fact and knowledge row must upgrade WITHOUT losing data and WITHOUT ever
+    leaving actor_id NULL: an approval recovers its actor from its JSON
+    payload (Origin.actor_id already rode there); facts/knowledge default to
+    the owner (Config.root_admin_id)."""
+    import lhassa.core.db as db
+    from lhassa.core.migrations import apply_migrations
+
+    path = tmp_path / "pre-phase-a.db"
+    monkeypatch.setattr(db, "DB_PATH", path)
+
+    # Build a version-10 database by running every migration up to (not
+    # including) migration 11, exactly the way a real pre-upgrade install
+    # would look.
+    migrations_10 = db.MIGRATIONS[:10]
+    async with aiosqlite.connect(path) as conn:
+        await apply_migrations(conn, migrations_10)
+        await conn.execute(
+            "INSERT INTO approvals(id, instance_id, tipo, payload, estado, creado_en) "
+            "VALUES('ap-legacy', 'inst', 'mint_task', ?, 'pendiente', '2026-01-01')",
+            ('{"actor_id": "carol", "accion": "sync_repo"}',),
+        )
+        await conn.execute(
+            "INSERT INTO approvals(id, instance_id, tipo, payload, estado, creado_en) "
+            "VALUES('ap-no-actor', 'inst', 'mint_task', '{}', 'pendiente', '2026-01-01')"
+        )
+        await conn.execute(
+            "INSERT INTO facts(id, instance_id, tipo, contenido, pinned, tags, "
+            "procedencia, confianza, creado_en, actualizado_en) VALUES("
+            "'fact-legacy', 'inst', 'dato', 'a legacy fact', 0, '[]', '', 1.0, "
+            "'2026-01-01', '2026-01-01')"
+        )
+        await conn.execute(
+            "INSERT INTO knowledge(id, instance_id, source_path, chunk_index, "
+            "text, embedding, mtime, size, ingested_at) VALUES("
+            "'kn-legacy', 'inst', 'notes.md', 0, 'hi', '[]', 0.0, -1, '2026-01-01')"
+        )
+        await conn.commit()
+
+    # Now run the real init_db(), which walks migrations 11.. from version 10.
+    await db.init_db()
+
+    async with aiosqlite.connect(path) as conn:
+        conn.row_factory = aiosqlite.Row
+        async with conn.execute(
+            "SELECT actor_id FROM approvals WHERE id = 'ap-legacy'"
+        ) as cur:
+            row = await cur.fetchone()
+        assert row["actor_id"] == "carol"
+
+        async with conn.execute(
+            "SELECT actor_id FROM approvals WHERE id = 'ap-no-actor'"
+        ) as cur:
+            row = await cur.fetchone()
+        assert row["actor_id"] == db.Config.root_admin_id
+
+        async with conn.execute(
+            "SELECT actor_id FROM facts WHERE id = 'fact-legacy'"
+        ) as cur:
+            row = await cur.fetchone()
+        assert row["actor_id"] == db.Config.root_admin_id
+
+        async with conn.execute(
+            "SELECT actor_id FROM knowledge WHERE id = 'kn-legacy'"
+        ) as cur:
+            row = await cur.fetchone()
+        assert row["actor_id"] == db.Config.root_admin_id
+
+        # The pre-existing rows are still exactly there — additive, not lossy.
+        async with conn.execute("SELECT COUNT(*) FROM approvals") as cur:
+            assert (await cur.fetchone())[0] == 2

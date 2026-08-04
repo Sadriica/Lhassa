@@ -55,14 +55,14 @@ def test_get_empty_overlay(client):
     assert r.status_code == 200
     body = r.json()
     assert body["relationships"] == []
-    assert body["kinds"] == ["reads", "notifies", "reviews", "collaborates"]
+    assert body["kinds"] == ["reads", "notifies", "reviews", "collaborates", "shares"]
 
 
 def test_get_kinds_legend(client):
     r = client.get("/api/org/relationships/kinds")
     assert r.status_code == 200
     kinds = {k["kind"]: k for k in r.json()["kinds"]}
-    assert set(kinds) == {"reads", "notifies", "reviews", "collaborates"}
+    assert set(kinds) == {"reads", "notifies", "reviews", "collaborates", "shares"}
     assert kinds["collaborates"]["symmetric"] is True
     assert kinds["reads"]["symmetric"] is False
     assert kinds["reads"]["description"]

@@ -129,6 +129,7 @@ from lhassa.api import (  # noqa: E402
     relationship_routes,
     reports_routes,
     runtime_routes,
+    share_routes,
     skills_routes,
     task_routes,
     tools_routes,
@@ -162,6 +163,7 @@ app.include_router(artifacts_routes.router)
 app.include_router(calendar_routes.router)
 app.include_router(project_routes.router)
 app.include_router(research_routes.router)
+app.include_router(share_routes.router)
 
 
 # ── WebSocket ──────────────────────────────────────────────────────────────────

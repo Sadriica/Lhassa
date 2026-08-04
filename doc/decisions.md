@@ -334,6 +334,69 @@ engine work, not to a surface), `lhassa init`, and a full migration of every
 dashboard panel off raw `fetch` — the client covers every domain, but roughly a
 dozen peripheral panels still call `fetch` directly and were left for a
 mechanical follow-up.
+## 2026-08-03 — Stream 6 Phase A: one brain per person, shared resources
+
+Multi-user, Phase A only (Phase B — a shared team instance with per-actor
+auth/RBAC — is explicitly out of scope). The owner's choice stands: multiple
+sovereign instances, not one shared instance.
+
+**`actor_id` promoted, not invented.** `Origin.actor_id` (`security/trust.py`)
+and `tasks.origen_actor` already existed; `approvals` carried an actor only
+inside its JSON `payload`. Migration 11 (`core/db.py`, additive, backfilled —
+existing approvals recover their actor from `payload["actor_id"]`, facts and
+knowledge default to `Config.root_admin_id`, no row is dropped or blanked)
+promotes it to a real column on `approvals`/`facts`/`knowledge` — the three
+places "who did/authored this" is load-bearing. Skills/flows/templates stay
+file-based and untouched.
+
+**The shared/private boundary is closed by construction.** `org/sharing.py`'s
+`SHAREABLE_TYPES` is `{skill, flow, template, knowledge}` — no code path
+accepts `fact` or `episode`, checked both at `publish()` and, defensively, at
+`list_offerings()` read time (so a row that reached `shared_resources` through
+any other writer still can't surface). Two new tables, `shared_resources` /
+`resource_subscriptions`, hold only what was explicitly published/subscribed.
+
+**Cross-instance permission rides `org/relationships.py:permits()` — the
+existing seam, extended, not bypassed.** A fifth, closed edge kind, `shares`
+(`RELATION_KINDS`), directed A→B ("A may discover/subscribe to B's
+resources"); it is INSTANCE-scoped (`INSTANCE_SCOPED_KINDS`), so its
+endpoints skip local-topology validation and instead enforce `to_id ==` the
+local instance's own id (an instance can only grant access to itself). Every
+publish/grant/subscribe/list call logs its own $0 `cross-instance-share`
+episode either way (allow or refuse), attributed `dominio=root_admin_id`.
+
+**Product decision made without asking (flagged, not silently assumed): the
+SHARES grant registry (`org_relationships_file`) is a file shared across every
+instance on one box** — the same assumption the existing multi-tenant DB shape
+already makes for `core.db`. There is no live multi-machine transport yet;
+once instances run on separate machines, either the grant must replicate or
+the requester must ask the provider over a real transport. This is written
+into `org/sharing.py`'s module docstring, not decided silently.
+
+**Surfaces:** `lhassa share publish|unpublish|grant|revoke|offerings|
+subscribe|unsubscribe|subscriptions` + `/api/share/*` (`api/share_routes.py`).
+
+**What the leak test actually proves, stated plainly.** Two tests exist:
+`test_private_facts_never_leak_across_instances` shows the happy path never
+returns a fact even with a full grant; the stronger
+`test_list_offerings_filters_out_a_row_that_bypassed_publish` writes a
+`fact`-typed row directly via the low-level `db.publish_resource` (bypassing
+`publish()`'s own check entirely) and asserts `list_offerings` still refuses
+it — that is the one that would actually fail if the read-time filter were
+ever removed. Both are `core.db`-row isolation tests (a real safety
+guarantee), not a network/process penetration test — no real cross-machine
+transport exists yet to attack.
+
+**Not touched:** `core/step.py`'s allowlist gate (Stream 0) is unchanged and
+not weakened; sharing operations are explicit CLI/API calls, not ACTIONS
+routed through the heartbeat. Trust degrade semantics for consumed shared
+content (treat as MUNDO) are documented in `org/sharing.py` but not yet wired
+into an actual consumption path — nothing subscribes-and-executes in Phase A.
+
+Full suite: 2352 passed (baseline was 2349 passed + 2 failures in
+`test_relationship_api.py` from a hardcoded four-kind assertion, updated to
+include `shares`; +1 net new test added while hardening the leak coverage
+below). `ruff check .`: all checks passed.
 
 ## 2026-08-03 — El CI de macOS corrige la auditoría que lo precedió
 

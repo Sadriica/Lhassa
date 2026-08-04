@@ -48,6 +48,7 @@ from lhassa.cli import memory_cmds as _memory_cmds  # noqa: E402
 from lhassa.cli import org_cmds as _org_cmds  # noqa: E402
 from lhassa.cli import seed_cmds as _seed_cmds  # noqa: E402
 from lhassa.cli import setup_cmds as _setup_cmds  # noqa: E402
+from lhassa.cli import share_cmds as _share_cmds  # noqa: E402
 from lhassa.cli import skills_cmds as _skills_cmds  # noqa: E402
 from lhassa.cli import project_cmds as _project_cmds  # noqa: E402
 from lhassa.cli import research_cmds as _research_cmds  # noqa: E402
@@ -298,6 +299,9 @@ _setup_cmds.register(app)
 
 # Attach the `lhassa config` sub-app (runtime settings → ~/.lhassa/settings.env).
 app.add_typer(_config_cmds.config_app, name="config")
+
+# Attach the `lhassa share` sub-app (cross-instance resource sharing, Stream 6 Phase A).
+app.add_typer(_share_cmds.share_app, name="share")
 
 # Attach the `lhassa task` sub-app (task/standing-goal management).
 app.add_typer(_task_cmds.task_app, name="task")

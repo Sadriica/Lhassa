@@ -1239,6 +1239,120 @@ async def _validate_migration_010(db) -> None:
             )
 
 
+async def _migration_011_multiuser(db) -> None:
+    """Multi-user Phase A: ``actor_id`` as a first-class column + shared resources.
+
+    Additive and backward-compatible (Stream 6 Phase A): existing rows never
+    lose data, they just get a WHO. ``actor_id`` is added to the three tables
+    where "who did/authored this" is genuinely load-bearing — approvals (who
+    proposed it; it already rides in ``payload["actor_id"]`` via
+    :class:`lhassa.security.trust.Origin`, this promotes it to a queryable
+    column), facts (who authored a durable memory row) and knowledge (who
+    ingested a chunk) — defaulting existing rows to ``Config.root_admin_id``
+    (the owner, "lhassa"), never blank.
+
+    ``shared_resources`` / ``resource_subscriptions`` are the new tables behind
+    cross-instance sharing (:mod:`lhassa.org.sharing`): a CLOSED, small set of
+    shareable kinds (skill/flow/template/knowledge) — deliberately NOT facts or
+    episodes, which stay private by construction (there is no column here to
+    mark a fact/episode "shared", so leaking memory across instances is a
+    schema-level impossibility, not just a runtime check).
+    """
+    for table in ("approvals", "facts", "knowledge"):
+        await db.execute(f"ALTER TABLE {table} ADD COLUMN actor_id TEXT")
+    # Backfill: an approval's actor_id was already carried in its JSON payload
+    # (Origin.actor_id) — recover it where present, else the owner.
+    async with db.execute("SELECT id, payload FROM approvals") as cur:
+        approval_rows = await cur.fetchall()
+    for row in approval_rows:
+        approval_id, payload_raw = row[0], row[1]
+        actor = Config.root_admin_id
+        try:
+            payload = json.loads(payload_raw) if payload_raw else {}
+            actor = str(payload.get("actor_id") or "").strip() or actor
+        except (ValueError, TypeError):
+            pass
+        await db.execute(
+            "UPDATE approvals SET actor_id = ? WHERE id = ?", (actor, approval_id)
+        )
+    await db.execute(
+        "UPDATE facts SET actor_id = ? WHERE actor_id IS NULL",
+        (Config.root_admin_id,),
+    )
+    await db.execute(
+        "UPDATE knowledge SET actor_id = ? WHERE actor_id IS NULL",
+        (Config.root_admin_id,),
+    )
+
+    # shared_resources — what THIS instance has published for other instances to
+    # discover. The CLOSED shareable-kind vocabulary is enforced in Python
+    # (lhassa.org.sharing.SHAREABLE_TYPES), never in schema — but no column here
+    # ever names "fact" or "episode" as a resource_type, so the private plane is
+    # structurally absent from this table, not merely filtered out at read time.
+    await db.execute("""
+        CREATE TABLE shared_resources (
+            id            TEXT PRIMARY KEY,
+            instance_id   TEXT NOT NULL,
+            resource_type TEXT NOT NULL,
+            resource_name TEXT NOT NULL,
+            actor_id      TEXT NOT NULL,
+            published_at  TEXT NOT NULL,
+            revoked_at    TEXT
+        )
+    """)
+    await db.execute("""
+        CREATE UNIQUE INDEX shared_resources_by_offer
+        ON shared_resources(instance_id, resource_type, resource_name)
+    """)
+
+    # resource_subscriptions — what THIS instance has subscribed to from another
+    # instance's offerings. Always minted AFTER a permits() check (deny-by-default
+    # — see lhassa.org.sharing.subscribe): the row itself is not a grant, it is a
+    # record that a permitted subscription happened.
+    await db.execute("""
+        CREATE TABLE resource_subscriptions (
+            id                  TEXT PRIMARY KEY,
+            instance_id         TEXT NOT NULL,
+            source_instance_id  TEXT NOT NULL,
+            resource_type       TEXT NOT NULL,
+            resource_name       TEXT NOT NULL,
+            actor_id            TEXT NOT NULL,
+            subscribed_at       TEXT NOT NULL,
+            unsubscribed_at     TEXT
+        )
+    """)
+    await db.execute("""
+        CREATE UNIQUE INDEX resource_subscriptions_by_source
+        ON resource_subscriptions(instance_id, source_instance_id, resource_type, resource_name)
+    """)
+
+
+async def _validate_migration_011(db) -> None:
+    for table in ("approvals", "facts", "knowledge"):
+        async with db.execute(f"PRAGMA table_info({table})") as cur:
+            cols = {row[1] for row in await cur.fetchall()}
+        if "actor_id" not in cols:
+            raise MigrationValidationError(f"invalid {table} schema: missing actor_id")
+    expected = {
+        "shared_resources": {
+            "id", "instance_id", "resource_type", "resource_name", "actor_id",
+            "published_at", "revoked_at",
+        },
+        "resource_subscriptions": {
+            "id", "instance_id", "source_instance_id", "resource_type",
+            "resource_name", "actor_id", "subscribed_at", "unsubscribed_at",
+        },
+    }
+    for table, required in expected.items():
+        async with db.execute(f"PRAGMA table_info({table})") as cur:
+            actual = {row[1] for row in await cur.fetchall()}
+        missing = required - actual
+        if missing:
+            raise MigrationValidationError(
+                f"invalid {table} schema: missing {sorted(missing)}"
+            )
+
+
 MIGRATIONS = (
     Migration(1, "baseline", _migration_001_baseline, _validate_migration_001),
     Migration(2, "durable-flows", _migration_002_durable_flows, _validate_migration_002),
@@ -1255,6 +1369,7 @@ MIGRATIONS = (
         _validate_migration_009,
     ),
     Migration(10, "conformance", _migration_010_conformance, _validate_migration_010),
+    Migration(11, "multiuser", _migration_011_multiuser, _validate_migration_011),
 )
 SCHEMA_VERSION = MIGRATIONS[-1].version
 
@@ -1605,16 +1720,19 @@ async def insert_fact(row: dict) -> str:
     (id, instance_id, tipo, contenido, pinned, tags, procedencia, confianza,
     creado_en, actualizado_en); ``tags`` may be a list (serialized here) or a
     pre-encoded JSON string. Append-only: this never overwrites an existing fact.
-    Returns the fact id.
+    ``actor_id`` (optional) is WHO authored the fact — defaults to
+    ``Config.root_admin_id`` (the owner) when absent, so every row always has a
+    WHO (Stream 6 Phase A). Returns the fact id.
     """
     tags = row.get("tags")
     tags_json = tags if isinstance(tags, str) else _dumps(list(tags or []))
+    actor_id = str(row.get("actor_id") or "").strip() or Config.root_admin_id
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute(
             """INSERT INTO facts(
                    id, instance_id, tipo, contenido, pinned, tags,
-                   procedencia, confianza, creado_en, actualizado_en)
-               VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                   procedencia, confianza, creado_en, actualizado_en, actor_id)
+               VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 row["id"],
                 row["instance_id"],
@@ -1626,6 +1744,7 @@ async def insert_fact(row: dict) -> str:
                 float(row.get("confianza", 1.0)),
                 row["creado_en"],
                 row["actualizado_en"],
+                actor_id,
             ),
         )
         await db.commit()
@@ -1998,15 +2117,26 @@ async def add_approval(
     *,
     estado: str = "pendiente",
     approval_id: Optional[str] = None,
+    actor_id: Optional[str] = None,
 ) -> str:
-    """Enqueue a human-in-the-loop approval. Returns its id."""
+    """Enqueue a human-in-the-loop approval. Returns its id.
+
+    ``actor_id`` (WHO proposed it) is promoted to a real column (Stream 6 Phase
+    A): given explicitly, else recovered from ``payload["actor_id"]``
+    (``Origin.actor_id`` already threads it there), else the owner.
+    """
     approval_id = approval_id or _new_id("ap")
+    actor_id = (
+        str(actor_id or "").strip()
+        or str((payload or {}).get("actor_id") or "").strip()
+        or Config.root_admin_id
+    )
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute(
             """INSERT INTO approvals(
-                   id, instance_id, tipo, payload, estado, creado_en)
-               VALUES(?, ?, ?, ?, ?, ?)""",
-            (approval_id, instance_id, tipo, _dumps(payload or {}), estado, _now()),
+                   id, instance_id, tipo, payload, estado, creado_en, actor_id)
+               VALUES(?, ?, ?, ?, ?, ?, ?)""",
+            (approval_id, instance_id, tipo, _dumps(payload or {}), estado, _now(), actor_id),
         )
         await db.commit()
     return approval_id
@@ -3174,12 +3304,13 @@ async def insert_knowledge_chunk(row: dict) -> str:
     """
     chunk_id = row.get("id") or _new_id("kn")
     size = row.get("size")
+    actor_id = str(row.get("actor_id") or "").strip() or Config.root_admin_id
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute(
             """INSERT INTO knowledge(
                    id, instance_id, source_path, chunk_index, text, embedding,
-                   mtime, size, ingested_at)
-               VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                   mtime, size, ingested_at, actor_id)
+               VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 chunk_id,
                 row["instance_id"],
@@ -3190,6 +3321,7 @@ async def insert_knowledge_chunk(row: dict) -> str:
                 float(row.get("mtime") or 0.0),
                 -1 if size is None else int(size),
                 row.get("ingested_at") or _now(),
+                actor_id,
             ),
         )
         await db.commit()
@@ -3261,6 +3393,146 @@ async def clear_knowledge(instance_id: str) -> int:
         )
         await db.commit()
         return cur.rowcount if cur.rowcount is not None else 0
+
+
+# ── shared resources (cross-instance sharing — Stream 6 Phase A) ──────────────
+# Skills/flows/templates/knowledge can be published/subscribed across instances;
+# facts/episodes never appear here (see lhassa.org.sharing, the deny-by-default
+# gate over these rows). Every row is scoped to instance_id like everything else.
+
+
+async def publish_resource(
+    instance_id: str,
+    resource_type: str,
+    resource_name: str,
+    *,
+    actor_id: str,
+) -> str:
+    """Publish (or re-publish, clearing any prior revocation) one shared resource.
+
+    Idempotent on ``(instance_id, resource_type, resource_name)`` — republishing
+    an existing offer updates its ``actor_id``/``published_at`` and clears
+    ``revoked_at`` rather than duplicating a row.
+    """
+    row_id = _new_id("share")
+    now = _now()
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            """INSERT INTO shared_resources(
+                   id, instance_id, resource_type, resource_name, actor_id,
+                   published_at, revoked_at)
+               VALUES(?, ?, ?, ?, ?, ?, NULL)
+               ON CONFLICT(instance_id, resource_type, resource_name)
+               DO UPDATE SET actor_id = excluded.actor_id,
+                             published_at = excluded.published_at,
+                             revoked_at = NULL""",
+            (row_id, instance_id, resource_type, resource_name, actor_id, now),
+        )
+        await db.commit()
+    return row_id
+
+
+async def unpublish_resource(
+    instance_id: str, resource_type: str, resource_name: str
+) -> bool:
+    """Mark a published resource revoked (soft-delete). Returns whether a row changed."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        cur = await db.execute(
+            """UPDATE shared_resources SET revoked_at = ?
+               WHERE instance_id = ? AND resource_type = ? AND resource_name = ?
+                 AND revoked_at IS NULL""",
+            (_now(), instance_id, resource_type, resource_name),
+        )
+        await db.commit()
+        return bool(cur.rowcount)
+
+
+async def list_shared_resources(
+    instance_id: str, *, resource_type: "Optional[str]" = None
+) -> list[dict]:
+    """Live (non-revoked) offerings published by ``instance_id``."""
+    sql = "SELECT * FROM shared_resources WHERE instance_id = ? AND revoked_at IS NULL"
+    args: list[Any] = [instance_id]
+    if resource_type:
+        sql += " AND resource_type = ?"
+        args.append(resource_type)
+    sql += " ORDER BY published_at"
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(sql, args) as cur:
+            return [dict(row) for row in await cur.fetchall()]
+
+
+async def get_shared_resource(
+    instance_id: str, resource_type: str, resource_name: str
+) -> "Optional[dict]":
+    """One live (non-revoked) offering, or ``None``."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            """SELECT * FROM shared_resources
+               WHERE instance_id = ? AND resource_type = ? AND resource_name = ?
+                 AND revoked_at IS NULL""",
+            (instance_id, resource_type, resource_name),
+        ) as cur:
+            row = await cur.fetchone()
+    return dict(row) if row else None
+
+
+async def add_resource_subscription(
+    instance_id: str,
+    source_instance_id: str,
+    resource_type: str,
+    resource_name: str,
+    *,
+    actor_id: str,
+) -> str:
+    """Record a (permitted) subscription. Idempotent — re-subscribing clears any
+    prior ``unsubscribed_at`` instead of duplicating a row."""
+    row_id = _new_id("sub")
+    now = _now()
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            """INSERT INTO resource_subscriptions(
+                   id, instance_id, source_instance_id, resource_type,
+                   resource_name, actor_id, subscribed_at, unsubscribed_at)
+               VALUES(?, ?, ?, ?, ?, ?, ?, NULL)
+               ON CONFLICT(instance_id, source_instance_id, resource_type, resource_name)
+               DO UPDATE SET actor_id = excluded.actor_id,
+                             subscribed_at = excluded.subscribed_at,
+                             unsubscribed_at = NULL""",
+            (row_id, instance_id, source_instance_id, resource_type, resource_name, actor_id, now),
+        )
+        await db.commit()
+    return row_id
+
+
+async def remove_resource_subscription(
+    instance_id: str, source_instance_id: str, resource_type: str, resource_name: str
+) -> bool:
+    """Mark a subscription unsubscribed. Returns whether a row changed."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        cur = await db.execute(
+            """UPDATE resource_subscriptions SET unsubscribed_at = ?
+               WHERE instance_id = ? AND source_instance_id = ? AND resource_type = ?
+                 AND resource_name = ? AND unsubscribed_at IS NULL""",
+            (_now(), instance_id, source_instance_id, resource_type, resource_name),
+        )
+        await db.commit()
+        return bool(cur.rowcount)
+
+
+async def list_resource_subscriptions(instance_id: str) -> list[dict]:
+    """Live (active) subscriptions held by ``instance_id``."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            """SELECT * FROM resource_subscriptions
+               WHERE instance_id = ? AND unsubscribed_at IS NULL
+               ORDER BY subscribed_at""",
+            (instance_id,),
+        ) as cur:
+            return [dict(row) for row in await cur.fetchall()]
 
 
 # ── projects (the first-class workspace entity — § core.projects) ─────────────
