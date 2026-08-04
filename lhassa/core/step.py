@@ -69,6 +69,34 @@ def _persisted_task(trigger: "watchlist.Trigger", instance_id: str) -> Optional[
     )
 
 
+def _rejection_resultado(trigger: "watchlist.Trigger", reason: str) -> str:
+    """The episode text for a task refused at the signature gate.
+
+    Refusing is correct — deny-by-default — but for a RECURRING task refusing is
+    also terminal in a way a one-shot refusal is not: the next occurrence is
+    minted only when a task completes, so a rejected recurring task takes its
+    whole schedule with it, permanently and with nothing in the log saying so.
+    That is how four daily hygiene routines went quiet without a word.
+
+    So the episode names the consequence and the remedy. It stays deterministic
+    and $0, and it is deliberately NOT a direct notification: ``core/`` must not
+    import a shell, and ``org/watcher.py`` already elevates failure episodes to
+    the owner. Never raises — a broken trigger degrades to the bare reason.
+    """
+    try:
+        if not getattr(trigger, "recurrence", None):
+            return reason
+        action = getattr(trigger, "action", "") or "task"
+        return (
+            f"{reason} — this task RECURS, so its schedule stops here: no next "
+            f"occurrence is minted. Re-create it through a trusted seam "
+            f"(`lhassa seed apply …` for a seeded routine) rather than editing "
+            f"the row; action={action}"
+        )
+    except Exception:
+        return reason
+
+
 def _verify_task_trigger(trigger: "watchlist.Trigger", instance_id: str) -> Optional[str]:
     """Return a rejection reason when a persisted trigger's signature is invalid."""
     task = _persisted_task(trigger, instance_id)
@@ -649,7 +677,7 @@ async def step(
             ep.finish(
                 decision="rejected by task signature gate",
                 accion=trigger.action,
-                resultado=signature_error,
+                resultado=_rejection_resultado(trigger, signature_error),
             )
             await ep.append()
             if trigger.task_id is not None:

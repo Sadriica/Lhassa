@@ -1,5 +1,47 @@
 # Lhassa — decisions log
 
+## 2026-08-04 — A signature gate that refuses must not also delete the schedule
+
+Four daily hygiene routines (`distill_memory`, `detect_repetition`,
+`calendar_sync`, `apply_feedback`) and a digest stopped running without a word.
+They had not failed: they were REFUSED at the task signature gate. Refusing is
+correct — deny-by-default — but a recurring task mints its next occurrence only
+when it completes, so a refusal takes the whole schedule with it, permanently.
+Every remaining pre-existing pending task was queued to die the same way,
+including five of the owner's own reminders with real application deadlines
+running to December.
+
+**What is established.** The current pipeline is healthy end to end: a freshly
+minted `temple_run` passes the gate, executes under `oracle`, walks its hops up
+to `lhassa`, and mints its recurrence. The key on disk is internally consistent
+(the derived public key matches the stored one) and Ed25519 signing here is
+deterministic.
+
+**What is not.** None of the 233 historical signatures reproduces under that
+key. The check covered the current canonical payload, the real pre-`6231b81`
+payload (taken out of git rather than reconstructed from memory), 1816 subsets
+of the stored columns, and variants of `params` (dict / raw string / re-encoded),
+`estado`, `origen_actor` and `creado_en`. The remaining explanation is a key
+that no longer exists, but the file on disk predates every task, so that does
+not close either. The cause is recorded as UNKNOWN rather than guessed.
+
+**Remedy — re-mint, never re-sign.** Rows that failed authentication are not
+retroactively blessed. Each legacy row was CANCELLED (its trace stays in the
+log) and an equivalent task minted afresh through `dispatch.mint_task`, which
+signs with the live key and applies the approval frontier as usual: the five
+reminders individually with their text and due date preserved, the routines by
+re-applying the `maintenance` and `digest` seeds. All 18 pending tasks now
+verify.
+
+**Code change.** A refusal that also kills a recurrence now says so in its own
+episode — it names the action and states that no next occurrence will be minted,
+pointing at the trusted seam for re-creation. It stays deterministic and $0 and
+is deliberately NOT a direct notification: `core/` must not import a shell, and
+`org/watcher.py` already elevates failure episodes to the owner. Which it now
+does readably — the desktop toast stopped spending its summary line repeating
+the application name, and the watcher groups identical failure reasons with a
+tally instead of quoting one cause three times.
+
 ## 2026-08-03 — Security sweep closure: every execution path enforces the same contract
 
 The findings deferred by the philosophy sweep, plus the follow-up audit findings,
