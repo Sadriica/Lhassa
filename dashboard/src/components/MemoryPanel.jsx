@@ -1,23 +1,22 @@
 import { useEffect, useState } from 'react'
+import { getFacts } from '../lib/api'
 
 export default function MemoryPanel() {
   const [facts, setFacts] = useState([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    fetch('/api/memory/facts')
-      .then(r => r.json())
-      .then(data => { setFacts(data); setLoading(false) })
-      .catch(() => setLoading(false))
-
-    // Refresh every 60s
-    const t = setInterval(() => {
-      fetch('/api/memory/facts')
-        .then(r => r.json())
-        .then(data => setFacts(data))
+    let cancelled = false
+    const load = (first) =>
+      getFacts()
+        .then((data) => { if (!cancelled) setFacts(Array.isArray(data) ? data : []) })
         .catch(() => {})
-    }, 60000)
-    return () => clearInterval(t)
+        .finally(() => { if (first && !cancelled) setLoading(false) })
+
+    load(true)
+    // Refresh every 60s
+    const t = setInterval(() => load(false), 60000)
+    return () => { cancelled = true; clearInterval(t) }
   }, [])
 
   return (
