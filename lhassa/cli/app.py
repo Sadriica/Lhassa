@@ -280,6 +280,9 @@ app.add_typer(_skills_cmds.skills_app, name="skills")
 # Attach the `lhassa flows` sub-app (stored work-flows + the flow-templates gallery).
 app.add_typer(_flow_cmds.flow_app, name="flows")
 
+# Attach the `lhassa flow` sub-app (the singular lifecycle: create/edit/run/watch/logs).
+app.add_typer(_flow_cmds.one_flow_app, name="flow")
+
 # Attach the `lhassa calendar` sub-app (named calendar feeds: add/list/remove).
 app.add_typer(_calendar_cmds.calendar_app, name="calendar")
 
