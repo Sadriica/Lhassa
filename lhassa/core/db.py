@@ -1494,6 +1494,36 @@ async def count_episodes_since(instance_id: str, since: str) -> int:
     return int(row[0] if row else 0)
 
 
+async def dominio_activity(instance_id: str, since: Optional[str] = None) -> dict[str, dict]:
+    """Per-``dominio`` activity summary: ``{dominio: {"last": iso, "count": n}}``.
+
+    One aggregate query over ``episodes`` (not one per brain) — the last episode
+    timestamp and a count of episodes at/after ``since`` (defaults to 7 days back),
+    grouped by ``dominio``. Rows with no ``dominio`` are skipped (they don't map to
+    a brain). The org screens use this to show WHO WORKED, not just who exists.
+    """
+    if since is None:
+        from datetime import timedelta
+
+        since = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            """SELECT dominio,
+                      MAX(creado_en) AS last_at,
+                      SUM(CASE WHEN creado_en >= ? THEN 1 ELSE 0 END) AS recent_count
+               FROM episodes
+               WHERE instance_id = ? AND dominio IS NOT NULL AND dominio != ''
+               GROUP BY dominio""",
+            (since, instance_id),
+        ) as cur:
+            rows = await cur.fetchall()
+    return {
+        str(row["dominio"]): {"last": row["last_at"], "count": int(row["recent_count"] or 0)}
+        for row in rows
+    }
+
+
 # ── recall (FTS5 full-text search over episodes — Fase 1) ───────────────────────
 #
 # $0, deterministic full-text search over the episode log — no model call. The

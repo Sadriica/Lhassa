@@ -31,6 +31,9 @@ def brain(tmp_path, monkeypatch):
     monkeypatch.setattr(
         config_mod.Config, "org_topology_file", tmp_path / "topology.json"
     )
+    monkeypatch.setattr(
+        config_mod.Config, "org_relationships_file", tmp_path / "relationships.json"
+    )
     asyncio.run(db.init_db())
     return db
 
@@ -352,6 +355,133 @@ async def test_org_screen_renders_the_chart(brain, tmp_path):
         # A fresh brain still has the root administrator in its default chart.
         assert table.row_count >= 1
         assert "lhassa" in table.get_row_at(0)[0]
+
+
+def _write_topology(tmp_path, monkeypatch):
+    import lhassa.config as config_mod
+    from lhassa.org.topology import BrainNode, Topology, save_topology
+
+    topology = Topology(
+        [
+            BrainNode(id="lhassa", role="administrator", parent=None),
+            BrainNode(
+                id="temple",
+                role="department",
+                parent="lhassa",
+                limits={"budget_usd": 5.0, "description": "internal functions"},
+            ),
+            BrainNode(id="interns", role="department", parent="lhassa"),
+        ]
+    )
+    save_topology(topology, config_mod.Config())
+    return topology
+
+
+@pytest.mark.asyncio
+async def test_org_screen_limits_column_excludes_description(brain, tmp_path, monkeypatch):
+    from textual.widgets import TabbedContent
+
+    _write_topology(tmp_path, monkeypatch)
+    app = _app()
+    async with app.run_test() as pilot:
+        app.query_one(TabbedContent).active = "org"
+        await pilot.pause()
+        table = app.query_one("#org-table", DataTable)
+        rows = {table.get_row_at(i)[0].strip("└ ").strip(): table.get_row_at(i) for i in range(table.row_count)}
+        temple_row = next(cells for key, cells in rows.items() if "temple" in key)
+        limits_cell = str(temple_row[4])
+        assert "budget_usd" in limits_cell
+        assert "description" not in limits_cell
+
+
+@pytest.mark.asyncio
+async def test_org_screen_relationships_panel_honest_when_empty(brain, tmp_path, monkeypatch):
+    from textual.widgets import TabbedContent
+
+    _write_topology(tmp_path, monkeypatch)
+    app = _app()
+    async with app.run_test() as pilot:
+        app.query_one(TabbedContent).active = "org"
+        await pilot.pause()
+        table = app.query_one("#org-table", DataTable)
+        table.focus()
+        table.cursor_coordinate = (0, 0)
+        await pilot.pause()
+        await pilot.press("enter")
+        await pilot.pause()
+        legend = app.query_one("#org-relationships-legend")
+        assert "no relationships defined" in str(legend.render())
+
+
+@pytest.mark.asyncio
+async def test_org_screen_relationships_panel_shows_edges(brain, tmp_path, monkeypatch):
+    from textual.widgets import TabbedContent
+
+    from lhassa.org import relationships as rel_mod
+
+    _write_topology(tmp_path, monkeypatch)
+    import lhassa.config as config_mod
+
+    rel_mod.add("temple", "lhassa", rel_mod.NOTIFIES, config=config_mod.Config())
+
+    app = _app()
+    async with app.run_test() as pilot:
+        app.query_one(TabbedContent).active = "org"
+        await pilot.pause()
+        table = app.query_one("#org-table", DataTable)
+        table.focus()
+        # Row 0 is lhassa (root); select it.
+        table.cursor_coordinate = (0, 0)
+        await pilot.pause()
+        await pilot.press("enter")
+        await pilot.pause()
+        rel_table = app.query_one("#org-relationships-table", DataTable)
+        assert rel_table.row_count == 1
+        assert rel_table.get_row_at(0)[1] == "notifies"
+
+
+@pytest.mark.asyncio
+async def test_org_screen_shows_recent_activity(brain, tmp_path, monkeypatch):
+    from textual.widgets import TabbedContent
+
+    from lhassa.core.episode import Episode
+
+    _write_topology(tmp_path, monkeypatch)
+    ep = Episode.begin(despertar_por="test", instance_id=INSTANCE)
+    ep.finish(decision="d", accion="a", resultado="r")
+    ep.dominio = "temple"
+    await brain.append_episode(ep)
+
+    app = _app()
+    async with app.run_test() as pilot:
+        app.query_one(TabbedContent).active = "org"
+        await pilot.pause()
+        table = app.query_one("#org-table", DataTable)
+        rows = [table.get_row_at(i) for i in range(table.row_count)]
+        temple_row = next(cells for cells in rows if "temple" in str(cells[0]))
+        assert temple_row[5] != "—"
+        assert "(7d)" in str(temple_row[5])
+
+
+@pytest.mark.asyncio
+async def test_org_screen_never_crashes_on_broken_relationships_file(brain, tmp_path, monkeypatch):
+    from textual.widgets import TabbedContent
+
+    _write_topology(tmp_path, monkeypatch)
+    (tmp_path / "relationships.json").write_text("not json", encoding="utf-8")
+
+    app = _app()
+    async with app.run_test() as pilot:
+        app.query_one(TabbedContent).active = "org"
+        await pilot.pause()
+        table = app.query_one("#org-table", DataTable)
+        table.focus()
+        table.cursor_coordinate = (0, 0)
+        await pilot.pause()
+        await pilot.press("enter")
+        await pilot.pause()
+        # No crash, and the app is still alive with rows rendered.
+        assert table.row_count >= 1
 
 
 # ── approvals keep resolving through the real seam ───────────────────────────────
