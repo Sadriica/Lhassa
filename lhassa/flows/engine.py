@@ -37,6 +37,13 @@ Per-kind behaviour
     to ``~/.lhassa/cv/out/{id}_{company}.tex`` and records its path.
   * ``branch``  — evaluates the outgoing edges' ``when`` and follows the FIRST match
     (an unconditional edge is the ``else``).
+  * ``loop``    — runs its declared ``body`` chain up to ``max_iterations`` times
+    (bounded), stopping early the moment an optional ``verify`` spec passes
+    (verifier-terminated, NEVER an LLM). See :func:`_run_loop_body`.
+  * ``wait``    — parks for an external event and resumes exactly like an
+    ``approval`` gate — the SAME park/resume seam, generalised, not a new one.
+  * ``subflow`` — composes another flow inline (:func:`_run_subflow`), bounded by
+    a recursion-depth guard.
 
 Branch / edge semantics
 -----------------------
@@ -373,15 +380,22 @@ async def _run_gate(
     flow_id: Optional[str] = None,
     approval_context: Optional[dict] = None,
     approval_decisions: Optional[dict[str, bool]] = None,
+    default_type: str = "verify",
 ) -> tuple[dict, Any, bool]:
     """Execute a gate node; returns ``(step_extra, data_out, passed)``.
 
     ``passed`` drives edge-following: a non-pass drops unconditional outgoing edges.
     ``base_cv`` is passed to the verifier via ``context`` so an objective check (e.g.
     contact-detail preservation) can compare the artifact against the fixed base CV.
+
+    ``default_type`` is the gate type used when ``config.type`` is absent — a
+    ``gate`` node defaults to ``"verify"``; a ``wait`` node (see
+    :func:`run_flow`) reuses this SAME function with ``default_type="approval"``,
+    since a wait is a generalisation of the approval park/resume seam, not a
+    new one.
     """
     cfg = node.config or {}
-    gate_type = str(cfg.get("type") or "verify").lower()
+    gate_type = str(cfg.get("type") or default_type).lower()
 
     if gate_type == "approval":
         if approval_decisions and approval_decisions.get(node.id) is True:
@@ -501,6 +515,170 @@ def _run_output(
     return record
 
 
+_MAX_LOOP_BODY_STEPS = 200  # defends against a malformed body chain, not a real cap
+
+
+async def _run_loop_body(
+    flow: Flow,
+    loop_node: FlowNode,
+    data: Any,
+    *,
+    config: Config,
+    executor: Executor,
+    base_cv: str,
+    company: str,
+    run_id: Optional[str],
+) -> tuple[list[dict], Any]:
+    """Walk ONE iteration of a ``loop`` node's body, from ``config.body`` to the
+    edge that closes back into ``loop_node`` (the declared back-edge validated by
+    :meth:`Flow.validate`). Returns ``(body_steps, data_out)``; raises on any
+    body problem — the caller (the LOOP dispatch) turns that into a failed step,
+    exactly like any other node error.
+
+    Deliberately scoped to ``task`` / ``branch`` / ``output`` / verify-``gate``
+    nodes: a loop body is meant to be a small, deterministic, bounded unit —
+    an ``approval`` gate (a human in the loop) or nested ``loop``/``wait``/
+    ``subflow`` would turn "bounded, verifier-terminated" into something this
+    simple walker cannot account for, so those are refused rather than silently
+    misbehaving.
+    """
+    body_start = str((loop_node.config or {}).get("body") or "").strip()
+    if not body_start:
+        raise RuntimeError(f"loop node {loop_node.id!r} has no config.body")
+    node_id = body_start
+    current = data
+    body_steps: list[dict] = []
+    seen_in_iteration: set[str] = set()
+
+    for _ in range(_MAX_LOOP_BODY_STEPS):
+        if node_id in seen_in_iteration:
+            raise RuntimeError(f"loop body revisits node {node_id!r} within one iteration")
+        seen_in_iteration.add(node_id)
+        node = flow.node(node_id)
+        step_started_perf = time.perf_counter()
+        step: dict = {
+            "node": node.id, "kind": node.kind.value, "ok": True,
+            "status": "completed", "started_at": _iso_now(),
+        }
+        passed = True
+        if node.kind == NodeKind.TASK:
+            extra, current = await _run_task(
+                node, current, config=config, executor=executor,
+                base_cv=base_cv, company=company,
+            )
+            step.update(extra)
+        elif node.kind == NodeKind.GATE:
+            if str((node.config or {}).get("type") or "verify").lower() != "verify":
+                raise RuntimeError(
+                    f"loop body gate {node.id!r} must be type=verify (no approvals in a loop body)"
+                )
+            extra, current, passed = await _run_gate(node, current, config=config, base_cv=base_cv)
+            step.update(extra)
+        elif node.kind == NodeKind.OUTPUT:
+            record = _run_output(node, current, company=company, run_id=run_id)
+            step.update(record)
+        elif node.kind == NodeKind.BRANCH:
+            step["branch"] = True
+        else:
+            raise RuntimeError(
+                f"node kind {node.kind.value!r} ({node.id!r}) is not supported inside a loop body"
+            )
+        step["finished_at"] = _iso_now()
+        step["duration_ms"] = _elapsed_ms(step_started_perf)
+        body_steps.append(step)
+
+        out_edges = flow.edges_from(node.id)
+        ctx = _edge_ctx(step, current)
+        if node.kind == NodeKind.BRANCH:
+            chosen = next((e for e in out_edges if eval_when(e.when, ctx)), None)
+            if chosen is None:
+                raise RuntimeError(f"loop body branch {node.id!r} has no matching edge")
+            next_edge = chosen
+        else:
+            candidates = [
+                e for e in out_edges
+                if (node.kind != NodeKind.GATE or passed or e.when is not None)
+                and eval_when(e.when, ctx)
+            ]
+            if not candidates:
+                raise RuntimeError(f"loop body node {node.id!r} has no outgoing edge to take")
+            next_edge = candidates[0]
+
+        if next_edge.to_node == loop_node.id:
+            return body_steps, current  # the declared back-edge — one iteration done
+        node_id = next_edge.to_node
+
+    raise RuntimeError(f"loop node {loop_node.id!r} body exceeded {_MAX_LOOP_BODY_STEPS} internal steps")
+
+
+_MAX_SUBFLOW_DEPTH = 5  # a bounded recursion-depth guard, not a real cap
+
+
+async def _run_subflow(
+    node: FlowNode,
+    data: Any,
+    *,
+    config: Config,
+    executor: Executor,
+    depth: int,
+    flow_loader: Optional[Callable[[str], Awaitable[Optional[Flow]]]] = None,
+) -> tuple[dict, Any]:
+    """Compose another flow inline; returns ``(step_extra, data_out)``.
+
+    Runs the child flow with :func:`run_flow` IN-MEMORY (not a separate durable
+    run row — whether a subflow's episode/delegation should be its own or
+    absorbed into the parent's is an open governance question, tracked as a
+    real design risk, not decided here). ``depth`` is the bounded recursion
+    guard: a subflow that (directly or transitively) tries to compose itself
+    past :data:`_MAX_SUBFLOW_DEPTH` is refused, never a stack overflow.
+    """
+    if depth >= _MAX_SUBFLOW_DEPTH:
+        raise RuntimeError(f"subflow recursion depth exceeded ({_MAX_SUBFLOW_DEPTH})")
+    flow_id = str((node.config or {}).get("flow_id") or "").strip()
+    if not flow_id:
+        raise RuntimeError(f"subflow node {node.id!r} has no config.flow_id")
+
+    if flow_loader is not None:
+        child = await flow_loader(flow_id)
+    else:
+        from lhassa.flows.store import FlowStore
+
+        store = FlowStore()
+        raw = store.get(flow_id)
+        child = Flow.from_dict(raw) if raw is not None else None
+    if child is None:
+        raise RuntimeError(f"subflow {flow_id!r} not found")
+
+    inputs = data if isinstance(data, dict) else {"data": data}
+    record = await run_flow(
+        child,
+        inputs=inputs,
+        config=config,
+        executor=executor,
+        subflow_loader=flow_loader,
+        _subflow_depth=depth + 1,
+    )
+    extra = {
+        "subflow": flow_id,
+        "subflow_status": record.get("status"),
+        "subflow_steps": record.get("steps"),
+    }
+    if record.get("status") != "completed":
+        # Bubble the child's own deepest error (not just its status) so a caller
+        # several levels up still sees the ROOT cause, e.g. a recursion-depth
+        # guard tripping several subflows down.
+        last_error = next(
+            (
+                str(s.get("error"))
+                for s in reversed(record.get("steps") or [])
+                if s.get("error")
+            ),
+            record.get("status"),
+        )
+        raise RuntimeError(f"subflow {flow_id!r} did not complete: {last_error}")
+    return extra, record.get("output")
+
+
 def _safe(value: Any) -> Any:
     """A JSON-safe shallow view of a value for the run record."""
     if isinstance(value, (str, int, float, bool, type(None), dict, list)):
@@ -576,6 +754,8 @@ async def run_flow(
     checkpoint_hook: Optional[CheckpointHook] = None,
     approval_context: Optional[dict] = None,
     approval_decisions: Optional[dict[str, bool]] = None,
+    subflow_loader: Optional[Callable[[str], Awaitable[Optional[Flow]]]] = None,
+    _subflow_depth: int = 0,
 ) -> dict:
     """Execute ``flow`` and return a structured run record. Never raises.
 
@@ -600,6 +780,11 @@ async def run_flow(
     and ``checkpoint_hook`` receives a detached JSON cursor after every node.
     ``approval_decisions`` lets a resumed approval gate pass without parking another
     request. Calls that omit these arguments retain the historical in-memory behavior.
+
+    ``subflow_loader`` overrides how a ``subflow`` node resolves ``config.flow_id``
+    into a :class:`Flow` (the test seam; defaults to :class:`lhassa.flows.store.FlowStore`).
+    ``_subflow_depth`` is INTERNAL (a subflow's own recursive call bumps it) — never
+    set it directly; it is the bounded recursion-depth guard.
     """
     if config is None:
         # Local import: stay correct if a test reloads ``lhassa.config`` (a stale
@@ -848,6 +1033,55 @@ async def run_flow(
                 data_out = data
             elif node.kind == NodeKind.BRANCH:
                 step["branch"] = True
+            elif node.kind == NodeKind.LOOP:
+                loop_cfg = node.config or {}
+                max_iterations = int(loop_cfg.get("max_iterations"))  # validated mandatory
+                verify_spec = loop_cfg.get("verify")
+                iterations: list[dict] = []
+                stop_reason = "max_iterations"
+                loop_data = data
+                for iteration in range(1, max_iterations + 1):
+                    body_steps, loop_data = await _run_loop_body(
+                        flow, node, loop_data, config=config, executor=executor,
+                        base_cv=base_cv, company=resolved_company, run_id=run_id,
+                    )
+                    iterations.append({"iteration": iteration, "steps": body_steps})
+                    if verify_spec:
+                        from lhassa.agents.verify import verify
+
+                        artifact = loop_data
+                        if isinstance(loop_data, dict):
+                            artifact = loop_data.get("summary", loop_data.get("output", loop_data))
+                        verdict = verify(artifact, spec=verify_spec, context={"base_cv": base_cv})
+                        if verdict.passed:
+                            stop_reason = "verified"
+                            break
+                data_out = loop_data
+                step["loop"] = {
+                    "iterations": len(iterations),
+                    "max_iterations": max_iterations,
+                    "stop_reason": stop_reason,
+                }
+                step["iterations"] = iterations
+            elif node.kind == NodeKind.WAIT:
+                extra, data_out, passed = await _run_gate(
+                    node,
+                    data,
+                    config=config,
+                    base_cv=base_cv,
+                    run_id=run_id if durable else None,
+                    flow_id=flow.id if durable else None,
+                    approval_context=approval_context,
+                    approval_decisions=decisions,
+                    default_type="approval",
+                )
+                step.update(extra)
+            elif node.kind == NodeKind.SUBFLOW:
+                extra, data_out = await _run_subflow(
+                    node, data, config=config, executor=executor,
+                    depth=_subflow_depth, flow_loader=subflow_loader,
+                )
+                step.update(extra)
         except Exception as exc:  # a node error is a failed step; the path stops here
             step["ok"] = False
             step["status"] = "failed"
@@ -869,7 +1103,7 @@ async def run_flow(
                     )
             continue
 
-        if node.kind == NodeKind.GATE and step.get("needs_approval"):
+        if node.kind in (NodeKind.GATE, NodeKind.WAIT) and step.get("needs_approval"):
             step["status"] = "needs_approval"
         step["finished_at"] = _iso_now()
         step["duration_ms"] = _elapsed_ms(step_started_perf)
@@ -888,7 +1122,7 @@ async def run_flow(
             pending_retry = None
         final_data = data_out
 
-        if node.kind == NodeKind.GATE and step.get("needs_approval") and durable:
+        if node.kind in (NodeKind.GATE, NodeKind.WAIT) and step.get("needs_approval") and durable:
             visited.discard(node.id)
             frontier.insert(0, (node.id, data_out))
             pending_approval = {
@@ -928,6 +1162,12 @@ async def run_flow(
 
         # ── pick the outgoing edges to follow ────────────────────────────────
         out_edges = flow.edges_from(node.id)
+        if node.kind == NodeKind.LOOP:
+            # The edge into config.body was already run internally, N times, by
+            # the LOOP dispatch above — only its EXIT edges are a normal,
+            # top-level "downstream" hop.
+            loop_body_start = str((node.config or {}).get("body") or "").strip()
+            out_edges = [e for e in out_edges if e.to_node != loop_body_start]
         ctx = _edge_ctx(step, data_out)
         if node.kind == NodeKind.BRANCH:
             chosen = next((e for e in out_edges if eval_when(e.when, ctx)), None)
@@ -936,9 +1176,10 @@ async def run_flow(
                 frontier.append((chosen.to_node, data_out))
         else:
             for e in out_edges:
-                # A gate that did not pass drops its unconditional edges (path stops),
-                # but a `when` that explicitly handles the failure may still route.
-                if node.kind == NodeKind.GATE and not passed and e.when is None:
+                # A gate (or wait) that did not pass drops its unconditional edges
+                # (path stops), but a `when` that explicitly handles the failure
+                # may still route.
+                if node.kind in (NodeKind.GATE, NodeKind.WAIT) and not passed and e.when is None:
                     continue
                 if eval_when(e.when, ctx):
                     frontier.append((e.to_node, data_out))

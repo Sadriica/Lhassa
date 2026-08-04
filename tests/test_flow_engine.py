@@ -499,6 +499,203 @@ async def test_durable_retry_parks_and_resumes_from_cursor(offline_env):
     assert resumed["resume_state"]["status"] == "completed"
 
 
+def _loop_flow(*, max_iterations=3, verify=None) -> Flow:
+    loop_cfg = {"max_iterations": max_iterations, "body": "b1"}
+    if verify is not None:
+        loop_cfg["verify"] = verify
+    return Flow(
+        id="loopy",
+        name="loopy",
+        nodes=[
+            FlowNode("t", NodeKind.TRIGGER, {"type": "manual"}),
+            FlowNode("loop", NodeKind.LOOP, loop_cfg),
+            FlowNode("b1", NodeKind.TASK, {"brain": "x", "prompt": "iterate {input}"}),
+            FlowNode("done", NodeKind.OUTPUT, {"type": "log"}),
+        ],
+        edges=[
+            FlowEdge("t", "loop"),
+            FlowEdge("loop", "b1"),
+            FlowEdge("b1", "loop"),
+            FlowEdge("loop", "done"),
+        ],
+    )
+
+
+@pytest.mark.asyncio
+async def test_loop_runs_until_max_iterations_with_no_verifier(offline_env):
+    calls = []
+
+    async def counter(goal, *, department, config, **kw):
+        calls.append(goal)
+        return {"ok": True, "summary": f"n={len(calls)}"}
+
+    flow = _loop_flow(max_iterations=3)
+    rec = await run_flow(flow, config=offline_env, executor=counter)
+    assert rec["status"] == "completed"
+    assert len(calls) == 3
+    loop_step = next(s for s in rec["steps"] if s["kind"] == "loop")
+    assert loop_step["loop"] == {
+        "iterations": 3, "max_iterations": 3, "stop_reason": "max_iterations",
+    }
+    assert len(loop_step["iterations"]) == 3
+    assert any(s["kind"] == "output" for s in rec["steps"])
+
+
+@pytest.mark.asyncio
+async def test_loop_stops_early_when_verifier_passes(offline_env):
+    calls = []
+
+    async def counter(goal, *, department, config, **kw):
+        calls.append(goal)
+        # only "done" on the 2nd attempt
+        return {"ok": True, "summary": "done" if len(calls) == 2 else "not yet"}
+
+    flow = _loop_flow(
+        max_iterations=5, verify={"type": "regex", "pattern": "done"}
+    )
+    rec = await run_flow(flow, config=offline_env, executor=counter)
+    assert rec["status"] == "completed"
+    assert len(calls) == 2  # bounded — stopped as soon as the verifier passed
+    loop_step = next(s for s in rec["steps"] if s["kind"] == "loop")
+    assert loop_step["loop"]["stop_reason"] == "verified"
+    assert loop_step["loop"]["iterations"] == 2
+
+
+@pytest.mark.asyncio
+async def test_loop_body_approval_gate_is_refused(offline_env):
+    """A loop body is bounded & verifier-terminated — a human-in-the-loop gate
+    (approval) would break that contract, so it is refused, not silently run."""
+    flow = Flow(
+        id="bad-loop", name="bad-loop",
+        nodes=[
+            FlowNode("t", NodeKind.TRIGGER, {"type": "manual"}),
+            FlowNode("loop", NodeKind.LOOP, {"max_iterations": 2, "body": "g"}),
+            FlowNode("g", NodeKind.GATE, {"type": "approval"}),
+        ],
+        edges=[FlowEdge("t", "loop"), FlowEdge("g", "loop")],
+    )
+    rec = await run_flow(flow, config=offline_env)
+    assert rec["status"] == "failed"
+    loop_step = next(s for s in rec["steps"] if s["kind"] == "loop")
+    assert loop_step["ok"] is False and "approval" in loop_step["error"]
+
+
+@pytest.mark.asyncio
+async def test_wait_node_parks_and_resumes_like_an_approval(offline_env):
+    flow = Flow(
+        id="waiting", name="waiting",
+        nodes=[
+            FlowNode("t", NodeKind.TRIGGER, {"type": "manual"}),
+            FlowNode("w", NodeKind.WAIT, {}),
+            FlowNode("o", NodeKind.OUTPUT, {"type": "log"}),
+        ],
+        edges=[FlowEdge("t", "w"), FlowEdge("w", "o")],
+    )
+    checkpoints = []
+
+    async def save(cursor):
+        checkpoints.append(json.loads(json.dumps(cursor)))
+
+    first = await run_flow(
+        flow, config=offline_env, run_id="run_wait", checkpoint_hook=save
+    )
+    assert first["status"] == "waiting_approval"
+    assert first["steps"][-1]["status"] == "needs_approval"
+
+    resumed = await run_flow(
+        flow,
+        config=offline_env,
+        run_id="run_wait",
+        resume_state=first["resume_state"],
+        checkpoint_hook=save,
+        approval_decisions={"w": True},
+    )
+    assert resumed["status"] == "completed"
+    assert [s["node"] for s in resumed["steps"]] == ["t", "w", "o"]
+
+
+@pytest.mark.asyncio
+async def test_subflow_composes_a_child_flow_inline(offline_env):
+    child = Flow(
+        id="child",
+        name="child",
+        nodes=[
+            FlowNode("t", NodeKind.TRIGGER, {"type": "manual"}),
+            FlowNode("w", NodeKind.TASK, {"brain": "x", "prompt": "child work"}),
+        ],
+        edges=[FlowEdge("t", "w")],
+    )
+
+    async def loader(flow_id):
+        return child if flow_id == "child" else None
+
+    parent = Flow(
+        id="parent",
+        name="parent",
+        nodes=[
+            FlowNode("t", NodeKind.TRIGGER, {"type": "manual"}),
+            FlowNode("s", NodeKind.SUBFLOW, {"flow_id": "child"}),
+        ],
+        edges=[FlowEdge("t", "s")],
+    )
+    calls = []
+
+    async def executor(goal, *, department, config, **kw):
+        calls.append(goal)
+        return {"ok": True, "summary": "child done"}
+
+    rec = await run_flow(
+        parent, config=offline_env, executor=executor, subflow_loader=loader
+    )
+    assert rec["status"] == "completed"
+    assert len(calls) == 1
+    subflow_step = next(s for s in rec["steps"] if s["kind"] == "subflow")
+    assert subflow_step["subflow"] == "child"
+    assert subflow_step["subflow_status"] == "completed"
+
+
+@pytest.mark.asyncio
+async def test_subflow_missing_flow_id_fails_the_path(offline_env):
+    async def loader(flow_id):
+        return None
+
+    flow = Flow(
+        id="parent2", name="parent2",
+        nodes=[
+            FlowNode("t", NodeKind.TRIGGER, {"type": "manual"}),
+            FlowNode("s", NodeKind.SUBFLOW, {"flow_id": "missing"}),
+        ],
+        edges=[FlowEdge("t", "s")],
+    )
+    rec = await run_flow(flow, config=offline_env, subflow_loader=loader)
+    assert rec["status"] == "failed"
+    step = next(s for s in rec["steps"] if s["kind"] == "subflow")
+    assert step["ok"] is False and "not found" in step["error"]
+
+
+@pytest.mark.asyncio
+async def test_subflow_recursion_depth_is_bounded(offline_env):
+    """A subflow that (transitively) composes itself is refused, not a stack
+    overflow — the bounded recursion-depth guard."""
+    recursive = Flow(
+        id="recursive",
+        name="recursive",
+        nodes=[
+            FlowNode("t", NodeKind.TRIGGER, {"type": "manual"}),
+            FlowNode("s", NodeKind.SUBFLOW, {"flow_id": "recursive"}),
+        ],
+        edges=[FlowEdge("t", "s")],
+    )
+
+    async def loader(flow_id):
+        return recursive if flow_id == "recursive" else None
+
+    rec = await run_flow(recursive, config=offline_env, subflow_loader=loader)
+    assert rec["status"] == "failed"
+    step = next(s for s in rec["steps"] if s["kind"] == "subflow")
+    assert step["ok"] is False and "recursion" in step["error"]
+
+
 @pytest.mark.asyncio
 async def test_durable_parking_is_deferred_while_legacy_remains_best_effort(
     offline_env, monkeypatch

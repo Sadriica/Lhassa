@@ -101,6 +101,102 @@ def test_no_edge_back_into_trigger():
         flow.validate()
 
 
+# ── loop / wait / subflow node kinds (Stream 2.3) ──────────────────────────────
+def _loop_flow(*, max_iterations=3, body="b1", verify=None) -> Flow:
+    loop_cfg = {"max_iterations": max_iterations, "body": body}
+    if verify is not None:
+        loop_cfg["verify"] = verify
+    return Flow(
+        id="loopy",
+        name="loopy",
+        nodes=[
+            FlowNode("t", NodeKind.TRIGGER, {"type": "manual"}),
+            FlowNode("loop", NodeKind.LOOP, loop_cfg),
+            FlowNode("b1", NodeKind.TASK, {"brain": "x", "prompt": "iterate"}),
+            FlowNode("done", NodeKind.OUTPUT, {"type": "log"}),
+        ],
+        edges=[
+            FlowEdge("t", "loop"),
+            FlowEdge("loop", "b1"),
+            FlowEdge("b1", "loop"),  # the declared body back-edge
+            FlowEdge("loop", "done"),
+        ],
+    )
+
+
+def test_node_kind_is_closed_includes_new_kinds():
+    assert NodeKind.coerce("loop") == NodeKind.LOOP
+    assert NodeKind.coerce("wait") == NodeKind.WAIT
+    assert NodeKind.coerce("subflow") == NodeKind.SUBFLOW
+
+
+def test_loop_flow_validates_with_its_own_back_edge():
+    flow = _loop_flow().validate()
+    assert flow.node("loop").kind == NodeKind.LOOP
+
+
+def test_loop_missing_max_iterations_rejected():
+    flow = _loop_flow(max_iterations=None)
+    with pytest.raises(FlowValidationError, match="max_iterations"):
+        flow.validate()
+
+
+def test_loop_zero_max_iterations_rejected():
+    flow = _loop_flow(max_iterations=0)
+    with pytest.raises(FlowValidationError, match="max_iterations"):
+        flow.validate()
+
+
+def test_loop_missing_body_rejected():
+    flow = _loop_flow(body="")
+    with pytest.raises(FlowValidationError, match="config.body"):
+        flow.validate()
+
+
+def test_loop_body_pointing_at_unknown_node_rejected():
+    flow = _loop_flow(body="ghost")
+    with pytest.raises(FlowValidationError, match="config.body"):
+        flow.validate()
+
+
+def test_a_cycle_outside_a_declared_loop_body_is_still_rejected():
+    """The exception is narrow: only a loop's OWN declared back-edge is legal."""
+    flow = sample_flow()
+    flow.edges.append(FlowEdge("out", "work"))  # a plain cycle, no loop node involved
+    with pytest.raises(FlowValidationError, match="cycle"):
+        flow.validate()
+
+
+def test_flow_with_zero_loop_nodes_validates_byte_for_byte_as_before():
+    """Zero LOOP nodes anywhere: the acyclic check is untouched."""
+    flow = sample_flow()
+    before = flow.to_dict()
+    flow.validate()
+    assert flow.to_dict() == before  # validate() never mutates
+
+
+def test_loop_roundtrips_through_json():
+    flow = _loop_flow(verify={"type": "regex", "pattern": "done"})
+    rebuilt = Flow.from_dict(flow.to_dict())
+    rebuilt.validate()
+    assert rebuilt.node("loop").config["max_iterations"] == 3
+    assert rebuilt.node("loop").config["verify"] == {"type": "regex", "pattern": "done"}
+
+
+def test_wait_and_subflow_nodes_validate_like_any_other_node():
+    flow = Flow(
+        id="composed",
+        name="composed",
+        nodes=[
+            FlowNode("t", NodeKind.TRIGGER, {"type": "manual"}),
+            FlowNode("w", NodeKind.WAIT, {}),
+            FlowNode("s", NodeKind.SUBFLOW, {"flow_id": "child"}),
+        ],
+        edges=[FlowEdge("t", "w"), FlowEdge("w", "s")],
+    )
+    flow.validate()
+
+
 # ── store ──────────────────────────────────────────────────────────────────────
 @pytest.fixture
 def store(tmp_path, monkeypatch):
