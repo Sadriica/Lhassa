@@ -38,8 +38,9 @@ def _describe(row: dict) -> dict:
 class ApprovalsScreen(TableScreen):
     """A DataTable of pending approvals with ``a``/``d`` resolve keybindings."""
 
-    COLUMNS = ("id", "title", "detail", "creado_en")
+    COLUMNS = ("id", "title", "detail", "created")
     TABLE_ID = "approvals-table"
+    EMPTY_TEXT = "no approvals pending"
     FILTER_PLACEHOLDER = "filter approvals…"
 
     BINDINGS = [

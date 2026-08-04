@@ -35,6 +35,7 @@ class RunsScreen(TableScreen):
 
     COLUMNS = ("id", "kind", "entity", "status", "cost", "evidence")
     TABLE_ID = "runs-table"
+    EMPTY_TEXT = "no runs recorded yet"
     FILTER_PLACEHOLDER = "filter runs…"
 
     async def load_rows(self) -> list[Row]:

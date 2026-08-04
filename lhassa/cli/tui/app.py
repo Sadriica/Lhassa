@@ -26,7 +26,7 @@ from __future__ import annotations
 from textual.app import App, ComposeResult
 from textual.widgets import Footer, Header, TabbedContent, TabPane
 
-from lhassa.cli.theme import GOLD, GREEN, RED, STONE, WHITE
+from lhassa.cli.tui import colors as tui_colors
 from lhassa.cli.tui.palette import LhassaCommands
 from lhassa.cli.tui.screens.approvals import ApprovalsScreen
 from lhassa.cli.tui.screens.flows import FlowsScreen
@@ -59,42 +59,11 @@ class LhassaTui(App):
 
     COMMANDS = App.COMMANDS | {LhassaCommands}
 
-    CSS = f"""
-    Screen {{
-        background: $surface;
-        color: {WHITE};
-    }}
-    Header {{
-        background: {GOLD};
-        color: black;
-    }}
-    Footer {{
-        background: {STONE};
-        color: {WHITE};
-    }}
-    TabbedContent {{
-        height: 1fr;
-    }}
-    Tabs {{
-        background: $surface;
-    }}
-    Tab.-active {{
-        color: {GOLD};
-        text-style: bold;
-    }}
-    DataTable > .datatable--header {{
-        background: {STONE};
-        color: {WHITE};
-        text-style: bold;
-    }}
-    DataTable > .datatable--cursor {{
-        background: {RED};
-        color: {WHITE};
-    }}
-    .success {{
-        color: {GREEN};
-    }}
-    """
+    #: All styling lives in the stylesheet now (resolved relative to this
+    #: module's directory: ``lhassa/cli/tui/lhassa.tcss``). Colors reach it as
+    #: ``$lh-*`` CSS variables via :meth:`get_css_variables`, sourced from
+    #: ``lhassa.cli.tui.colors`` — never a literal hex in this file.
+    CSS_PATH = "lhassa.tcss"
 
     BINDINGS = [
         ("q", "quit", "Quit"),
@@ -103,12 +72,31 @@ class LhassaTui(App):
     ]
 
     def __init__(self, instance_id: "str | None" = None, **kwargs) -> None:
+        # Resolved BEFORE super().__init__() — Textual's own App.__init__ calls
+        # get_css_variables() while building the initial stylesheet, so
+        # ``_theme_name`` must already exist by then. Degrades to dark on ANY
+        # detection error, and is fixed for the session (a probe never re-fires
+        # mid-run).
+        try:
+            self._theme_name = tui_colors.detect_theme()
+        except Exception:
+            self._theme_name = "dark"
+        self._log_sink_id: "int | None" = None
         super().__init__(**kwargs)
         if instance_id is None:
             from lhassa.config import Config
 
             instance_id = Config.instance_id
         self._instance_id = instance_id
+
+    def get_css_variables(self) -> dict[str, str]:
+        """Feed the ``$lh-*`` palette (see ``cli/tui/colors.py``) to the stylesheet."""
+        variables = super().get_css_variables()
+        try:
+            variables.update(tui_colors.variables(self._theme_name))
+        except Exception:  # a palette failure must never block the UI
+            pass
+        return variables
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -130,6 +118,85 @@ class LhassaTui(App):
             with TabPane("Org", id="org"):
                 yield OrgScreen(self._instance_id)
         yield Footer()
+
+    # ── logging: nothing may paint over the running UI ─────────────────────────
+    def on_mount(self) -> None:
+        """Redirect loguru into Textual's own log for the session's lifetime.
+
+        ``cli/app.py:tui_cmd`` already calls ``_boot.quiet_logging()`` before the
+        app is constructed, which drops the DEBUG→stderr default sink for a
+        WARNING+ one. That is still a stderr sink, though, and Textual owns the
+        alternate screen from here on — ANY stderr write bleeds through and
+        paints over the chrome. So on mount every sink is swapped for one that
+        writes to ``self.log`` (Textual's own, off-screen log) instead; on
+        unmount the WARNING+ stderr sink is restored so a plain CLI session
+        after the TUI exits behaves exactly as before.
+        """
+        self._install_log_sink()
+
+    def on_unmount(self) -> None:
+        self._restore_log_sink()
+
+    def _install_log_sink(self) -> None:
+        try:
+            from loguru import logger as _loguru
+        except Exception:
+            return
+        try:
+            _loguru.remove()
+        except Exception:
+            pass
+
+        def _sink(message: object) -> None:
+            try:
+                self.log(str(message).rstrip("\n"))
+            except Exception:
+                pass  # the app may already be tearing down
+
+        try:
+            self._log_sink_id = _loguru.add(_sink, level="DEBUG")
+        except Exception:
+            self._log_sink_id = None
+
+    def _restore_log_sink(self) -> None:
+        """Bring back a WARNING+ stderr sink, mirroring ``_boot.quiet_logging()``.
+
+        Deliberately a CALLABLE sink (``sys.stderr.write`` looked up at WRITE
+        time), not ``logger.add(sys.stderr, ...)``: ``on_unmount`` fires while
+        Textual has not yet released its stdio redirection, so binding the
+        stream object here would capture Textual's transient print-capture
+        wrapper instead of the real terminal stderr the process ends up with
+        once ``run()`` actually returns.
+        """
+        import os
+        import sys
+
+        try:
+            from loguru import logger as _loguru
+        except Exception:
+            return
+        if self._log_sink_id is not None:
+            try:
+                _loguru.remove(self._log_sink_id)
+            except Exception:
+                pass
+            self._log_sink_id = None
+        level = (os.getenv("LHASSA_CLI_LOG_LEVEL") or "WARNING").upper()
+        if level in ("OFF", "NONE", "SILENT"):
+            return
+
+        def _write_stderr(message: object) -> None:
+            try:
+                sys.stderr.write(str(message))
+            except Exception:
+                pass
+
+        try:
+            _loguru.add(
+                _write_stderr, level=level, format="<dim>{level: <7}</dim> {message}"
+            )
+        except Exception:
+            pass
 
     # ── app actions (also the command palette's entries) ──────────────────────
     def switch_tab(self, tab_id: str) -> None:

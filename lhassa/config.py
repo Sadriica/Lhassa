@@ -567,6 +567,12 @@ class Config:
     # fallback chain still backs a failing pick, so a bad value degrades, never breaks.
     telegram_provider: str = os.getenv("LHASSA_TELEGRAM_PROVIDER", "")
 
+    # ── TUI (lhassa tui) ────────────────────────────────────────────────────
+    # dark | light | auto. "auto" detects via COLORFGBG then a short-timeout
+    # OSC 11 terminal probe, defaulting to dark on any ambiguity or error — see
+    # cli/tui/colors.py:detect_theme(). A bad value degrades to "auto".
+    tui_theme: str = os.getenv("LHASSA_TUI_THEME", "auto").strip().lower() or "auto"
+
     # ── Chat memory (rolling per-chat conversation history) ──────────────────
     # How many user+assistant PAIRS of a Telegram chat are kept in the in-memory
     # rolling history and threaded back into the next brain think as ``messages``

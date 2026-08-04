@@ -39,6 +39,7 @@ class OrgScreen(TableScreen):
 
     COLUMNS = ("brain", "role", "department", "skills", "limits")
     TABLE_ID = "org-table"
+    EMPTY_TEXT = "no brains in the org chart yet"
     FILTER_PLACEHOLDER = "filter brains…"
     # The topology is a file on disk, not a hot table — poll it gently.
     REFRESH_SECONDS = 8.0

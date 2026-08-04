@@ -354,6 +354,7 @@ is loaded *after* `.env` (override on) and never holds secrets. The most relevan
 | **Chat (CLI/voice/agent)** | `LHASSA_LLM_PROVIDER` (groq/anthropic/openai/openrouter/cerebras/ollama **or** the local CLIs claude/codex/opencode), `LHASSA_MODEL` |
 | **Heartbeat / opencode** | `LHASSA_HEARTBEAT_PROVIDER` (auto/local/cloud/opencode/claude/codex), `LHASSA_OPENCODE_BIN`, `LHASSA_OPENCODE_MODEL` |
 | **Telegram chat seat** | `LHASSA_TELEGRAM_PROVIDER` (auto/default/claude/codex/opencode/local — the chat door's own fast provider) |
+| **TUI** | `LHASSA_TUI_THEME` (auto/dark/light — `lhassa tui`'s palette; auto detects via `COLORFGBG` then an OSC 11 probe) |
 | **Local / fallback chain** | `LHASSA_LOCAL_MODEL_URL`, `LHASSA_LOCAL_MODEL`, `LHASSA_FALLBACK_PROVIDERS` (default `claude,codex,default`) |
 | **Cost / router** | `LHASSA_ROUTER`, `LHASSA_MODEL_CHEAP`, `LHASSA_MODEL_SMART`, `LHASSA_LLM_DAILY_TOKEN_BUDGET`, `LHASSA_KILL_SWITCH` |
 | **Telegram** | `LHASSA_TELEGRAM_BOT_TOKEN`, `LHASSA_TELEGRAM_CHAT_ID`, `LHASSA_TELEGRAM_POLL` |

@@ -521,6 +521,24 @@ EDITABLE: list[dict] = [
         "restart": RESTART_TELEGRAM,
     },
     {
+        "key": "tui_theme",
+        "attr": "tui_theme",
+        "env_var": "LHASSA_TUI_THEME",
+        "type": "enum",
+        "options": ["auto", "dark", "light"],
+        "label": "TUI theme (lhassa tui)",
+        "help": (
+            "Which palette 'lhassa tui' renders with. 'auto' detects the terminal's "
+            "background via COLORFGBG, then a short-timeout OSC 11 probe, defaulting "
+            "to dark on any ambiguity or error. 'dark'/'light' pin it. Each 'lhassa "
+            "tui' launch is a fresh process, so this takes effect on the next launch "
+            "— no long-running service to restart."
+        ),
+        "group": "Surfaces",
+        "default": "auto",
+        "restart": RESTART_NONE,
+    },
+    {
         "key": "calendar_ics_url",
         "attr": "calendar_ics_url",
         "env_var": "LHASSA_CALENDAR_ICS_URL",

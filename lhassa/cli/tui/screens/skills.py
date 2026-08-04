@@ -41,6 +41,7 @@ class SkillsScreen(TableScreen):
 
     COLUMNS = ("name", "description", "domain", "brains")
     TABLE_ID = "skills-table"
+    EMPTY_TEXT = "no skills installed yet"
     FILTER_PLACEHOLDER = "filter skills…"
 
     async def load_rows(self) -> list[Row]:

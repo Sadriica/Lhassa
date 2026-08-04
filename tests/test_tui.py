@@ -34,7 +34,7 @@ async def test_app_mounts_on_empty_db(brain):
     app = LhassaTui(instance_id=INSTANCE)
     async with app.run_test() as pilot:
         await pilot.pause()
-        assert app.query_one("#ov-body") is not None
+        assert app.query_one("#ov-instance") is not None
 
 
 @pytest.mark.asyncio
@@ -116,6 +116,37 @@ async def test_approvals_screen_renders_via_describe(brain):
         row = table.get_row_at(0)
         assert row[0] == "ap_test1"
         assert "sync_repo" in row[1] or "automatic" in row[1]
+
+
+@pytest.mark.asyncio
+async def test_no_loguru_sink_targets_stderr_while_mounted(brain):
+    """Regression for the log-leak bug: while the TUI owns the screen, nothing
+    may write to stderr — a live stderr sink paints warnings over the running
+    UI. ``on_mount`` must swap every sink for one that writes to the app's own
+    (off-screen) log, and ``on_unmount`` must restore a stderr sink afterward
+    so a plain CLI session behaves normally again."""
+    from loguru import logger as _loguru
+    from lhassa.cli.tui.app import LhassaTui
+
+    def _handler_ids() -> set:
+        return set(getattr(_loguru._core, "handlers", {}).keys())
+
+    def _targets_real_stream(handler) -> bool:
+        """True if this handler writes straight to a stream object (as opposed
+        to a callable sink resolving its stream at write time)."""
+        return getattr(getattr(handler, "_sink", None), "_stream", None) is not None
+
+    app = LhassaTui(instance_id=INSTANCE)
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        # Mounted: no handler is bound to a live stream object at all — every
+        # sink is either the app's own log or nothing.
+        handlers = getattr(_loguru._core, "handlers", {})
+        assert not any(_targets_real_stream(h) for h in handlers.values())
+
+    # After the app tears down, a sink is restored (normal CLI behavior) —
+    # there is at least one handler again where there was none live before.
+    assert _handler_ids() != set()
 
 
 @pytest.mark.asyncio

@@ -57,32 +57,6 @@ HELP: list[tuple[str, list[tuple[str, str]]]] = [
 class HelpScreen(ModalScreen):
     """A dismissible overlay listing every keybinding in the app."""
 
-    DEFAULT_CSS = """
-    HelpScreen {
-        align: center middle;
-    }
-    HelpScreen > Vertical {
-        width: 84;
-        max-width: 90%;
-        height: auto;
-        max-height: 90%;
-        border: round $accent;
-        background: $surface;
-        padding: 1 2;
-    }
-    HelpScreen .help-title {
-        text-style: bold;
-        padding: 0 0 1 0;
-    }
-    HelpScreen .help-scope {
-        text-style: bold;
-        padding: 1 0 0 0;
-    }
-    HelpScreen .help-foot {
-        padding: 1 0 0 0;
-    }
-    """
-
     BINDINGS = [
         ("escape", "dismiss_help", "Close"),
         ("question_mark", "dismiss_help", "Close"),

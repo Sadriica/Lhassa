@@ -1,0 +1,230 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
+/* The Lhassa TUI stylesheet — every rule that used to live in inline Python
+ * f-strings (app.py CSS, per-screen DEFAULT_CSS). Colors come in as the
+ * `$lh-*` CSS variables from `lhassa.cli.tui.colors` (fed via
+ * `App.get_css_variables()`), themselves derived from `cli.theme`'s
+ * canonical GOLD/RED/WHITE/GREEN/STONE — no color literal lives here.
+ *
+ * Discipline: gold is an ACCENT (text, underline, a thin cursor mark) —
+ * never a fill. Red means error only. See doc/architecture.md's TUI note.
+ */
+
+Screen {
+    background: $lh-bg;
+    color: $lh-text;
+}
+
+/* ── App chrome ────────────────────────────────────────────────────────── */
+
+Header {
+    background: $lh-surface;
+    color: $lh-gold-soft;
+    border-bottom: solid $lh-border;
+}
+
+Footer {
+    background: $lh-surface;
+    color: $lh-faint;
+}
+
+TabbedContent {
+    height: 1fr;
+}
+
+Tabs {
+    background: $lh-bg;
+}
+
+Tab {
+    color: $lh-stone;
+}
+
+Tab.-active {
+    color: $lh-gold-soft;
+    text-style: bold;
+}
+
+Underline > .underline--bar {
+    color: $lh-gold;
+}
+
+/* ── DataTable — no filled header, an accent (not red) cursor row ────────── */
+
+DataTable {
+    background: $lh-bg;
+}
+
+DataTable > .datatable--header {
+    background: $lh-bg;
+    color: $lh-stone;
+    text-style: bold;
+}
+
+DataTable > .datatable--cursor {
+    background: $lh-surface-2;
+    color: $lh-gold-soft;
+    text-style: bold;
+}
+
+DataTable > .datatable--odd-row {
+    background: $lh-surface;
+}
+
+DataTable > .datatable--even-row {
+    background: $lh-bg;
+}
+
+.success {
+    color: $lh-green;
+}
+
+.error {
+    color: $lh-red;
+}
+
+/* ── TableScreen (screens/base.py) ────────────────────────────────────────── */
+
+TableScreen {
+    padding: 1 2;
+    background: $lh-bg;
+}
+
+TableScreen Input.filter {
+    display: none;
+    margin: 0 0 1 0;
+    background: $lh-surface;
+    color: $lh-text;
+    border: solid $lh-border;
+}
+
+TableScreen Input.filter.-visible {
+    display: block;
+}
+
+TableScreen DataTable {
+    height: 1fr;
+}
+
+TableScreen Static.status {
+    padding: 1 0 0 0;
+    color: $lh-faint;
+}
+
+/* ── Overview (screens/overview.py) — a grid of four titled sections ────── */
+
+OverviewScreen {
+    padding: 1 2;
+}
+
+OverviewScreen Grid#ov-grid {
+    grid-size: 2 2;
+    grid-gutter: 1 2;
+    height: 1fr;
+}
+
+OverviewScreen .ov-card {
+    background: $lh-surface;
+    border: solid $lh-border;
+    padding: 1 2;
+    height: 1fr;
+}
+
+OverviewScreen .ov-card-title {
+    color: $lh-gold-soft;
+    text-style: bold;
+    padding: 0 0 1 0;
+}
+
+OverviewScreen Horizontal.ov-row {
+    height: 1;
+    padding: 0 0 1 0;
+}
+
+OverviewScreen .ov-label {
+    color: $lh-stone;
+    width: 1fr;
+}
+
+OverviewScreen .ov-value {
+    color: $lh-text;
+    width: auto;
+    text-align: right;
+}
+
+OverviewScreen .ov-value-cost {
+    color: $lh-green;
+    width: auto;
+    text-align: right;
+    text-style: bold;
+}
+
+OverviewScreen .ov-value.-alert {
+    color: $lh-red;
+    text-style: bold;
+}
+
+/* ── Memory (screens/memory.py) ───────────────────────────────────────────── */
+
+MemoryScreen #memory-recall-label {
+    padding: 1 0 0 0;
+    color: $lh-faint;
+}
+
+MemoryScreen #memory-recall-table {
+    height: 1fr;
+}
+
+/* ── Projects (screens/projects.py) ───────────────────────────────────────── */
+
+ProjectsScreen #runs-label {
+    padding: 1 0 0 0;
+    color: $lh-faint;
+}
+
+ProjectsScreen #project-runs-table {
+    height: 1fr;
+}
+
+/* ── Flows (screens/flows.py) ─────────────────────────────────────────────── */
+
+FlowsScreen #flows-runs-label {
+    padding: 1 0 0 0;
+    color: $lh-faint;
+}
+
+FlowsScreen #flows-runs-table {
+    height: 1fr;
+}
+
+/* ── Help (screens/help.py) ───────────────────────────────────────────────── */
+
+HelpScreen {
+    align: center middle;
+}
+
+HelpScreen > Vertical {
+    width: 84;
+    max-width: 90%;
+    height: auto;
+    max-height: 90%;
+    border: round $lh-gold;
+    background: $lh-surface;
+    padding: 1 2;
+}
+
+HelpScreen .help-title {
+    color: $lh-gold-soft;
+    text-style: bold;
+    padding: 0 0 1 0;
+}
+
+HelpScreen .help-scope {
+    color: $lh-gold-soft;
+    text-style: bold;
+    padding: 1 0 0 0;
+}
+
+HelpScreen .help-foot {
+    color: $lh-faint;
+    padding: 1 0 0 0;
+}

@@ -332,6 +332,11 @@ _memory_cmds.register(app)
 @app.command("tui")
 def tui_cmd() -> None:
     """Launch the Textual terminal dashboard (offline, direct DB reads)."""
+    # Belt-and-suspenders: this module already calls quiet_logging() at import
+    # (line 33), but the call is idempotent and cheap, and the TUI must NEVER
+    # run with loguru's noisy default sink live even if something reaches this
+    # command without that import having happened first.
+    quiet_logging()
     # Lazy import: importing the CLI must never pay Textual's import cost.
     from lhassa.cli.tui.app import run_tui
 

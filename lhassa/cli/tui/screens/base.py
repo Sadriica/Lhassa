@@ -44,25 +44,8 @@ class TableScreen(Vertical):
     REFRESH_SECONDS = 4.0
     #: Placeholder shown in the filter input.
     FILTER_PLACEHOLDER = "filter…"
-
-    DEFAULT_CSS = """
-    TableScreen {
-        padding: 1 2;
-    }
-    TableScreen Input.filter {
-        display: none;
-        margin: 0 0 1 0;
-    }
-    TableScreen Input.filter.-visible {
-        display: block;
-    }
-    TableScreen DataTable {
-        height: 1fr;
-    }
-    TableScreen Static.status {
-        padding: 1 0 0 0;
-    }
-    """
+    #: What an unfiltered empty table says WHY it's empty (faint status text).
+    EMPTY_TEXT = "nothing here yet"
 
     BINDINGS = [
         ("r", "refresh", "Refresh"),
@@ -132,6 +115,13 @@ class TableScreen(Vertical):
             return True
         return self._filter in " ".join(str(c) for c in cells).lower()
 
+    def _empty_reason(self) -> str:
+        """Why the table is showing no rows — an honest empty state, not a
+        blank grid. A filter that matched nothing says so by name."""
+        if self._filter:
+            return f"no rows match '{self._filter}'"
+        return self.EMPTY_TEXT
+
     # ── refresh ───────────────────────────────────────────────────────────────
     async def action_refresh(self) -> None:
         """Re-poll the source and redraw only if something actually changed."""
@@ -162,6 +152,8 @@ class TableScreen(Vertical):
                 table.scroll_to(offset.x, offset.y, animate=False)
             except Exception:
                 pass
+        else:
+            self.set_status(f"[dim]{self._empty_reason()}[/]")
 
     # ── selection helper ──────────────────────────────────────────────────────
     def selected_key(self) -> "str | None":

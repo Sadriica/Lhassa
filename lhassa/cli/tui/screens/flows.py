@@ -44,16 +44,8 @@ class FlowsScreen(TableScreen):
 
     COLUMNS = ("id", "name", "nodes", "edges", "description")
     TABLE_ID = "flows-table"
+    EMPTY_TEXT = "no flows defined yet"
     FILTER_PLACEHOLDER = "filter flows…"
-
-    DEFAULT_CSS = """
-    FlowsScreen #flows-runs-label {
-        padding: 1 0 0 0;
-    }
-    FlowsScreen #flows-runs-table {
-        height: 1fr;
-    }
-    """
 
     BINDINGS = [("x", "run_selected", "Run flow")]
 

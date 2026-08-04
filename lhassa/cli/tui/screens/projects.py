@@ -53,16 +53,8 @@ class ProjectsScreen(TableScreen):
 
     COLUMNS = ("name", "kind", "status", "path")
     TABLE_ID = "projects-table"
+    EMPTY_TEXT = "no projects yet"
     FILTER_PLACEHOLDER = "filter projects…"
-
-    DEFAULT_CSS = """
-    ProjectsScreen #runs-label {
-        padding: 1 0 0 0;
-    }
-    ProjectsScreen #project-runs-table {
-        height: 1fr;
-    }
-    """
 
     def __init__(self, instance_id: str, **kwargs) -> None:
         super().__init__(instance_id, **kwargs)
