@@ -1,5 +1,54 @@
 # Lhassa — decisions log
 
+## 2026-08-03 — `lhassa setup`: one command closes the eight-manual-step gap
+
+Verified problem (`doc/plan-4.md`, Stream 3): installing Lhassa never produced a
+working system. `seeds.apply_all` was only ever called from `lhassa seed
+apply-all` — a fresh clone gave a bare chat, with no departments, digest,
+maintenance or flows until eight manual steps were run by hand.
+
+**`lhassa setup`** (`cli/setup_cmds.py`) closes the gap with six deterministic,
+$0 steps, none of which touches a model: detect the host (reusing `host.py`
+unchanged — no new detection was written), detect or configure a brain
+($0-first: a subscription CLI on PATH, then a reachable local Ollama, then an
+existing API key), ask for permissions **by scope** in plain language (never
+all-or-nothing — declining a scope always leaves a working system with that
+capability off), apply the matching seeds for a chosen profile, install
+systemd/launchd services (the existing unit files, only the checkout path is
+templated in), and a smoke check that reports one honest sentence about what
+is now alive.
+
+**The actual fix**: every profile applies a fixed baseline
+(`temple`, `digest`, `maintenance`, `personal`) that alone already satisfies the
+DoD — a real department, the daily digest, the maintenance schedule, and at
+least one real work-flow (the personal secretary's morning/evening briefings)
+— then layers ONE domain seed on top (`research` → `research`, `dev` → `cv`,
+`knowledge` → none beyond the baseline, since its distinguishing scope is the
+`read` permission rather than a seed). This is a deliberate design choice, not
+an existing seed named per-profile — no "dev" or "knowledge" seed exists today.
+
+**Permissions write real config**, not a flag: `read` → `knowledge_roots` /
+`protected_roots`; `commands` → `auto_sync_repos` (+ optionally
+`LHASSA_ALLOWLIST_REPOS` via the settings advanced escape hatch, and a pointer
+to `scripts/install-privileged.sh` for sudoers, run separately); `network`
+declined pins `heartbeat_provider` to `local` so the routine think never
+reaches the network; `notify` toggles `notify_channels`. Every decision routes
+through `lhassa.settings` (never `.env`), so a re-run is idempotent by the same
+contract every setting write already carries.
+
+**Testable by construction**: every judgment — brain detection, scope
+decisions, which seeds a profile applies — is a pure function over injected
+inputs (`env`, `which`, `probe_ollama`, a plain `dict` of granted scopes),
+mirroring `host.py`'s own "pure parser + injected collector" pattern; no TTY
+and no network are needed to exercise the wizard's logic. `tests/test_setup_cmds.py`
+adds 32 tests, including two end-to-end ones that run the REAL seed registry
+(not a stub) for every profile and assert the DoD against `smoke_check`'s real
+topology/flow counts, plus an idempotency check.
+
+**DoD met**: one command, `lhassa setup --yes`, takes a fresh clone to a brain
+with departments, digest, maintenance and flows — no hidden manual step. Full
+suite green, ruff clean.
+
 ## 2026-08-03 — El CI de macOS corrige la auditoría que lo precedió
 
 The first real macOS CI run (triggered by the push to `main`) came back
