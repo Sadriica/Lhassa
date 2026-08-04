@@ -410,6 +410,34 @@ class LedgerGateway:
 
     # ── Budget bookkeeping ────────────────────────────────────────────────────
 
+    def daily_output_tokens_sync(self, day: str | None = None) -> int:
+        """Synchronous, read-only sibling of :meth:`daily_output_tokens`.
+
+        Exists for callers that cannot await (the router's ``decide`` is
+        synchronous and is called both with and without a running event loop,
+        so it cannot safely ``asyncio.run`` the async ledger read). Opens the
+        ledger with the stdlib ``sqlite3`` module directly — a plain read, no
+        schema writes — so it works even against a DB file that a concurrent
+        ``aiosqlite`` connection is using (SQLite handles concurrent readers).
+        Returns ``0`` if the DB/table doesn't exist yet or on any error —
+        never raises.
+        """
+        import sqlite3
+
+        day = day or _today()
+        if not self.db_path.exists():
+            return 0
+        try:
+            with sqlite3.connect(str(self.db_path), timeout=1.0) as db:
+                cur = db.execute(
+                    "SELECT output_tokens FROM daily_spend WHERE day=?", (day,)
+                )
+                row = cur.fetchone()
+            return int(row[0]) if row else 0
+        except Exception as exc:
+            logger.debug(f"LLM gateway: daily_output_tokens_sync failed: {exc}")
+            return 0
+
     async def daily_output_tokens(self, day: str | None = None) -> int:
         """Output tokens already spent on the given UTC day (default today)."""
         await self._ensure_db()

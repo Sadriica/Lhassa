@@ -302,21 +302,55 @@ def fallback_chain(config: "Config", primary: Optional[ModelProvider]) -> list[t
 # ── Budget soft-limit (a brake before BudgetExceeded hits outright) ──────────
 
 
+# Process-local cache for the persisted-ledger read below — the router's
+# ``decide`` is on the hot path (called once per judgment) and the do-and-sleep
+# execution model means most callers ARE the process (a heartbeat beat lives
+# seconds), so a short TTL still protects against a hot loop of ``decide``
+# calls within one beat while staying fresh across beats.
+_BUDGET_CACHE_TTL_S = 60.0
+_budget_cache: dict[str, tuple[float, int]] = {}  # day -> (monotonic_ts, spent_tokens)
+
+
 def _budget_pct_used(config: "Config") -> float:
     """Best-effort fraction of today's daily token budget already spent.
 
-    Router functions are synchronous (``decide``/``pick_model`` are called
-    without an event loop in several places), while the accurate ledger read
-    (``gateway.spend_summary``) is async — so this reads the live in-process
-    mirror (``lhassa.state.state.metrics``) instead of hitting the DB. That
-    mirror is reset per-process (not per-UTC-day), so it is a *conservative
-    approximation* good enough to trip the soft brake during a long-running
-    process; it is not the authoritative accounting (the gateway ledger is).
-    Returns 0.0 when unlimited (budget<=0) or on any error.
+    The soft brake must trip even though each heartbeat beat is a brand-new
+    ``systemd`` process (do-and-sleep, per the architecture): a per-process
+    in-memory mirror (``lhassa.state.state.metrics``) resets to zero on every
+    such process, so it would never see yesterday's — or even this run's
+    earlier — spend and the 80% brake could simply never fire. The source of
+    truth here is instead the **persisted gateway ledger**
+    (``lhassa.llm.gateway``'s ``daily_spend`` table, the same one
+    ``spend_summary()`` reports from) via
+    :meth:`LedgerGateway.daily_output_tokens_sync` — a plain, synchronous,
+    read-only SQLite read (``decide`` is sync and is called both with and
+    without a running event loop, so the async ``spend_summary`` can't just be
+    awaited here). The read is cheap but not free, so it is cached per-process
+    for ``_BUDGET_CACHE_TTL_S`` (60s) keyed by UTC day.
+
+    Falls back to the in-process mirror (the previous behaviour) if the
+    ledger read raises for any reason, and to ``0.0`` when unlimited
+    (budget<=0) or if everything fails. Never raises.
     """
     budget = getattr(config, "llm_daily_token_budget", 0) or 0
     if budget <= 0:
         return 0.0
+    try:
+        import time
+
+        from lhassa.llm.gateway import _today, gateway
+
+        day = _today()
+        cached = _budget_cache.get(day)
+        now = time.monotonic()
+        if cached is not None and (now - cached[0]) < _BUDGET_CACHE_TTL_S:
+            spent = cached[1]
+        else:
+            spent = gateway.daily_output_tokens_sync(day)
+            _budget_cache[day] = (now, spent)
+        return spent / budget
+    except Exception:
+        pass
     try:
         from lhassa.state import state
 

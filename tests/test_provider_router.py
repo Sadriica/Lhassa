@@ -553,6 +553,95 @@ def test_decide_force_justdo_uses_cheap():
     assert "forced=justdo" in d.reason
 
 
+# ── Router: budget soft-limit reads the persisted ledger, not the in-process
+#    mirror (the do-and-sleep execution model means a fresh heartbeat process
+#    starts with an empty ``state.metrics`` mirror every single beat) ─────────
+
+
+@pytest.fixture
+def budget_cache_guard():
+    """``_budget_pct_used`` caches per UTC day in a module dict — reset it so
+    one test's cached read never leaks into the next."""
+    router._budget_cache.clear()
+    yield
+    router._budget_cache.clear()
+
+
+async def test_budget_pct_used_reads_persisted_ledger_new_process(
+    tmp_path, monkeypatch, metrics_guard, budget_cache_guard,
+):
+    """A brand-new process (empty in-memory mirror) must still see spend that
+    was persisted to the gateway ledger by a *previous* process — this is
+    exactly the do-and-sleep gap: each heartbeat beat is a new ``systemd``
+    process, so the in-memory mirror alone can never trip the soft brake.
+    """
+    from lhassa.llm import gateway as gw
+
+    test_gateway = LedgerGateway(db_path=tmp_path / "ledger.db")
+    await test_gateway._ensure_db()
+    day = gw._today()
+    await test_gateway._add_daily_spend(day, 900)  # 90% of a 1000-token budget
+
+    # Stand in for "this is a fresh process": no in-process spend recorded.
+    state.metrics.pop("llm_output_tokens", None)
+    monkeypatch.setattr(gw, "gateway", test_gateway)
+
+    cfg = FakeConfig(llm_daily_token_budget=1000)
+    pct = router._budget_pct_used(cfg)
+    assert pct == pytest.approx(0.9)
+
+
+async def test_decide_downgrades_hard_when_persisted_spend_crosses_soft_pct(
+    tmp_path, monkeypatch, metrics_guard, budget_cache_guard,
+):
+    """The soft brake (default 80%) must fire off the persisted ledger alone,
+    with no help from ``state.metrics`` — reproducing "new process, ledger
+    already past soft pct" end to end through ``decide``.
+    """
+    from lhassa.llm import gateway as gw
+
+    test_gateway = LedgerGateway(db_path=tmp_path / "ledger.db")
+    await test_gateway._ensure_db()
+    await test_gateway._add_daily_spend(gw._today(), 850)  # 85% of 1000
+
+    state.metrics.pop("llm_output_tokens", None)
+    monkeypatch.setattr(gw, "gateway", test_gateway)
+
+    cfg = FakeConfig(llm_daily_token_budget=1000)
+    d = router.decide(FakeTrigger(params={"hard": True}), None, config=cfg)
+    assert d.model == "cheap-model"
+    assert "budget_downgrade" in d.reason
+
+
+async def test_budget_pct_used_falls_back_to_mirror_on_ledger_error(
+    monkeypatch, metrics_guard, budget_cache_guard,
+):
+    """A broken ledger read degrades to the previous (in-process mirror)
+    behaviour rather than raising or silently disabling the brake."""
+    from lhassa.llm import gateway as gw
+
+    class BrokenGateway:
+        def daily_output_tokens_sync(self, day=None):
+            raise RuntimeError("db is locked")
+
+    monkeypatch.setattr(gw, "gateway", BrokenGateway())
+    state.metrics["llm_output_tokens"] = 950
+
+    cfg = FakeConfig(llm_daily_token_budget=1000)
+    pct = router._budget_pct_used(cfg)
+    assert pct == pytest.approx(0.95)
+
+
+def test_budget_pct_used_unlimited_returns_zero(budget_cache_guard):
+    cfg = FakeConfig(llm_daily_token_budget=0)
+    assert router._budget_pct_used(cfg) == 0.0
+
+
+def test_daily_output_tokens_sync_missing_db_returns_zero(tmp_path):
+    gw = LedgerGateway(db_path=tmp_path / "nope.db")
+    assert gw.daily_output_tokens_sync() == 0
+
+
 # ── Router: cascade ───────────────────────────────────────────────────────────
 
 
