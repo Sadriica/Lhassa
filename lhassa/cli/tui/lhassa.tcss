@@ -206,8 +206,23 @@ OrgScreen #org-relationships-label {
     color: $lh-faint;
 }
 
+OrgScreen DataTable#org-table {
+    /* The chart outweighs the overlay: it is the reason this tab exists. */
+    height: 3fr;
+}
+
 OrgScreen #org-relationships-table {
     height: 1fr;
+    min-height: 6;
+}
+
+/* No edges defined → the panel shrinks to its single explanatory line. */
+OrgScreen.-no-relationships #org-relationships-table {
+    display: none;
+}
+
+OrgScreen.-no-relationships #org-relationships-label {
+    display: none;
 }
 
 OrgScreen #org-relationships-legend {

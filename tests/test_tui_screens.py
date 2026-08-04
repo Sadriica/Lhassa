@@ -414,6 +414,32 @@ async def test_org_screen_relationships_panel_honest_when_empty(brain, tmp_path,
 
 
 @pytest.mark.asyncio
+async def test_org_screen_collapses_empty_relationships_panel(brain, tmp_path, monkeypatch):
+    """With no overlay edges the panel must not steal height from the chart.
+
+    The regression this guards: the panel held ~half the screen on a machine
+    with zero relationships, truncating the brain tree, and it only ever
+    re-evaluated after a row selection — so simply OPENING the tab left it
+    expanded and empty.
+    """
+    from textual.widgets import TabbedContent
+
+    _write_topology(tmp_path, monkeypatch)
+    app = _app()
+    async with app.run_test() as pilot:
+        app.query_one(TabbedContent).active = "org"
+        await pilot.pause()
+        screen = app.query_one("OrgScreen")
+        await screen.action_refresh()
+        await pilot.pause()
+        # No row was ever selected — the collapse still applied.
+        assert screen.has_class("-no-relationships")
+        assert app.query_one("#org-relationships-table", DataTable).display is False
+        legend = app.query_one("#org-relationships-legend")
+        assert "no relationships defined" in str(legend.render())
+
+
+@pytest.mark.asyncio
 async def test_org_screen_relationships_panel_shows_edges(brain, tmp_path, monkeypatch):
     from textual.widgets import TabbedContent
 

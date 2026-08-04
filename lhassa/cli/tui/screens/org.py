@@ -176,8 +176,25 @@ class OrgScreen(TableScreen):
 
     async def action_refresh(self) -> None:
         await super().action_refresh()
+        # The collapse must not wait for a selection: the owner opens this tab
+        # to read the CHART, and on a machine with no overlay edges the panel
+        # would otherwise hold half the screen until they clicked something.
+        self._sync_panel_visibility()
         if self._selected_brain:
             self._render_relationships(self._selected_brain)
+
+    def _sync_panel_visibility(self) -> None:
+        """Collapse the overlay panel while no relationship edges exist."""
+        empty = not _load_relationships()
+        self.set_class(empty, "-no-relationships")
+        if empty and not self._selected_brain:
+            try:
+                self.query_one("#org-relationships-legend", Static).update(
+                    "[dim]no relationships defined — brains are linked only by "
+                    "the command tree[/]"
+                )
+            except Exception:
+                return
 
     async def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
         if event.data_table.id != self.TABLE_ID:
@@ -194,6 +211,7 @@ class OrgScreen(TableScreen):
             return
 
         all_edges = _load_relationships()
+        self.set_class(not all_edges, "-no-relationships")
         desc = self._descriptions.get(brain_id, "")
         title = f"Relationships — [accent]{brain_id}[/]"
         if desc:
