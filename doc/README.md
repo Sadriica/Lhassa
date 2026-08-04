@@ -18,8 +18,8 @@ you are trying to do, not by subsystem.
 - [`narrative.md`](narrative.md) — the narrative & voice book (the flag, the pillars, tone, vocabulary).
 - [`lhassa-brief.md`](lhassa-brief.md) — the implementation spec, in Spanish.
 - [`decisions.md`](decisions.md) — the running decisions log, phase by phase.
-- [`plan.md`](plan.md) — the CURRENT plan (the "mileage" waves) and what remains.
-- [`roadmap.md`](roadmap.md) — archived pre-brain plan (archaeology only).
+- [`roadmap.md`](roadmap.md) — the CURRENT plan: what's done (pointers into `decisions.md`), what's in progress, what's next.
+- [`plan.md`](plan.md) / [`plan-4.md`](plan-4.md) — superseded, absorbed into `roadmap.md` on 2026-08-04; kept only so old links don't die.
 
 ## Use it
 
