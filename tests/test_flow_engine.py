@@ -1,5 +1,6 @@
 """Work-flow ENGINE tests — offline, with an injected executor (no live model)."""
 
+import asyncio
 import json
 
 import pytest
@@ -355,6 +356,146 @@ async def test_durable_approval_pauses_retries_and_resumes_from_cursor(
     assert gate["approval_payload"] == approval_payload
     assert len(calls) == 1
     assert resumed["resume_state"]["frontier"] == []
+    assert resumed["resume_state"]["status"] == "completed"
+
+
+def _retry_flow(retry_cfg: dict, *, timeout_seconds=None) -> Flow:
+    cfg = {"skill": "optimization", "prompt": "go", "retry": retry_cfg}
+    if timeout_seconds is not None:
+        cfg["timeout_seconds"] = timeout_seconds
+    return Flow(
+        id="retry",
+        name="retry",
+        nodes=[
+            FlowNode("t", NodeKind.TRIGGER, {"type": "manual"}),
+            FlowNode("w", NodeKind.TASK, cfg),
+            FlowNode("o", NodeKind.OUTPUT, {"type": "log"}),
+        ],
+        edges=[FlowEdge("t", "w"), FlowEdge("w", "o")],
+    )
+
+
+@pytest.mark.asyncio
+async def test_task_retry_inline_succeeds_after_transient_failure(offline_env):
+    """A non-durable (in-memory) run retries inline, no real sleep, no extra step."""
+    calls = []
+
+    async def flaky(goal, *, department, config, **kw):
+        calls.append(goal)
+        if len(calls) == 1:
+            raise RuntimeError("transient")
+        return {"ok": True, "summary": "done"}
+
+    flow = _retry_flow({"max_attempts": 2, "retry_on": ["error"]})
+    rec = await run_flow(flow, config=offline_env, executor=flaky)
+    assert rec["status"] == "completed"
+    assert len(calls) == 2
+    task_step = next(s for s in rec["steps"] if s["kind"] == "task")
+    assert task_step["ok"] is True
+    assert task_step["attempt"] == 2
+    # exactly one step recorded for the task node (no per-attempt duplicate)
+    assert len([s for s in rec["steps"] if s["kind"] == "task"]) == 1
+
+
+@pytest.mark.asyncio
+async def test_task_retry_exhausted_fails_the_path(offline_env):
+    async def always_boom(goal, *, department, config, **kw):
+        raise RuntimeError("permanent")
+
+    flow = _retry_flow({"max_attempts": 2, "retry_on": ["error"]})
+    rec = await run_flow(flow, config=offline_env, executor=always_boom)
+    assert rec["status"] == "failed"
+    task_step = next(s for s in rec["steps"] if s["kind"] == "task")
+    assert task_step["ok"] is False and "permanent" in task_step["error"]
+    assert not any(s["kind"] == "output" for s in rec["steps"])
+
+
+@pytest.mark.asyncio
+async def test_task_default_config_retries_once_unchanged(offline_env):
+    """No ``retry`` config at all behaves exactly as before: a single attempt."""
+    calls = []
+
+    async def boom(goal, *, department, config, **kw):
+        calls.append(goal)
+        raise RuntimeError("no retry configured")
+
+    flow = _retry_flow({})
+    rec = await run_flow(flow, config=offline_env, executor=boom)
+    assert rec["status"] == "failed"
+    assert len(calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_task_timeout_counts_as_retry_on_timeout(offline_env):
+    calls = []
+
+    async def slow_then_fast(goal, *, department, config, **kw):
+        calls.append(goal)
+        if len(calls) == 1:
+            await asyncio.sleep(0.2)
+            return {"ok": True, "summary": "too slow"}
+        return {"ok": True, "summary": "fast"}
+
+    flow = _retry_flow(
+        {"max_attempts": 2, "retry_on": ["timeout"]}, timeout_seconds=0.05
+    )
+    rec = await run_flow(flow, config=offline_env, executor=slow_then_fast)
+    assert rec["status"] == "completed"
+    assert len(calls) == 2
+    task_step = next(s for s in rec["steps"] if s["kind"] == "task")
+    assert task_step["attempt"] == 2
+
+
+@pytest.mark.asyncio
+async def test_durable_retry_parks_and_resumes_from_cursor(offline_env):
+    """A durable run parks WAITING_RETRY, releasing the walk, and resumes clean."""
+    calls = []
+
+    async def flaky(goal, *, department, config, **kw):
+        calls.append(goal)
+        if len(calls) == 1:
+            raise RuntimeError("transient")
+        return {"ok": True, "summary": "done"}
+
+    flow = _retry_flow({"max_attempts": 2, "retry_on": ["error"], "base_seconds": 0})
+    checkpoints = []
+
+    async def save(cursor):
+        checkpoints.append(json.loads(json.dumps(cursor)))
+
+    first = await run_flow(
+        flow,
+        config=offline_env,
+        executor=flaky,
+        run_id="run_retry",
+        checkpoint_hook=save,
+    )
+    assert first["status"] == "waiting_retry"
+    assert first["finished_at"] is None
+    assert [s["node"] for s in first["steps"]] == ["t", "w"]
+    assert first["steps"][-1]["status"] == "waiting_retry"
+    cursor = first["resume_state"]
+    assert cursor["frontier"] == [{"node": "w", "data": {}}]
+    assert "w" not in cursor["visited"]
+    assert cursor["retry_state"] == {"w": 1}
+    assert cursor["pending_retry"]["node_id"] == "w"
+    assert json.loads(json.dumps(cursor)) == cursor
+
+    resumed = await run_flow(
+        flow,
+        config=offline_env,
+        executor=flaky,
+        run_id="run_retry",
+        resume_state=cursor,
+        checkpoint_hook=save,
+    )
+    assert resumed["status"] == "completed"
+    assert resumed["finished_at"] is not None
+    assert [s["node"] for s in resumed["steps"]] == ["t", "w", "o"]
+    task_step = resumed["steps"][1]
+    assert task_step["ok"] is True and task_step["attempt"] == 2
+    assert len(calls) == 2
+    assert resumed["resume_state"]["retry_state"] == {}
     assert resumed["resume_state"]["status"] == "completed"
 
 

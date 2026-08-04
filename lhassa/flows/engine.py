@@ -20,7 +20,14 @@ Per-kind behaviour
     topology), then runs the work through the INJECTABLE ``executor`` (default
     :func:`lhassa.org.executor.brain_executor`, offline unless ``LHASSA_ORG_LIVE``).
     The upstream ``data`` is passed in as the task's input; the executor's result
-    becomes the data that flows downstream.
+    becomes the data that flows downstream. A ``task`` node may declare
+    ``config.retry`` (``max_attempts``/``backoff``/``base_seconds``/``max_seconds``/
+    ``retry_on``, all optional — the default is a single attempt) and
+    ``config.timeout_seconds``: a timeout counts as ``retry_on: "timeout"``. In a
+    DURABLE run a retryable failure PARKS the run (``WAITING_RETRY``, releasing the
+    lease exactly like a completed run) until ``next_wakeup_at``; in an in-memory
+    run it retries inline with no real sleep (the deterministic $0 plane never
+    blocks on wall-clock time).
   * ``gate``    — ``verify`` runs :func:`lhassa.agents.verify.verify`; ``approval``
     parks a request via :mod:`lhassa.security.approval`. The step records the
     verdict (``passed`` / ``needs_approval``). On a non-pass the path STOPS unless an
@@ -48,12 +55,13 @@ A structured run record::
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import os
 import time
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Awaitable, Callable, Optional
 
 from loguru import logger
@@ -140,6 +148,65 @@ def resolve_brain(node: FlowNode, data: Any, config: Config) -> tuple[str, bool]
     callers and tests.
     """
     return resolve_router(node)(node, data, config)
+
+
+_DEFAULT_RETRY_ON = frozenset({"error"})
+
+
+def _retry_config(node: FlowNode) -> dict:
+    """Parse a ``task`` node's ``config.retry`` spec; degrades to "no retry".
+
+    ``{"max_attempts": int>=1, "backoff": "fixed"|"exponential", "base_seconds":
+    float, "max_seconds": float, "retry_on": ["error", "timeout", ...]}``. Every
+    key is optional and a missing/malformed value falls back to a single
+    attempt on ``"error"`` only — a node with no ``retry`` config behaves
+    exactly as before this feature existed.
+    """
+    cfg = node.config or {}
+    spec = cfg.get("retry") if isinstance(cfg.get("retry"), dict) else {}
+    try:
+        max_attempts = max(1, int(spec.get("max_attempts") or 1))
+    except (TypeError, ValueError):
+        max_attempts = 1
+    backoff = str(spec.get("backoff") or "fixed").strip().lower()
+    base_raw = spec.get("base_seconds")
+    try:
+        base_seconds = max(0.0, float(base_raw)) if base_raw is not None else 1.0
+    except (TypeError, ValueError):
+        base_seconds = 1.0
+    max_raw = spec.get("max_seconds")
+    try:
+        max_seconds = max(base_seconds, float(max_raw)) if max_raw is not None else base_seconds
+    except (TypeError, ValueError):
+        max_seconds = base_seconds
+    retry_on_raw = spec.get("retry_on")
+    if isinstance(retry_on_raw, (list, tuple, set)):
+        retry_on = {str(x).strip().lower() for x in retry_on_raw if str(x).strip()}
+    else:
+        retry_on = set()
+    return {
+        "max_attempts": max_attempts,
+        "backoff": backoff,
+        "base_seconds": base_seconds,
+        "max_seconds": max_seconds,
+        "retry_on": retry_on or set(_DEFAULT_RETRY_ON),
+    }
+
+
+def _backoff_seconds(retry_cfg: dict, attempt: int) -> float:
+    """The wait before the NEXT attempt (``attempt`` is the one that just failed).
+
+    ``"exponential"`` doubles per attempt from ``base_seconds``, capped at
+    ``max_seconds``; anything else (including the default ``"fixed"``) waits a
+    constant ``base_seconds``.
+    """
+    base = retry_cfg["base_seconds"]
+    cap = retry_cfg["max_seconds"]
+    if retry_cfg["backoff"] == "exponential":
+        seconds = base * (2 ** max(0, attempt - 1))
+    else:
+        seconds = base
+    return max(0.0, min(seconds, cap))
 
 
 async def _default_executor(
@@ -459,6 +526,8 @@ def _cursor_snapshot(
     pending_approval: Optional[dict],
     approval_decisions: dict[str, bool],
     status: str,
+    pending_retry: Optional[dict] = None,
+    retry_state: Optional[dict[str, int]] = None,
 ) -> dict:
     """Build the versioned, JSON-only cursor consumed by a later resume."""
     return _json_safe(
@@ -477,6 +546,8 @@ def _cursor_snapshot(
             "run_started": run_started,
             "pending_approval": pending_approval,
             "approval_decisions": approval_decisions,
+            "pending_retry": pending_retry,
+            "retry_state": dict(retry_state or {}),
         }
     )
 
@@ -603,6 +674,10 @@ async def run_flow(
         base_cv = str(state.get("base_cv") if "base_cv" in state else base_cv)
         run_started = str(state.get("run_started") or run_started)
         pending_approval = state.get("pending_approval")
+        pending_retry = state.get("pending_retry")
+        retry_state = {
+            str(k): int(v) for k, v in (state.get("retry_state") or {}).items()
+        }
     else:
         steps = []
         visited = set()
@@ -610,6 +685,8 @@ async def run_flow(
         last_output = None
         final_data = inputs or {}
         pending_approval = None
+        pending_retry = None
+        retry_state = {}
 
     decisions = {
         str(key): bool(value)
@@ -621,6 +698,7 @@ async def run_flow(
     cap = len(flow.nodes) * _MAX_STEPS_FACTOR + 8
     failed = False
     waiting_approval = False
+    waiting_retry = False
 
     async def checkpoint(status: str) -> dict:
         cursor = _cursor_snapshot(
@@ -634,6 +712,8 @@ async def run_flow(
             run_started=run_started,
             pending_approval=pending_approval,
             approval_decisions=decisions,
+            pending_retry=pending_retry,
+            retry_state=retry_state,
             status=status,
         )
         if checkpoint_hook is not None:
@@ -656,6 +736,13 @@ async def run_flow(
             candidate = pending_approval.get("step_index")
             if isinstance(candidate, int) and 0 <= candidate < len(steps):
                 replace_step_idx = candidate
+        elif (
+            isinstance(pending_retry, dict)
+            and pending_retry.get("node_id") == node_id
+        ):
+            candidate = pending_retry.get("step_index")
+            if isinstance(candidate, int) and 0 <= candidate < len(steps):
+                replace_step_idx = candidate
 
         step_started = _iso_now()
         step_started_perf = time.perf_counter()
@@ -668,16 +755,78 @@ async def run_flow(
         }
         data_out: Any = data
         passed = True  # only gates can set this False
+        node_pending_retry: Optional[dict] = None
         try:
             if node.kind == NodeKind.TRIGGER:
                 step["trigger"] = node.config.get("type", "manual")
                 step["inputs"] = _safe(data)
             elif node.kind == NodeKind.TASK:
-                extra, data_out = await _run_task(
-                    node, data, config=config, executor=executor,
-                    base_cv=base_cv, company=resolved_company,
-                )
-                step.update(extra)
+                retry_cfg = _retry_config(node)
+                timeout_raw = (node.config or {}).get("timeout_seconds")
+                try:
+                    timeout_seconds = (
+                        float(timeout_raw) if timeout_raw is not None else None
+                    )
+                except (TypeError, ValueError):
+                    timeout_seconds = None
+                attempt = int(retry_state.get(node.id, 0))
+                while True:
+                    attempt += 1
+                    try:
+                        coro = _run_task(
+                            node, data, config=config, executor=executor,
+                            base_cv=base_cv, company=resolved_company,
+                        )
+                        if timeout_seconds is not None:
+                            extra, data_out = await asyncio.wait_for(
+                                coro, timeout=timeout_seconds
+                            )
+                        else:
+                            extra, data_out = await coro
+                        retry_state.pop(node.id, None)
+                        extra["attempt"] = attempt
+                        step.update(extra)
+                        break
+                    except Exception as exc:
+                        reason = (
+                            "timeout"
+                            if isinstance(exc, asyncio.TimeoutError)
+                            else "error"
+                        )
+                        retryable = (
+                            reason in retry_cfg["retry_on"]
+                            and attempt < retry_cfg["max_attempts"]
+                        )
+                        if not retryable:
+                            raise
+                        retry_state[node.id] = attempt
+                        if durable:
+                            wait_seconds = _backoff_seconds(retry_cfg, attempt)
+                            next_wakeup_at = datetime.now(timezone.utc) + timedelta(
+                                seconds=wait_seconds
+                            )
+                            node_pending_retry = {
+                                "node_id": node.id,
+                                "attempt": attempt,
+                                "reason": reason,
+                                "wait_seconds": wait_seconds,
+                                "next_wakeup_at": next_wakeup_at.isoformat(),
+                            }
+                            step["ok"] = False
+                            step["status"] = "waiting_retry"
+                            step["attempt"] = attempt
+                            step["error"] = str(exc)
+                            step["retry_reason"] = reason
+                            break
+                        # Non-durable (in-memory) run: retry inline, no real sleep —
+                        # the deterministic $0 plane never blocks on wall-clock time.
+                        logger.debug(
+                            "flows: node {} attempt {} failed ({}), retrying inline",
+                            node.id,
+                            attempt,
+                            exc,
+                        )
+                        continue
             elif node.kind == NodeKind.GATE:
                 extra, data_out, passed = await _run_gate(
                     node,
@@ -736,6 +885,7 @@ async def run_flow(
                     step.setdefault(field, previous_step[field])
             steps[replace_step_idx] = step
             pending_approval = None
+            pending_retry = None
         final_data = data_out
 
         if node.kind == NodeKind.GATE and step.get("needs_approval") and durable:
@@ -757,6 +907,23 @@ async def run_flow(
                 step["status"] = "failed"
                 step["error"] = f"checkpoint failed: {exc}"
                 logger.warning("flows: approval checkpoint failed: {}", exc)
+            break
+
+        if node_pending_retry is not None and durable:
+            visited.discard(node.id)
+            frontier.insert(0, (node.id, data))
+            node_pending_retry["step_index"] = len(steps) - 1
+            pending_retry = node_pending_retry
+            waiting_retry = True
+            try:
+                latest_cursor = await checkpoint("waiting_retry")
+            except Exception as exc:
+                failed = True
+                waiting_retry = False
+                step["ok"] = False
+                step["status"] = "failed"
+                step["error"] = f"checkpoint failed: {exc}"
+                logger.warning("flows: retry checkpoint failed: {}", exc)
             break
 
         # ── pick the outgoing edges to follow ────────────────────────────────
@@ -788,11 +955,15 @@ async def run_flow(
     status = (
         "failed"
         if failed
-        else ("waiting_approval" if waiting_approval else "completed")
+        else (
+            "waiting_approval"
+            if waiting_approval
+            else ("waiting_retry" if waiting_retry else "completed")
+        )
     )
     output = last_output if last_output is not None else _safe(final_data)
     cost_usd = sum(float(s.get("cost_usd") or 0.0) for s in steps)
-    if durable and not waiting_approval:
+    if durable and not waiting_approval and not waiting_retry:
         latest_cursor = _cursor_snapshot(
             frontier=frontier,
             visited=visited,
@@ -804,6 +975,8 @@ async def run_flow(
             run_started=run_started,
             pending_approval=pending_approval,
             approval_decisions=decisions,
+            pending_retry=pending_retry,
+            retry_state=retry_state,
             status=status,
         )
     record = {
@@ -811,7 +984,7 @@ async def run_flow(
         "flow_id": flow.id,
         "status": status,
         "started_at": run_started,
-        "finished_at": None if waiting_approval else _iso_now(),
+        "finished_at": None if (waiting_approval or waiting_retry) else _iso_now(),
         "duration_ms": _elapsed_ms(run_started_perf),
         "cost_usd": round(cost_usd, 6),
         "steps": steps,
