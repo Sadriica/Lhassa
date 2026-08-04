@@ -44,6 +44,14 @@ from lhassa.core.migrations import (
 # lhassa.memory.store.DB_PATH.
 DB_PATH = Path(Config.brain_db_path)
 
+# Validated-schema cache: a DB path is migrated + schema-validated ONCE per
+# process. Re-validation is the expensive part of init_db (every migration
+# validator runs a PRAGMA table_info — ~23+ checks across the whole registry)
+# and is a pure no-op when the DB is already at a version we brought to the
+# current schema. Keyed by resolved path AND the schema version we validated,
+# so a replaced/recreated file (fresh user_version) still migrates.
+_MIGRATED_VERSIONS: dict[str, int] = {}
+
 
 # ── small helpers ───────────────────────────────────────────────────────────────
 
@@ -1378,12 +1386,19 @@ async def init_db() -> None:
     """Enable WAL and migrate the grande to the supported schema version."""
     path = Path(DB_PATH)
     path.parent.mkdir(parents=True, exist_ok=True)
+    key = str(path.resolve())
     async with aiosqlite.connect(path) as db:
         # Refuse a newer DB before changing even its journal mode.
-        ensure_supported(await get_schema_version(db), SCHEMA_VERSION)
+        version = await get_schema_version(db)
+        ensure_supported(version, SCHEMA_VERSION)
         await db.execute("PRAGMA journal_mode=WAL")
         await db.execute("PRAGMA busy_timeout=5000")
-        await apply_migrations(db, MIGRATIONS)
+        # Already brought this DB file to the current schema in THIS process —
+        # the migration/validation pass (the expensive part) is a no-op.
+        if _MIGRATED_VERSIONS.get(key) == version:
+            return
+        migrated_version = await apply_migrations(db, MIGRATIONS)
+        _MIGRATED_VERSIONS[key] = migrated_version
 
 
 # ── episodes (append-only) ───────────────────────────────────────────────────────

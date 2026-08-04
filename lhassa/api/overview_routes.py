@@ -17,6 +17,7 @@ picked up live — the same seam ``runtime_routes`` uses.
 Mounted by the integrator with ``app.include_router(overview_routes.router)``.
 """
 
+import asyncio
 import time
 from datetime import datetime, timedelta, timezone
 
@@ -319,15 +320,23 @@ async def build_overview() -> dict:
     """
     sections: dict = {}
     errors: dict[str, str] = {}
-    for name, fn in _OVERVIEW_SECTIONS.items():
-        try:
-            sections[name] = await fn()
-        except Exception as exc:  # one degraded subsystem is reported, not fatal
-            errors[name] = f"{type(exc).__name__}: {exc}"
+    # The sections are fully independent (each is defensive and never raises on
+    # its own subsystem's failure), so gather them CONCURRENTLY instead of
+    # serially — under the API server this yields the DB/health latency of the
+    # slowest section rather than their sum. gather preserves input order, so
+    # the ``errors``/default mapping below stays aligned by name.
+    results = await asyncio.gather(
+        *(fn() for fn in _OVERVIEW_SECTIONS.values()), return_exceptions=True
+    )
+    for name, result in zip(_OVERVIEW_SECTIONS, results):
+        if isinstance(result, BaseException):
+            errors[name] = f"{type(result).__name__}: {result}"
             default = _OVERVIEW_DEFAULTS[name]
             # Copy so a caller can't mutate the shared default; handle list sections
             # (e.g. ``now_running``) as well as the dict ones.
             sections[name] = list(default) if isinstance(default, list) else dict(default)
+        else:
+            sections[name] = result
     sections["errors"] = errors
     sections["instance_id"] = lhassa_config.Config.instance_id
     sections["generated_at"] = int(time.time())

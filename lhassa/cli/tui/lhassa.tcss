@@ -137,7 +137,10 @@ OverviewScreen .ov-card-title {
 
 OverviewScreen Horizontal.ov-row {
     height: 1;
-    padding: 0 0 1 0;
+    /* Spacing MUST be margin, not padding: Textual subtracts padding from the
+       declared height, so `height: 1` + `padding-bottom: 1` left zero rows of
+       content and every label/value rendered invisible. */
+    margin: 0 0 1 0;
 }
 
 OverviewScreen .ov-label {

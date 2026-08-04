@@ -212,9 +212,21 @@ class LocalModelProvider:
         import httpx
 
         if self._client_factory is not None:
+            # Injectable path (tests): a fresh client per call, as before.
             client = self._client_factory()
+            close_after = True
         else:
-            client = httpx.AsyncClient(timeout=_LOCAL_TIMEOUT)
+            # Production: REUSE a cached AsyncClient keyed by endpoint, mirroring
+            # ``_agent_clients`` — per-call client construction costs TCP/TLS +
+            # pool teardown on every completion on the $0 local seat (the most
+            # frequently used one). The client is closed at process shutdown via
+            # ``main._close_http_clients``-style hooks; never per call.
+            key = ("httpx", endpoint, _LOCAL_TIMEOUT)
+            client = _agent_clients.get(key)
+            if client is None:
+                client = httpx.AsyncClient(timeout=_LOCAL_TIMEOUT)
+                _agent_clients[key] = client
+            close_after = False
 
         try:
             try:
@@ -235,12 +247,13 @@ class LocalModelProvider:
                     f"local model unreachable at {url}: bad response ({exc})"
                 ) from exc
         finally:
-            aclose = getattr(client, "aclose", None)
-            if aclose is not None:
-                try:
-                    await aclose()
-                except Exception:
-                    pass
+            if close_after:
+                aclose = getattr(client, "aclose", None)
+                if aclose is not None:
+                    try:
+                        await aclose()
+                    except Exception:
+                        pass
 
         usage = data.get("usage") or {}
         return Completion(

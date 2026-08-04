@@ -177,3 +177,24 @@ async def test_approvals_screen_approve_key_resolves(brain):
     assert pending == []
     resolved = await brain.get_approval(INSTANCE, "ap_test2")
     assert resolved["estado"] == "aprobada"
+
+
+async def test_overview_rows_actually_have_height():
+    """A card's label/value rows must render, not collapse to zero rows.
+
+    Textual subtracts padding from a declared height, so `height: 1` plus
+    `padding-bottom: 1` left zero rows of content: the Overview cards showed
+    their titles and nothing else. Spacing there must be margin. Automated
+    tests passed while the screen was visibly empty — this is the assertion
+    that would have caught it.
+    """
+    from lhassa.cli.tui.app import LhassaTui
+
+    app = LhassaTui()
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        labels = app.query(".ov-label")
+        values = app.query(".ov-value")
+        assert labels and values, "Overview rendered no label/value rows"
+        assert all(w.size.height >= 1 for w in labels), "labels collapsed to zero height"
+        assert all(w.size.height >= 1 for w in values), "values collapsed to zero height"
