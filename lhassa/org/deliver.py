@@ -247,9 +247,12 @@ async def deliver(
          empty/unknown ``origin_department``) degrades to a single
          root-attributed hop — it never blocks the send.
       3. **Send**: a ``document`` goes out via
-         :func:`lhassa.notify.telegram_api.send_document`; a plain ``text`` (no
-         document) fans out via :func:`lhassa.notify.dispatch.notify`. Both are
-         the existing config-gated seams — an unconfigured channel simply
+         :func:`lhassa.notify.telegram_api.send_document`, its ``caption``
+         routed through :func:`lhassa.notify.voice.revoice` first (the
+         document path used to bypass the voice layer entirely — closed); a
+         plain ``text`` (no document) fans out via
+         :func:`lhassa.notify.dispatch.notify`, which already revoices.  Both
+         are the existing config-gated seams — an unconfigured channel simply
          doesn't deliver.
       4. **Final root episode** recording the actual send OUTCOME — honest on
          failure (``"...({channel}, failed)"``), never spun as a success.
@@ -297,8 +300,17 @@ async def deliver(
     try:
         if document:
             from lhassa.notify import telegram_api
+            from lhassa.notify import voice as _voice
 
-            delivered = await telegram_api.send_document(document, caption=caption, config=config)
+            # Close the voice bypass: a document's caption used to reach the
+            # owner raw, skipping revoice entirely — the ONE surface where
+            # machine text could still get through. Route it through the same
+            # $0 voice layer text-only deliveries already get.
+            voice_kind = kind if kind in _voice.KINDS else None
+            voiced_caption = await _voice.revoice(caption, kind=voice_kind, config=config)
+            delivered = await telegram_api.send_document(
+                document, caption=voiced_caption, config=config
+            )
         else:
             from lhassa.notify import voice as _voice
             from lhassa.notify.dispatch import notify

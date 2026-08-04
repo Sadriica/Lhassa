@@ -154,22 +154,61 @@ STYLE_GUIDE = {
     "avoid": "fake enthusiasm, hype, jargon, talking down, over-explaining, forced jokes",
 }
 
-# Severity → short human lead-in for templated alerts (no model needed).
-_ALERT_LEADS = {
+# ── The $0 notification vocabulary — the ONE source both the LLM-free alert
+# formatter below (keyed by health/watcher SEVERITY) and the notify voice
+# layer (:mod:`lhassa.notify.voice`, keyed by notification KIND) draw from.
+# Before this table existed the two carried their own near-copies of the same
+# phrases ("Heads up: " in voice.py vs "Heads up — " here) that were free to
+# drift apart even though they meant the same thing — the root cause behind
+# Lhassa's identity never actually reaching the messages the owner receives.
+# English is the default register; ``LEAD_PHRASES_ES`` mirrors it for owners
+# whose ``config.digest_language`` (reused as the general notify-language
+# signal) is Spanish — see :func:`lead_phrases`.
+LEAD_PHRASES: dict[str, str] = {
+    "reminder": "You asked me to remind you: ",
+    "action-result": "Done — ",
+    "alert": "Heads up — ",
+    "escalation": "Something needs a look — ",
+    "approval": "Waiting on your word: ",
+    "learned": "I learned something — ",
+}
+
+LEAD_PHRASES_ES: dict[str, str] = {
+    "reminder": "Me pediste que te lo recordara: ",
+    "action-result": "Listo — ",
+    "alert": "Aviso — ",
+    "escalation": "Esto necesita tu atención — ",
+    "approval": "Esperando tu palabra: ",
+    "learned": "Aprendí algo — ",
+}
+
+
+def lead_phrases(language: str = "") -> dict[str, str]:
+    """The lead-phrase table for ``language`` ("es" family, else English)."""
+    return LEAD_PHRASES_ES if (language or "").strip().lower().startswith("es") else LEAD_PHRASES
+
+
+# health/watcher severities map onto the same vocabulary above — "info" gets
+# no lead (a plain factual line needs no framing).
+_SEVERITY_TO_LEAD: dict[str, str] = {
     "info": "",
-    "notice": "Heads up — ",
-    "warn": "Heads up — ",
-    "alert": "Something needs a look — ",
+    "notice": "alert",
+    "warn": "alert",
+    "alert": "escalation",
 }
 
 
 def format_alert(body: str, level: str = "warn", suggestion: str = "") -> str:
     """Render a notification line in Lhassa' voice — used by the LLM-free monitors.
 
-    Keep `body` to a short factual statement; `suggestion` is an optional,
-    gentle next step. No emoji, no alarm.
+    Draws its lead phrase from :data:`LEAD_PHRASES` (the same table
+    :mod:`lhassa.notify.voice` uses) via the severity→lead mapping above, so a
+    watcher alert and a voice-layer alert never drift into two different
+    phrasings of "heads up". Keep `body` to a short factual statement;
+    `suggestion` is an optional, gentle next step. No emoji, no alarm.
     """
-    lead = _ALERT_LEADS.get(level, _ALERT_LEADS["warn"])
+    lead_key = _SEVERITY_TO_LEAD.get(level, "alert")
+    lead = LEAD_PHRASES.get(lead_key, "") if lead_key else ""
     text = f"{lead}{body}".strip()
     if suggestion:
         text = f"{text} {suggestion}".strip()

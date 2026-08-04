@@ -1,5 +1,52 @@
 # Lhassa — decisions log
 
+## 2026-08-03 — A real voice: the $0 plane finally speaks as Lhassa (Stream 4)
+
+Root cause, confirmed: the deterministic notification plane never consulted
+`persona.py`. `notify/voice.py`'s lead phrases and `persona.format_alert`'s
+lead phrases were two hand-maintained near-copies ("Heads up: " vs
+"Heads up — ") that were free to drift, and `notify_style="template"` (the
+default) never touched `persona.py` at all — only the opt-in, off-by-default
+persona pass did. So the messages the owner actually received never carried
+Lhassa's identity unless a model call happened to be spent on them.
+
+Fixed, all deterministic, zero model calls:
+
+1. **One source of voice.** `persona.LEAD_PHRASES` (+ a Spanish mirror,
+   `LEAD_PHRASES_ES`) is now the single vocabulary; `notify/voice.py` imports
+   it instead of carrying its own `_FRAMING` dict, and `persona.format_alert`
+   draws from the same table via a severity→lead mapping. The duplicated
+   strings are gone.
+2. **The phrasebook is an obligation.** New `notify/phrasebook.py` gives every
+   allowlisted action (the union of `security.allowlist.build_allowlist()` and
+   `actionpack._temple.TEMPLE_ACTIONS`) a natural first-person lead, plus
+   intent overrides (`LEARNED_ACTIONS`, `ATTENTION_ACTIONS`) so an
+   action-result reads as "Done — ", "Heads up — ", or "I learned
+   something — " depending on what actually happened, not one blanket
+   framing. `tests/test_notify_phrasebook.py` is the parity guard — it fails
+   the moment a new allowlisted action ships with no phrasing.
+3. **Identity reaches the $0 plane.** `voice.template()` now takes an optional
+   `config` and applies two deterministic identity effects with no model call:
+   localizes the lead phrase to the owner's language
+   (`config.digest_language`, reused as the general notify-language signal),
+   and caps notification length when the loaded identity carries a
+   "keep it concise" directive (`persona.load_identity`) — live today, since
+   the default personal identity already carries
+   "responder conciso por defecto".
+4. **Closed the `org/deliver.py` document bypass.** A delivered document's
+   caption used to go straight to `telegram_api.send_document`, skipping
+   `revoice()` entirely — the one surface where machine text could still
+   reach the owner. The caption now routes through the same voice layer a
+   text-only delivery already gets.
+5. **Templates by intent, not only by kind** — implemented as point 2's
+   intent overrides rather than a separate mechanism, since kind-level
+   framing was already too coarse for action-results specifically.
+
+Full suite: 2338 passed, ruff clean. `tests/test_notify_voice.py` and
+`tests/test_persona.py` were updated where the unified "Heads up — " phrasing
+(dash, not colon) changed an asserted string; behavior for `format_alert`
+itself is unchanged (verified by existing tests).
+
 ## 2026-08-03 — El CI de macOS corrige la auditoría que lo precedió
 
 The first real macOS CI run (triggered by the push to `main`) came back
