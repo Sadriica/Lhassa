@@ -417,10 +417,20 @@ status asserts an outcome) / `verified` (observed AND independently corroborated
 a passing verify result, or a resolved linked approval) — a pure derived read, no
 new storage, never a stronger claim than the evidence supports.
 
-**The brain in a terminal.** `lhassa tui` (`cli/tui/`) is a Textual app — four tabs
-(Overview/Projects/Runs/Approvals) reading `core/db.py` directly, so it works with
-the API server down; approve/deny (`a`/`d` keys) go through the same
-`security/approval.py:resolve()` seam as the CLI/API.
+**The brain in a terminal.** `lhassa tui` (`cli/tui/`) is a Textual app — **eight
+tabs** (Overview/Projects/Runs/Approvals/Flows/Skills/Memory/Org) reading
+`core/db.py`, `flows/store.py`, `skills/store.py` and `org/topology.py` DIRECTLY,
+so it works with the API server down. Every table screen subclasses
+`cli/tui/screens/base.py:TableScreen`, which is where the three app-wide
+affordances live: a `/` case-insensitive **substring filter** (predictable beats
+fuzzy), **live refresh** on a `set_interval` that SKIPS the redraw when the rows
+are unchanged (no flicker, cursor/scroll preserved) and degrade-to-empty on any
+read failure. `cli/tui/palette.py` registers screen navigation + app actions with
+Textual's own **command palette** (`ctrl+p`) — navigation only, never mutations;
+`screens/help.py` is the **keyboard-help** modal (`?`/`F1`). Mutations cross the
+same seams every other surface uses: approve/deny (`a`/`d`) through
+`security/approval.py:resolve()`, running a flow (`x` on the Flows tab) through
+`org/delegate.py:delegate_flow` — never `run_flow`, never raw SQL.
 
 **The temple (`temple`) — Lhassa's own inner department.** Distinct from `interns`
 (CV workers) and `personal` (the owner's own department): `temple` is a DIRECT

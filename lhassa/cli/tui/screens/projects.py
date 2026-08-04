@@ -5,15 +5,17 @@
 used to scope ``runs`` to a project (see ``core/projects.py``). The evidence
 column renders through ``lhassa.memory.evidence.evidence_state`` — the same
 humblest-first claim ladder used elsewhere.
+
+A :class:`~lhassa.cli.tui.screens.base.TableScreen`, so the project list gains
+the ``/`` filter and the live re-poll; the runs pane refreshes with it.
 """
 
 from __future__ import annotations
 
 from textual.app import ComposeResult
-from textual.containers import Vertical
 from textual.widgets import DataTable, Static
 
-_EMPTY = "—"
+from lhassa.cli.tui.screens.base import EMPTY, Row, TableScreen
 
 
 async def _load_projects(instance_id: str) -> list[dict]:
@@ -32,9 +34,7 @@ async def _load_runs_for_project(instance_id: str, project_id: str) -> list[dict
 
     try:
         await db.init_db()
-        return await db.list_runs(
-            instance_id, entity_id=entity_tag(project_id), limit=50
-        )
+        return await db.list_runs(instance_id, entity_id=entity_tag(project_id), limit=50)
     except Exception:
         return []
 
@@ -48,16 +48,14 @@ def _evidence_of(row: dict) -> str:
         return "prepared"
 
 
-class ProjectsScreen(Vertical):
+class ProjectsScreen(TableScreen):
     """Top: a DataTable of projects. Bottom: recent runs for the selected one."""
 
+    COLUMNS = ("name", "kind", "status", "path")
+    TABLE_ID = "projects-table"
+    FILTER_PLACEHOLDER = "filter projects…"
+
     DEFAULT_CSS = """
-    ProjectsScreen {
-        padding: 1 2;
-    }
-    ProjectsScreen #projects-table {
-        height: 1fr;
-    }
     ProjectsScreen #runs-label {
         padding: 1 0 0 0;
     }
@@ -66,51 +64,52 @@ class ProjectsScreen(Vertical):
     }
     """
 
-    BINDINGS = [("r", "refresh", "Refresh")]
-
     def __init__(self, instance_id: str, **kwargs) -> None:
-        super().__init__(**kwargs)
-        self._instance_id = instance_id
-        self._project_ids: list[str] = []
+        super().__init__(instance_id, **kwargs)
+        self._selected_project = ""
 
     def compose(self) -> ComposeResult:
-        table = DataTable(id="projects-table", cursor_type="row")
-        table.add_columns("name", "kind", "status", "path")
-        yield table
+        yield from super().compose()
         yield Static("Recent runs — select a project above", id="runs-label")
         runs_table = DataTable(id="project-runs-table", cursor_type="row")
         runs_table.add_columns("id", "kind", "status", "cost", "evidence")
         yield runs_table
 
-    async def on_mount(self) -> None:
-        await self.action_refresh()
+    async def load_rows(self) -> list[Row]:
+        out: list[Row] = []
+        for row in await _load_projects(self._instance_id):
+            out.append(
+                (
+                    str(row.get("id")),
+                    (
+                        str(row.get("name") or EMPTY),
+                        str(row.get("kind") or EMPTY),
+                        str(row.get("status") or EMPTY),
+                        str(row.get("path") or EMPTY),
+                    ),
+                )
+            )
+        return out
 
     async def action_refresh(self) -> None:
-        rows = await _load_projects(self._instance_id)
-        table = self.query_one("#projects-table", DataTable)
-        table.clear()
-        self._project_ids = []
-        for row in rows:
-            table.add_row(
-                str(row.get("name") or _EMPTY),
-                str(row.get("kind") or _EMPTY),
-                str(row.get("status") or _EMPTY),
-                str(row.get("path") or _EMPTY),
-                key=str(row.get("id")),
-            )
-            self._project_ids.append(str(row.get("id")))
+        await super().action_refresh()
+        if self._selected_project:
+            await self._load_runs(self._selected_project)
 
     async def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
-        if event.data_table.id != "projects-table":
+        if event.data_table.id != self.TABLE_ID:
             return
-        project_id = str(event.row_key.value)
-        await self._load_runs(project_id)
+        self._selected_project = str(event.row_key.value or "")
+        await self._load_runs(self._selected_project)
 
     async def _load_runs(self, project_id: str) -> None:
-        label = self.query_one("#runs-label", Static)
+        try:
+            label = self.query_one("#runs-label", Static)
+            runs_table = self.query_one("#project-runs-table", DataTable)
+        except Exception:
+            return
         label.update(f"Recent runs — [accent]{project_id}[/]")
         runs = await _load_runs_for_project(self._instance_id, project_id)
-        runs_table = self.query_one("#project-runs-table", DataTable)
         runs_table.clear()
         for run in runs:
             cost = run.get("cost_usd") or 0.0
@@ -119,9 +118,9 @@ class ProjectsScreen(Vertical):
             except (TypeError, ValueError):
                 cost = 0.0
             runs_table.add_row(
-                str(run.get("id") or _EMPTY),
-                str(run.get("kind") or _EMPTY),
-                str(run.get("status") or _EMPTY),
+                str(run.get("id") or EMPTY),
+                str(run.get("kind") or EMPTY),
+                str(run.get("status") or EMPTY),
                 f"${cost:.4f}",
                 _evidence_of(run),
                 key=str(run.get("id")),

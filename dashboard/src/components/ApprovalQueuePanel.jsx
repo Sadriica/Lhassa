@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { getApprovals, resolveApproval } from '../lib/api'
 import { toast } from '../lib/toast'
 import { shortWhen } from '../lib/format'
 
@@ -13,8 +14,7 @@ export default function ApprovalQueuePanel() {
 
   const load = useCallback(async () => {
     try {
-      const r = await fetch('/api/approvals')
-      const data = await r.json()
+      const data = await getApprovals()
       setApprovals(Array.isArray(data) ? data : [])
       setError('')
     } catch {
@@ -36,15 +36,7 @@ export default function ApprovalQueuePanel() {
     setBusy(id)
     setError('')
     try {
-      const r = await fetch(`/api/approvals/${id}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ approved }),
-      })
-      if (!r.ok) {
-        const d = await r.json().catch(() => ({}))
-        throw new Error(d.detail || 'Resolve failed')
-      }
+      await resolveApproval(id, approved)
       setApprovals(prev => prev.filter(a => a.id !== id))
       toast.success(approved ? 'Approved.' : 'Denied.')
     } catch (e) {
