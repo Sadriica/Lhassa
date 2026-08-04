@@ -23,8 +23,8 @@ class Task:
     """A typed, signed work item (§2.5).
 
     ``accion`` is a CLOSED set ("sync_repo", ...). ``origen`` carries trust + the
-    WHO. ``firma`` is the Ed25519 signature over ``canonical_bytes()`` and is the
-    ONLY field not itself covered by the signature.
+    WHO. ``firma`` is the Ed25519 signature over ``canonical_bytes()``. ``estado``
+    is mutable workflow metadata, so it is outside the signed execution envelope.
     """
 
     id: str
@@ -38,7 +38,7 @@ class Task:
     creado_en: str = ""
 
     def canonical_bytes(self) -> bytes:
-        """Deterministic bytes of the SIGNABLE fields (everything except ``firma``).
+        """Deterministic bytes of the immutable, execution-relevant fields.
 
         These are the exact bytes that get signed and verified: a JSON object
         with sorted keys, compact separators, UTF-8, and the origin flattened the
@@ -53,7 +53,6 @@ class Task:
             "params": self.params,
             "origen_trust": int(self.origen.trust),
             "origen_actor": self.origen.actor_id,
-            "estado": self.estado,
             "creado_en": self.creado_en,
         }
         return json.dumps(
@@ -72,6 +71,7 @@ class Task:
             "origen_actor": self.origen.actor_id,
             "estado": self.estado,
             "firma": self.firma,
+            "creado_en": self.creado_en,
         }
 
     @classmethod

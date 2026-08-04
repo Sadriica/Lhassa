@@ -11,6 +11,7 @@ from types import SimpleNamespace
 import pytest
 
 from lhassa.skills.store import SkillStore
+from lhassa.skills.skillmd import Skill
 
 
 @pytest.fixture
@@ -57,3 +58,49 @@ def test_get_does_not_read_outside_the_store(store):
     (base / "outside").mkdir()
     (base / "outside" / "SKILL.md").write_text("---\nname: leaked\n---\nsecret")
     assert st.get("../outside") is None
+
+
+def test_symlink_cannot_redirect_save_or_read_outside_store(store):
+    st, base, root = store
+    outside = base / "outside"
+    outside.mkdir()
+    (outside / "SKILL.md").write_text("---\nname: leaked\n---\nsecret")
+    (root / "escape").symlink_to(outside, target_is_directory=True)
+
+    with pytest.raises(ValueError):
+        st.save(Skill(name="escape", description="d", instructions="body"))
+    assert st.get("escape") is None
+    assert st.list_skills() == []
+    assert (outside / "SKILL.md").read_text().endswith("secret")
+
+
+def test_in_store_folder_alias_cannot_overwrite_or_delete_target(store):
+    st, _base, root = store
+    target = root / "real"
+    target.mkdir()
+    (target / "SKILL.md").write_text("---\nname: real\n---\nprecious")
+    (root / "alias").symlink_to(target, target_is_directory=True)
+
+    with pytest.raises(ValueError):
+        st.save(Skill(name="alias", description="d", instructions="overwrite"))
+    assert st.delete("alias") is False
+    assert target.exists()
+    assert (target / "SKILL.md").read_text().endswith("precious")
+
+
+def test_definition_symlink_cannot_read_or_write_outside_store(store):
+    st, base, root = store
+    outside = base / "outside-definition.md"
+    outside.write_text("secret")
+    folder = root / "linked-definition"
+    folder.mkdir()
+    (folder / "SKILL.md").symlink_to(outside)
+
+    got = st.get("linked-definition")
+    assert got is not None and got.error
+    assert "secret" not in got.instructions
+    with pytest.raises(ValueError):
+        st.save(
+            Skill(name="linked-definition", description="d", instructions="overwrite")
+        )
+    assert outside.read_text() == "secret"

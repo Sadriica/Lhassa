@@ -217,6 +217,12 @@ class Config:
     semantic_consolidation: bool = os.getenv(
         "LHASSA_SEMANTIC_CONSOLIDATION", "1"
     ).lower() in ("1", "true", "yes")
+    # Explicit cost boundary for episode distillation.  Keep this separate from
+    # semantic consolidation: both may spend, and either must be independently
+    # stoppable at the module edge regardless of which caller invokes it.
+    memory_distill_enabled: bool = os.getenv(
+        "LHASSA_MEMORY_DISTILL_ENABLED", "1"
+    ).strip().lower() in ("1", "true", "yes", "on")
 
     # Incremental backup mirror of the grande (brain.db). Cheap to re-run; the
     # mirror is overwritten/rotated each time. Restorations are verified.

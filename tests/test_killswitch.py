@@ -8,6 +8,7 @@ tmp_path, and the API is driven through ``httpx.ASGITransport`` (no live network
 import httpx
 import pytest
 import pytest_asyncio  # noqa: F401  (registers asyncio mode)
+from types import SimpleNamespace
 
 from lhassa.llm.gateway import (
     BudgetExceeded,
@@ -136,6 +137,92 @@ async def test_releasing_switch_restores_normal_behaviour(gw, metrics_guard):
     assert calls["n"] == 1
 
 
+async def test_singleton_kill_switch_blocks_every_first_party_cli_and_local(
+    monkeypatch,
+):
+    """The process switch is checked before subprocess/network provider work."""
+    from lhassa.llm.gateway import gateway
+    from lhassa.llm.provider import (
+        ClaudeCodeProvider,
+        CodexProvider,
+        LocalModelProvider,
+        OpenCodeProvider,
+    )
+
+    calls = {"runner": 0, "client": 0}
+
+    async def forbidden_runner(argv):
+        calls["runner"] += 1
+        raise AssertionError("CLI runner must not start while killed")
+
+    def forbidden_client():
+        calls["client"] += 1
+        raise AssertionError("local HTTP client must not start while killed")
+
+    cfg = SimpleNamespace(
+        llm_kill_switch=False,
+        local_model_url="http://127.0.0.1:11434/v1",
+        local_model="local",
+        opencode_bin="opencode",
+        opencode_model="test",
+        claude_bin="claude",
+        claude_model="",
+        codex_bin="codex",
+        codex_model="",
+    )
+    providers = [
+        OpenCodeProvider(cfg, runner=forbidden_runner),
+        ClaudeCodeProvider(cfg, runner=forbidden_runner),
+        CodexProvider(cfg, runner=forbidden_runner),
+        LocalModelProvider(cfg, client_factory=forbidden_client),
+    ]
+    monkeypatch.setattr(gateway, "_kill_switch", True)
+    monkeypatch.setattr(gateway, "_kill_switch_overridden", True)
+
+    for provider in providers:
+        with pytest.raises(KillSwitchActive):
+            await provider.complete(MESSAGES)
+
+    assert calls == {"runner": 0, "client": 0}
+
+
+async def test_config_kill_switch_blocks_cli_before_runner(monkeypatch):
+    """A live Config setting also engages the shared guard before CLI work."""
+    from lhassa.llm.gateway import gateway
+    from lhassa.llm.provider import OpenCodeProvider
+
+    calls = {"runner": 0}
+
+    async def forbidden_runner(argv):
+        calls["runner"] += 1
+        raise AssertionError("CLI runner must not start while killed")
+
+    cfg = SimpleNamespace(
+        llm_kill_switch=True,
+        opencode_bin="opencode",
+        opencode_model="test",
+    )
+    monkeypatch.setattr(gateway, "_kill_switch", False)
+    monkeypatch.setattr(gateway, "_kill_switch_overridden", False)
+
+    with pytest.raises(KillSwitchActive):
+        await OpenCodeProvider(cfg, runner=forbidden_runner).complete(MESSAGES)
+    assert calls["runner"] == 0
+
+
+async def test_runtime_release_overrides_boot_config_true(gw, metrics_guard):
+    """Dashboard release remains authoritative over an enabled boot default."""
+    cfg = FakeConfig(llm_cache_enabled=False)
+    cfg.llm_kill_switch = True
+    fake, calls = make_fake_completion(text="released")
+
+    gw.set_kill_switch(False)
+    result = await gw.complete(MESSAGES, config=cfg, completion_fn=fake)
+
+    assert result.text == "released"
+    assert calls["n"] == 1
+
+
 # ── Runtime budget override (persisted) ──────────────────────────────────────
 
 
@@ -172,6 +259,7 @@ async def test_limits_get_post_round_trip(tmp_path, monkeypatch):
     monkeypatch.setattr(gateway, "_initialized", False)
     monkeypatch.setattr(gateway, "_budget_override", None)
     monkeypatch.setattr(gateway, "_kill_switch", False)
+    monkeypatch.setattr(gateway, "_kill_switch_overridden", False)
 
     transport = httpx.ASGITransport(app=server.app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
@@ -217,6 +305,7 @@ async def test_ledger_endpoint_exposes_kill_switch(tmp_path, monkeypatch):
     monkeypatch.setattr(gateway, "_initialized", False)
     monkeypatch.setattr(gateway, "_budget_override", None)
     monkeypatch.setattr(gateway, "_kill_switch", True)
+    monkeypatch.setattr(gateway, "_kill_switch_overridden", False)
 
     transport = httpx.ASGITransport(app=server.app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:

@@ -1,5 +1,48 @@
 # Lhassa — decisions log
 
+## 2026-08-03 — Security sweep closure: every execution path enforces the same contract
+
+The findings deferred by the philosophy sweep, plus the follow-up audit findings,
+are closed in this pass. This entry is the durable project memory for the change;
+the normative behavior lives in `doc/security.md` and `doc/calendar.md`, and the
+regressions are executable in the corresponding `tests/test_*.py` modules.
+
+- **Local execution no longer bypasses policy.** Persisted tasks are signed at
+  creation, retain the exact signed creation timestamp across watchlist transport,
+  and are verified before fixed actions, reflexes, judgment or delegation. The
+  heartbeat and `run_task_now` both reload the stored envelope, cross the same
+  deny-by-default allowlist, and reject tampering terminally with an episode.
+- **Approval is evidence at execution time, not just a routing decision.** An
+  approval-required task can run only with either a valid autonomy decision or a
+  durable approved `mint_task` row for that exact task id. This final check applies
+  even to callers that reach the database/dispatch seam directly.
+- **Approval identity and separation of duties are fail-closed.** API, CLI, TUI and
+  Telegram resolve approvals as the canonical owner principal; user-controlled
+  `by_actor` is audit metadata, never authority. High-risk actions, including
+  `run_command`, `run_script`, protected-root reads and non-read-only project
+  attachment, require proposer and approver to differ. A missing proposer is not a
+  reason to waive the rule.
+- **The model kill switch is global.** Every provider checks it immediately before
+  opening HTTP or launching a local CLI subprocess. It also remains a hard stop in
+  the heartbeat, fallback chain, Telegram and `/ai`; no alternate provider may turn
+  an emergency stop into fallback behavior.
+- **Calendar feeds resist redirect and DNS-rebinding SSRF.** Every redirect target is
+  revalidated, automatic redirects are disabled, and the HTTP connection uses the
+  public IP that passed validation while preserving the original Host header and TLS
+  server name. Unsafe/unresolvable feeds may use an existing stale cache but never
+  make the network request.
+- **The skill store has one filesystem boundary.** Symlinked skill directories,
+  aliases, definitions and resources cannot escape or reinterpret the store. The
+  directory name is the canonical identity, so hostile frontmatter cannot redirect
+  export/delete behavior.
+- **Memory spend is explicit.** `LHASSA_MEMORY_DISTILL_ENABLED` is now a declared
+  configuration and live setting; disabling it stops episode distillation before
+  provider selection for scheduled, CLI and future callers.
+
+Verification at closure: **2407 passed**, `ruff check .` clean and
+`git diff --check` clean. The only suite warning is the pre-existing asyncio
+deprecation in `tests/test_actionpack.py::test_web_fetch_happy_path`.
+
 ## 2026-08-03 — Round two: the traversal that could delete the brain
 
 A second wave of four reviewers closed the gaps the first six had not covered

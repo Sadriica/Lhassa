@@ -66,6 +66,8 @@ class Trigger:
     due_at: Optional[str] = None
     recurrence: Optional[str] = None
     judgment: bool = False
+    firma: str = ""
+    creado_en: str = ""
 
     def maps_to_fixed_action(self) -> bool:
         """True iff ``action`` is in the closed deterministic set (no LLM needed).
@@ -97,6 +99,8 @@ async def _from_pending_tasks(
                 due_at=task.get("due_at"),
                 recurrence=task.get("recurrence"),
                 judgment=bool((task.get("params") or {}).get("_judgment")),
+                firma=task.get("firma") or "",
+                creado_en=task.get("creado_en") or "",
             )
         )
 

@@ -170,6 +170,7 @@ async def approve(
     instance_id: Optional[str] = None,
     approval_id: Optional[str] = None,
     by_actor: str = "duenio",
+    approver: Optional[approval.TrustedApprover] = None,
 ) -> str:
     """Graduate a candidate: **approval = merge** (the brief's "aprobación = merge").
 
@@ -192,7 +193,13 @@ async def approve(
         approval_id = await approval.request_approval(
             inst, tipo="tool_graduation", payload=payload
         )
-    await approval.resolve(inst, approval_id, approved=True, by_actor=by_actor)
+    await approval.resolve(
+        inst,
+        approval_id,
+        approved=True,
+        by_actor=by_actor,
+        approver=approver,
+    )
 
     repo = await init()
     if repo is None or not git_available():

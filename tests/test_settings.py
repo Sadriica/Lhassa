@@ -22,6 +22,11 @@ def env(tmp_path, monkeypatch):
     Config = config_mod.Config
     for entry in settings.EDITABLE:
         monkeypatch.setattr(Config, entry["attr"], getattr(Config, entry["attr"]))
+    from lhassa.llm.gateway import gateway
+    monkeypatch.setattr(gateway, "_kill_switch", gateway._kill_switch)
+    monkeypatch.setattr(
+        gateway, "_kill_switch_overridden", gateway._kill_switch_overridden
+    )
     return tmp_path
 
 
@@ -58,6 +63,8 @@ def test_set_bool_writes_settings_env_and_applies_live(env):
     assert "LHASSA_KILL_SWITCH=1" in _settings_env_text(env)
     # Applied live on the Config class so the running API reflects it immediately.
     assert config_mod.Config.llm_kill_switch is True
+    from lhassa.llm.gateway import gateway
+    assert gateway.kill_switch is True
     # effective() now reports it overridden.
     row = settings.get("llm_kill_switch")
     assert row["overridden"] is True and row["value"] is True

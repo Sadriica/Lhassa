@@ -74,7 +74,9 @@ def _list_resources(folder: Path) -> list:
     """Filenames bundled alongside the definition in ``folder`` (sorted)."""
     out: list = []
     for p in sorted(folder.iterdir()):
-        if p.is_file() and p.name not in _DEFINITION_FILES:
+        # A bundled symlink can otherwise make export/import copy bytes from
+        # outside the skill. Resources are ordinary files, never aliases.
+        if not p.is_symlink() and p.is_file() and p.name not in _DEFINITION_FILES:
             out.append(p.name)
     return out
 
@@ -153,7 +155,13 @@ class SkillStore:
             import hashlib
 
             slug = "skill-" + hashlib.sha256(raw.encode("utf-8")).hexdigest()[:12]
-        folder = (self.root / slug).resolve()
+        lexical = self.root / slug
+        # Reject aliases even when their target remains under the root: delete
+        # of ``a -> b`` must never rmtree the real skill ``b``, and save must
+        # never overwrite it through the alias.
+        if lexical.is_symlink():
+            raise ValueError(f"skill folder {lexical} is a symlink")
+        folder = lexical.resolve()
         root = self.root.resolve()
         if folder == root or root not in folder.parents:
             raise ValueError(f"skill name {name!r} does not resolve inside the store")
@@ -175,9 +183,22 @@ class SkillStore:
             return []
         out: list[Skill] = []
         for child in sorted(root.iterdir()):
-            if child.is_dir():
-                out.append(_read_skill_folder(child))
+            if not child.is_symlink() and self._inside(child) and child.is_dir():
+                skill = self._read_stored(child)
+                if skill is not None:
+                    out.append(skill)
         return out
+
+    def _read_stored(self, folder: Path) -> Optional[Skill]:
+        """Read one installed folder without following definition symlinks."""
+        for filename in _DEFINITION_FILES:
+            definition = folder / filename
+            if definition.is_symlink():
+                logger.warning("skills: refusing symlinked definition {}", definition)
+                return Skill(name=folder.name, error="skill definition may not be a symlink")
+        # The directory name is the store identity. Do not let hand-written
+        # frontmatter such as ``name: ../../x`` become an export path.
+        return replace(_read_skill_folder(folder), name=folder.name)
 
     def get(self, name: str) -> Optional[Skill]:
         """The skill named ``name``, or ``None`` if it is not in the store.
@@ -187,7 +208,10 @@ class SkillStore:
         bumps the curator's usage telemetry (best-effort — see
         :mod:`lhassa.skills.curator`; never breaks a caller on failure).
         """
-        folder = self.folder_for(name)
+        try:
+            folder = self.folder_for(name)
+        except ValueError:
+            return None
         if not folder.exists() or not folder.is_dir():
             # Tolerate an exact (un-slugified) folder name too.
             alt = self.root / name
@@ -195,7 +219,9 @@ class SkillStore:
                 folder = alt
             else:
                 return None
-        skill = _read_skill_folder(folder)
+        skill = self._read_stored(folder)
+        if skill is None:
+            return None
         try:
             from lhassa.skills import curator as _curator
 
@@ -229,9 +255,15 @@ class SkillStore:
         name = slugify(skill.name) or slugify(skill.description.split("\n")[0])
         if not name:
             raise ValueError("cannot save a skill with no name")
-        folder = self.root / name
+        # Use the same resolved boundary as get/delete.  In particular, refuse
+        # a pre-existing symlink named like the skill that points outside the
+        # store instead of following it while writing SKILL.md.
+        folder = self.folder_for(name)
         folder.mkdir(parents=True, exist_ok=True)
-        (folder / SKILL_MD).write_text(
+        definition = folder / SKILL_MD
+        if definition.is_symlink() or definition.resolve().parent != folder.resolve():
+            raise ValueError("skill definition path is not a regular file inside its folder")
+        definition.write_text(
             to_skill_md(replace(skill, name=name)), encoding="utf-8"
         )
         return folder

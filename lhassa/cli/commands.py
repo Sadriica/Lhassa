@@ -147,17 +147,26 @@ async def _resolve(approval_id: str, approved: bool, by_actor: str) -> None:
     await db.init_db()
     try:
         await approval.resolve(
-            _instance_id(), approval_id, approved=approved, by_actor=by_actor
+            _instance_id(),
+            approval_id,
+            approved=approved,
+            by_actor=by_actor,
+            approver=approval.TrustedApprover("owner", "local-process"),
         )
     except KeyError:
         raise typer.BadParameter(f"no approval {approval_id!r}") from None
-    except approval.ApprovalResolutionConflict as exc:
+    except (
+        approval.ApprovalResolutionConflict,
+        approval.ApprovalAuthorizationError,
+    ) as exc:
         raise typer.BadParameter(str(exc)) from None
 
 
 def approve_cmd(
     approval_id: str = typer.Argument(..., help="The approval id to approve."),
-    by_actor: str = typer.Option("duenio", "--by", help="Who resolved it (audit trail)."),
+    by_actor: str = typer.Option(
+        "duenio", "--by", help="Audit label (CLI identity remains authoritative)."
+    ),
     json_out: bool = typer.Option(False, "--json", help="Emit the result as JSON."),
 ) -> None:
     """Approve a pending approval (feeds the autonomy knob)."""
@@ -170,7 +179,9 @@ def approve_cmd(
 
 def deny_cmd(
     approval_id: str = typer.Argument(..., help="The approval id to deny."),
-    by_actor: str = typer.Option("duenio", "--by", help="Who resolved it (audit trail)."),
+    by_actor: str = typer.Option(
+        "duenio", "--by", help="Audit label (CLI identity remains authoritative)."
+    ),
     json_out: bool = typer.Option(False, "--json", help="Emit the result as JSON."),
 ) -> None:
     """Deny a pending approval (resets its autonomy streak)."""

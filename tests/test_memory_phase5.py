@@ -299,6 +299,25 @@ async def test_distill_happy_path(tmp_path, monkeypatch):
 # ── Test 8: distill malformed JSON ───────────────────────────────────────────────
 
 @pytest.mark.asyncio
+async def test_distill_boundary_flag_stops_before_provider_resolution():
+    from lhassa.memory import consolidate
+
+    with patch.object(
+        consolidate, "_resolve_provider_model", side_effect=AssertionError("must not spend")
+    ):
+        result = await consolidate.distill_episodes(
+            "inst_test",
+            config=type(
+                "C", (), {"instance_id": "inst_test", "memory_distill_enabled": False}
+            )(),
+        )
+
+    assert result == {"distilled": 0, "skipped": "memory_distill_enabled off"}
+
+
+# ── Test 8: distill malformed JSON ───────────────────────────────────────────────
+
+@pytest.mark.asyncio
 async def test_distill_malformed_json(tmp_path, monkeypatch):
     import lhassa.core.db as db
 

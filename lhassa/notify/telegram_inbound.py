@@ -611,7 +611,7 @@ async def _brain_reply(text: str, *, config) -> str:
     from lhassa.core import db, watchlist
     from lhassa.core.episode import Episode
     from lhassa.llm import router
-    from lhassa.llm.gateway import BudgetExceeded
+    from lhassa.llm.gateway import BudgetExceeded, KillSwitchActive
     from lhassa.llm.provider import ProviderNotConfigured
     from lhassa.memory import answer_cache
     from lhassa.memory import load as memory_load
@@ -751,6 +751,11 @@ async def _brain_reply(text: str, *, config) -> str:
                     max_tokens=routing.effort.token_budget,
                     system=system,
                 )
+            except KillSwitchActive as exc:
+                # Manual shutdown is global: unlike a spent budget or a flaky
+                # seat, it must not advance to the next configured provider.
+                last_exc = exc
+                break
             except (ProviderNotConfigured, BudgetExceeded) as exc:
                 last_exc = exc
                 continue
@@ -1129,13 +1134,22 @@ async def _handle_callback_query(
         else:
             try:
                 await _approval.resolve(
-                    instance_id, ap_id, approved=approved, by_actor="telegram"
+                    instance_id,
+                    ap_id,
+                    approved=approved,
+                    by_actor="telegram",
+                    approver=_approval.TrustedApprover(
+                        "owner", "telegram-owner"
+                    ),
                 )
             except _approval.ApprovalResolutionConflict:
                 # A double-tap (or a race with another surface): the approval is
                 # no longer pending — acknowledge honestly and launch NOTHING.
                 existing = None
                 ack_text = f"Approval {ap_id} was already resolved."
+            except _approval.ApprovalAuthorizationError as exc:
+                existing = None
+                ack_text = f"Approval refused: {exc}"
             except KeyError:
                 existing = None
                 ack_text = f"No pending approval {ap_id}."

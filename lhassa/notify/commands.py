@@ -583,6 +583,8 @@ async def _resolve_from_chat(args: str, *, config, approved: bool) -> str:
     Mirrors what ``api/approval_routes.py``'s POST endpoint does
     (``security.approval.resolve``), attributed to the ``"telegram"`` actor.
     """
+    from lhassa.security import approval as _approval
+
     verb = "approve" if approved else "deny"
     ap_id = (args or "").strip().split()[0] if (args or "").strip() else ""
     if not ap_id:
@@ -591,14 +593,16 @@ async def _resolve_from_chat(args: str, *, config, approved: bool) -> str:
         cfg = _config(config)
         instance_id = getattr(cfg, "instance_id", None) or "inst_personal"
         from lhassa.core import db as _db
-        from lhassa.security import approval as _approval
-
         await _db.init_db()
         existing = await _db.get_approval(instance_id, ap_id)
         if existing is None:
             return f"No pending approval with id {ap_id!r}."
         await _approval.resolve(
-            instance_id, ap_id, approved=approved, by_actor="telegram"
+            instance_id,
+            ap_id,
+            approved=approved,
+            by_actor="telegram",
+            approver=_approval.TrustedApprover("owner", "telegram-owner"),
         )
 
         # A resolved mint_route approval TURNS ON that capability's route —
@@ -612,6 +616,8 @@ async def _resolve_from_chat(args: str, *, config, approved: bool) -> str:
             )
 
         return f"Approval {ap_id} {'approved' if approved else 'denied'}."
+    except _approval.ApprovalAuthorizationError as exc:
+        return f"Approval refused: {exc}"
     except Exception as exc:
         logger.warning(f"commands: /{verb} {ap_id} failed: {exc}")
         return _oops(f"resolve approval {ap_id}")
@@ -1506,7 +1512,7 @@ async def _cmd_ai(args: str, *, config=None) -> str:
     if not text:
         return "Ask me to look something up and answer it: /ai how much is a flight from Madrid to Bogotá?"
     try:
-        from lhassa.llm.gateway import BudgetExceeded
+        from lhassa.llm.gateway import BudgetExceeded, KillSwitchActive
         from lhassa.llm.provider import ProviderNotConfigured
         from lhassa.persona import load_identity
         from lhassa.tools import search as _search
@@ -1564,6 +1570,11 @@ async def _cmd_ai(args: str, *, config=None) -> str:
                     [{"role": "user", "content": user}],
                     model=mdl, max_tokens=1024, system=system,
                 )
+            except KillSwitchActive as exc:
+                # A manual kill is a hard stop, independent of configured
+                # provider order.  Never continue into a later CLI/cloud seat.
+                last_exc = exc
+                break
             except (ProviderNotConfigured, BudgetExceeded) as exc:
                 last_exc = exc
                 continue

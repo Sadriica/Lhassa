@@ -9,7 +9,7 @@ threshold lives per action by risk, never one global knob.
 Mounted by the integrator with ``app.include_router(approval_routes.router)``.
 """
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 
 import lhassa.config as lhassa_config
 from lhassa.core import db
@@ -17,6 +17,23 @@ from lhassa.flows.runtime import RuntimeConflict
 from lhassa.security import approval
 
 router = APIRouter()
+
+
+def _trusted_api_approver(request: Request) -> approval.TrustedApprover:
+    """Derive owner identity from middleware, or the same loopback-only policy.
+
+    The fallback keeps this router self-contained when mounted on a minimal app;
+    it is fail-closed for non-loopback clients and whenever an API token is
+    configured (only the server middleware can validate that secret).
+    """
+    source = str(getattr(request.state, "lhassa_auth_source", "") or "")
+    host = request.client.host if request.client else None
+    local_hosts = {"127.0.0.1", "::1", "localhost", "testclient"}
+    if not source and not getattr(lhassa_config.Config, "api_token", "") and host in local_hosts:
+        source = "loopback"
+    if not source:
+        raise approval.UntrustedApproverError("authenticated API identity required")
+    return approval.TrustedApprover(actor_id="owner", source=source)
 
 
 @router.get("/api/approvals")
@@ -33,7 +50,7 @@ async def get_approvals():
 
 
 @router.post("/api/approvals/{approval_id}")
-async def resolve_approval_endpoint(approval_id: str, payload: dict):
+async def resolve_approval_endpoint(approval_id: str, payload: dict, request: Request):
     """Resolve a pending approval. Body: ``{approved: bool, by_actor?: str}``.
 
     Marks the approval aprobada/rechazada and feeds the autonomy knob so a
@@ -47,7 +64,14 @@ async def resolve_approval_endpoint(approval_id: str, payload: dict):
     raw_actor = payload.get("by_actor", "duenio")
     if not isinstance(raw_actor, str):
         raise HTTPException(status_code=400, detail="'by_actor' must be a string.")
+    # ``by_actor`` remains accepted for wire compatibility and optional UI labels,
+    # but it is not an authorization claim. The middleware-authenticated API
+    # channel is the authoritative resolver identity.
     by_actor = raw_actor.strip() or "duenio"
+    try:
+        trusted = _trusted_api_approver(request)
+    except approval.UntrustedApproverError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
 
     await db.init_db()
     try:
@@ -56,14 +80,20 @@ async def resolve_approval_endpoint(approval_id: str, payload: dict):
             approval_id,
             approved=approved,
             by_actor=by_actor,
+            approver=trusted,
         )
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=f"approval {approval_id!r} not found") from exc
     except (RuntimeConflict, approval.ApprovalResolutionConflict) as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except approval.SelfApprovalError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except approval.ApprovalAuthorizationError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
     return {
         "ok": True,
         "approval_id": approval_id,
         "approved": approved,
+        "resolved_by": trusted.actor_id,
         **(result or {}),
     }
