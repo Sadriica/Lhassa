@@ -211,6 +211,20 @@ OrgScreen DataTable#org-table {
     height: 3fr;
 }
 
+/* Collapsed overlay → the chart hugs its own rows instead of stretching to the
+   footer, so the note below it stays ADJACENT to the table rather than
+   stranded at the bottom of an empty screen. `max-height` keeps a tall
+   topology scrollable instead of overflowing. */
+OrgScreen.-no-relationships DataTable#org-table {
+    height: auto;
+    max-height: 1fr;
+}
+
+OrgScreen.-no-relationships #org-relationships-legend {
+    padding: 1 0 0 0;
+    height: auto;
+}
+
 OrgScreen #org-relationships-table {
     height: 1fr;
     min-height: 6;
