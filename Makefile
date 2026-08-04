@@ -1,4 +1,4 @@
-.PHONY: install quickstart install-health install-heartbeat install-telegram install-monitor install-privileged dashboard run dev check test lint clean
+.PHONY: install quickstart install-health install-heartbeat install-telegram install-monitor install-privileged dashboard run dev check test test-integration cov lint clean
 
 # First-time setup: install Python deps + build the dashboard.
 # Installs the `voice` extra (pipecat/torch) — this is the laptop dev workflow
@@ -88,6 +88,22 @@ check:
 # doc/portability.md).
 test:
 	uv run --extra dev --extra voice python -m pytest
+
+# Real end-to-end integration tests (tests/test_integration_heartbeat.py):
+# a live CLI subprocess (opencode/claude/codex, whichever is on PATH) and a
+# real on-disk DB file, no provider/DB mocks. Excluded from `make test` by
+# default (see pyproject.toml's addopts); run explicitly, and expect it to
+# take longer and spend a little real token budget.
+test-integration:
+	uv run --extra dev python -m pytest -m integration -q
+
+# Coverage baseline over the unit suite (respects pyproject's `-m "not
+# integration"` addopts — same tests `make test` runs, just measured). A
+# separate target on purpose: coverage instrumentation slows the run, so it
+# never rides along with the fast default `make test`. HTML report in
+# htmlcov/index.html.
+cov:
+	uv run --extra dev python -m pytest tests/ -q --cov=lhassa --cov-report=term-missing:skip-covered --cov-report=html
 
 # Lint with ruff
 lint:

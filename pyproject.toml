@@ -48,6 +48,7 @@ lhassa = "lhassa.cli:main"
 dev = [
     "pytest>=8.0.0",
     "pytest-asyncio>=0.23.0",
+    "pytest-cov>=5.0.0",
     "ruff>=0.4.0",
 ]
 # Optional: exact token counting for the memory budget. estimate_tokens() uses
@@ -69,6 +70,24 @@ voice = [
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+addopts = "-m \"not integration\""
+markers = [
+    "integration: real end-to-end tests (live CLI subprocess, real DB file); excluded by default, run with `make test-integration`",
+]
+
+[tool.coverage.run]
+# Coverage is a separate `make cov` target, never part of the default `make
+# test` run — measuring it costs real time (~3-4 min) that the fast default
+# suite must not pay.
+source = ["lhassa"]
+omit = [
+    "lhassa/_vendor/*",   # vendored third-party code, not ours to cover
+    "lhassa/voice/*",     # hardware/audio pipeline (pipecat/torch); untestable without mics/speakers
+]
+
+[tool.coverage.report]
+skip_covered = false
+show_missing = true
 
 [tool.uv]
 # To use CPU-only PyTorch and avoid the large CUDA wheel:

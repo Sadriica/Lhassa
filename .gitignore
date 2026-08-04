@@ -41,3 +41,7 @@ dashboard/playwright-report/
 
 # Agent worktrees — throwaway checkouts, never versioned
 .claude/worktrees/
+
+# Coverage (make cov)
+.coverage
+htmlcov/
