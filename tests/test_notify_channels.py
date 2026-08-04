@@ -264,3 +264,39 @@ def test_desktop_send_uses_osascript_off_linux(monkeypatch):
     # The message rides the environment, never interpolated into the script.
     assert "hola mac" not in " ".join(argv)
     assert calls[0][1]["env"]["_LHASSA_MSG"] == "hola mac"
+
+
+# ── the toast's headline ─────────────────────────────────────────────────────────
+
+
+def test_split_headline_lifts_the_messages_own_opening_clause():
+    """The toast already shows "Lhassa" as the app name; the summary must not repeat it.
+
+    The regression: every alert rendered as "Lhassa / Lhassa / <the actual
+    message>", spending the one line the owner reads at a glance on the app
+    name they already knew.
+    """
+    from lhassa.notify.desktop import split_headline
+
+    title, body = split_headline(
+        "Something needs a look — monitor · interns: 2 new failure(s)"
+    )
+    assert title == "Something needs a look"
+    assert body == "monitor · interns: 2 new failure(s)"
+
+
+def test_split_headline_keeps_the_app_name_when_there_is_no_headline():
+    """No separator → the old shape, never a toast with an empty body."""
+    from lhassa.notify.desktop import _APP_NAME, split_headline
+
+    assert split_headline("disco casi lleno") == (_APP_NAME, "disco casi lleno")
+    assert split_headline("") == (_APP_NAME, "")
+
+
+def test_split_headline_refuses_an_over_long_first_clause():
+    """A clause too long to be a headline is detail, not a title."""
+    from lhassa.notify.desktop import _APP_NAME, split_headline
+
+    long_head = "x" * 80
+    text = f"{long_head}: tail"
+    assert split_headline(text) == (_APP_NAME, text)

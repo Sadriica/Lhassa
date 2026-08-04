@@ -199,11 +199,20 @@ def detect_events(prev_signals: Optional[dict], curr_signals: dict) -> list[dict
         f for f in (curr_signals.get("failures") or []) if f.get("id") not in prev_ids
     ]
     if fresh:
+        # Failures arrive in batches that share ONE cause (five hygiene tasks
+        # refused by the same gate, say). Listing the identical reason three
+        # times and calling the rest "+1 more" hid both the count and the
+        # variety, so group by reason and quote each one once with its tally.
+        by_reason: dict[str, int] = {}
+        for f in fresh:
+            reason = str(f.get("decision") or f.get("accion") or "episode")[:60]
+            by_reason[reason] = by_reason.get(reason, 0) + 1
+        ordered = sorted(by_reason.items(), key=lambda kv: (-kv[1], kv[0]))
         names = "; ".join(
-            str(f.get("decision") or f.get("accion") or "episode")[:60]
-            for f in fresh[:3]
+            f"{reason} ×{count}" if count > 1 else reason
+            for reason, count in ordered[:3]
         )
-        extra = f" (+{len(fresh) - 3} more)" if len(fresh) > 3 else ""
+        extra = f" (+{len(ordered) - 3} more)" if len(ordered) > 3 else ""
         events.append(
             {
                 "kind": _KIND_FAILURES,

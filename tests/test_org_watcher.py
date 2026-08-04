@@ -516,3 +516,40 @@ async def test_react_no_keyboard_when_no_pending_approvals(tmp_path, monkeypatch
 
     assert len(calls) == 1
     assert "reply_markup" not in calls[0]
+
+
+def test_repeated_failure_reasons_are_grouped_with_a_tally():
+    """A batch sharing one cause must read as "reason x4", not the reason thrice.
+
+    The regression: five hygiene tasks refused by the same gate rendered as
+    "rejected by task signature gate; rejected by task signature gate; rejected
+    by task signature gate (+1 more)" — which hid both the real count and the
+    fact that there was only ONE distinct cause.
+    """
+    from lhassa.org.watcher import detect_events
+
+    curr = {
+        "failures": [
+            {"id": f"ep_{i}", "decision": "rejected by task signature gate"}
+            for i in range(4)
+        ]
+    }
+    events = detect_events({"failures": []}, curr)
+    summaries = [e["summary"] for e in events]
+    assert summaries == ["4 new failure(s): rejected by task signature gate ×4"]
+
+
+def test_distinct_failure_reasons_are_each_named_once():
+    from lhassa.org.watcher import detect_events
+
+    curr = {
+        "failures": [
+            {"id": "ep_1", "decision": "gate refused"},
+            {"id": "ep_2", "decision": "gate refused"},
+            {"id": "ep_3", "decision": "provider timeout"},
+        ]
+    }
+    summary = detect_events({"failures": []}, curr)[0]["summary"]
+    assert "gate refused ×2" in summary
+    assert "provider timeout" in summary
+    assert "provider timeout ×" not in summary

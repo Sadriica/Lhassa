@@ -54,6 +54,38 @@ def _platform_argv(title: str, message: str):
     return plat.notify_argv(title, message)
 
 
+#: Separators that mark where a message's headline ends and its detail begins,
+#: in the order the messages actually use them.
+_HEADLINE_SEPARATORS = (" — ", " · ", ": ")
+
+#: A headline longer than this is detail wearing a title's clothes.
+_HEADLINE_MAX = 60
+
+
+def split_headline(text: str) -> "tuple[str, str]":
+    """Split a notification into a toast ``(summary, body)``.
+
+    A toast already shows "Lhassa" as the application name, so repeating it as
+    the summary wasted the one line the owner actually reads at a glance and
+    pushed the real content down. This lifts the message's own opening clause
+    into the summary and leaves the rest as the body.
+
+    Degrades to the previous behaviour: a message with no separator, or whose
+    first clause is too long to be a headline, keeps the application name as
+    the summary and the whole text as the body. An empty body would leave the
+    toast's prominent line blank, so a headline is lifted only when the message
+    actually has one.
+    """
+    text = (text or "").strip()
+    if not text:
+        return (_APP_NAME, "")
+    for sep in _HEADLINE_SEPARATORS:
+        head, found, tail = text.partition(sep)
+        if found and tail.strip() and len(head) <= _HEADLINE_MAX:
+            return (head.strip(), tail.strip())
+    return (_APP_NAME, text)
+
+
 @register_channel("desktop")
 class DesktopChannel:
     """Pop a desktop toast through ``notify-send`` (Linux/libnotify)."""
@@ -88,14 +120,15 @@ class DesktopChannel:
 
     @staticmethod
     def _notify(text: str, level: str) -> None:
-        argv = _platform_argv(_APP_NAME, text)
+        title, body = split_headline(text)
+        argv = _platform_argv(title, body)
         if argv is not None:
             # The platform layer passes user text through the environment
             # rather than interpolating it into a script — same discipline as
             # ``voice/notifier.py``'s AppleScript call.
             env = os.environ.copy()
-            env["_LHASSA_TITLE"] = _APP_NAME
-            env["_LHASSA_MSG"] = text
+            env["_LHASSA_TITLE"] = title
+            env["_LHASSA_MSG"] = body
             subprocess.run(argv, timeout=_TIMEOUT, capture_output=True, env=env)
             return
         urgency = _URGENCY.get(str(level).lower(), "low")
@@ -104,8 +137,8 @@ class DesktopChannel:
                 _NOTIFY_SEND,
                 f"--app-name={_APP_NAME}",
                 f"--urgency={urgency}",
-                _APP_NAME,
-                text,
+                title,
+                body,
             ],
             timeout=_TIMEOUT,
             capture_output=True,
