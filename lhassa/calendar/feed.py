@@ -22,6 +22,7 @@ from __future__ import annotations
 import time
 from datetime import datetime, timedelta, timezone
 from typing import Optional
+from urllib.parse import urljoin, urlparse
 
 import httpx
 from loguru import logger
@@ -47,6 +48,7 @@ _WINDOWS_TZ_OFFSETS: dict[str, int] = {
 }
 
 _DEFAULT_FEED_TTL = 3600.0  # seconds — /today shouldn't re-download 1MB each call.
+_MAX_FEED_REDIRECTS = 10
 
 # ICS BYDAY codes → Python weekday() (Mon=0).
 _BYDAY = {"MO": 0, "TU": 1, "WE": 2, "TH": 3, "FR": 4, "SA": 5, "SU": 6}
@@ -85,16 +87,54 @@ async def fetch_feed(
     # unguarded feed turns the heartbeat into a repeating probe of whatever it
     # names — loopback, link-local, cloud metadata. The same guard the research
     # and web_fetch paths already cross applies here.
-    from lhassa.tools.net_safety import ssrf_check
+    from lhassa.tools.net_safety import resolve_public_url
 
-    unsafe = ssrf_check(url)
+    _address, unsafe = resolve_public_url(url)
     if unsafe:
         logger.warning("calendar: refusing unsafe feed URL — {}", unsafe)
-        return None
+        # A DNS outage and an address that became unsafe both forbid a new
+        # request, but neither makes the already-cached bytes dangerous. Keep
+        # the documented stale-cache degradation without touching the network.
+        try:
+            return cache.read_text(encoding="utf-8", errors="replace") if cache.exists() else None
+        except OSError:
+            return None
 
     try:
-        async with httpx.AsyncClient(timeout=20.0, follow_redirects=True) as client:
-            resp = await client.get(url)
+        # Follow redirects ourselves so EVERY destination crosses the SSRF
+        # boundary.  httpx's automatic redirect handling validates only the
+        # public starting URL and would happily follow it into loopback/private
+        # space.
+        current_url = url
+        async with httpx.AsyncClient(timeout=20.0, follow_redirects=False) as client:
+            for redirect_count in range(_MAX_FEED_REDIRECTS + 1):
+                address, unsafe = resolve_public_url(current_url)
+                if unsafe:
+                    logger.warning("calendar: refusing unsafe feed redirect — {}", unsafe)
+                    return None
+                parsed = urlparse(current_url)
+                assert address is not None  # resolve_public_url's success contract
+                ip_literal = f"[{address}]" if ":" in address else address
+                port = f":{parsed.port}" if parsed.port is not None else ""
+                pinned_url = parsed._replace(netloc=f"{ip_literal}{port}").geturl()
+                host_header = parsed.hostname or ""
+                if parsed.port is not None:
+                    host_header = f"{host_header}:{parsed.port}"
+                resp = await client.get(
+                    pinned_url,
+                    headers={"Host": host_header},
+                    extensions={"sni_hostname": parsed.hostname},
+                )
+                if resp.status_code not in (301, 302, 303, 307, 308):
+                    break
+                location = resp.headers.get("location", "").strip()
+                if not location:
+                    logger.warning("calendar: redirect had no Location header")
+                    return None
+                if redirect_count >= _MAX_FEED_REDIRECTS:
+                    logger.warning("calendar: too many feed redirects")
+                    return None
+                current_url = urljoin(current_url, location)
         if resp.status_code == 200 and resp.text:
             try:
                 cache.parent.mkdir(parents=True, exist_ok=True)

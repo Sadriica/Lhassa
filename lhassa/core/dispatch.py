@@ -43,6 +43,8 @@ from lhassa.core import db as _db
 from lhassa.core.task import Task
 from lhassa.memory import facts as _facts
 from lhassa.security import approval as _approval
+from lhassa.security import allowlist as _allowlist
+from lhassa.security import autonomy as _autonomy
 from lhassa.security import signing as _signing
 from lhassa.security.trust import Origin, TrustLevel, degrade
 
@@ -191,9 +193,17 @@ async def mint_task(
             estado="pendiente",
             creado_en=_db._now(),
         )
-        task.firma = _signing.sign_task(task)
-
-        needs_human = _approval.needs_approval(task)
+        # Autonomy only lowers friction when its durable history is available.
+        # A missing/corrupt ledger must fail safe (ask for approval), not prevent
+        # the task from being minted at all.
+        try:
+            auto = await _autonomy.should_auto_approve(
+                instance_id, accion, origin.actor_id
+            )
+        except Exception as exc:
+            logger.warning("mint_task: autonomy lookup degraded: {}", exc)
+            auto = False
+        needs_human = _approval.needs_approval(task, autonomy=auto)
         if needs_human:
             task.estado = "esperando_aprobacion"
             await _approval.request_approval(
@@ -209,6 +219,8 @@ async def mint_task(
                     "source": "mint_task",
                 },
             )
+
+        task.firma = _signing.sign_task(task)
 
         kwargs = task.to_db_kwargs()
         kwargs["due_at"] = due_at
@@ -242,9 +254,35 @@ async def run_task_now(
     from lhassa.core.episode import Episode
 
     try:
+        row = await _db.get_task(instance_id, task_id)
+        if row is None or row.get("estado") != "pendiente":
+            return False
+        task = Task.from_db_row(row)
+        decision = _allowlist.allow(task)
+        if decision.allowed:
+            authorized, reason = await _approval.authorize_execution(task)
+            if not authorized:
+                decision = _allowlist.AllowDecision(
+                    False, reason, decision.requires_approval
+                )
+        if not decision.allowed:
+            logger.warning(
+                "run_task_now: {!r} rejected by execution gate: {}",
+                task_id, decision.reason,
+            )
+            ep = Episode.begin(despertar_por=despertar_por, instance_id=instance_id)
+            ep.finish(
+                decision="rejected by local allowlist",
+                accion=task.accion,
+                resultado=decision.reason,
+            )
+            await ep.append()
+            await _db.set_task_state(instance_id, task_id, "rechazada")
+            return False
+        # Execute the signed persisted envelope; caller arguments cannot swap it.
         ep = Episode.begin(despertar_por=despertar_por, instance_id=instance_id)
-        result = await _actions.run(accion, dict(params or {}), ep)
-        ep.finish(decision=accion, accion=accion, resultado=str(result)[:500])
+        result = await _actions.run(task.accion, dict(task.params or {}), ep)
+        ep.finish(decision=task.accion, accion=task.accion, resultado=str(result)[:500])
         await ep.append()
         await _db.set_task_state(instance_id, task_id, "hecha")
         return True

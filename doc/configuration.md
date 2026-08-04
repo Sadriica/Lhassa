@@ -415,6 +415,7 @@ In debug mode, every STT frame is printed to the terminal:
 | `LHASSA_KIND_TEMPLATES` | No | *(empty — `code:code-review` built in)* | CSV `kind:template,kind:template` overriding/extending which `org.templates` preset a project's `kind` auto-attaches (the standing-brains reflex, `actionpack/_standing.py`). A malformed entry is skipped, never crashes the reflex. |
 | `LHASSA_MEMORY_GRAPH` | No | `0` | Opt-in switch for the persisted knowledge graph (`kg_entities`/`kg_edges`) — gates both the `kg_sync` feeder and `memory/load.py`'s graph-augmented context layer. See `doc/memory.md`. |
 | `LHASSA_KG_TRIPLES` | No | `0` | Opt-in switch for cheap-model triple extraction on top of `kg_sync` (batched over new rows only, `asserts` edges) and for fuzzy-pair judging in `kg_resolve`. Unset keeps `kg_sync` byte-identical to the $0 co-occurrence-only path. See `doc/memory.md`. |
+| `LHASSA_MEMORY_DISTILL_ENABLED` | No | `1` | Independent spend boundary for episode-to-fact distillation. Set to `0` to stop scheduled, CLI and future callers before provider selection. Editable live as `memory_distill_enabled`; see `doc/memory.md`. |
 
 See `lhassa config list` for the live view — these are also editable at runtime via the settings service where marked `EDITABLE`.
 

@@ -118,6 +118,25 @@ def test_approvals_and_approve(tmp_path, monkeypatch):
     assert remaining == []
 
 
+def test_cli_by_label_cannot_bypass_high_risk_self_approval(tmp_path, monkeypatch):
+    db = _use_tmp_db(tmp_path, monkeypatch)
+
+    async def seed():
+        await db.init_db()
+        return await db.add_approval(
+            INST,
+            "task",
+            {"accion": "move_money", "actor_id": "cli"},
+        )
+
+    approval_id = asyncio.run(seed())
+    res = runner.invoke(app, ["approve", approval_id, "--by", "manager"])
+    assert res.exit_code != 0
+    assert "self-approval refused" in res.output
+    row = asyncio.run(db.get_approval(INST, approval_id))
+    assert row["estado"] == "pendiente"
+
+
 def test_deny(tmp_path, monkeypatch):
     db = _use_tmp_db(tmp_path, monkeypatch)
 

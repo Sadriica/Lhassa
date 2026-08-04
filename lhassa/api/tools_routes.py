@@ -17,7 +17,7 @@ is. This is what stood BETWEEN "approve" and "merge" being the same click as
 Mounted by the integrator with ``app.include_router(tools_routes.router)``.
 """
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 
 from lhassa.config import Config
 from lhassa.core import db
@@ -47,7 +47,7 @@ async def get_tools():
 
 
 @router.post("/api/tools/{nombre}/graduate")
-async def graduate_tool(nombre: str, payload: dict | None = None):
+async def graduate_tool(nombre: str, request: Request, payload: dict | None = None):
     """Approve a tool's graduation: aprobación = merge.
 
     Body (all optional): ``{branch?, approval_id?, by_actor?}``. REFUSES (409) a
@@ -80,12 +80,21 @@ async def graduate_tool(nombre: str, payload: dict | None = None):
             ),
         )
 
-    merge_commit = await versioning.approve(
-        nombre,
-        branch=branch,
-        instance_id=Config.instance_id,
-        approval_id=approval_id,
-        by_actor=by_actor,
-    )
+    from lhassa.api.approval_routes import _trusted_api_approver
+    from lhassa.security import approval
+
+    try:
+        merge_commit = await versioning.approve(
+            nombre,
+            branch=branch,
+            instance_id=Config.instance_id,
+            approval_id=approval_id,
+            by_actor=by_actor,
+            approver=_trusted_api_approver(request),
+        )
+    except approval.SelfApprovalError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except approval.ApprovalAuthorizationError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
     await db.upsert_tool(Config.instance_id, nombre, estado="graduada")
     return {"ok": True, "tool": nombre, "estado": "graduada", "merge_commit": merge_commit}

@@ -92,8 +92,16 @@ async def require_local_or_token(request: Request, call_next):
     path = request.url.path
     if path.startswith(("/api", "/checkin", "/report")):
         client_host = request.client.host if request.client else None
-        if not _request_allowed(client_host, _http_token(request)):
+        provided_token = _http_token(request)
+        if not _request_allowed(client_host, provided_token):
             return JSONResponse(status_code=403, content={"detail": _auth_error_detail()})
+        # Downstream mutation routes may need an authenticated identity, not just
+        # an allow/deny verdict.  Record which boundary established access; never
+        # derive that identity from a JSON field supplied by the caller.
+        token = getattr(Config, "api_token", "")
+        request.state.lhassa_auth_source = (
+            "api-token" if _authorized(token, provided_token) else "loopback"
+        )
     return await call_next(request)
 
 app.add_middleware(

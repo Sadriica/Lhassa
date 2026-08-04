@@ -38,3 +38,6 @@ dashboard/playwright-report/
 
 # local env backups
 .env.bak*
+
+# Agent worktrees — throwaway checkouts, never versioned
+.claude/worktrees/

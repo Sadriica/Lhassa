@@ -35,31 +35,48 @@ def _is_blocked_addr(addr_str: str) -> bool:
 
 def ssrf_check(url: str) -> str | None:
     """Return an error for an unsafe URL, otherwise ``None``."""
+    _address, error = resolve_public_url(url)
+    return error
+
+
+def resolve_public_url(url: str) -> tuple[str | None, str | None]:
+    """Resolve and validate ``url`` once, returning a public IP to connect to.
+
+    Callers that actually fetch should connect to the returned address while
+    preserving the original HTTP Host header and TLS SNI. This closes the DNS
+    validation/connection gap in which a rebinding name could resolve public
+    here and private inside the HTTP client a moment later.
+    """
     try:
         parsed = urlparse(url)
     except Exception as exc:
-        return f"invalid URL: {exc}"
+        return None, f"invalid URL: {exc}"
     if parsed.scheme not in ("http", "https"):
-        return f"scheme {parsed.scheme!r} not allowed (only http/https)"
+        return None, f"scheme {parsed.scheme!r} not allowed (only http/https)"
     host = (parsed.hostname or "").strip()
     if not host:
-        return "missing host in URL"
+        return None, "missing host in URL"
     if host.lower() == "localhost":
-        return "host 'localhost' is not allowed (SSRF guard)"
+        return None, "host 'localhost' is not allowed (SSRF guard)"
     try:
         addr_infos = socket.getaddrinfo(host, None)
     except socket.gaierror as exc:
-        return f"could not resolve host {host!r}: {exc}"
+        return None, f"could not resolve host {host!r}: {exc}"
     except OSError as exc:
-        return f"host resolution error for {host!r}: {exc}"
+        return None, f"host resolution error for {host!r}: {exc}"
+    addresses: list[str] = []
     for _family, _type, _proto, _canonname, sockaddr in addr_infos:
         addr = sockaddr[0]
         if _is_blocked_addr(addr):
-            return (
+            return None, (
                 f"host {host!r} resolves to a private/loopback/link-local "
                 f"address ({addr!r}) — blocked by SSRF guard"
             )
-    return None
+        if addr not in addresses:
+            addresses.append(addr)
+    if not addresses:
+        return None, f"host {host!r} resolved to no usable addresses"
+    return addresses[0], None
 
 
-__all__ = ["_is_blocked_addr", "ssrf_check"]
+__all__ = ["_is_blocked_addr", "resolve_public_url", "ssrf_check"]

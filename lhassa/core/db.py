@@ -1743,6 +1743,7 @@ async def add_task(
     task_id: Optional[str] = None,
     due_at: Optional[str] = None,
     recurrence: Optional[str] = None,
+    creado_en: Optional[str] = None,
 ) -> str:
     """Insert a task. Returns its id (generated if not supplied).
 
@@ -1753,6 +1754,26 @@ async def add_task(
     """
     task_id = task_id or _new_id("t")
     now = _now()
+    created = creado_en or now
+    if not firma:
+        # Secure-by-default local persistence: every task entering through the
+        # brain's write seam gets a signed execution envelope. Direct SQL remains
+        # untrusted and is rejected by the heartbeat gate.
+        from lhassa.core.task import Task
+        from lhassa.security import signing
+        from lhassa.security.trust import Origin, TrustLevel
+
+        task = Task(
+            id=task_id,
+            instance_id=instance_id,
+            accion=accion,
+            objetivo=objetivo,
+            params=dict(params or {}),
+            origen=Origin(trust=TrustLevel(origen_trust), actor_id=origen_actor),
+            estado=estado,
+            creado_en=created,
+        )
+        firma = signing.sign_task(task)
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute(
             """INSERT INTO tasks(
@@ -1762,7 +1783,7 @@ async def add_task(
                VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 task_id, instance_id, accion, objetivo, _dumps(params or {}),
-                origen_trust, origen_actor, estado, firma, now,
+                origen_trust, origen_actor, estado, firma, created,
                 due_at, recurrence, now,
             ),
         )
@@ -1791,6 +1812,22 @@ async def load_pending_tasks(instance_id: str) -> list[dict]:
     for row in rows:
         row["params"] = _loads(row.get("params"), {})
     return rows
+
+
+async def get_task(instance_id: str, task_id: str) -> Optional[dict]:
+    """Return one task by id, scoped to ``instance_id``, with decoded params."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            "SELECT * FROM tasks WHERE instance_id = ? AND id = ?",
+            (instance_id, task_id),
+        ) as cur:
+            raw = await cur.fetchone()
+    if raw is None:
+        return None
+    row = dict(raw)
+    row["params"] = _loads(row.get("params"), {})
+    return row
 
 
 async def list_tasks(
@@ -2116,6 +2153,27 @@ async def get_approval(instance_id: str, approval_id: str) -> Optional[dict]:
     out = dict(row)
     out["payload"] = _loads(out.get("payload"), {})
     return out
+
+
+async def has_approved_task_approval(instance_id: str, task_id: str) -> bool:
+    """Whether a resolved mint approval authorizes this exact task id."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            """SELECT payload FROM approvals
+               WHERE instance_id = ? AND estado = 'aprobada'""",
+            (instance_id,),
+        ) as cur:
+            rows = await cur.fetchall()
+    for row in rows:
+        payload = _loads(row["payload"], {})
+        if (
+            isinstance(payload, dict)
+            and payload.get("source") == "mint_task"
+            and payload.get("task_id") == task_id
+        ):
+            return True
+    return False
 
 
 async def resolve_approval(instance_id: str, approval_id: str, estado: str) -> bool:

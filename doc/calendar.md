@@ -36,6 +36,15 @@ network is down), parsed with no model. Recurring weekly classes, Windows
 timezones (e.g. `SA Pacific Standard Time` = Bogotá) and all-day events are
 handled; exotic monthly/yearly recurrences are best-effort.
 
+Feed retrieval is also an SSRF boundary because it can run unattended from the
+heartbeat. The initial URL and **every redirect target** must resolve only to public
+addresses; loopback, private, link-local and metadata destinations are rejected.
+Redirects are followed manually rather than delegated to the HTTP client. After DNS
+validation, the connection is pinned to the validated public IP while retaining the
+original Host header and TLS server name, closing the validation/connect DNS-rebinding
+window. If the configured target is unsafe or cannot be resolved, no request is made;
+an already cached stale copy may still be returned for availability.
+
 ### Asking about it in chat
 
 Once a feed is connected, just ask — "¿qué hay en mi calendario el viernes?" /

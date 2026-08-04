@@ -104,7 +104,11 @@ class ApprovalsScreen(Vertical):
         verb = "approved" if approved else "denied"
         try:
             await approval.resolve(
-                self._instance_id, approval_id, approved=approved, by_actor="tui"
+                self._instance_id,
+                approval_id,
+                approved=approved,
+                by_actor="tui",
+                approver=approval.TrustedApprover("owner", "local-process"),
             )
             status.update(f"[success]✓[/] {verb} [model]{approval_id}[/]")
         except Exception as exc:  # a resolution failure must never crash the TUI

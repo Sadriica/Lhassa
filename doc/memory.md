@@ -270,6 +270,10 @@ re-querying the grande on every touch.
   Only the chica is touched; the grande is untouched unless the caller opts
   into `record_provenance=True`, which appends the summary back as a
   low-confidence (`confianza=0.5`) `dato` fact.
+- **Episode distillation has an independent spend switch.** Set
+  `LHASSA_MEMORY_DISTILL_ENABLED=0` to stop `distill_episodes()` at the memory
+  boundary before provider resolution. The guard applies equally to scheduled,
+  CLI and future callers.
 - **`regenerate()`** — "kill the chica, it regenerates from the grande": wipes
   the instance's cache and rebuilds it from `memory.load.load()`. The grande
   surviving the chica's destruction is the whole point of the split.

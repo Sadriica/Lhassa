@@ -281,6 +281,10 @@ class LedgerGateway:
         self._kill_switch: bool = (
             _env_flag("LHASSA_KILL_SWITCH", False) if kill_switch is None else bool(kill_switch)
         )
+        # Once the live setter is used it is authoritative over the boot/config
+        # default.  This lets the dashboard release a switch that was enabled
+        # through LHASSA_KILL_SWITCH without a process restart.
+        self._kill_switch_overridden: bool = False
         self._load_limits()
 
     # ── Kill-switch (hard manual stop) ─────────────────────────────────────────
@@ -293,13 +297,18 @@ class LedgerGateway:
     def set_kill_switch(self, value: bool) -> None:
         """Engage or release the kill-switch for the live process."""
         self._kill_switch = bool(value)
+        self._kill_switch_overridden = True
         logger.warning(
             f"LLM gateway: kill-switch {'ENGAGED — all cloud-LLM calls halted' if value else 'released'}"
         )
 
-    def _assert_live(self) -> None:
+    def _assert_live(self, config: "Config | None" = None) -> None:
         """Refuse the call before any provider work when the kill-switch is on."""
-        if self._kill_switch:
+        config_default = bool(getattr(config, "llm_kill_switch", False))
+        active = self._kill_switch if self._kill_switch_overridden else (
+            self._kill_switch or config_default
+        )
+        if active:
             logger.warning("LLM gateway: call refused — kill-switch is engaged")
             raise KillSwitchActive(
                 "LLM kill-switch is engaged; all cloud-LLM calls are halted. "
@@ -720,7 +729,7 @@ class LedgerGateway:
             config = Config()
 
         # ── Kill-switch: a hard manual stop, before cache, budget, or provider ──
-        self._assert_live()
+        self._assert_live(config)
 
         await self._ensure_db()
 
@@ -847,7 +856,7 @@ class LedgerGateway:
             config = Config()
 
         # ── Kill-switch: a hard manual stop, before cache, budget, or provider ──
-        self._assert_live()
+        self._assert_live(config)
 
         await self._ensure_db()
 
@@ -963,6 +972,16 @@ class LedgerGateway:
 # Module-level default instance — import from anywhere via
 # `from lhassa.llm.gateway import gateway`.
 gateway = LedgerGateway()
+
+
+def assert_llm_live(config: "Config | None" = None) -> None:
+    """Apply the process-wide manual kill-switch to non-gateway providers.
+
+    CLI and local providers do not traverse :class:`LedgerGateway`, but the
+    owner's stop switch is about model execution, not billing.  Their common
+    provider boundary calls this before starting a process or network request.
+    """
+    gateway._assert_live(config)
 
 
 async def spend_summary(config: "Config | None" = None) -> dict:
