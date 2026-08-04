@@ -82,7 +82,9 @@ def test_cacheable_question_asked_twice_second_ask_is_free(monkeypatch):
     assert reply1 == "Paris."
     assert len(provider.calls) == 1
     ep1 = _last_episode()
-    assert ep1["decision"].startswith("think:")
+    # Plan 4 Stream 1 prefixes the routing trajectory (type/mode/effort) before
+    # the "think:"/"cache-hit:" label — check containment, not a strict prefix.
+    assert "think:" in ep1["decision"]
     assert ep1["costo_usd"] == 0.001
 
     # Second identical ask: served from the cache, $0, provider NOT called again.
@@ -90,7 +92,7 @@ def test_cacheable_question_asked_twice_second_ask_is_free(monkeypatch):
     assert reply2 == "Paris."
     assert len(provider.calls) == 1  # unchanged — no second think
     ep2 = _last_episode()
-    assert ep2["decision"].startswith("cache-hit:")
+    assert "cache-hit:" in ep2["decision"]
     assert ep2["costo_usd"] == 0.0
     assert ep2["resultado"] == "Paris."
 
@@ -110,7 +112,7 @@ def test_live_data_question_is_never_cached(monkeypatch):
     # A live_data question always thinks again — never served from cache.
     assert len(provider.calls) == 2
     ep2 = _last_episode()
-    assert ep2["decision"].startswith("think:")
+    assert "think:" in ep2["decision"]
 
 
 def test_judgment_question_always_thinks(monkeypatch):

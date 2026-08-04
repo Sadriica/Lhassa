@@ -111,3 +111,107 @@ def classify(text: str) -> str:
         return "cacheable"
 
     return "judgment"
+
+
+# ── work-type classification (Plan 4, Stream 1 — task identification) ───────
+#
+# A SECOND, independent $0 axis over the same inbound text: not "can this be
+# cached" but "what KIND of work is this" — the input to the working-mode
+# registry (``notify.modes``) and the effort resolver (``core.effort``). Pure
+# regex + optional episode signals (never a model), same "never raises,
+# degrades to the safest default" contract as :func:`classify` above. The
+# default here is ``"question"`` (answer directly, minimal effort) rather than
+# ``classify``'s ``"judgment"`` — the safest default for THIS axis is the
+# cheapest mode, not the most expensive one; a genuinely hard ask still gets
+# routed to real judgment inside its mode/effort, it just isn't assumed to be
+# expensive before there's any signal that it is.
+#
+# Six buckets, checked in priority order (most specific verb-shaped signal
+# first; "question" is both a positive match AND the catch-all):
+#   "build"       — write/implement/fix/create code or a concrete artifact.
+#   "review"      — look over/audit/critique existing work.
+#   "maintenance" — housekeeping: clean up, sync, archive, update in place.
+#   "decision"    — choose between options, a recommendation is requested.
+#   "research"    — investigate/find out/compare, an open-ended lookup.
+#   "question"    — a direct ask with a bounded answer (default).
+WORK_TYPES = ("question", "research", "build", "review", "maintenance", "decision")
+
+_BUILD_RE = re.compile(
+    r"\b("
+    r"build|implement|write (a |the )?(code|script|function|tool|test)|"
+    r"create (a|an|the)|add (a|an|the) (feature|endpoint|command|function|test)|"
+    r"fix (the |this |a )?(bug|issue|error)|refactor|"
+    r"escribe (un |una |el |la )?(c[oó]digo|script|funci[oó]n)|"
+    r"implementa|arregla (el |la |un |una )?(bug|error)|"
+    r"crea (un|una)|agrega (un|una)|corrige"
+    r")\b",
+    re.IGNORECASE,
+)
+
+_REVIEW_RE = re.compile(
+    r"\b("
+    r"review|audit|critique|check (my|this|the)|look over|"
+    r"what do you think of (this|my)|feedback on|"
+    r"revisa|audita|eval[uú]a|qu[eé] opinas de (este|esta|mi)|"
+    r"dame (tu )?opini[oó]n"
+    r")\b",
+    re.IGNORECASE,
+)
+
+_MAINTENANCE_RE = re.compile(
+    r"\b("
+    r"clean\s*up|archive|sync\b|synchroni[sz]e|housekeeping|"
+    r"update the|tidy up|maintain|"
+    r"limpia|sincroniza|mantenimiento|archiva|actualiza (el|la)"
+    r")\b",
+    re.IGNORECASE,
+)
+
+_DECISION_RE = re.compile(
+    r"\b("
+    r"should i|which (one|is better)|help me (decide|choose)|"
+    r"recommend|pros and cons|what.s better|worth it\??$|"
+    r"deber[ií]a|cu[aá]l (elijo|es mejor|prefieres)|qu[eé] me recomiendas|"
+    r"me conviene"
+    r")\b",
+    re.IGNORECASE,
+)
+
+_RESEARCH_RE = re.compile(
+    r"\b("
+    r"research|investigate|find out|look up|dig into|"
+    r"compare .* (and|vs\.?|with)|what.s (new|out there) (on|about)|"
+    r"sources on|state of the art|"
+    r"investiga|averigua|busca informaci[oó]n|indaga|"
+    r"compara .* (y|con)"
+    r")\b",
+    re.IGNORECASE,
+)
+
+
+def classify_work_type(text: str) -> str:
+    """Classify one message into a WORK TYPE (the task-identification axis).
+
+    Returns one of :data:`WORK_TYPES`. Pure regex, no model, never raises — a
+    falsy/non-string input, or text matching none of the specific buckets,
+    degrades to ``"question"`` (the cheapest mode/effort combination, never a
+    silently expensive default).
+    """
+    try:
+        stripped = (text or "").strip()
+    except Exception:
+        return "question"
+    if not stripped:
+        return "question"
+
+    for label, pattern in (
+        ("build", _BUILD_RE),
+        ("review", _REVIEW_RE),
+        ("maintenance", _MAINTENANCE_RE),
+        ("decision", _DECISION_RE),
+        ("research", _RESEARCH_RE),
+    ):
+        if pattern.search(stripped):
+            return label
+
+    return "question"
