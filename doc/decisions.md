@@ -1,5 +1,71 @@
 # Lhassa — decisions log
 
+## 2026-08-03 — Stream 5: four interfaces, one capability
+
+Plan 4's Stream 5 asked that anything doable in one surface be doable in the
+others, and that no endpoint be left without a surface. Three findings shaped
+the work, and each one is a variation of the same defect: a capability existed
+but only one door opened onto it.
+
+**The CLI could describe flows but not author them.** `lhassa flows` was
+read-only — list, templates, show, apply. Authoring, running and following a
+flow happened on the dashboard canvas or nowhere. A singular `lhassa flow` now
+carries the full lifecycle: `create` (from a template or a blank one-trigger
+scaffold), `edit` (a `$EDITOR` round-trip), `validate`, `run`, `watch`, `logs`,
+`runs`, `delete`.
+
+Two decisions inside it are load-bearing. First, **the run crosses
+`org/delegate.py:delegate_flow`, never `flows/engine.py:run_flow`** — the
+standing principle that a flow is never run bare binds a new surface exactly as
+it binds the old ones, and a test asserts that `run_flow` is unreachable from
+the CLI. Second, **`edit` never discards the operator's work**: an invalid
+buffer stays on disk, the command says where, and it offers to re-open rather
+than dropping the edit on the floor. Losing someone's typing to a validation
+error is not a validation failure, it is a data-loss bug.
+
+`watch`/`logs` read the durable kernel directly rather than through the API, so
+they keep the CLI's existing virtue — the terminal works with the server down.
+
+**The TUI covered 4 of ~18 domains and could not find anything.** It is now
+eight tabs (Flows, Skills, Memory and Org join the original four), but the
+structural change is `cli/tui/screens/base.py:TableScreen` — one place that
+owns the `/` filter, the live re-poll and the degrade-on-read-failure, so a
+future screen inherits all three instead of re-deriving them.
+
+Two small judgements there. The filter is a **substring match, not fuzzy**: a
+filter you can predict beats one that guesses, and there is nothing to learn.
+And the live refresh **skips the redraw when the rendered rows are unchanged**,
+which is what keeps an idle brain from flickering and keeps the cursor where the
+operator left it — a polling UI that redraws unconditionally is unusable long
+before it is slow. The command palette (`ctrl+p`) is Textual's own, fed a
+provider; it offers navigation only. Approve/deny/run stay on the screen that
+owns the selected row, because a palette entry cannot show you what you are
+about to act on.
+
+**The dashboard had no API client and seven endpoints with no consumer.**
+`lib/api.js` was ten lines. Every panel decided for itself whether to check the
+status, how to word the error, and whether to send credentials — and none of
+them sent credentials, so the dashboard only ever worked on loopback.
+`lib/apiClient.js` is now the one door (base URL, token header, status→Error,
+JSON parsing, one JSDoc-annotated function per endpoint). One behaviour
+improves as a side effect: the client surfaces the API's own `{"detail": …}`,
+so a flow that fails validation names the offending node instead of reporting
+`Save failed (400)`.
+
+Artifacts, Integrity, Research assessments, the memory graph/entities, episode
+search and `/api/flow-runs` all have surfaces now. **The memory graph renders as
+ranked lists, not a node-link diagram** — stated here rather than buried,
+because it is a real reduction. The read model is a projection over facts and
+episodes; a force layout would add a dependency and a screen full of pixels
+without adding a fact the lists do not already state. The client function is
+unchanged if a canvas is layered on later.
+
+**What was cut.** The v2 node kinds on the canvas (they belong to Stream 2's
+engine work, not to a surface), `lhassa init`, and a full migration of every
+dashboard panel off raw `fetch` — the client covers every domain, but roughly a
+dozen peripheral panels still call `fetch` directly and were left for a
+mechanical follow-up.
+
 ## 2026-08-03 — El CI de macOS corrige la auditoría que lo precedió
 
 The first real macOS CI run (triggered by the push to `main`) came back
