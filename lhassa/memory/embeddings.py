@@ -448,8 +448,9 @@ async def reindex(instance_id: str, config=None) -> int:
 async def _reindex_answer_cache(instance_id: str, embedder: "Embedder") -> tuple[int, int]:
     """Re-embed every cached question for ``instance_id`` with ``embedder``.
 
-    ``answer_cache`` has no per-row model stamp (unlike ``fact_embeddings``), so
-    this writes the new vector directly via a raw ``UPDATE`` against the same
+    ``answer_cache`` carries a per-row ``embedder`` stamp (migration 12,
+    mirroring ``fact_embeddings.model``), so this writes both the new vector
+    AND the current embedder's name via a raw ``UPDATE`` against the same
     table :mod:`lhassa.core.db` already owns — reusing ``db.DB_PATH`` and
     ``db.list_answer_cache`` rather than duplicating the connection/table
     definition. Best-effort per row. Returns ``(updated, failed)``.
@@ -467,8 +468,9 @@ async def _reindex_answer_cache(instance_id: str, embedder: "Embedder") -> tuple
             vector = embedder.embed([row["question"]])[0]
             async with aiosqlite.connect(db.DB_PATH) as conn:
                 await conn.execute(
-                    "UPDATE answer_cache SET embedding = ? WHERE instance_id = ? AND id = ?",
-                    (_json_dump(vector), instance_id, row["id"]),
+                    "UPDATE answer_cache SET embedding = ?, embedder = ? "
+                    "WHERE instance_id = ? AND id = ?",
+                    (_json_dump(vector), embedder.name, instance_id, row["id"]),
                 )
                 await conn.commit()
             updated += 1

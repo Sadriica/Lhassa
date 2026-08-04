@@ -84,6 +84,7 @@ async def store(
                 "answer": answer,
                 "embedding": vector,
                 "tags": list(tags or []),
+                "embedder": embedder.name,
             }
         )
     except Exception as exc:  # never break the caller over a cache write
@@ -103,11 +104,15 @@ async def lookup(
 
     Loads the ``_LOOKUP_LIMIT`` most recent (non-expired) cached rows for
     ``instance_id``, embeds ``question`` with the same embedder, and returns the
-    highest-cosine match at or above ``threshold``. A row older than
-    ``config.answer_cache_ttl`` seconds is ignored (TTL is applied here, at read
-    time, so entries age out without a separate sweep). The winning row's
-    ``hits`` counter is bumped (best-effort). Never raises: any failure degrades
-    to a MISS (``None``), so a broken cache never breaks a chat reply.
+    highest-cosine match at or above ``threshold``. A row stamped with a
+    DIFFERENT embedder than the one currently configured is skipped entirely —
+    mirroring ``memory.load._semantic_layer``'s same guard — since cosine
+    similarity across two embedders' vector spaces is not a comparable number,
+    never a near-miss worth surfacing. A row older than ``config.answer_cache_ttl``
+    seconds is ignored (TTL is applied here, at read time, so entries age out
+    without a separate sweep). The winning row's ``hits`` counter is bumped
+    (best-effort). Never raises: any failure degrades to a MISS (``None``), so a
+    broken cache never breaks a chat reply.
 
     ``stats`` is an optional, keyword-only diagnostics out-param — pass an empty
     dict and this fills it with ``{"best_similarity": float, "scanned": int,
@@ -139,10 +144,16 @@ async def lookup(
 
         embedder = get_embedder(config)
         qvec = embedder.embed([question])[0]
+        embedder_name = getattr(embedder, "name", "")
 
         best_row = None
         best_sim = -1.0
         for row in fresh:
+            # Only compare against rows stamped with the same embedder — vectors
+            # from a different embedder/model must never be cosine-compared
+            # (a mismatch is a MISS, not a garbage similarity score).
+            if (row.get("embedder") or "") != embedder_name:
+                continue
             sim = cosine(qvec, row.get("embedding") or [])
             if sim > best_sim:
                 best_sim = sim

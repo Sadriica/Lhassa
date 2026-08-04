@@ -81,6 +81,8 @@ import re
 import unicodedata
 from itertools import combinations
 
+from loguru import logger
+
 from lhassa.config import Config
 from lhassa.core import db
 from lhassa.llm import router as _router
@@ -295,10 +297,21 @@ def _triple_messages(items: list[dict]) -> list[dict]:
     return [{"role": "user", "content": prompt}]
 
 
-def _parse_triples(text: str, valid_sources: set) -> list[dict]:
-    """Parse+validate the model's triple array: every field non-empty, the
-    ``source`` must be one of the ids actually offered in the prompt (a
-    hallucinated source is dropped, not trusted), and subject != object."""
+def _parse_triples(
+    text: str, source_texts: dict[str, str], *, dropped: list[str] | None = None
+) -> list[dict]:
+    """Parse+validate the model's triple array.
+
+    Every field must be non-empty, ``source`` must be one of the ids actually
+    offered in the prompt (a hallucinated source is dropped, not trusted), and
+    subject != object. Beyond that, the GROUNDING guard: subject AND object
+    must each appear (case/accent-insensitive substring) somewhere in the cited
+    source's own text — a triple naming something the source never said is a
+    model hallucination of CONTENT, not just of the source id, and is dropped
+    the same way. Dropped triples are counted into ``dropped`` (honest toward
+    the log) but never surfaced to the caller — the model never learns which
+    ones were rejected.
+    """
     out: list[dict] = []
     for raw in _extract_json_array(text):
         if not isinstance(raw, dict):
@@ -307,10 +320,17 @@ def _parse_triples(text: str, valid_sources: set) -> list[dict]:
         predicate = str(raw.get("predicate") or "").strip()
         obj = str(raw.get("object") or "").strip()
         source = str(raw.get("source") or "").strip()
-        if not subject or not predicate or not obj or source not in valid_sources:
+        if not subject or not predicate or not obj or source not in source_texts:
+            if dropped is not None:
+                dropped.append(source or "<missing-source>")
             continue
         if subject.casefold() == obj.casefold():
             continue  # would be a self-edge
+        source_norm = _normalize_name(source_texts[source])
+        if _normalize_name(subject) not in source_norm or _normalize_name(obj) not in source_norm:
+            if dropped is not None:
+                dropped.append(source)
+            continue  # ungrounded — subject/object never actually appear in the source
         out.append({"subject": subject, "predicate": predicate, "object": obj, "source": source})
     return out
 
@@ -359,8 +379,14 @@ async def _run_triple_extraction(
         except Exception:
             continue
 
-        valid_sources = {it["source"] for it in batch}
-        triples = _parse_triples(completion.text, valid_sources)
+        source_texts = {it["source"]: it["text"] for it in batch}
+        dropped: list[str] = []
+        triples = _parse_triples(completion.text, source_texts, dropped=dropped)
+        if dropped:
+            logger.debug(
+                f"kg._run_triple_extraction: dropped {len(dropped)} ungrounded/"
+                f"hallucinated triple(s) (sources={dropped})"
+            )
         when = db._now()
         for t in triples:
             try:

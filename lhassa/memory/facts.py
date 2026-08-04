@@ -24,6 +24,12 @@ from datetime import datetime, timezone
 from lhassa.config import Config
 from lhassa.core import db
 
+# Literal negation prefixes this module can recognize as a heuristic — NOT
+# semantic NLP, just a plain string-prefix match (see ``_strip_negation_prefix``).
+# Longest/most-specific pattern first so "ya no " / "no longer " are stripped
+# whole rather than leaving a dangling "no "/"longer " on the body.
+_NEGATION_PREFIXES: tuple[str, ...] = ("ya no ", "no longer ", "no ", "not ")
+
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -141,21 +147,58 @@ async def load_by_tags(instance_id: str | None, tags) -> list[Fact]:
     return [Fact.from_row(r) for r in rows]
 
 
+def _strip_negation_prefix(body: str) -> str | None:
+    """If ``body`` starts with a literal negation prefix, return the rest.
+
+    Plain string-prefix matching only — NOT semantic negation detection. Checks
+    ``_NEGATION_PREFIXES`` longest-specific-first ("ya no " / "no longer "
+    before the bare "no "/"not ") so a phrase like "ya no me gusta X" strips to
+    "me gusta x" in one step rather than leaving a stray "no ". Returns
+    ``None`` when no prefix matches (the caller then falls back to the
+    unmodified body).
+    """
+    for prefix in _NEGATION_PREFIXES:
+        if body.startswith(prefix):
+            return body[len(prefix):].strip()
+    return None
+
+
 def _conflict_key(fact: Fact) -> str:
     """
-    The conflict key: two facts contradict when this matches. We start simple —
-    the normalized (stripped, case-folded) ``contenido`` — so superseding facts
-    are written verbatim with the same subject. (Tag-keyed / subject-extracted
-    conflicts are a Phase-2 refinement.)
+    The conflict key: two facts contradict when this matches.
+
+    Base case: the normalized (stripped, case-folded) ``contenido`` — so
+    superseding facts written verbatim with the same subject collapse to one
+    winner.
+
+    Direct-negation heuristic (deliberately NOT semantic NLP): when
+    ``contenido`` starts with a literal negation prefix — Spanish "no " /
+    "ya no ", English "not " / "no longer " — the key is the body with that
+    prefix stripped, so "me gusta el chocolate" and "no me gusta el chocolate"
+    collapse to the SAME key and are treated as a contradiction rather than
+    two unrelated facts. This is a plain string-prefix match: it recognizes
+    only a negation written at the very start of the sentence, in one of the
+    four listed forms — it will miss mid-sentence negation, synonyms, or any
+    other phrasing, and it can in principle collide with an unrelated fact
+    that happens to start with the same words after stripping "no "/"not "
+    (an accepted, honestly-documented risk rather than a claim of real
+    language understanding). Anything beyond this literal prefix match
+    (subject extraction, true semantic equivalence) remains a Phase-2 item,
+    not attempted here.
     """
-    return fact.contenido.strip().casefold()
+    body = fact.contenido.strip().casefold()
+    stripped = _strip_negation_prefix(body)
+    return stripped if stripped is not None else body
 
 
 def resolve(facts: list[Fact]) -> list[Fact]:
     """
     Collapse contradictions to one winner per conflict key.
 
-    Conflict key: normalized exact ``contenido`` (see :func:`_conflict_key`).
+    Conflict key: normalized ``contenido``, with a direct-negation prefix
+    ("no "/"ya no "/"not "/"no longer ") stripped so a fact and its literal
+    negation share a key (see :func:`_conflict_key` for exactly what this does
+    and does not catch — it is a string-prefix heuristic, not semantic NLP).
     Winner: the **most recent AND highest confianza** — we rank conflicting facts
     by ``(actualizado_en, confianza)`` and keep the maximum (recency leads, with
     confianza as the tiebreaker), per the brief's contradiction rule.

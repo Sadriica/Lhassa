@@ -316,6 +316,95 @@ async def test_sync_triples_ignores_hallucinated_source(tmp_path, monkeypatch):
     assert await _asserts_edges(db, INSTANCE) == []
 
 
+@pytest.mark.asyncio
+async def test_sync_triples_ignores_a_grounded_source_but_ungrounded_content(
+    tmp_path, monkeypatch
+):
+    """A triple citing a REAL source id, but naming a subject/object the source's
+    own text never mentions, is a content hallucination — dropped just like a
+    hallucinated source id, not merely a source-id check."""
+    db = await _init(tmp_path, monkeypatch)
+    from lhassa.memory import facts
+
+    fact = await facts.add_fact(INSTANCE, "dato", "Ana works at Sezzle", tags=["work"])
+    # "Bogota" never appears in the fact's text — ungrounded object.
+    triple_json = (
+        '[{"subject": "Ana", "predicate": "lives_in", "object": "Bogota", '
+        f'"source": "fact:{fact.id}"}}]'
+    )
+    fake = _FakeTripleProvider(text=triple_json)
+    cfg = _cfg(kg_triples_enabled=True)
+
+    await kg.sync(INSTANCE, config=cfg, provider=fake, model="cheap-model")
+
+    assert await _asserts_edges(db, INSTANCE) == []
+
+
+@pytest.mark.asyncio
+async def test_sync_triples_grounded_subject_and_object_both_present_is_kept(
+    tmp_path, monkeypatch
+):
+    """The counterpart to the ungrounded test: when subject AND object both
+    genuinely appear in the cited source's text, the triple is written as before
+    — the new guard must not reject legitimate, grounded triples."""
+    db = await _init(tmp_path, monkeypatch)
+    from lhassa.memory import facts
+
+    fact = await facts.add_fact(INSTANCE, "dato", "Ana works at Sezzle", tags=["work"])
+    triple_json = (
+        '[{"subject": "Ana", "predicate": "works_at", "object": "Sezzle", '
+        f'"source": "fact:{fact.id}"}}]'
+    )
+    fake = _FakeTripleProvider(text=triple_json)
+    cfg = _cfg(kg_triples_enabled=True)
+
+    await kg.sync(INSTANCE, config=cfg, provider=fake, model="cheap-model")
+
+    assert len(await _asserts_edges(db, INSTANCE)) == 1
+
+
+def test_parse_triples_drops_ungrounded_object_and_counts_it():
+    from lhassa.memory.kg import _parse_triples
+
+    source_texts = {"fact:1": "Ana works at Sezzle"}
+    triple_json = (
+        '[{"subject": "Ana", "predicate": "lives_in", "object": "Bogota", '
+        '"source": "fact:1"}]'
+    )
+    dropped: list[str] = []
+    out = _parse_triples(triple_json, source_texts, dropped=dropped)
+    assert out == []
+    assert dropped == ["fact:1"]
+
+
+def test_parse_triples_keeps_a_fully_grounded_triple():
+    from lhassa.memory.kg import _parse_triples
+
+    source_texts = {"fact:1": "Ana works at Sezzle"}
+    triple_json = (
+        '[{"subject": "Ana", "predicate": "works_at", "object": "Sezzle", '
+        '"source": "fact:1"}]'
+    )
+    dropped: list[str] = []
+    out = _parse_triples(triple_json, source_texts, dropped=dropped)
+    assert len(out) == 1
+    assert dropped == []
+
+
+def test_parse_triples_drops_hallucinated_source_and_counts_it():
+    from lhassa.memory.kg import _parse_triples
+
+    source_texts = {"fact:1": "Ana works at Sezzle"}
+    triple_json = (
+        '[{"subject": "Ana", "predicate": "works_at", "object": "Sezzle", '
+        '"source": "fact:not_a_real_id"}]'
+    )
+    dropped: list[str] = []
+    out = _parse_triples(triple_json, source_texts, dropped=dropped)
+    assert out == []
+    assert dropped == ["fact:not_a_real_id"]
+
+
 # ── C2: entity resolution ─────────────────────────────────────────────────────
 
 

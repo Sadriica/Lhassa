@@ -223,6 +223,107 @@ def test_stats_is_untouched_shape_when_not_passed_does_not_break_callers():
     asyncio.run(_run())
 
 
+def test_store_writes_the_embedder_stamp():
+    async def _run():
+        await db.init_db()
+        cfg = _cfg(embedder_backend="hash")  # force the offline embedder, deterministic
+        cid = await answer_cache.store(
+            INSTANCE, "What is the capital of France?", "Paris.", config=cfg
+        )
+        rows = await db.list_answer_cache(INSTANCE)
+        row = next(r for r in rows if r["id"] == cid)
+        assert row["embedder"] == "hashing-v1"
+
+    asyncio.run(_run())
+
+
+def test_lookup_skips_a_row_stamped_with_a_different_embedder():
+    """A row embedded by a different embedder must never be cosine-compared
+    against the current query vector — mismatch is a MISS, never a garbage
+    similarity score (mirrors memory.load._semantic_layer's own guard)."""
+
+    async def _run():
+        await db.init_db()
+        cfg = _cfg()
+        cid = await answer_cache.store(
+            INSTANCE, "What is the capital of France?", "Paris.", config=cfg
+        )
+        async with __import__("lhassa._vendor.aiosqlite", fromlist=["connect"]).connect(
+            db.DB_PATH
+        ) as conn:
+            await conn.execute(
+                "UPDATE answer_cache SET embedder = ? WHERE id = ?",
+                ("some-other-embedder", cid),
+            )
+            await conn.commit()
+
+        hit = await answer_cache.lookup(
+            INSTANCE, "What is the capital of France?", threshold=0.90, config=cfg
+        )
+        assert hit is None
+
+    asyncio.run(_run())
+
+
+def test_lookup_stats_report_a_scanned_row_that_mismatches_embedder():
+    """The row is still 'scanned' (fresh, not TTL-expired) but never contributes
+    a similarity score once its embedder doesn't match the current one."""
+
+    async def _run():
+        await db.init_db()
+        cfg = _cfg()
+        cid = await answer_cache.store(
+            INSTANCE, "What is the capital of France?", "Paris.", config=cfg
+        )
+        async with __import__("lhassa._vendor.aiosqlite", fromlist=["connect"]).connect(
+            db.DB_PATH
+        ) as conn:
+            await conn.execute(
+                "UPDATE answer_cache SET embedder = ? WHERE id = ?",
+                ("some-other-embedder", cid),
+            )
+            await conn.commit()
+
+        stats: dict = {}
+        hit = await answer_cache.lookup(
+            INSTANCE, "What is the capital of France?", config=cfg, stats=stats
+        )
+        assert hit is None
+        assert stats["hit"] is False
+        assert stats["scanned"] == 1
+        assert stats["best_similarity"] == -1.0  # never updated — no comparable row
+
+    asyncio.run(_run())
+
+
+def test_reindex_all_restamps_the_embedder_on_answer_cache_rows():
+    from lhassa.memory import embeddings
+
+    async def _run():
+        await db.init_db()
+        cfg = _cfg(embedder_backend="hash")  # force the offline embedder, deterministic
+        cid = await answer_cache.store(
+            INSTANCE, "What is the capital of France?", "Paris.", config=cfg
+        )
+        # Simulate a pre-migration/legacy row with a stale stamp.
+        async with __import__("lhassa._vendor.aiosqlite", fromlist=["connect"]).connect(
+            db.DB_PATH
+        ) as conn:
+            await conn.execute(
+                "UPDATE answer_cache SET embedder = ? WHERE id = ?", ("stale-embedder", cid)
+            )
+            await conn.commit()
+
+        summary = await embeddings.reindex_all(INSTANCE, config=cfg)
+        assert summary["answers"] == 1
+
+        rows = await db.list_answer_cache(INSTANCE)
+        row = next(r for r in rows if r["id"] == cid)
+        assert row["embedder"] == "hashing-v1"
+
+    asyncio.run(_run())
+
+
 def test_stats_default_on_lookup_failure(monkeypatch):
     async def _boom(*a, **k):
         raise RuntimeError("db is down")

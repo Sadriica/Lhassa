@@ -147,3 +147,76 @@ async def test_resolve_keeps_distinct_facts(tmp_path, monkeypatch):
     await facts.add_fact("inst_personal", "dato", "b")
     resolved = facts.resolve(await facts.load_facts("inst_personal"))
     assert {f.contenido for f in resolved} == {"a", "b"}
+
+
+# ── direct-negation contradiction heuristic ──────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_resolve_treats_spanish_negation_as_a_conflict(tmp_path, monkeypatch):
+    await _init(tmp_path, monkeypatch)
+    from lhassa.memory import facts
+    positive = await facts.add_fact("inst_personal", "dato", "le gusta el chocolate")
+    negative = await facts.add_fact("inst_personal", "dato", "no le gusta el chocolate")
+    resolved = facts.resolve(await facts.load_facts("inst_personal"))
+    # One conflict key, newest (the negation) wins.
+    assert len(resolved) == 1
+    assert resolved[0].id == negative.id
+    assert positive.id != negative.id
+
+
+@pytest.mark.asyncio
+async def test_resolve_treats_ya_no_negation_as_a_conflict(tmp_path, monkeypatch):
+    await _init(tmp_path, monkeypatch)
+    from lhassa.memory import facts
+    await facts.add_fact("inst_personal", "dato", "trabaja en Sezzle")
+    newest = await facts.add_fact("inst_personal", "dato", "ya no trabaja en Sezzle")
+    resolved = facts.resolve(await facts.load_facts("inst_personal"))
+    assert len(resolved) == 1
+    assert resolved[0].id == newest.id
+
+
+@pytest.mark.asyncio
+async def test_resolve_treats_english_negation_as_a_conflict(tmp_path, monkeypatch):
+    await _init(tmp_path, monkeypatch)
+    from lhassa.memory import facts
+    await facts.add_fact("inst_personal", "dato", "likes coffee")
+    newest = await facts.add_fact("inst_personal", "dato", "not likes coffee")
+    resolved = facts.resolve(await facts.load_facts("inst_personal"))
+    assert len(resolved) == 1
+    assert resolved[0].id == newest.id
+
+
+@pytest.mark.asyncio
+async def test_resolve_treats_no_longer_negation_as_a_conflict(tmp_path, monkeypatch):
+    await _init(tmp_path, monkeypatch)
+    from lhassa.memory import facts
+    await facts.add_fact("inst_personal", "dato", "works at Sezzle")
+    newest = await facts.add_fact("inst_personal", "dato", "no longer works at Sezzle")
+    resolved = facts.resolve(await facts.load_facts("inst_personal"))
+    assert len(resolved) == 1
+    assert resolved[0].id == newest.id
+
+
+def test_strip_negation_prefix_recognizes_all_four_forms():
+    from lhassa.memory.facts import _strip_negation_prefix
+    assert _strip_negation_prefix("no le gusta el chocolate") == "le gusta el chocolate"
+    assert _strip_negation_prefix("ya no le gusta el chocolate") == "le gusta el chocolate"
+    assert _strip_negation_prefix("not likes coffee") == "likes coffee"
+    assert _strip_negation_prefix("no longer works at sezzle") == "works at sezzle"
+
+
+def test_strip_negation_prefix_returns_none_without_a_negation_prefix():
+    from lhassa.memory.facts import _strip_negation_prefix
+    assert _strip_negation_prefix("le gusta el chocolate") is None
+
+
+@pytest.mark.asyncio
+async def test_resolve_does_not_merge_unrelated_facts_without_negation(tmp_path, monkeypatch):
+    """Sanity check: the heuristic only fires on a literal negation prefix — two
+    otherwise-unrelated facts never collapse."""
+    await _init(tmp_path, monkeypatch)
+    from lhassa.memory import facts
+    await facts.add_fact("inst_personal", "dato", "le gusta el chocolate")
+    await facts.add_fact("inst_personal", "dato", "le gusta el café")
+    resolved = facts.resolve(await facts.load_facts("inst_personal"))
+    assert len(resolved) == 2
