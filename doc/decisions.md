@@ -1,5 +1,59 @@
 # Lhassa — decisions log
 
+## 2026-08-03 — Plan 4, Stream 1: the versatile brain (task type / mode / effort)
+
+`core/policy.py`'s `PolicyDecision` already carried a hidden binary
+(`context_tier` minimal/full). This stream makes it an explicit model of HOW
+work gets done, in three deterministic, $0 axes — no model call anywhere in
+this work, same "never raises, degrades to the cheapest safe default"
+contract as every existing $0 layer.
+
+1. **Task identification** — `notify/intent.py:classify_work_type()` grows a
+   second, independent regex axis alongside the existing `classify()` (chat-
+   cache eligibility): `question` / `research` / `build` / `review` /
+   `maintenance` / `decision`. Defaults to `question` (the cheapest bucket),
+   deliberately the opposite default from `classify()`'s `judgment` — this
+   axis's safe default is the cheapest trajectory, not the most expensive one.
+2. **Working mode** — `notify/modes.py` is a new `Registry`-backed swap point
+   (`MODES`, `@register_mode`, mirroring `PROVIDERS`/`VERIFIERS`/`CHANNELS`):
+   `answer_directly` / `search_and_cite` / `iterate_with_verifier` /
+   `delegate_to_hierarchy` / `open_flow`, with a default `WORK_TYPE_MODE` map.
+   `resolve_mode()` never raises — an unknown type or a deregistered mode name
+   degrades to `answer_directly`.
+3. **Effort level** — `core/effort.py` (spine, zero shell imports) defines
+   `minimal` / `standard` / `deep` / `exhaustive` profiles (token budget, loop
+   turns, verifier count, whether MoA opens, a declared pre-spend cost
+   estimate). `resolve_effort()` picks in priority order: an explicit
+   override > a `--<level>` marker parsed out of the message text itself >
+   the work type's policy default > the global default (`standard`).
+   `parse_effort_marker()` always strips the marker from the returned text,
+   whether or not it matched a real level, so a mistyped marker never reaches
+   a model.
+4. **Composition seam** — `notify/task_router.py:route()` wires the three
+   together for one message and returns a `RoutingDecision`; `describe()`
+   renders it into one Episode-ready line. Wired into
+   `notify/telegram_inbound.py:_brain_reply` BEFORE the answer-cache lookup
+   and BEFORE any provider call: the resolved `effort.token_budget` now sizes
+   the actual `max_tokens` request (replacing the old fixed `_CHAT_MAX_TOKENS`
+   constant), and every episode's `decision` is prefixed with the declared
+   trajectory (`route: type=... mode=... effort=... budget=...tk turns=...
+   verifiers=... moa=... declared_cost≈$...`) — the DoD ("minimal vs. deep
+   produce visibly different trajectories, cost declared before it's spent")
+   is checkable straight from the episode log, not only from a test.
+
+**Two pre-existing tests updated, not the design changed under them**:
+`tests/test_answer_cache_telegram.py`'s `decision.startswith("think:"/"cache-
+hit:")` assertions became `in` checks — the routing prefix now precedes both
+labels; the behaviour they actually assert (a real think happened / a cache
+hit was served) is unchanged.
+
+**Not done in this stream** (explicitly out of scope, left for later
+integration passes): wiring `loop_turns`/`verifier_count`/`moa` into the
+heartbeat's `_judge()` path in `core/step.py`, and into `/moa`'s panel-open
+decision — those consumers can adopt the resolved `EffortProfile` without
+further design work, they just haven't been touched yet so the risk surface
+of this stream stays small.
+
 ## 2026-08-03 — El CI de macOS corrige la auditoría que lo precedió
 
 The first real macOS CI run (triggered by the push to `main`) came back
