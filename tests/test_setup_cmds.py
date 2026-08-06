@@ -239,7 +239,10 @@ def test_install_services_linux_without_systemctl(tmp_path):
     assert result["errors"]
 
 
-def test_install_services_linux_installs_and_enables(tmp_path):
+def test_install_services_linux_installs_and_enables(tmp_path, monkeypatch):
+    # CI runners export XDG_CONFIG_HOME, which _install_systemd honors over
+    # the explicit home; unset it so the test observes its own tmp home.
+    monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
     home = tmp_path / "home"
     calls = []
 
@@ -260,7 +263,8 @@ def test_install_services_linux_installs_and_enables(tmp_path):
     assert "%h/Code/lhassa" not in dst.read_text()
 
 
-def test_install_services_linux_dry_run_writes_nothing(tmp_path):
+def test_install_services_linux_dry_run_writes_nothing(tmp_path, monkeypatch):
+    monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
     home = tmp_path / "home"
     result = sc.install_services("linux", REPO_ROOT, home=home, dry_run=True, which=lambda n: "/usr/bin/" + n)
     assert result["installed"] == []
