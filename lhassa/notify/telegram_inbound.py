@@ -53,8 +53,9 @@ _TIMEOUT = float(_LONG_POLL_SECONDS) + 15.0
 _BACKOFF_START = 1.0
 _BACKOFF_MAX = 60.0
 
-# A chat turn is a short answer, not a long job.
-_CHAT_MAX_TOKENS = 1024
+# A chat turn is a short answer, not a long job. The actual per-turn cap now
+# comes from the resolved effort profile (Plan 4, Stream 1 — see
+# ``lhassa.notify.task_router``); this stays only as the retry floor below.
 # A reasoning model (deepseek V4 Flash) spends its budget THINKING before it
 # writes; when the cap is hit mid-thought the content comes back EMPTY with real
 # tokens billed. One bounded retry with a bigger cap almost always recovers it.
@@ -610,11 +611,12 @@ async def _brain_reply(text: str, *, config) -> str:
     from lhassa.core import db, watchlist
     from lhassa.core.episode import Episode
     from lhassa.llm import router
-    from lhassa.llm.gateway import BudgetExceeded
+    from lhassa.llm.gateway import BudgetExceeded, KillSwitchActive
     from lhassa.llm.provider import ProviderNotConfigured
     from lhassa.memory import answer_cache
     from lhassa.memory import load as memory_load
     from lhassa.notify.intent import classify
+    from lhassa.notify import task_router
     from lhassa.persona import load_identity
 
     instance_id = getattr(config, "instance_id", None) or "inst_personal"
@@ -625,6 +627,13 @@ async def _brain_reply(text: str, *, config) -> str:
     ep = Episode.begin(despertar_por="telegram", instance_id=instance_id)
     reply = _FALLBACK_REPLY
     try:
+        # Plan 4, Stream 1 — the versatile brain's three $0 axes (task type,
+        # working mode, effort level), resolved BEFORE any spend. Strips a
+        # `--<level>` marker (e.g. `--deep`) from the text so it never reaches
+        # the model, the cache key, or the semantic memory query.
+        routing = task_router.route(text)
+        text = routing.text
+
         # $0 intent classification BEFORE any provider/spend is resolved (§CLAUDE.md:
         # "thinking is the EXCEPTION"). Only a "cacheable" (stable, non-time-sensitive)
         # question is even eligible for the answer cache; live_data/judgment/command
@@ -645,7 +654,10 @@ async def _brain_reply(text: str, *, config) -> str:
                 _history_record(config, "user", text)
                 _history_record(config, "assistant", cached_answer)
                 ep.finish(
-                    decision=f"cache-hit: served past answer (sim={similarity:.2f})",
+                    decision=(
+                        f"{task_router.describe(routing)} | "
+                        f"cache-hit: served past answer (sim={similarity:.2f})"
+                    ),
                     accion="responder",
                     resultado=cached_answer,
                     costo_usd=0.0,
@@ -733,9 +745,17 @@ async def _brain_reply(text: str, *, config) -> str:
                 result = await prov.complete(
                     messages,
                     model=mdl,
-                    max_tokens=_CHAT_MAX_TOKENS,
+                    # The declared effort budget governs the actual request —
+                    # "minimal" and "deep" ask for visibly different caps, not
+                    # just a different label after the fact.
+                    max_tokens=routing.effort.token_budget,
                     system=system,
                 )
+            except KillSwitchActive as exc:
+                # Manual shutdown is global: unlike a spent budget or a flaky
+                # seat, it must not advance to the next configured provider.
+                last_exc = exc
+                break
             except (ProviderNotConfigured, BudgetExceeded) as exc:
                 last_exc = exc
                 continue
@@ -755,7 +775,7 @@ async def _brain_reply(text: str, *, config) -> str:
                     result = await prov.complete(
                         messages,
                         model=mdl,
-                        max_tokens=_CHAT_MAX_TOKENS_RETRY,
+                        max_tokens=max(routing.effort.token_budget, _CHAT_MAX_TOKENS_RETRY),
                         system=system,
                     )
                     reply = (result.text or "").strip()
@@ -795,6 +815,7 @@ async def _brain_reply(text: str, *, config) -> str:
 
             ep.finish(
                 decision=(
+                    f"{task_router.describe(routing)} | "
                     f"think: provider={actual} model={mdl or 'provider-default'}"
                     f"{_capabilities.tag_intent(text)}"
                     # The near-miss diagnostic (plan 0.2): when a cacheable
@@ -1113,13 +1134,22 @@ async def _handle_callback_query(
         else:
             try:
                 await _approval.resolve(
-                    instance_id, ap_id, approved=approved, by_actor="telegram"
+                    instance_id,
+                    ap_id,
+                    approved=approved,
+                    by_actor="telegram",
+                    approver=_approval.TrustedApprover(
+                        "owner", "telegram-owner"
+                    ),
                 )
             except _approval.ApprovalResolutionConflict:
                 # A double-tap (or a race with another surface): the approval is
                 # no longer pending — acknowledge honestly and launch NOTHING.
                 existing = None
                 ack_text = f"Approval {ap_id} was already resolved."
+            except _approval.ApprovalAuthorizationError as exc:
+                existing = None
+                ack_text = f"Approval refused: {exc}"
             except KeyError:
                 existing = None
                 ack_text = f"No pending approval {ap_id}."

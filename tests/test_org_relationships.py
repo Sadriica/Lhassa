@@ -19,12 +19,13 @@ from lhassa.org.topology import BrainNode, Topology
 class _Cfg:
     """A minimal Config stand-in with just the org-relevant fields."""
 
-    def __init__(self, *, org_topology_file="", org_relationships_file=""):
+    def __init__(self, *, org_topology_file="", org_relationships_file="", instance_id="inst_local"):
         self.org_role = ""
         self.org_departments = ""
         self.root_admin_id = "lhassa"
         self.org_topology_file = org_topology_file
         self.org_relationships_file = org_relationships_file
+        self.instance_id = instance_id
 
 
 @pytest.fixture
@@ -51,7 +52,14 @@ def cfg(tmp_path):
 # ── add / remove each kind ────────────────────────────────────────────────────────
 
 
-@pytest.mark.parametrize("kind", list(rel.RELATION_KINDS))
+# SHARES is INSTANCE-scoped (its endpoints are whole instances, not brains in
+# THIS topology, and its 'to' must equal the local instance id) — it does not
+# fit the brain-to-brain shape the rest of this file exercises, so it is
+# excluded here and covered by its own tests below.
+_BRAIN_SCOPED_KINDS = [k for k in rel.RELATION_KINDS if k not in rel.INSTANCE_SCOPED_KINDS]
+
+
+@pytest.mark.parametrize("kind", _BRAIN_SCOPED_KINDS)
 def test_add_then_remove_each_kind(cfg, kind):
     rels = rel.add("dept:a", "dept:b", kind, config=cfg)
     assert Relationship("dept:a", "dept:b", kind) in [
@@ -203,3 +211,38 @@ def test_describe_shape(cfg):
     assert desc["relationships"] == [
         {"from": "dept:a", "to": "dept:b", "kind": "reviews", "note": "approve gate"}
     ]
+
+
+# ── SHARES — the instance-scoped cross-instance kind (Stream 6 Phase A) ───────
+
+
+def test_shares_add_requires_to_equal_local_instance(cfg):
+    # cfg.instance_id == "inst_local"; granting FROM a foreign instance TO the
+    # local one is valid, the reverse is refused (an instance can only grant
+    # access to ITSELF, never impersonate a grant for someone else).
+    rel.add("inst_remote", "inst_local", rel.SHARES, config=cfg)
+    assert rel.permits("inst_remote", "inst_local", rel.SHARES, cfg) is True
+    with pytest.raises(RelationshipError):
+        rel.add("inst_local", "inst_remote", rel.SHARES, config=cfg)
+
+
+def test_shares_endpoints_need_no_local_topology_membership(cfg):
+    # Neither "inst_remote" nor "inst_local" is a node in cfg's org topology
+    # (only "general"/"dept:a"/"dept:b" are) — SHARES must not require that.
+    rel.add("some-other-instance", "inst_local", rel.SHARES, config=cfg)
+    assert rel.permits("some-other-instance", "inst_local", rel.SHARES, cfg) is True
+
+
+def test_shares_permits_denies_by_default(cfg):
+    assert rel.permits("inst_remote", "inst_local", rel.SHARES, cfg) is False
+
+
+def test_shares_is_not_symmetric(cfg):
+    rel.add("inst_remote", "inst_local", rel.SHARES, config=cfg)
+    assert rel.permits("inst_local", "inst_remote", rel.SHARES, cfg) is False
+
+
+def test_shares_remove_revokes(cfg):
+    rel.add("inst_remote", "inst_local", rel.SHARES, config=cfg)
+    rel.remove("inst_remote", "inst_local", rel.SHARES, config=cfg)
+    assert rel.permits("inst_remote", "inst_local", rel.SHARES, cfg) is False

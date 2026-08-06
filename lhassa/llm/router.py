@@ -289,7 +289,13 @@ def fallback_chain(config: "Config", primary: Optional[ModelProvider]) -> list[t
         except Exception:
             continue
         if provider is not None:
-            chain.append((provider, _fallback_model_for(name, config)))
+            # Same privacy treatment as pick_provider: a REMOTE fallback seat
+            # must be pseudonymized too. Without this, the one turn that
+            # happened to fail over carried raw sensitive text to the cloud —
+            # the primary being wrapped is no protection for its substitutes.
+            chain.append(
+                (_maybe_pseudonymize(provider, config), _fallback_model_for(name, config))
+            )
     return chain
 
 

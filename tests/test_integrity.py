@@ -112,15 +112,14 @@ async def test_integrity_action_returns_compact_result(monkeypatch):
         "check_integrity",
         {"config": config(), "trigger": "test-action"},
     )
-    import json
-
-    result = json.loads(raw)
-    assert result == {
-        "findings_critical": 0,
-        "findings_warn": 2,
-        "run_id": "conf_action",
-        "status": "warn",
-    }
+    # The action answers in a SENTENCE, not a JSON dump: this string is what
+    # reaches the owner's notification, and the machine-readable copy lives in
+    # the conformance_runs table (which is what the watcher reads).
+    assert raw.startswith("check_integrity: ")
+    assert "warn" in raw
+    assert "2 warning" in raw
+    assert "conf_action" in raw
+    assert "{" not in raw and "}" not in raw
 
 
 @pytest.mark.asyncio
@@ -199,6 +198,18 @@ async def test_watcher_runs_integrity_on_its_own_cadence(monkeypatch):
         }
 
     monkeypatch.setattr(integrity, "run_integrity", fake_integrity)
+
+    # The watcher no longer parses the action's return string; it reads the
+    # verdict from conformance_runs, so the run has to exist there.
+    async def fake_latest(_instance_id):
+        return {
+            "id": "conf_test",
+            "status": "fail",
+            "findings_critical": 1,
+            "findings_warn": 0,
+        }
+
+    monkeypatch.setattr(db, "latest_conformance_run", fake_latest)
     reacted = []
 
     async def fake_react(events, **kwargs):

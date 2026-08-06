@@ -14,6 +14,7 @@ import hashlib
 import json
 import uuid
 from contextlib import suppress
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Optional
 
 from lhassa.flows.engine import Executor, run_flow
@@ -57,12 +58,13 @@ async def _execute_claimed(
     if not lease_token:
         raise RuntimeConflict("durable execution requires a claimed lease")
     state_version = int(run["state_version"])
-    parked = False
+    parked_status: Optional[str] = None
 
     async def save_cursor(cursor: dict) -> None:
-        nonlocal parked, state_version
-        pending = cursor.get("pending_approval") or {}
-        if cursor.get("status") == "waiting_approval":
+        nonlocal parked_status, state_version
+        cursor_status = cursor.get("status")
+        if cursor_status == "waiting_approval":
+            pending = cursor.get("pending_approval") or {}
             await repo.park_gate(
                 run["instance_id"],
                 run["run_id"],
@@ -74,7 +76,25 @@ async def _execute_claimed(
                 expected_version=state_version,
                 lease_token=lease_token,
             )
-            parked = True
+            parked_status = "waiting_approval"
+        elif cursor_status == "waiting_retry":
+            pending = cursor.get("pending_retry") or {}
+            wakeup_raw = str(pending.get("next_wakeup_at") or "")
+            try:
+                next_wakeup_at = datetime.fromisoformat(wakeup_raw)
+            except ValueError:
+                next_wakeup_at = datetime.now(timezone.utc)
+            await repo.park_retry(
+                run["instance_id"],
+                run["run_id"],
+                frontier=list(cursor.get("frontier") or []),
+                visited=list(cursor.get("visited") or []),
+                state=cursor,
+                next_wakeup_at=next_wakeup_at,
+                expected_version=state_version,
+                lease_token=lease_token,
+            )
+            parked_status = "waiting_retry"
         else:
             await repo.append_checkpoint(
                 run["instance_id"],
@@ -128,9 +148,9 @@ async def _execute_claimed(
         int(step.get("duration_ms") or 0) for step in record.get("steps") or []
     )
     status = record.get("status")
-    if status == "waiting_approval":
-        if not parked:
-            raise RuntimeConflict("approval run returned without an atomic park")
+    if status in ("waiting_approval", "waiting_retry"):
+        if parked_status != status:
+            raise RuntimeConflict(f"{status} run returned without an atomic park")
     else:
         failed = status == "failed"
         await repo.transition_run(
@@ -239,8 +259,8 @@ async def resume_flow_run(
     run = await repo.get_run(instance_id, run_id)
     if run is None:
         raise KeyError(run_id)
-    if run["status"] != RunStatus.QUEUED.value:
-        raise RuntimeConflict(f"run {run_id} is not queued")
+    if run["status"] not in (RunStatus.QUEUED.value, RunStatus.WAITING_RETRY.value):
+        raise RuntimeConflict(f"run {run_id} is not queued or waiting on a retry")
     checkpoint = await repo.get_checkpoint(instance_id, run_id)
     if checkpoint is None:
         raise RuntimeConflict(f"run {run_id} has no checkpoint")

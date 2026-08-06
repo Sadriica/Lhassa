@@ -112,11 +112,69 @@ async def test_fetch_falls_back_to_stale_cache_on_error(tmp_path, monkeypatch):
         def __init__(self, *a, **k): pass
         async def __aenter__(self): return self
         async def __aexit__(self, *a): return False
-        async def get(self, url): raise RuntimeError("network down")
+        async def get(self, url, **kwargs): raise RuntimeError("network down")
 
     monkeypatch.setattr(feed.httpx, "AsyncClient", _Client)
     out = await feed.fetch_feed("https://example.com/c.ics", ttl=1)
     assert out == "STALE"  # served the stale copy rather than nothing
+
+
+@pytest.mark.asyncio
+async def test_fetch_refuses_redirect_to_private_address(tmp_path, monkeypatch):
+    cache = tmp_path / "feed_cache.ics"
+    monkeypatch.setattr(feed, "feed_cache_path", lambda url: cache)
+
+    class _Resp:
+        status_code = 302
+        is_redirect = True
+        headers = {"location": "http://127.0.0.1/metadata"}
+        text = ""
+
+    class _Client:
+        def __init__(self, *a, **k): pass
+        async def __aenter__(self): return self
+        async def __aexit__(self, *a): return False
+        async def get(self, url, **kwargs): return _Resp()
+
+    monkeypatch.setattr(feed.httpx, "AsyncClient", _Client)
+    from lhassa.tools import net_safety
+    monkeypatch.setattr(
+        net_safety,
+        "resolve_public_url",
+        lambda url: (None, "private address")
+        if "127.0.0.1" in url
+        else ("93.184.216.34", None),
+    )
+    assert await feed.fetch_feed("https://example.com/c.ics", ttl=0) is None
+
+
+@pytest.mark.asyncio
+async def test_fetch_pins_validated_ip_while_preserving_host_and_sni(tmp_path, monkeypatch):
+    monkeypatch.setattr(feed, "feed_cache_path", lambda url: tmp_path / "feed.ics")
+    seen = {}
+
+    class _Resp:
+        status_code = 200
+        text = "BEGIN:VCALENDAR\nEND:VCALENDAR"
+
+    class _Client:
+        def __init__(self, *a, **k): pass
+        async def __aenter__(self): return self
+        async def __aexit__(self, *a): return False
+        async def get(self, url, **kwargs):
+            seen.update(url=url, **kwargs)
+            return _Resp()
+
+    monkeypatch.setattr(feed.httpx, "AsyncClient", _Client)
+    from lhassa.tools import net_safety
+    monkeypatch.setattr(
+        net_safety, "resolve_public_url", lambda _url: ("93.184.216.34", None)
+    )
+
+    assert await feed.fetch_feed("https://example.com/c.ics", ttl=0)
+    assert seen["url"].startswith("https://93.184.216.34/")
+    assert seen["headers"]["Host"] == "example.com"
+    assert seen["extensions"]["sni_hostname"] == "example.com"
 
 
 @pytest.mark.asyncio
@@ -256,14 +314,18 @@ async def test_upcoming_per_feed_caches_dont_collide(tmp_path, monkeypatch):
         async def __aexit__(self, *a):
             return False
 
-        async def get(self, url):
+        async def get(self, url, **kwargs):
             body = {
-                "https://example.edu/a.ics": _cal(_ev("A", "20260709T100000")),
-                "https://example.com/b.ics": _cal(_ev("B", "20260709T110000")),
-            }[url]
+                "example.edu": _cal(_ev("A", "20260709T100000")),
+                "example.com": _cal(_ev("B", "20260709T110000")),
+            }[kwargs["headers"]["Host"]]
             return _Resp(body)
 
     monkeypatch.setattr(feed.httpx, "AsyncClient", _Client)
+    from lhassa.tools import net_safety
+    monkeypatch.setattr(
+        net_safety, "resolve_public_url", lambda _url: ("93.184.216.34", None)
+    )
 
     await feed.fetch_feed("https://example.edu/a.ics", ttl=0)
     await feed.fetch_feed("https://example.com/b.ics", ttl=0)

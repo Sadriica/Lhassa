@@ -1,8 +1,20 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react'
 import { toast } from '../lib/toast'
 import { fmtDuration, fmtPct } from '../lib/format'
-import { requireOk } from '../lib/api'
+import {
+  createFlow,
+  deleteFlow as deleteFlowApi,
+  getAnalyticsFlows,
+  getAnalyticsRuns,
+  getFlow,
+  getFlows,
+  getOrgSkills,
+  getTopology,
+  replaceFlow,
+  runFlow as runFlowApi,
+} from '../lib/api'
 import { EmptyState, ErrorState, SectionHeader } from './ui/common'
+import DurableRunsPanel from './workflow/durableRuns'
 
 // The React-Flow canvas is heavy (React Flow + its styles). Lazy-load it so it is
 // code-split out of the initial dashboard bundle and only fetched when a flow opens.
@@ -144,9 +156,7 @@ export default function WorkflowsPanel({ route, onRoute } = {}) {
 
   const loadFlows = useCallback(async () => {
     try {
-      const r = await fetch('/api/flows')
-      await requireOk(r, 'Flows')
-      const d = await r.json()
+      const d = await getFlows()
       setFlows(Array.isArray(d) ? d : [])
       setError('')
     } catch (e) {
@@ -158,9 +168,7 @@ export default function WorkflowsPanel({ route, onRoute } = {}) {
 
   const loadAnalytics = useCallback(async () => {
     try {
-      const r = await fetch('/api/analytics/flows?range=30d')
-      await requireOk(r, 'Flow analytics')
-      const d = await r.json()
+      const d = await getAnalyticsFlows('30d')
       const byId = {}
       for (const item of d.items || []) byId[item.entity_id] = item
       setFlowAnalytics(byId)
@@ -174,9 +182,7 @@ export default function WorkflowsPanel({ route, onRoute } = {}) {
   const loadFlowRuns = useCallback(async (id) => {
     if (!id) { setFlowRuns([]); return }
     try {
-      const r = await fetch(`/api/analytics/runs?kind=flow&entity_id=${encodeURIComponent(id)}&limit=25`)
-      await requireOk(r, 'Flow run history')
-      const d = await r.json()
+      const d = await getAnalyticsRuns({ kind: 'flow', entity_id: id, limit: 25 })
       setFlowRuns(Array.isArray(d.items) ? d.items : [])
     } catch {
       setFlowRuns([])
@@ -187,12 +193,10 @@ export default function WorkflowsPanel({ route, onRoute } = {}) {
     loadFlows()
     loadAnalytics()
     // The org context task nodes route against: brains to pin, skills to auto-route.
-    fetch('/api/org/topology')
-      .then((r) => (r.ok ? r.json() : null))
+    getTopology()
       .then((d) => setBrains(Array.isArray(d?.nodes) ? d.nodes : []))
       .catch(() => setBrains([]))
-    fetch('/api/org/skills')
-      .then((r) => (r.ok ? r.json() : []))
+    getOrgSkills()
       .then((d) => setSkills(Array.isArray(d) ? d : []))
       .catch(() => setSkills([]))
   }, [loadFlows, loadAnalytics])
@@ -201,9 +205,7 @@ export default function WorkflowsPanel({ route, onRoute } = {}) {
     setBusy(true)
     setError('')
     try {
-      const r = await fetch(`/api/flows/${encodeURIComponent(id)}`)
-      if (!r.ok) throw new Error('open failed')
-      const d = await r.json()
+      const d = await getFlow(id)
       setEditing(d)
       setIsNew(false)
       await loadFlowRuns(d.id)
@@ -234,10 +236,7 @@ export default function WorkflowsPanel({ route, onRoute } = {}) {
   // flow at its id (replace-or-create), then refresh the list so it reappears.
   const recreateFlow = useCallback(async (flow) => {
     try {
-      const r = await fetch(`/api/flows/${encodeURIComponent(flow.id)}`, {
-        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(flow),
-      })
-      if (!r.ok) throw new Error('restore failed')
+      await replaceFlow(flow.id, flow)
       await loadFlows()
       toast.success(`Flow "${flow.name || flow.id}" restored.`)
     } catch {
@@ -256,8 +255,10 @@ export default function WorkflowsPanel({ route, onRoute } = {}) {
     setBusy(true)
     setError('')
     try {
-      const r = await fetch(`/api/flows/${encodeURIComponent(id)}`, { method: 'DELETE' })
-      if (!r.ok && r.status !== 404) throw new Error('delete failed')
+      // A 404 is fine here — the flow is already gone, which is the desired end state.
+      await deleteFlowApi(id).catch((e) => {
+        if (!/endpoint is missing|not found/i.test(String(e?.message || ''))) throw e
+      })
       await loadFlows() // reconcile with the server (preserves existing refetch behavior)
       toast.show({
         type: 'success',
@@ -277,35 +278,29 @@ export default function WorkflowsPanel({ route, onRoute } = {}) {
   // so the editor can show a 400 {detail} inline.
   const saveFlow = useCallback(async (flowDict) => {
     try {
-      const url = isNew ? '/api/flows' : `/api/flows/${encodeURIComponent(flowDict.id)}`
-      const method = isNew ? 'POST' : 'PUT'
-      const r = await fetch(url, {
-        method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(flowDict),
-      })
-      const d = await r.json().catch(() => ({}))
-      if (!r.ok) return { ok: false, detail: d.detail || `Save failed (${r.status})` }
+      const d = isNew ? await createFlow(flowDict) : await replaceFlow(flowDict.id, flowDict)
       setIsNew(false)
       setEditing(d) // adopt the canonical stored flow (same id → editor keeps the canvas)
       onRoute?.(d.id) // a freshly-created flow now has a persistent id — deep-link it
       await loadFlows()
       return { ok: true, flow: d }
-    } catch {
-      return { ok: false, detail: 'Save failed — network error.' }
+    } catch (e) {
+      // The client surfaces the API's own `{"detail": …}` (e.g. which node failed
+      // validation) in the Error message — show that, not a generic line.
+      return { ok: false, detail: e instanceof Error ? e.message : 'Save failed — network error.' }
     }
   }, [isNew, loadFlows, onRoute])
 
   const runFlow = useCallback(async (id, inputs = {}) => {
     try {
-      const r = await fetch(`/api/flows/${encodeURIComponent(id)}/run`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ inputs }),
-      })
-      const d = await r.json().catch(() => ({}))
-      if (!r.ok) return { ok: false, detail: d.detail || `Run failed (${r.status})` }
+      // The server routes this through org/delegate.py:delegate_flow — the
+      // dashboard never reaches the engine directly.
+      const d = await runFlowApi(id, { inputs })
       await loadAnalytics()
       await loadFlowRuns(id)
       return { ok: true, run: d }
-    } catch {
-      return { ok: false, detail: 'Run failed — network error.' }
+    } catch (e) {
+      return { ok: false, detail: e instanceof Error ? e.message : 'Run failed — network error.' }
     }
   }, [loadAnalytics, loadFlowRuns])
 
@@ -334,6 +329,10 @@ export default function WorkflowsPanel({ route, onRoute } = {}) {
             />
           </div>
         </Suspense>
+        {/* The DURABLE runs of this flow (GET /api/flow-runs) — the operational
+            kernel's own record + its append-only event stream, polled while a run
+            is still moving. Distinct from the analytics run history above it. */}
+        {!isNew && <DurableRunsPanel flowId={editing.id} />}
         <FlowInsights items={flowAnalyticsItems} onOpen={openFlow} />
       </div>
     )

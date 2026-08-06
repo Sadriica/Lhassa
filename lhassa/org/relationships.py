@@ -46,14 +46,30 @@ READS = "reads"
 NOTIFIES = "notifies"
 REVIEWS = "reviews"
 COLLABORATES = "collaborates"
+# SHARES — cross-INSTANCE, not cross-brain (Stream 6 Phase A). Edge (A, B,
+# shares) means "instance A may discover/subscribe to instance B's published
+# resources" — the SAME directed-A-reads-B shape as READS, one level up (whole
+# brains, not sub-brains within one tree). See INSTANCE_SCOPED_KINDS below: this
+# is the one kind whose endpoints are NOT required to be local topology nodes.
+SHARES = "shares"
 
 # The closed set of valid relationship kinds. Adding a kind is a deliberate edit
 # here (and a description below) — the set is closed on purpose.
-RELATION_KINDS: tuple[str, ...] = (READS, NOTIFIES, REVIEWS, COLLABORATES)
+RELATION_KINDS: tuple[str, ...] = (READS, NOTIFIES, REVIEWS, COLLABORATES, SHARES)
 
 # Which kinds are SYMMETRIC (bidirectional). A symmetric edge is stored canonically
 # (ids sorted) so A↔B is never duplicated, and ``permits`` answers true both ways.
 SYMMETRIC_KINDS: frozenset[str] = frozenset({COLLABORATES})
+
+# Which kinds are INSTANCE-scoped rather than brain-scoped: their endpoints are
+# whole Lhassa instances (possibly foreign — never in this instance's own org
+# topology), so the local-topology membership check (_require_brains) does not
+# apply. Deliberately a SEPARATE closed set from RELATION_KINDS: extending
+# cross-instance semantics to a kind is a distinct decision from adding the kind
+# at all. For a SHARES edge specifically, ``to_id`` MUST be this instance's own
+# identity (Config.instance_id) — only the resource owner can grant access to
+# ITSELF; ``from_id`` is the (foreign, unvalidated) requester.
+INSTANCE_SCOPED_KINDS: frozenset[str] = frozenset({SHARES})
 
 # One-line semantics for the dashboard legend / the kinds API endpoint.
 KIND_DESCRIPTIONS: dict[str, str] = {
@@ -61,6 +77,8 @@ KIND_DESCRIPTIONS: dict[str, str] = {
     NOTIFIES: "A pushes info/events to B (directed A→B).",
     REVIEWS: "B reviews/approves A's work (directed A→B; A is reviewed by B).",
     COLLABORATES: "Peers share context, bidirectional (symmetric A↔B).",
+    SHARES: "Instance A may discover/subscribe to instance B's shared "
+    "resources (directed A→B; B is this instance, the grantor).",
 }
 
 
@@ -203,6 +221,24 @@ def _require_brains(from_id: str, to_id: str, config: "Optional[Config]") -> Non
             raise RelationshipError(f"no brain {bid!r} in the org topology")
 
 
+def _require_instance_grant(from_id: str, to_id: str, config: "Optional[Config]") -> None:
+    """Validate an INSTANCE-scoped edge (currently only :data:`SHARES`).
+
+    Endpoints are whole instances, not local topology brains — a foreign
+    ``from_id`` is expected and NOT checked against the local tree. What IS
+    enforced: ``to_id`` must be THIS instance's own id, so an instance can only
+    ever grant access to its own resources, never impersonate a grant on
+    another instance's behalf.
+    """
+    cfg = _resolve_config(config)
+    local_id = str(getattr(cfg, "instance_id", "") or "").strip()
+    if not local_id or to_id != local_id:
+        raise RelationshipError(
+            "an instance-scoped edge's 'to' must be this instance's own id "
+            f"({local_id!r}); an instance can only grant access to itself"
+        )
+
+
 def add(
     from_id: str,
     to_id: str,
@@ -226,7 +262,10 @@ def add(
         raise RelationshipError("a relationship needs a non-empty 'from' and 'to'")
     if from_id == to_id:
         raise RelationshipError(f"a brain cannot have a {kind!r} edge to itself")
-    _require_brains(from_id, to_id, config)
+    if kind in INSTANCE_SCOPED_KINDS:
+        _require_instance_grant(from_id, to_id, config)
+    else:
+        _require_brains(from_id, to_id, config)
 
     from_id, to_id = _canonical(from_id, to_id, kind)
     new = Relationship(from_id, to_id, kind, note=note or "", scope=scope or "")

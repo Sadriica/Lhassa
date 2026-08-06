@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useState } from 'react'
-import { requireOk } from '../lib/api'
+import {
+  getProject,
+  getProjectArtifacts,
+  getProjectEpisodes,
+  getProjectRuns,
+  getProjects,
+} from '../lib/api'
 import { shortWhen } from '../lib/format'
 import { EmptyState, ErrorState, SectionHeader } from './ui/common'
 
@@ -160,9 +166,7 @@ export default function ProjectsPanel() {
 
   const loadProjects = useCallback(async () => {
     try {
-      const r = await fetch(`/api/projects${showAll ? '?all=1' : ''}`)
-      await requireOk(r, 'Projects')
-      setProjects(await r.json())
+      setProjects(await getProjects(showAll))
       setError('')
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not load projects.')
@@ -178,17 +182,14 @@ export default function ProjectsPanel() {
     setDetail(null)
     setDetailError('')
     try {
-      const [pRes, rRes, aRes, eRes] = await Promise.all([
-        fetch(`/api/projects/${encodeURIComponent(id)}`),
-        fetch(`/api/projects/${encodeURIComponent(id)}/runs`),
-        fetch(`/api/projects/${encodeURIComponent(id)}/artifacts`),
-        fetch(`/api/projects/${encodeURIComponent(id)}/episodes`),
+      // The project itself must load (its failure is the user's error); the three
+      // scoped reads are supporting detail and degrade to empty independently.
+      const project = await getProject(id)
+      const [runs, artifacts, episodes] = await Promise.all([
+        getProjectRuns(id).catch(() => []),
+        getProjectArtifacts(id).catch(() => []),
+        getProjectEpisodes(id).catch(() => []),
       ])
-      await requireOk(pRes, 'Project')
-      const project = await pRes.json()
-      const runs = rRes.ok ? await rRes.json() : []
-      const artifacts = aRes.ok ? await aRes.json() : []
-      const episodes = eRes.ok ? await eRes.json() : []
       setDetail({ project, runs, artifacts, episodes })
     } catch (e) {
       setDetailError(e instanceof Error ? e.message : 'Could not load project detail.')

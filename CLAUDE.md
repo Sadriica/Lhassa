@@ -396,6 +396,33 @@ kind, no self-edge) before it writes. `/api/org/relationships` (+ `/kinds`,
 overlay (legend + toggles) and the inspector adds/removes them. Multi-person approval:
 proposer ≠ approver for high-risk.
 
+**Multi-user, Phase A — one brain per person, shared resources.** The owner's
+choice: multiple SOVEREIGN instances (one Lhassa per person), not one shared
+instance with per-user auth (that is Phase B, not built). `actor_id` is now a
+real column (additive migration 11, `core/db.py`) on `approvals` (already
+carried in `payload["actor_id"]` via `Origin.actor_id`, now queryable), `facts`
+and `knowledge` — defaulting existing rows to the owner, never blank.
+`org/relationships.py` gains a fifth, INSTANCE-scoped edge kind, `shares`
+(`RELATION_KINDS`/`INSTANCE_SCOPED_KINDS`): edge `(A, B, shares)` means
+"instance A may discover/subscribe to instance B's shared resources" — `to_id`
+must equal the local instance's own id (an instance can only grant access to
+ITSELF), and its endpoints skip local-topology validation (a foreign instance
+is never a node in this instance's own org chart). `org/sharing.py` is the
+whole surface built on that one seam: a closed, small shareable-type set
+(`SHAREABLE_TYPES` = skill/flow/template/knowledge — facts and episodes are
+never in it, so private memory cannot be published even by construction, not
+just by a runtime check) backed by two new tables (`shared_resources`,
+`resource_subscriptions`); every cross-instance read/write is deny-by-default
+via `relationships.permits(requester, provider, SHARES)` (a permit-lookup
+failure denies, never allows) and logs its own $0 `cross-instance-share`
+episode, attributed `dominio=Config.root_admin_id` like every other org-wide
+governance op. `lhassa share publish|unpublish|grant|revoke|offerings|
+subscribe|unsubscribe|subscriptions` + `/api/share/*`. PRODUCT DECISION (no
+live multi-machine transport exists yet): the SHARES grant registry
+(`org_relationships_file`) is a file shared across every instance on one box,
+the same way the brain DB already is — revisit once instances run on separate
+machines and a real transport lands.
+
 **Projects + standing brains.** `core/projects.py` is the first-class workspace
 entity — a named, TYPED unit of work (`kind`: `code`/`research`/`ops`/`personal`/
 `generic`, open), scoped into existing tables via one namespaced-string convention
@@ -417,10 +444,20 @@ status asserts an outcome) / `verified` (observed AND independently corroborated
 a passing verify result, or a resolved linked approval) — a pure derived read, no
 new storage, never a stronger claim than the evidence supports.
 
-**The brain in a terminal.** `lhassa tui` (`cli/tui/`) is a Textual app — four tabs
-(Overview/Projects/Runs/Approvals) reading `core/db.py` directly, so it works with
-the API server down; approve/deny (`a`/`d` keys) go through the same
-`security/approval.py:resolve()` seam as the CLI/API.
+**The brain in a terminal.** `lhassa tui` (`cli/tui/`) is a Textual app — **eight
+tabs** (Overview/Projects/Runs/Approvals/Flows/Skills/Memory/Org) reading
+`core/db.py`, `flows/store.py`, `skills/store.py` and `org/topology.py` DIRECTLY,
+so it works with the API server down. Every table screen subclasses
+`cli/tui/screens/base.py:TableScreen`, which is where the three app-wide
+affordances live: a `/` case-insensitive **substring filter** (predictable beats
+fuzzy), **live refresh** on a `set_interval` that SKIPS the redraw when the rows
+are unchanged (no flicker, cursor/scroll preserved) and degrade-to-empty on any
+read failure. `cli/tui/palette.py` registers screen navigation + app actions with
+Textual's own **command palette** (`ctrl+p`) — navigation only, never mutations;
+`screens/help.py` is the **keyboard-help** modal (`?`/`F1`). Mutations cross the
+same seams every other surface uses: approve/deny (`a`/`d`) through
+`security/approval.py:resolve()`, running a flow (`x` on the Flows tab) through
+`org/delegate.py:delegate_flow` — never `run_flow`, never raw SQL.
 
 **The temple (`temple`) — Lhassa's own inner department.** Distinct from `interns`
 (CV workers) and `personal` (the owner's own department): `temple` is a DIRECT

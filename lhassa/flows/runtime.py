@@ -678,6 +678,125 @@ class FlowRuntimeRepository:
             raise RuntimeError(f"run {run_id} vanished after commit")
         return run
 
+    async def park_retry(
+        self,
+        instance_id: str,
+        run_id: str,
+        *,
+        frontier: list,
+        visited: list,
+        state: dict,
+        next_wakeup_at: datetime,
+        expected_version: int,
+        lease_token: str,
+    ) -> dict:
+        """Commit checkpoint + WAITING_RETRY run state atomically.
+
+        Mirrors :meth:`park_gate`'s shape (a running claim pauses, atomically,
+        with its cursor persisted) but for a retryable node failure instead of
+        an approval: no ``approvals`` row, and the run becomes claimable again
+        the moment ``next_wakeup_at`` is due — :meth:`claim_run` already knows
+        how to pick a ``waiting_retry`` row back up. The lease is released
+        exactly like a completed run (the CAS/lease/fencing model is unchanged).
+        """
+        timestamp = _iso(_now())
+        conn = await self._connection()
+        try:
+            await conn.execute("BEGIN IMMEDIATE")
+            async with conn.execute(
+                "SELECT * FROM flow_run_state WHERE instance_id = ? AND run_id = ?",
+                (instance_id, run_id),
+            ) as cur:
+                row = await cur.fetchone()
+            if row is None:
+                raise RunNotFound(run_id)
+            if row["status"] != RunStatus.RUNNING.value:
+                raise RuntimeConflict(f"run {run_id} is not running")
+            if row["state_version"] != expected_version:
+                raise RuntimeConflict(
+                    f"expected version {expected_version}, found {row['state_version']}"
+                )
+            self._require_fence(row, lease_token)
+
+            seq = int(row["checkpoint_seq"]) + 1
+            await conn.execute(
+                """INSERT INTO flow_checkpoints(
+                       run_id, seq, instance_id, frontier, visited, state,
+                       schema_version, created_at)
+                   VALUES(?, ?, ?, ?, ?, ?, 1, ?)""",
+                (
+                    run_id,
+                    seq,
+                    instance_id,
+                    _dump(frontier),
+                    _dump(visited),
+                    _dump(state),
+                    timestamp,
+                ),
+            )
+            checkpoint_event_id = await self._insert_event(
+                conn,
+                instance_id=instance_id,
+                run_id=run_id,
+                kind=FlowEventKind.CHECKPOINT_SAVED,
+                payload={"seq": seq, "reason": "retry_scheduled"},
+                dedupe_key=f"checkpoint:{run_id}:{seq}",
+                created_at=timestamp,
+            )
+            await conn.execute(
+                """UPDATE flow_checkpoints SET source_event_id = ?
+                   WHERE run_id = ? AND seq = ?""",
+                (checkpoint_event_id, run_id, seq),
+            )
+            await conn.execute(
+                """UPDATE flow_run_state
+                   SET status = 'waiting_retry', frontier = ?, visited = ?,
+                       checkpoint_seq = ?, state_version = state_version + 1,
+                       lease_owner = NULL, lease_token = NULL,
+                       lease_expires_at = NULL, heartbeat_at = NULL,
+                       next_wakeup_at = ?, updated_at = ?
+                   WHERE instance_id = ? AND run_id = ?
+                     AND status = 'running' AND state_version = ?""",
+                (
+                    _dump(frontier),
+                    _dump(visited),
+                    seq,
+                    _iso(next_wakeup_at),
+                    timestamp,
+                    instance_id,
+                    run_id,
+                    expected_version,
+                ),
+            )
+            await self._insert_event(
+                conn,
+                instance_id=instance_id,
+                run_id=run_id,
+                kind=FlowEventKind.RETRY_SCHEDULED,
+                payload={"next_wakeup_at": _iso(next_wakeup_at)},
+                dedupe_key=f"retry-scheduled:{run_id}:{seq}",
+                created_at=timestamp,
+            )
+            await self._insert_event(
+                conn,
+                instance_id=instance_id,
+                run_id=run_id,
+                kind=FlowEventKind.RUN_PAUSED,
+                payload={"reason": "retry", "next_wakeup_at": _iso(next_wakeup_at)},
+                dedupe_key=f"run-paused:{run_id}:{seq}",
+                created_at=timestamp,
+            )
+            await conn.commit()
+        except BaseException:
+            await conn.rollback()
+            raise
+        finally:
+            await conn.close()
+        run = await self.get_run(instance_id, run_id)
+        if run is None:
+            raise RuntimeError(f"run {run_id} vanished after commit")
+        return run
+
     async def heartbeat_run(
         self,
         instance_id: str,

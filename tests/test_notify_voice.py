@@ -51,9 +51,17 @@ def test_classify_falls_back_to_generic():
 def test_template_action_result_dedupes_doubled_name():
     text = "⚙️ check_spend: check_spend: 2040 output tokens today, cost $0.0053"
     out = voice.template(text, "action-result")
-    assert out.startswith("Done — Check-spend:")
+    # check_spend has a phrasebook lead ("I checked spend") — no mechanical
+    # "Check-spend:" title-casing for a known action.
+    assert out.startswith("Done — I checked spend:")
     assert "2040 output tokens today" in out
     assert "check_spend: check_spend" not in out
+
+
+def test_template_action_result_falls_back_to_title_case_for_unknown_action():
+    text = "⚙️ totally_unknown_action: totally_unknown_action: did a thing"
+    out = voice.template(text, "action-result")
+    assert out == "Done — Totally-unknown-action: did a thing"
 
 
 def test_template_naturalizes_key_value_tail():
@@ -75,7 +83,10 @@ def test_template_approval_adds_framing():
 
 def test_template_alert_adds_framing_when_not_already_voiced():
     out = voice.template("a new failure was seen", "alert")
-    assert out == "Heads up: a new failure was seen"
+    # "Heads up — " is the ONE lead phrase — sourced from persona.LEAD_PHRASES,
+    # the same table persona.format_alert draws from (no more duplicated,
+    # drifted copies of "heads up").
+    assert out == "Heads up — a new failure was seen"
 
 
 def test_template_alert_is_a_noop_on_already_voiced_watcher_text():

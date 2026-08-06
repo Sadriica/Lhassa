@@ -403,6 +403,14 @@ async def react(events: list[dict], *, department: str, config: Optional[Config]
     with contextlib.suppress(Exception):
         await db.init_db()
         ep = Episode.begin(despertar_por="monitor", instance_id=instance_id)
+        # Attribution: the alert below deliberately does NOT ride org/deliver's
+        # per-hop chain — the monitor is Lhassa's own $0 ear (same documented
+        # exception class as health/checks.py), and wrapping every alert in
+        # deliver hops would refill the episode log with the very paperwork
+        # recall demotes. The audit trail is kept the cheap way instead: this
+        # episode names the observing department via dominio, so "who told the
+        # owner" is answerable without the extra hops.
+        ep.dominio = department
         ep.finish(
             decision="monitor: watch",
             accion=f"monitor:{department}",
@@ -519,8 +527,6 @@ async def watch_loop(config: Optional[Config] = None, *, once: bool = False) -> 
                 )
             )
             if integrity_due:
-                import json
-
                 from lhassa import actionpack
                 from lhassa.actionpack._temple import temple_run
 
@@ -536,15 +542,37 @@ async def watch_loop(config: Optional[Config] = None, *, once: bool = False) -> 
                     },
                     return_record=True,
                 )
-                try:
-                    integrity = json.loads(str(record.get("result") or "{}"))
-                except (AttributeError, json.JSONDecodeError, TypeError, ValueError):
-                    integrity = {
-                        "status": "error",
-                        "run_id": "unknown",
-                        "findings_critical": 1,
-                        "findings_warn": 0,
-                    }
+                # Read the structured verdict from the conformance_runs table —
+                # the source of truth — instead of parsing the action's return
+                # string (the string is what reaches the owner's screen, and a
+                # raw JSON dump is not a notification). One guard first: when
+                # the action ERRORED, no completed run row was written, so the
+                # latest row is a stale, possibly-green PREVIOUS run — reading
+                # it would mask the failure as a pass. An error therefore
+                # fails closed here and never consults the table.
+                integrity = {
+                    "status": "error",
+                    "run_id": "unknown",
+                    "findings_critical": 1,
+                    "findings_warn": 0,
+                }
+                action_errored = "check_integrity: error:" in str(
+                    (record or {}).get("result") or ""
+                )
+                if not action_errored:
+                    try:
+                        from lhassa.core import db as _db
+
+                        row = await _db.latest_conformance_run(config.instance_id)
+                        if row:
+                            integrity = {
+                                "status": str(row.get("status") or "error"),
+                                "run_id": row.get("id") or "unknown",
+                                "findings_critical": int(row.get("findings_critical") or 0),
+                                "findings_warn": int(row.get("findings_warn") or 0),
+                            }
+                    except Exception as exc:  # the watcher never crashes on a read
+                        logger.debug(f"watcher: could not read conformance run: {exc}")
                 _STATE["last_integrity_at"] = now
                 if integrity["status"] != "pass":
                     critical = int(integrity.get("findings_critical") or 0)

@@ -1,13 +1,14 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Runs screen — a DataTable of recent durable runs across all entities."""
+"""Runs screen — a DataTable of recent durable runs across all entities.
+
+Now a :class:`~lhassa.cli.tui.screens.base.TableScreen`: it gains the ``/``
+substring filter and the live re-poll for free, and keeps its direct
+``core/db.py`` read (works with the API server down).
+"""
 
 from __future__ import annotations
 
-from textual.app import ComposeResult
-from textual.containers import Vertical
-from textual.widgets import DataTable
-
-_EMPTY = "—"
+from lhassa.cli.tui.screens.base import EMPTY, Row, TableScreen
 
 
 async def _load_runs(instance_id: str) -> list[dict]:
@@ -29,48 +30,32 @@ def _evidence_of(row: dict) -> str:
         return "prepared"
 
 
-class RunsScreen(Vertical):
+class RunsScreen(TableScreen):
     """A DataTable of recent runs (id/kind/entity/status/cost/evidence)."""
 
-    DEFAULT_CSS = """
-    RunsScreen {
-        padding: 1 2;
-    }
-    RunsScreen #runs-table {
-        height: 1fr;
-    }
-    """
+    COLUMNS = ("id", "kind", "entity", "status", "cost", "evidence")
+    TABLE_ID = "runs-table"
+    FILTER_PLACEHOLDER = "filter runs…"
 
-    BINDINGS = [("r", "refresh", "Refresh")]
-
-    def __init__(self, instance_id: str, **kwargs) -> None:
-        super().__init__(**kwargs)
-        self._instance_id = instance_id
-
-    def compose(self) -> ComposeResult:
-        table = DataTable(id="runs-table", cursor_type="row")
-        table.add_columns("id", "kind", "entity", "status", "cost", "evidence")
-        yield table
-
-    async def on_mount(self) -> None:
-        await self.action_refresh()
-
-    async def action_refresh(self) -> None:
-        rows = await _load_runs(self._instance_id)
-        table = self.query_one("#runs-table", DataTable)
-        table.clear()
-        for row in rows:
+    async def load_rows(self) -> list[Row]:
+        out: list[Row] = []
+        for row in await _load_runs(self._instance_id):
             cost = row.get("cost_usd") or 0.0
             try:
                 cost = float(cost)
             except (TypeError, ValueError):
                 cost = 0.0
-            table.add_row(
-                str(row.get("id") or _EMPTY),
-                str(row.get("kind") or _EMPTY),
-                str(row.get("entity_id") or _EMPTY),
-                str(row.get("status") or _EMPTY),
-                f"${cost:.4f}",
-                _evidence_of(row),
-                key=str(row.get("id")),
+            out.append(
+                (
+                    str(row.get("id")),
+                    (
+                        str(row.get("id") or EMPTY),
+                        str(row.get("kind") or EMPTY),
+                        str(row.get("entity_id") or EMPTY),
+                        str(row.get("status") or EMPTY),
+                        f"${cost:.4f}",
+                        _evidence_of(row),
+                    ),
+                )
             )
+        return out

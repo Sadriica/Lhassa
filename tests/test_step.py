@@ -5,6 +5,8 @@ Fully offline (replay): a tmp brain DB via monkeypatched ``db.DB_PATH`` and a
 monkeypatched git subprocess. No live network, LLM, or git.
 """
 
+import asyncio
+
 import pytest
 import pytest_asyncio  # noqa: F401
 
@@ -379,6 +381,41 @@ async def test_step_judgment_all_chain_entries_fail_still_defers_no_crash(
 
 
 @pytest.mark.asyncio
+async def test_step_kill_switch_in_fallback_chain_stops_later_providers(
+    tmp_path, monkeypatch
+):
+    """A manual kill encountered mid-chain is terminal, whatever its order."""
+    db = await _init(tmp_path, monkeypatch)
+    from lhassa.core import step
+    from lhassa.llm import router as router_mod
+    from lhassa.llm.gateway import KillSwitchActive
+    from lhassa.llm.router import Decision
+
+    await db.add_task("inst_personal", "decide_thing", "asunto", params={})
+
+    primary = FakeProvider(name="opencode", raises=RuntimeError("flaked"))
+    killed = FakeProvider(name="default", raises=KillSwitchActive("manual stop"))
+    later = FakeProvider(name="claude", text="must not run")
+
+    def _fake_decide(trigger, ctx=None, *, config, **kwargs):
+        return Decision(kind="think", provider=primary, model="m", reason="think")
+
+    monkeypatch.setattr(router_mod, "decide", _fake_decide)
+    monkeypatch.setattr(
+        router_mod, "fallback_chain", lambda config, chosen: [(killed, None), (later, None)]
+    )
+
+    summary = await step.step("inst_personal")
+
+    assert summary["judged"] == 0
+    assert summary["deferred"] == 1
+    assert len(killed.calls) == 1
+    assert later.calls == []
+    ep = (await db.load_recent_episodes("inst_personal"))[0]
+    assert "KillSwitchActive" in ep["resultado"]
+
+
+@pytest.mark.asyncio
 async def test_step_judgment_budget_exceeded_only_tries_cli_providers_in_chain(
     tmp_path, monkeypatch
 ):
@@ -528,7 +565,12 @@ async def test_step_delegate_launches_job_and_records_episode(tmp_path, monkeypa
     # Next tick supervises: the finished job is reaped to done with its cost.
     job_id = jobs[0]["id"]
     await runner._JOBS[job_id].task  # let the stream finish
-    summary2 = await step.step("inst_personal")
+    # The completed job creates a review trigger. Keep that review hermetic so
+    # this lifecycle test cannot discover and invoke a developer's local CLI.
+    summary2 = await asyncio.wait_for(
+        step.step("inst_personal", provider=FakeProvider(text="reviewed")),
+        timeout=5,
+    )
     assert summary2.get("reaped") == 1
     jobs2 = await _jobs(db)
     assert jobs2[0]["estado"] == "done"

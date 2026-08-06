@@ -8,7 +8,12 @@ import SkillsPanel from './components/SkillsPanel'
 import AgentsPanel from './components/AgentsPanel'
 import AgenticPanel from './components/AgenticPanel'
 import WorkflowsPanel from './components/WorkflowsPanel'
+import DurableRunsPanel from './components/workflow/durableRuns'
 import ProjectsPanel from './components/ProjectsPanel'
+import ArtifactsPanel from './components/ArtifactsPanel'
+import IntegrityPanel from './components/IntegrityPanel'
+import ResearchPanel from './components/ResearchPanel'
+import KnowledgePanel from './components/KnowledgePanel'
 import MetricsPanel from './components/MetricsPanel'
 import AIUsagePanel from './components/AIUsagePanel'
 import MemoryPanel from './components/MemoryPanel'
@@ -91,8 +96,28 @@ export default function App() {
           <ErrorBoundary><WorkflowsPanel route={subRoute} onRoute={onFlowRoute} /></ErrorBoundary>
         )}
 
+        {section === 'flow-runs' && (
+          <ErrorBoundary><DurableRunsPanel /></ErrorBoundary>
+        )}
+
         {section === 'projects' && (
           <ErrorBoundary><ProjectsPanel /></ErrorBoundary>
+        )}
+
+        {section === 'knowledge' && (
+          <ErrorBoundary><KnowledgePanel /></ErrorBoundary>
+        )}
+
+        {section === 'artifacts' && (
+          <ErrorBoundary><ArtifactsPanel /></ErrorBoundary>
+        )}
+
+        {section === 'research' && (
+          <ErrorBoundary><ResearchPanel /></ErrorBoundary>
+        )}
+
+        {section === 'integrity' && (
+          <ErrorBoundary><IntegrityPanel /></ErrorBoundary>
         )}
 
         {section === 'run' && (

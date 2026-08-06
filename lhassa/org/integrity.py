@@ -168,7 +168,12 @@ async def _canonical_research_flows(config: Config, instance_id: str) -> dict:
             drift.append({"flow_id": flow_id, "reason": "drifted"})
     return _result(
         not drift,
-        "research flows canonical" if not drift else f"{len(drift)} flow drift(s)",
+        # A finding must NAME its remedy: this exact drift alerted the owner
+        # hourly for three days while the fix was one idempotent command the
+        # summary never mentioned. Counsel, not control — say what to type.
+        "research flows canonical"
+        if not drift
+        else f"{len(drift)} flow drift(s) — run `lhassa seed apply research` to restore",
         drift=drift,
     )
 

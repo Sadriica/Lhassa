@@ -55,6 +55,14 @@ This allowlist is task-level (which signed `Task` actions may execute at all) an
 explicitly kept independent from `lhassa/tools/privileged.py`'s command-level (sudo)
 allowlist over OS binaries — two layers, on purpose, never merged.
 
+The gate is enforced at the **local execution boundary**, not only at remote/PTC
+edges. `core/step.py` checks persisted tasks before fixed actions, judgment and
+delegation; reflexes and sensor-produced fixed actions cross it as well.
+`core/dispatch.py:run_task_now()` reloads the authoritative row instead of trusting
+parameters supplied by its caller. A denial is terminal (`rechazada`) and produces
+an episode rather than silently retrying forever. This makes the heartbeat, an early
+runner and a remote worker different transports for the same policy contract.
+
 ## Signed tasks + trust that only degrades
 
 Every `Task` that reaches the allowlist gate carries a `firma` (signature) and an
@@ -66,6 +74,14 @@ cifrar": the channel (TLS/WireGuard) already handles confidentiality; the signat
 proves the task really came from the brain and wasn't tampered with. `signing.verify()`
 never raises — bad signature, garbage input, wrong type all just return `False`, because
 the allowlist gate has to be able to call it on hostile data.
+
+Tasks created through `core/db.py:add_task()` are signed automatically when the caller
+does not provide a signature. The original `creado_en` travels with the task because it
+is part of the signed envelope; mutable lifecycle state (`estado`) deliberately is not.
+Consequently pending → running → done transitions do not invalidate authenticity, but
+changing action, target, parameters, origin or creation time does. Execution always
+verifies the exact stored envelope, so a caller cannot replace signed parameters after
+retrieval.
 
 `security/trust.py:TrustLevel` is a three-level ordered enum: `MUNDO` (0, derived from
 external/untrusted content) < `INTERNO` (1, the brain acting on itself) < `HUMANO` (2, a
@@ -102,6 +118,40 @@ now an approve genuinely unblocks the work, and Telegram's inline-keyboard
 handler additionally runs a resolved `mint_task` approval immediately (the
 same early-runner+report path the `[[action: …]]` marker uses), rather than
 waiting for the next beat.
+
+Approval is checked again at the final execution boundary. A task whose policy requires
+approval may execute only when autonomy legitimately applies or the database contains a
+durable, approved `mint_task` approval for that exact task id. Reaching
+`actions.run()` through a lower-level database or dispatch seam therefore cannot skip
+the human decision.
+
+The authority resolving an approval is a trusted principal supplied by the surface,
+not arbitrary request data. API, CLI, TUI and Telegram use the canonical owner
+principal; a `by_actor` value is retained only as audit context. Separation of duties
+is stamped when the approval is requested and enforced when it is resolved for all
+high-risk shapes: `always_approve` actions, actions whose allowlist spec requires
+approval (including `run_command` and `run_script`), protected-root reads and
+non-read-only project attachments. The proposer cannot approve their own request, and
+a missing proposer fails closed rather than disabling the rule.
+
+## Global model kill switch
+
+`LHASSA_KILL_SWITCH` / the live `llm_kill_switch` setting is an emergency boundary,
+not a routing preference. `llm/gateway.py` owns the process-wide state and every model
+provider calls `assert_llm_live()` immediately before HTTP I/O or launching a CLI
+subprocess. The heartbeat, fallback chain, Telegram and `/ai` also preserve
+`KillSwitchActive` as a hard stop: it is never converted into a budget failure or a
+reason to try another provider. Turning the switch on therefore prevents both paid API
+calls and nominally free local/CLI inference until it is explicitly turned off.
+
+## Skill-store filesystem boundary
+
+`skills/store.py` treats the configured skill root as a hard boundary for list, get,
+save and delete. Skill folders must be real directories, not symlink aliases; a
+symlinked `SKILL.md` is rejected and symlinked resources are not exported. The folder
+name—not editable frontmatter—is the canonical storage identity. This prevents both
+out-of-root traversal and in-store aliasing where one skill could be read or deleted
+under another name.
 
 ### The protected-roots tier — per-access approval on a path, not an action
 

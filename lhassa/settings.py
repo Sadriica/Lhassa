@@ -310,6 +310,21 @@ EDITABLE: list[dict] = [
         "restart": RESTART_APP,
     },
     {
+        "key": "memory_distill_enabled",
+        "attr": "memory_distill_enabled",
+        "env_var": "LHASSA_MEMORY_DISTILL_ENABLED",
+        "type": "bool",
+        "label": "Distill episodes with a model",
+        "help": (
+            "Allow the memory distillation pass to spend a model call. Turning "
+            "this off is enforced inside the memory module, so scheduled, CLI, "
+            "and future callers all stop at the same boundary."
+        ),
+        "group": "Memory",
+        "default": True,
+        "restart": RESTART_NONE,
+    },
+    {
         "key": "embeddings_url",
         "attr": "embeddings_url",
         "env_var": "LHASSA_EMBEDDINGS_URL",
@@ -779,6 +794,13 @@ def _apply_live(entry: dict, value: Any) -> None:
     from lhassa.config import Config
 
     setattr(Config, entry["attr"], value)
+    if entry["attr"] == "llm_kill_switch":
+        # The singleton is the process-wide authority used by CLI/local as well
+        # as cloud providers. Keep the generic Settings surface and the limits
+        # endpoint on the exact same live switch.
+        from lhassa.llm.gateway import gateway
+
+        gateway.set_kill_switch(bool(value))
 
 
 def _config():

@@ -264,6 +264,7 @@ class DepartmentBrain:
                         approval_id,
                         approved=True,
                         by_actor=approver,
+                        approver=approval.TrustedApprover(approver, "org-rbac"),
                     )
                 except (KeyError, approval.ApprovalResolutionConflict) as exc:
                     # A stale or raced approval id (duplicate delivery, resolved

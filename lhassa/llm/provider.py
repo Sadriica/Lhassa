@@ -84,6 +84,13 @@ _ZERO_RETENTION_PROVIDERS = {"anthropic", "openai"}
 _GATEWAY_OPT_KEYS = ("temperature", "system", "completion_fn")
 
 
+def _assert_llm_live(config: "Config | None") -> None:
+    """Process-wide pre-call guard shared by every non-gateway first-party seat."""
+    from lhassa.llm.gateway import assert_llm_live
+
+    assert_llm_live(config)
+
+
 class GatewayProvider:
     """Active provider: routes ``complete()`` through the cost gateway.
 
@@ -141,6 +148,7 @@ class OpenCodeZenProvider:
     async def complete(
         self, messages: list[dict], *, model: str | None = None, max_tokens: int = 1024, **opts
     ) -> Completion:
+        _assert_llm_live(self._config)
         raise ProviderNotConfigured("opencode Zen not configured")
 
 
@@ -183,6 +191,7 @@ class LocalModelProvider:
     async def complete(
         self, messages: list[dict], *, model: str | None = None, max_tokens: int = 1024, **opts
     ) -> Completion:
+        _assert_llm_live(self._config)
         url = self._url()
         endpoint = url.rstrip("/") + "/chat/completions"
         model = model or (getattr(self._config, "local_model", "") or "") or "local"
@@ -503,6 +512,7 @@ class OpenCodeProvider:
     async def complete(
         self, messages: list[dict], *, model: str | None = None, max_tokens: int = 1024, **opts
     ) -> Completion:
+        _assert_llm_live(self._config)
         model = model or (getattr(self._config, "opencode_model", "") or "")
         binary = (getattr(self._config, "opencode_bin", "") or "") or "opencode"
         prompt = self._build_prompt(messages, opts.get("system"))
@@ -746,6 +756,7 @@ class ClaudeCodeProvider:
     async def complete(
         self, messages: list[dict], *, model: str | None = None, max_tokens: int = 1024, **opts
     ) -> Completion:
+        _assert_llm_live(self._config)
         binary = (getattr(self._config, "claude_bin", "") or "") or "claude"
         # Only honor a Claude model. The router may pair THIS CLI provider with the
         # config's default model (e.g. a groq/openai name) — forwarding that as
@@ -832,6 +843,7 @@ class CodexProvider:
     async def complete(
         self, messages: list[dict], *, model: str | None = None, max_tokens: int = 1024, **opts
     ) -> Completion:
+        _assert_llm_live(self._config)
         binary = (getattr(self._config, "codex_bin", "") or "") or "codex"
         # ``codex-cli`` is the router's marker for "the CLI's own model" — not a real
         # model id, so drop it (forwarding it as -m would fail) and let the CLI pick.

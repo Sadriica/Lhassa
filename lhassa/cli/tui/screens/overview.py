@@ -1,11 +1,13 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """Overview screen — the brain at a glance.
 
-A static snapshot on mount: instance id, the last episode (time + accion,
-standing in for "last heartbeat" since every episode is one step() tick),
-today's think count + cost (episodes with ``costo_usd > 0`` — routine $0
-actions don't count as a "think"), pending approvals count, active projects
-count. Refreshed only on demand (the ``r`` key) — no background polling.
+The snapshot: instance id, the last episode (time + accion, standing in for
+"last heartbeat" since every episode is one step() tick), today's think count +
+cost (episodes with ``costo_usd > 0`` — routine $0 actions don't count as a
+"think"), pending approvals count, active projects count.
+
+Re-polled on a timer like every other screen (``r`` forces it now). The redraw
+is skipped when the snapshot is unchanged, so an idle brain never flickers.
 """
 
 from __future__ import annotations
@@ -96,18 +98,27 @@ class OverviewScreen(Vertical):
 
     BINDINGS = [("r", "refresh", "Refresh")]
 
+    #: Seconds between background re-polls (mirrors ``screens/base.py``).
+    REFRESH_SECONDS = 4.0
+
     def __init__(self, instance_id: str, **kwargs) -> None:
         super().__init__(**kwargs)
         self._instance_id = instance_id
+        self._snapshot: "dict | None" = None
 
     def compose(self) -> ComposeResult:
         yield Static("Loading overview…", id="ov-body", classes="row")
 
     async def on_mount(self) -> None:
         await self.action_refresh()
+        if self.REFRESH_SECONDS > 0:
+            self.set_interval(self.REFRESH_SECONDS, self.action_refresh)
 
     async def action_refresh(self) -> None:
         snapshot = await _gather(self._instance_id)
+        if snapshot == self._snapshot:
+            return  # nothing changed — do not redraw (no flicker)
+        self._snapshot = snapshot
         body = self.query_one("#ov-body", Static)
         body.update(
             "\n".join(

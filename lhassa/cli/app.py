@@ -47,6 +47,8 @@ from lhassa.cli import knowledge_cmds as _knowledge_cmds  # noqa: E402
 from lhassa.cli import memory_cmds as _memory_cmds  # noqa: E402
 from lhassa.cli import org_cmds as _org_cmds  # noqa: E402
 from lhassa.cli import seed_cmds as _seed_cmds  # noqa: E402
+from lhassa.cli import setup_cmds as _setup_cmds  # noqa: E402
+from lhassa.cli import share_cmds as _share_cmds  # noqa: E402
 from lhassa.cli import skills_cmds as _skills_cmds  # noqa: E402
 from lhassa.cli import project_cmds as _project_cmds  # noqa: E402
 from lhassa.cli import research_cmds as _research_cmds  # noqa: E402
@@ -280,6 +282,9 @@ app.add_typer(_skills_cmds.skills_app, name="skills")
 # Attach the `lhassa flows` sub-app (stored work-flows + the flow-templates gallery).
 app.add_typer(_flow_cmds.flow_app, name="flows")
 
+# Attach the `lhassa flow` sub-app (the singular lifecycle: create/edit/run/watch/logs).
+app.add_typer(_flow_cmds.one_flow_app, name="flow")
+
 # Attach the `lhassa calendar` sub-app (named calendar feeds: add/list/remove).
 app.add_typer(_calendar_cmds.calendar_app, name="calendar")
 
@@ -289,8 +294,14 @@ app.add_typer(_artifact_cmds.artifact_app, name="artifacts")
 # Attach the `lhassa seed` sub-app (reproducible bootstrap seeds — cv, …).
 app.add_typer(_seed_cmds.seed_app, name="seed")
 
+# Attach `lhassa setup` — one command, one wizard: clone to a working brain.
+_setup_cmds.register(app)
+
 # Attach the `lhassa config` sub-app (runtime settings → ~/.lhassa/settings.env).
 app.add_typer(_config_cmds.config_app, name="config")
+
+# Attach the `lhassa share` sub-app (cross-instance resource sharing, Stream 6 Phase A).
+app.add_typer(_share_cmds.share_app, name="share")
 
 # Attach the `lhassa task` sub-app (task/standing-goal management).
 app.add_typer(_task_cmds.task_app, name="task")

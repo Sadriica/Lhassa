@@ -30,12 +30,15 @@ from lhassa.agents import verify as verify_agent
 from lhassa.config import Config
 from lhassa.core import actions, db, dispatch, policy, watchlist
 from lhassa.core.episode import Episode
+from lhassa.core.task import Task
 from lhassa.harness import runner
 from lhassa.harness.adapter import get_adapter
 from lhassa.llm import router
-from lhassa.llm.gateway import BudgetExceeded
+from lhassa.llm.gateway import BudgetExceeded, KillSwitchActive
 from lhassa.llm.provider import ModelProvider, ProviderNotConfigured
 from lhassa.memory import load as memory_load
+from lhassa.security import allowlist, approval, signing
+from lhassa.security.trust import Origin, TrustLevel
 
 # Marker for an episode that needed judgment but could not run the model.
 DEFERRED_DECISION = "deferred: needs judgment"
@@ -43,6 +46,75 @@ DEFERRED_DECISION = "deferred: needs judgment"
 # Cap on the judgment answer — raised from 512 to 768 to accommodate JSON dispatch
 # payloads (new_facts / new_tasks objects add meaningful token overhead).
 _JUDGMENT_MAX_TOKENS = 768
+
+
+def _persisted_task(trigger: "watchlist.Trigger", instance_id: str) -> Optional[Task]:
+    """Rebuild the exact signed task envelope carried through the watchlist."""
+    if trigger.task_id is None:
+        return None
+    try:
+        trust = TrustLevel(int(trigger.origen_trust))
+    except (TypeError, ValueError):
+        trust = TrustLevel.MUNDO
+    return Task(
+        id=trigger.task_id,
+        instance_id=instance_id,
+        accion=trigger.action,
+        objetivo=trigger.objetivo or "",
+        params=dict(trigger.params or {}),
+        origen=Origin(trust=trust, actor_id=trigger.origen_actor),
+        estado="pendiente",
+        firma=trigger.firma,
+        creado_en=trigger.creado_en,
+    )
+
+
+def _verify_task_trigger(trigger: "watchlist.Trigger", instance_id: str) -> Optional[str]:
+    """Return a rejection reason when a persisted trigger's signature is invalid."""
+    task = _persisted_task(trigger, instance_id)
+    if task is None:
+        return None
+    if not signing.verify_task(task, signing.load_public_key()):
+        return "signature verification failed"
+    return None
+
+
+async def _allow_fixed_action(
+    trigger: "watchlist.Trigger",
+    instance_id: str,
+    *,
+    action: str,
+    params: dict,
+) -> "allowlist.AllowDecision":
+    """Apply the same signed allowlist wall to task and sense-driven actions."""
+    task = _persisted_task(trigger, instance_id)
+    if task is not None:
+        # A policy may not rewrite a signed task into a different executable.
+        if action != task.accion or dict(params or {}) != task.params:
+            return allowlist.AllowDecision(
+                False, "fixed action does not match the signed task envelope"
+            )
+    else:
+        # Senses are trusted local code, not persisted orders. Mint a short-lived
+        # internal envelope so they cross the exact same wall before execution.
+        task = Task(
+            id=f"sense:{trigger.kind}:{action}",
+            instance_id=instance_id,
+            accion=action,
+            objetivo=trigger.objetivo or "",
+            params=dict(params or {}),
+            origen=Origin(TrustLevel.INTERNO, actor_id=f"watchlist:{trigger.kind}"),
+            estado="pendiente",
+            creado_en=db._now(),
+        )
+        task.firma = signing.sign_task(task)
+    decision = allowlist.allow(task)
+    if not decision.allowed:
+        return decision
+    authorized, reason = await approval.authorize_execution(task)
+    if not authorized:
+        return allowlist.AllowDecision(False, reason, decision.requires_approval)
+    return decision
 
 
 def _build_messages(trigger: "watchlist.Trigger", ctx: "memory_load.Context") -> list[dict]:
@@ -132,15 +204,27 @@ async def _notify_loop_capped(instance_id: str, loop_id: str, goal: str) -> None
     is the seam. Best-effort: a delivery failure must never break the tick.
     """
     try:
+        params = {
+            "text": (
+                f"Goal loop {loop_id} capped: {goal!r} did not verify-pass "
+                "within its turn budget. Recurrence stopped."
+            ),
+            "level": "warning",
+        }
+        trigger = watchlist.Trigger(
+            kind="loop", action="notify", objetivo=loop_id, params=params
+        )
+        gate = await _allow_fixed_action(
+            trigger, instance_id, action="notify", params=params
+        )
+        if not gate.allowed:
+            logger.warning(
+                "step: loop-cap notification rejected by allowlist: {}", gate.reason
+            )
+            return
         await actions.run(
             "notify",
-            {
-                "text": (
-                    f"Goal loop {loop_id} capped: {goal!r} did not verify-pass "
-                    "within its turn budget. Recurrence stopped."
-                ),
-                "level": "warning",
-            },
+            params,
             None,
         )
     except Exception as exc:
@@ -309,7 +393,14 @@ async def _judge(
         # budget); on ProviderNotConfigured (or any other failure) the full
         # configured chain is walked, including the cloud gateway.
         attempts: list[tuple] = []
-        if result is None and provider is None:
+        if isinstance(last_exc, KillSwitchActive):
+            # The kill switch is a HARD stop, not a budget signal. It subclasses
+            # BudgetExceeded, so without this branch the CLI fallback below
+            # would still call out to claude/codex/opencode with the switch
+            # engaged — the owner flips a switch expecting silence and the
+            # heartbeat keeps talking. No fallback: degrade to deferred.
+            attempts = []
+        elif result is None and provider is None:
             chain = router.fallback_chain(config, chosen)
             if isinstance(last_exc, BudgetExceeded):
                 chain = [
@@ -323,6 +414,13 @@ async def _judge(
                 decision_note = (
                     f"{decision.reason} | fallback: {getattr(attempt_provider, 'name', '?')}"
                 )
+                break
+            except KillSwitchActive as exc:
+                # This is not an exhausted-budget signal.  In particular, do
+                # not continue into a later CLI provider when a configurable
+                # chain happens to put the gateway before it.
+                last_exc = exc
+                result = None
                 break
             except (ProviderNotConfigured, BudgetExceeded) as exc:
                 last_exc = exc
@@ -543,15 +641,42 @@ async def step(
             instance_id=instance_id,
         )
 
+        # Every persisted task is authenticated before *any* branch (fixed,
+        # judgment, or delegation) can consume it. Unknown judgment labels are
+        # intentionally outside the action allowlist, but never outside signing.
+        signature_error = _verify_task_trigger(trigger, instance_id)
+        if signature_error is not None:
+            ep.finish(
+                decision="rejected by task signature gate",
+                accion=trigger.action,
+                resultado=signature_error,
+            )
+            await ep.append()
+            if trigger.task_id is not None:
+                await db.set_task_state(instance_id, trigger.task_id, "rechazada")
+            n_rejected += 1
+            continue
+
         if trigger.maps_to_fixed_action():
             # Fixed deterministic action — no LLM (§2.4).
-            result = await actions.run(trigger.action, trigger.params, ep)
-            ep.finish(
-                decision=trigger.action,
-                accion=trigger.action,
-                resultado=result,
+            gate = await _allow_fixed_action(
+                trigger, instance_id, action=trigger.action, params=trigger.params
             )
-            n_actions += 1
+            if gate.allowed:
+                result = await actions.run(trigger.action, trigger.params, ep)
+                ep.finish(
+                    decision=trigger.action,
+                    accion=trigger.action,
+                    resultado=result,
+                )
+                n_actions += 1
+            else:
+                ep.finish(
+                    decision="rejected by local allowlist",
+                    accion=trigger.action,
+                    resultado=gate.reason,
+                )
+                n_rejected += 1
             ran_model = False
         else:
             # Deterministic policy layer FIRST (§ core/policy.py "reflexes"):
@@ -560,15 +685,29 @@ async def step(
             pdecision = policy.evaluate(trigger)
 
             if pdecision.kind == "action":
-                result = await actions.run(
-                    pdecision.action, pdecision.params, ep
+                gate = await _allow_fixed_action(
+                    trigger,
+                    instance_id,
+                    action=pdecision.action or "",
+                    params=pdecision.params,
                 )
-                ep.finish(
-                    decision=pdecision.reason,
-                    accion=pdecision.action or trigger.action,
-                    resultado=result,
-                )
-                n_actions += 1
+                if gate.allowed:
+                    result = await actions.run(
+                        pdecision.action, pdecision.params, ep
+                    )
+                    ep.finish(
+                        decision=pdecision.reason,
+                        accion=pdecision.action or trigger.action,
+                        resultado=result,
+                    )
+                    n_actions += 1
+                else:
+                    ep.finish(
+                        decision="rejected by local allowlist",
+                        accion=pdecision.action or trigger.action,
+                        resultado=gate.reason,
+                    )
+                    n_rejected += 1
                 ran_model = False
             elif pdecision.kind == "skip":
                 ep.finish(
@@ -615,7 +754,9 @@ async def step(
 
         # Mark the originating task done so the next tick doesn't re-fire it.
         if trigger.task_id is not None:
-            if trigger.maps_to_fixed_action() or ran_model:
+            if ep.decision == "rejected by local allowlist":
+                estado = "rechazada"
+            elif trigger.maps_to_fixed_action() or ran_model:
                 estado = "hecha"
             else:
                 estado = "diferida"

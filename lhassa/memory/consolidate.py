@@ -403,6 +403,12 @@ async def distill_episodes(
 
     NOTE: This is the ONE function in the memory layer that may spend tokens.
     """
+    # Boundary gate, mirroring consolidate_semantic's own flag check: this is
+    # one of the very few memory functions that may spend tokens, so the toggle
+    # lives HERE, not only in whichever caller happens to schedule it — a future
+    # action/CLI/flow cannot spend without an explicit switch.
+    if not getattr(config, "memory_distill_enabled", True):
+        return {"distilled": 0, "skipped": "memory_distill_enabled off"}
     from lhassa.llm.gateway import BudgetExceeded
     from lhassa.llm.provider import ProviderNotConfigured
 

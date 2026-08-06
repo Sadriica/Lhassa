@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-import json
 
 from lhassa.config import Config
 
@@ -28,23 +27,32 @@ async def check_integrity(params: dict) -> str:
         from lhassa.org import integrity
 
         result = await integrity.run_integrity(config, trigger=trigger)
-        return json.dumps(
-            {
-                "run_id": result.get("run_id"),
-                "status": result.get("status"),
-                "findings_warn": int(result.get("findings_warn") or 0),
-                "findings_critical": int(result.get("findings_critical") or 0),
-            },
-            sort_keys=True,
+        return _say(
+            status=str(result.get("status") or "unknown"),
+            critical=int(result.get("findings_critical") or 0),
+            warnings=int(result.get("findings_warn") or 0),
+            run_id=result.get("run_id"),
         )
     except Exception as exc:
-        return json.dumps(
-            {
-                "error": f"{type(exc).__name__}: {exc}",
-                "findings_critical": 1,
-                "findings_warn": 0,
-                "run_id": None,
-                "status": "error",
-            },
-            sort_keys=True,
-        )
+        return f"check_integrity: error: {type(exc).__name__}: {exc}"
+
+
+def _say(*, status: str, critical: int, warnings: int, run_id) -> str:
+    """One sentence a person can read — the actionpack convention.
+
+    This used to return ``json.dumps(...)`` because the watcher parsed it. That
+    payload travelled all the way to the owner's screen as a raw dict, which is
+    what a notification should never be: the machine-readable copy lives in the
+    ``conformance_runs`` table, and the watcher reads it from there. Siblings
+    like ``curate_skills`` and ``distill_memory`` already answer this way.
+    """
+    where = f" (run {run_id})" if run_id else ""
+    if status == "pass":
+        return f"check_integrity: every contract passed{where}"
+    bits = []
+    if critical:
+        bits.append(f"{critical} critical")
+    if warnings:
+        bits.append(f"{warnings} warning")
+    detail = " and ".join(bits) if bits else "no findings recorded"
+    return f"check_integrity: {status} — {detail}{where}"

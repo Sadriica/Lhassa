@@ -219,7 +219,9 @@ async def _init_db(tmp_path, monkeypatch):
 def test_approvals_lists_pending(tmp_path, monkeypatch):
     db = asyncio.run(_init_db(tmp_path, monkeypatch))
     ap_id = asyncio.run(
-        db.add_approval("inst_personal", "task", {"accion": "run_command"})
+        db.add_approval(
+            "inst_personal", "task", {"accion": "run_command", "actor_id": "brain"}
+        )
     )
     reply = asyncio.run(commands.dispatch("/approvals", config=_cfg(instance_id="inst_personal")))
     assert ap_id in reply
@@ -237,7 +239,9 @@ def test_approvals_empty_queue(tmp_path, monkeypatch):
 def test_approve_resolves_pending_approval(tmp_path, monkeypatch):
     db = asyncio.run(_init_db(tmp_path, monkeypatch))
     ap_id = asyncio.run(
-        db.add_approval("inst_personal", "task", {"accion": "run_command"})
+        db.add_approval(
+            "inst_personal", "task", {"accion": "run_command", "actor_id": "brain"}
+        )
     )
     reply = asyncio.run(
         commands.dispatch(f"/approve {ap_id}", config=_cfg(instance_id="inst_personal"))
@@ -245,6 +249,26 @@ def test_approve_resolves_pending_approval(tmp_path, monkeypatch):
     assert "approved" in reply
     remaining = asyncio.run(db.load_pending_approvals("inst_personal"))
     assert remaining == []
+
+
+def test_approve_explains_high_risk_self_approval_refusal(tmp_path, monkeypatch):
+    from lhassa.config import Config
+
+    monkeypatch.setattr(Config, "always_approve_actions", {"move_money"})
+    db = asyncio.run(_init_db(tmp_path, monkeypatch))
+    ap_id = asyncio.run(
+        db.add_approval(
+            "inst_personal",
+            "task",
+            {"accion": "move_money", "actor_id": "telegram"},
+        )
+    )
+    reply = asyncio.run(
+        commands.dispatch(f"/approve {ap_id}", config=_cfg(instance_id="inst_personal"))
+    )
+    assert reply.startswith("Approval refused:")
+    assert "self-approval refused" in reply
+    assert asyncio.run(db.get_approval("inst_personal", ap_id))["estado"] == "pendiente"
 
 
 def test_deny_resolves_pending_approval(tmp_path, monkeypatch):
@@ -1113,6 +1137,45 @@ def test_ai_synthesizes_an_answer_from_search_results(tmp_path, monkeypatch):
     assert "cuánto vale un vuelo Madrid-Bogotá" in seen["query"]
     assert "Live web results" in seen["user"]
     assert "€520" in seen["user"]  # the search results were fed to the model
+
+
+def test_ai_kill_switch_stops_before_later_configured_provider(tmp_path, monkeypatch):
+    asyncio.run(_init_db(tmp_path, monkeypatch))
+    from lhassa.llm.gateway import KillSwitchActive
+
+    async def fake_web(query, max_results=4):
+        return []
+
+    import lhassa.tools.search as search_mod
+
+    monkeypatch.setattr(search_mod, "web_search", fake_web)
+    monkeypatch.setattr(search_mod, "news_search", fake_web)
+
+    class _Prov:
+        def __init__(self, name, exc=None):
+            self.name = name
+            self.exc = exc
+            self.calls = 0
+
+        async def complete(self, messages, **kwargs):
+            self.calls += 1
+            if self.exc:
+                raise self.exc
+            return SimpleNamespace(text="must not run", cost_usd=0.0)
+
+    killed = _Prov("default", KillSwitchActive("manual stop"))
+    later = _Prov("claude")
+
+    async def _ordered(_cfg):
+        return [(killed, "m"), (later, "m")]
+
+    monkeypatch.setattr(commands, "_resolve_chat_provider", _ordered)
+
+    reply = asyncio.run(commands.dispatch("/ai current answer", config=_cfg()))
+
+    assert "reach a model" in reply
+    assert killed.calls == 1
+    assert later.calls == 0
 
 
 def test_ai_without_question_gives_hint(tmp_path, monkeypatch):

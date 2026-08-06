@@ -19,6 +19,7 @@ as pending; the machine reports ``pendiente_aprobacion`` and does NOT execute. A
 later tick/check-in proceeds once a human resolves it from the queue.
 """
 
+from dataclasses import dataclass
 from typing import Optional, Union
 
 from lhassa.config import Config
@@ -33,10 +34,80 @@ class ApprovalResolutionConflict(RuntimeError):
     """An approval was already resolved or changed concurrently."""
 
 
+class ApprovalAuthorizationError(PermissionError):
+    """The resolver is not authorized to approve this request."""
+
+
+class UntrustedApproverError(ApprovalAuthorizationError):
+    """A high-risk approval did not carry channel-authenticated identity."""
+
+
+class SelfApprovalError(ApprovalAuthorizationError):
+    """A high-risk action was approved by the actor that proposed it."""
+
+
+@dataclass(frozen=True)
+class TrustedApprover:
+    """Identity asserted by an authenticated adapter, never by request payload.
+
+    ``actor_id`` is the stable actor used for separation-of-duties checks and the
+    audit trail. ``source`` records which trust boundary established it (for
+    example ``api-token``, ``loopback``, ``telegram-owner`` or ``local-process``).
+    Construct this at a channel boundary only; arbitrary user labels belong in
+    ``by_actor`` and are deliberately ignored for high-risk authorization.
+    """
+
+    actor_id: str
+    source: str
+
+    def __post_init__(self) -> None:
+        if not self.actor_id.strip() or not self.source.strip():
+            raise ValueError("trusted approver actor_id and source must be non-empty")
+
+
+_OWNER_ALIASES = frozenset({"api", "cli", "duenio", "owner", "telegram", "tui"})
+
+
+def _principal(actor_id: str) -> str:
+    """Canonicalize legacy channel actor labels to the one local owner.
+
+    Older task producers identify the human by surface (``api``, ``telegram``,
+    ``cli``). Approval identity is intentionally stable across those surfaces;
+    otherwise the same person could propose over one channel and approve over
+    another. Non-owner identities (org members, agents) remain distinct.
+    """
+    actor = (actor_id or "").strip()
+    return "owner" if actor.casefold() in _OWNER_ALIASES else actor
+
+
 def _always_approve() -> "set[str]":
     """The configured high-risk action set (always requires human approval)."""
     actions = Config.always_approve_actions
     return actions if isinstance(actions, set) else set(actions or [])
+
+
+def _requires_separation_of_duties(payload: dict) -> bool:
+    """Whether resolution needs authenticated, distinct approver identity.
+
+    This mirrors every non-lowerable/per-action reason that can park dangerous
+    work, rather than consulting only ``always_approve_actions``. Unknown action
+    specs fail closed when the parked payload explicitly marks the request as
+    requiring approval (new producers may stamp ``requires_approval``).
+    """
+    accion = str((payload or {}).get("accion") or "")
+    if accion in _always_approve():
+        return True
+    spec = al.ALLOWLIST.get(accion)
+    if spec is not None and spec.requires_approval:
+        return True
+    if (payload or {}).get("requires_separation_of_duties") is True:
+        return True
+    if (payload or {}).get("requires_approval") is True:
+        return True
+    params = (payload or {}).get("params")
+    return _touches_protected_root(accion, params) or _attach_template_needs_gate(
+        accion, params
+    )
 
 
 # File-perception actions whose ``path`` param is checked against the owner's
@@ -56,14 +127,14 @@ def _touches_protected_root(accion: str, params) -> bool:
         import os
         from pathlib import Path
 
-        from lhassa.config import Config
-
         raw = (getattr(Config, "protected_roots", "") or "").strip()
         if not raw:
             return False
+        if not isinstance(params, dict):
+            return True
         target = str((params or {}).get("path", "") or "").strip()
         if not target:
-            return False
+            return True
         path = Path(os.path.expanduser(target)).resolve()
         for entry in raw.split(","):
             entry = entry.strip()
@@ -174,6 +245,26 @@ def needs_approval(
     return bool(requires or trust_below or is_mundo)
 
 
+async def authorize_execution(task) -> tuple[bool, str]:
+    """Require durable approval evidence at the final execution frontier.
+
+    Signing proves task integrity, not that HITL was satisfied. Execution is
+    authorized only when earned autonomy currently removes the gate, or an
+    approved ``mint_task`` row names this exact task. Lookup errors deny.
+    """
+    try:
+        auto = await autonomy.should_auto_approve(
+            task.instance_id, task.accion, task.origen.actor_id
+        )
+        if not needs_approval(task, autonomy=auto):
+            return True, "approval not required"
+        if await db.has_approved_task_approval(task.instance_id, task.id):
+            return True, "durable human approval found"
+        return False, "required human approval evidence is missing"
+    except Exception as exc:
+        return False, f"approval evidence unavailable: {exc}"
+
+
 async def request_approval(
     instance_id: str,
     *,
@@ -188,6 +279,12 @@ async def request_approval(
     both show the human what they are approving AND feed the autonomy knob on
     resolution — at minimum ``accion``, ``actor_id`` and ``origen_trust``.
     """
+    # Snapshot the security classification into the durable row. A later config
+    # or allowlist edit must never downgrade a request that was parked as
+    # separation-of-duties work.
+    payload = dict(payload or {})
+    if _requires_separation_of_duties(payload):
+        payload["requires_separation_of_duties"] = True
     if approval_id:
         existing = await db.get_approval(instance_id, approval_id)
         if existing is not None:
@@ -209,19 +306,48 @@ async def resolve(
     approval_id: str,
     *,
     approved: bool,
-    by_actor: str,
+    by_actor: str = "duenio",
+    approver: Optional[TrustedApprover] = None,
 ) -> Optional[dict]:
     """Resolve a pending approval and feed the decision to the autonomy knob.
 
     Marks the approval ``aprobada`` / ``rechazada`` in the queue, then records the
     decision against the parked action's ``(accion, actor_id)`` so a repeatedly
     approved human action earns auto-approval and a denial resets its streak.
-    ``by_actor`` is the human who resolved it (recorded for the audit trail).
+    ``by_actor`` is a backwards-compatible audit label for ordinary approvals.
+    For high-risk approvals it is NEVER an authorization claim: callers must pass
+    a ``TrustedApprover`` established by their authenticated channel.  When one is
+    supplied, its actor id is authoritative for both policy and audit.
     """
     ap = await db.get_approval(instance_id, approval_id)
     if not ap:
         raise KeyError(approval_id)
     payload = ap.get("payload") or {}
+    resolved_by = approver.actor_id.strip() if approver is not None else by_actor
+
+    # Proposer ≠ approver, at the GENERAL seam. org/coordinator.py already
+    # enforces this for its own delegate flow, but the generic tipo="task"
+    # approvals — the ones carrying always_approve_actions like run_command —
+    # had no check: any caller reaching the endpoint could self-approve by
+    # naming any by_actor. High-risk only; routine approvals stay one-tap.
+    if approved:
+        accion = str(payload.get("accion") or "")
+        proposer = str(payload.get("actor_id") or "")
+        high_risk = _requires_separation_of_duties(payload)
+        if high_risk and approver is None:
+            raise UntrustedApproverError(
+                f"high-risk {accion!r} approval requires identity from an "
+                "authenticated channel"
+            )
+        if high_risk and not proposer:
+            raise UntrustedApproverError(
+                f"high-risk {accion!r} approval has no authenticated proposer identity"
+            )
+        if high_risk and proposer and _principal(proposer) == _principal(resolved_by):
+            raise SelfApprovalError(
+                f"self-approval refused: {resolved_by!r} proposed this "
+                f"high-risk {accion!r} approval and cannot also resolve it"
+            )
     result = None
     if ap.get("tipo") == "flow_gate" and payload.get("run_id"):
         # Lazy import keeps security independent from the flow engine at import
@@ -234,7 +360,7 @@ async def resolve(
                 instance_id,
                 approval_id,
                 approved=approved,
-                by_actor=by_actor,
+                by_actor=resolved_by,
             )
         except RuntimeConflict as exc:
             # One exception contract for every surface: an already-resolved or

@@ -20,7 +20,14 @@ Per-kind behaviour
     topology), then runs the work through the INJECTABLE ``executor`` (default
     :func:`lhassa.org.executor.brain_executor`, offline unless ``LHASSA_ORG_LIVE``).
     The upstream ``data`` is passed in as the task's input; the executor's result
-    becomes the data that flows downstream.
+    becomes the data that flows downstream. A ``task`` node may declare
+    ``config.retry`` (``max_attempts``/``backoff``/``base_seconds``/``max_seconds``/
+    ``retry_on``, all optional — the default is a single attempt) and
+    ``config.timeout_seconds``: a timeout counts as ``retry_on: "timeout"``. In a
+    DURABLE run a retryable failure PARKS the run (``WAITING_RETRY``, releasing the
+    lease exactly like a completed run) until ``next_wakeup_at``; in an in-memory
+    run it retries inline with no real sleep (the deterministic $0 plane never
+    blocks on wall-clock time).
   * ``gate``    — ``verify`` runs :func:`lhassa.agents.verify.verify`; ``approval``
     parks a request via :mod:`lhassa.security.approval`. The step records the
     verdict (``passed`` / ``needs_approval``). On a non-pass the path STOPS unless an
@@ -30,6 +37,13 @@ Per-kind behaviour
     to ``~/.lhassa/cv/out/{id}_{company}.tex`` and records its path.
   * ``branch``  — evaluates the outgoing edges' ``when`` and follows the FIRST match
     (an unconditional edge is the ``else``).
+  * ``loop``    — runs its declared ``body`` chain up to ``max_iterations`` times
+    (bounded), stopping early the moment an optional ``verify`` spec passes
+    (verifier-terminated, NEVER an LLM). See :func:`_run_loop_body`.
+  * ``wait``    — parks for an external event and resumes exactly like an
+    ``approval`` gate — the SAME park/resume seam, generalised, not a new one.
+  * ``subflow`` — composes another flow inline (:func:`_run_subflow`), bounded by
+    a recursion-depth guard.
 
 Branch / edge semantics
 -----------------------
@@ -48,18 +62,24 @@ A structured run record::
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import os
 import time
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Awaitable, Callable, Optional
 
 from loguru import logger
 
 from lhassa.config import Config
 from lhassa.flows.model import Flow, FlowNode, NodeKind
+from lhassa.flows.registries import (
+    resolve_context,
+    resolve_output_handler,
+    resolve_router,
+)
 
 # An executor seam: ``async (goal, *, department, config) -> dict``. Defaults to the
 # org's department brain (offline + $0 unless LHASSA_ORG_LIVE). Injected in tests.
@@ -129,35 +149,71 @@ def eval_when(when: Optional[dict], ctx: dict) -> bool:
 def resolve_brain(node: FlowNode, data: Any, config: Config) -> tuple[str, bool]:
     """Resolve which brain a ``task`` node runs on. Returns ``(department, pinned)``.
 
-    HYBRID: a pinned ``config.brain`` wins (``pinned=True``). Otherwise the node's
-    ``skill``/``domain`` (falling back to the prompt or the upstream data) auto-routes
-    through the org topology to a leaf department, reusing the org's deterministic
-    keyword routing. Any routing failure degrades to the skill text (or ``"general"``)
-    so a task always has a target and never raises here.
+    A thin, backward-compatible wrapper over :mod:`lhassa.flows.registries` —
+    ``TASK_ROUTERS`` (default ``org_topology``, selectable per node via
+    ``config.router``). Kept as a public function/import path for existing
+    callers and tests.
+    """
+    return resolve_router(node)(node, data, config)
+
+
+_DEFAULT_RETRY_ON = frozenset({"error"})
+
+
+def _retry_config(node: FlowNode) -> dict:
+    """Parse a ``task`` node's ``config.retry`` spec; degrades to "no retry".
+
+    ``{"max_attempts": int>=1, "backoff": "fixed"|"exponential", "base_seconds":
+    float, "max_seconds": float, "retry_on": ["error", "timeout", ...]}``. Every
+    key is optional and a missing/malformed value falls back to a single
+    attempt on ``"error"`` only — a node with no ``retry`` config behaves
+    exactly as before this feature existed.
     """
     cfg = node.config or {}
-    pinned = (cfg.get("brain") or "").strip()
-    if pinned:
-        return pinned, True
-
-    skill = (cfg.get("skill") or cfg.get("domain") or "").strip()
-    routing_text = skill or str(cfg.get("prompt") or data or "").strip()
+    spec = cfg.get("retry") if isinstance(cfg.get("retry"), dict) else {}
     try:
-        from lhassa.org import topology as topo_mod
-        from lhassa.org.coordinator import route_in_topology
+        max_attempts = max(1, int(spec.get("max_attempts") or 1))
+    except (TypeError, ValueError):
+        max_attempts = 1
+    backoff = str(spec.get("backoff") or "fixed").strip().lower()
+    base_raw = spec.get("base_seconds")
+    try:
+        base_seconds = max(0.0, float(base_raw)) if base_raw is not None else 1.0
+    except (TypeError, ValueError):
+        base_seconds = 1.0
+    max_raw = spec.get("max_seconds")
+    try:
+        max_seconds = max(base_seconds, float(max_raw)) if max_raw is not None else base_seconds
+    except (TypeError, ValueError):
+        max_seconds = base_seconds
+    retry_on_raw = spec.get("retry_on")
+    if isinstance(retry_on_raw, (list, tuple, set)):
+        retry_on = {str(x).strip().lower() for x in retry_on_raw if str(x).strip()}
+    else:
+        retry_on = set()
+    return {
+        "max_attempts": max_attempts,
+        "backoff": backoff,
+        "base_seconds": base_seconds,
+        "max_seconds": max_seconds,
+        "retry_on": retry_on or set(_DEFAULT_RETRY_ON),
+    }
 
-        topology = topo_mod.load_topology(config)
-        node_id = topology.root().id
-        # Walk down one level at a time until a leaf — route_in_topology is single-hop.
-        for _ in range(64):
-            if topology.is_leaf(node_id):
-                break
-            node_id = route_in_topology(topology, node_id, routing_text)
-        leaf = topology.node(node_id)
-        return (leaf.department or leaf.id), False
-    except Exception as exc:
-        logger.debug("flows: auto-route degraded to skill text ({}): {}", routing_text, exc)
-        return (skill or "general"), False
+
+def _backoff_seconds(retry_cfg: dict, attempt: int) -> float:
+    """The wait before the NEXT attempt (``attempt`` is the one that just failed).
+
+    ``"exponential"`` doubles per attempt from ``base_seconds``, capped at
+    ``max_seconds``; anything else (including the default ``"fixed"``) waits a
+    constant ``base_seconds``.
+    """
+    base = retry_cfg["base_seconds"]
+    cap = retry_cfg["max_seconds"]
+    if retry_cfg["backoff"] == "exponential":
+        seconds = base * (2 ** max(0, attempt - 1))
+    else:
+        seconds = base
+    return max(0.0, min(seconds, cap))
 
 
 async def _default_executor(
@@ -324,15 +380,22 @@ async def _run_gate(
     flow_id: Optional[str] = None,
     approval_context: Optional[dict] = None,
     approval_decisions: Optional[dict[str, bool]] = None,
+    default_type: str = "verify",
 ) -> tuple[dict, Any, bool]:
     """Execute a gate node; returns ``(step_extra, data_out, passed)``.
 
     ``passed`` drives edge-following: a non-pass drops unconditional outgoing edges.
     ``base_cv`` is passed to the verifier via ``context`` so an objective check (e.g.
     contact-detail preservation) can compare the artifact against the fixed base CV.
+
+    ``default_type`` is the gate type used when ``config.type`` is absent — a
+    ``gate`` node defaults to ``"verify"``; a ``wait`` node (see
+    :func:`run_flow`) reuses this SAME function with ``default_type="approval"``,
+    since a wait is a generalisation of the approval park/resume seam, not a
+    new one.
     """
     cfg = node.config or {}
-    gate_type = str(cfg.get("type") or "verify").lower()
+    gate_type = str(cfg.get("type") or default_type).lower()
 
     if gate_type == "approval":
         if approval_decisions and approval_decisions.get(node.id) is True:
@@ -421,9 +484,13 @@ def _run_output(
 ) -> dict:
     """Record an output node — best-effort, never raises.
 
-    Types: ``notify`` / ``doc`` / ``log`` record the payload; ``tex`` additionally
-    EXPORTS a tailored ``.tex`` file for the CV work-flow via :func:`lhassa.cv.export`
-    and records the written path (``{"output": "tex", "path": "…/out/{id}_{company}.tex"}``).
+    ``notify`` / ``doc`` / ``log`` (and any other unregistered type) record the
+    payload as a plain log entry. A type registered in
+    :mod:`lhassa.flows.registries` (``OUTPUT_HANDLERS`` — ``tex`` by default,
+    which EXPORTS a tailored ``.tex`` file for the CV work-flow via
+    :func:`lhassa.cv.export`) additionally runs that handler and merges its
+    record fields (e.g. ``{"output": "tex", "path": "…/out/{id}_{company}.tex"}``).
+    An unregistered type degrades to the plain log record — never a ``KeyError``.
     """
     cfg = node.config or {}
     out_type = str(cfg.get("type") or "log").lower()
@@ -433,29 +500,183 @@ def _run_output(
         payload = data.get("summary", data.get("output", data))
     record = {"output_type": out_type, "target": target, "payload": _safe(payload)}
 
-    if out_type == "tex":
+    handler = resolve_output_handler(out_type)
+    if handler is not None:
         try:
-            from lhassa import cv
-
-            artifact = payload if isinstance(payload, str) else str(payload)
-            artifact = cv.clean_latex(artifact)  # strip prose/fences → compile-ready .tex
-            # Deterministically restore the owner's contact block from the base
-            # CV — the model never has to reproduce it, and the contact_preserved
-            # gate downstream always passes ($0; best-effort, degrades to no-op).
-            artifact = cv.restore_contact(artifact, cv.load_base())
-            path = cv.export(artifact, company=company, run_id=run_id)
-            record["output"] = "tex"
-            record["path"] = str(path)
-            logger.info("flows: output[tex] {} → {}", node.id, path)
+            record.update(handler(node, payload, company=company, run_id=run_id))
             return record
-        except Exception as exc:  # writing a file is best-effort; never crash the run
-            record["output"] = "tex"
+        except Exception as exc:  # a handler is best-effort; never crash the run
+            record["output"] = out_type
             record["error"] = str(exc)
-            logger.warning("flows: output[tex] {} could not export: {}", node.id, exc)
+            logger.warning("flows: output[{}] {} handler failed: {}", out_type, node.id, exc)
             return record
 
     logger.info("flows: output[{}] {} → {}", out_type, node.id, target)
     return record
+
+
+_MAX_LOOP_BODY_STEPS = 200  # defends against a malformed body chain, not a real cap
+
+
+async def _run_loop_body(
+    flow: Flow,
+    loop_node: FlowNode,
+    data: Any,
+    *,
+    config: Config,
+    executor: Executor,
+    base_cv: str,
+    company: str,
+    run_id: Optional[str],
+) -> tuple[list[dict], Any]:
+    """Walk ONE iteration of a ``loop`` node's body, from ``config.body`` to the
+    edge that closes back into ``loop_node`` (the declared back-edge validated by
+    :meth:`Flow.validate`). Returns ``(body_steps, data_out)``; raises on any
+    body problem — the caller (the LOOP dispatch) turns that into a failed step,
+    exactly like any other node error.
+
+    Deliberately scoped to ``task`` / ``branch`` / ``output`` / verify-``gate``
+    nodes: a loop body is meant to be a small, deterministic, bounded unit —
+    an ``approval`` gate (a human in the loop) or nested ``loop``/``wait``/
+    ``subflow`` would turn "bounded, verifier-terminated" into something this
+    simple walker cannot account for, so those are refused rather than silently
+    misbehaving.
+    """
+    body_start = str((loop_node.config or {}).get("body") or "").strip()
+    if not body_start:
+        raise RuntimeError(f"loop node {loop_node.id!r} has no config.body")
+    node_id = body_start
+    current = data
+    body_steps: list[dict] = []
+    seen_in_iteration: set[str] = set()
+
+    for _ in range(_MAX_LOOP_BODY_STEPS):
+        if node_id in seen_in_iteration:
+            raise RuntimeError(f"loop body revisits node {node_id!r} within one iteration")
+        seen_in_iteration.add(node_id)
+        node = flow.node(node_id)
+        step_started_perf = time.perf_counter()
+        step: dict = {
+            "node": node.id, "kind": node.kind.value, "ok": True,
+            "status": "completed", "started_at": _iso_now(),
+        }
+        passed = True
+        if node.kind == NodeKind.TASK:
+            extra, current = await _run_task(
+                node, current, config=config, executor=executor,
+                base_cv=base_cv, company=company,
+            )
+            step.update(extra)
+        elif node.kind == NodeKind.GATE:
+            if str((node.config or {}).get("type") or "verify").lower() != "verify":
+                raise RuntimeError(
+                    f"loop body gate {node.id!r} must be type=verify (no approvals in a loop body)"
+                )
+            extra, current, passed = await _run_gate(node, current, config=config, base_cv=base_cv)
+            step.update(extra)
+        elif node.kind == NodeKind.OUTPUT:
+            record = _run_output(node, current, company=company, run_id=run_id)
+            step.update(record)
+        elif node.kind == NodeKind.BRANCH:
+            step["branch"] = True
+        else:
+            raise RuntimeError(
+                f"node kind {node.kind.value!r} ({node.id!r}) is not supported inside a loop body"
+            )
+        step["finished_at"] = _iso_now()
+        step["duration_ms"] = _elapsed_ms(step_started_perf)
+        body_steps.append(step)
+
+        out_edges = flow.edges_from(node.id)
+        ctx = _edge_ctx(step, current)
+        if node.kind == NodeKind.BRANCH:
+            chosen = next((e for e in out_edges if eval_when(e.when, ctx)), None)
+            if chosen is None:
+                raise RuntimeError(f"loop body branch {node.id!r} has no matching edge")
+            next_edge = chosen
+        else:
+            candidates = [
+                e for e in out_edges
+                if (node.kind != NodeKind.GATE or passed or e.when is not None)
+                and eval_when(e.when, ctx)
+            ]
+            if not candidates:
+                raise RuntimeError(f"loop body node {node.id!r} has no outgoing edge to take")
+            next_edge = candidates[0]
+
+        if next_edge.to_node == loop_node.id:
+            return body_steps, current  # the declared back-edge — one iteration done
+        node_id = next_edge.to_node
+
+    raise RuntimeError(f"loop node {loop_node.id!r} body exceeded {_MAX_LOOP_BODY_STEPS} internal steps")
+
+
+_MAX_SUBFLOW_DEPTH = 5  # a bounded recursion-depth guard, not a real cap
+
+
+async def _run_subflow(
+    node: FlowNode,
+    data: Any,
+    *,
+    config: Config,
+    executor: Executor,
+    depth: int,
+    flow_loader: Optional[Callable[[str], Awaitable[Optional[Flow]]]] = None,
+) -> tuple[dict, Any]:
+    """Compose another flow inline; returns ``(step_extra, data_out)``.
+
+    Runs the child flow with :func:`run_flow` IN-MEMORY (not a separate durable
+    run row — whether a subflow's episode/delegation should be its own or
+    absorbed into the parent's is an open governance question, tracked as a
+    real design risk, not decided here). ``depth`` is the bounded recursion
+    guard: a subflow that (directly or transitively) tries to compose itself
+    past :data:`_MAX_SUBFLOW_DEPTH` is refused, never a stack overflow.
+    """
+    if depth >= _MAX_SUBFLOW_DEPTH:
+        raise RuntimeError(f"subflow recursion depth exceeded ({_MAX_SUBFLOW_DEPTH})")
+    flow_id = str((node.config or {}).get("flow_id") or "").strip()
+    if not flow_id:
+        raise RuntimeError(f"subflow node {node.id!r} has no config.flow_id")
+
+    if flow_loader is not None:
+        child = await flow_loader(flow_id)
+    else:
+        from lhassa.flows.store import FlowStore
+
+        store = FlowStore()
+        raw = store.get(flow_id)
+        child = Flow.from_dict(raw) if raw is not None else None
+    if child is None:
+        raise RuntimeError(f"subflow {flow_id!r} not found")
+
+    inputs = data if isinstance(data, dict) else {"data": data}
+    record = await run_flow(
+        child,
+        inputs=inputs,
+        config=config,
+        executor=executor,
+        subflow_loader=flow_loader,
+        _subflow_depth=depth + 1,
+    )
+    extra = {
+        "subflow": flow_id,
+        "subflow_status": record.get("status"),
+        "subflow_steps": record.get("steps"),
+    }
+    if record.get("status") != "completed":
+        # Bubble the child's own deepest error (not just its status) so a caller
+        # several levels up still sees the ROOT cause, e.g. a recursion-depth
+        # guard tripping several subflows down.
+        last_error = next(
+            (
+                str(s.get("error"))
+                for s in reversed(record.get("steps") or [])
+                if s.get("error")
+            ),
+            record.get("status"),
+        )
+        raise RuntimeError(f"subflow {flow_id!r} did not complete: {last_error}")
+    return extra, record.get("output")
 
 
 def _safe(value: Any) -> Any:
@@ -483,6 +704,8 @@ def _cursor_snapshot(
     pending_approval: Optional[dict],
     approval_decisions: dict[str, bool],
     status: str,
+    pending_retry: Optional[dict] = None,
+    retry_state: Optional[dict[str, int]] = None,
 ) -> dict:
     """Build the versioned, JSON-only cursor consumed by a later resume."""
     return _json_safe(
@@ -501,6 +724,8 @@ def _cursor_snapshot(
             "run_started": run_started,
             "pending_approval": pending_approval,
             "approval_decisions": approval_decisions,
+            "pending_retry": pending_retry,
+            "retry_state": dict(retry_state or {}),
         }
     )
 
@@ -523,11 +748,14 @@ async def run_flow(
     executor: Optional[Executor] = None,
     company: Optional[str] = None,
     base_cv: Optional[str] = None,
+    context: Optional[str] = None,
     run_id: Optional[str] = None,
     resume_state: Optional[dict] = None,
     checkpoint_hook: Optional[CheckpointHook] = None,
     approval_context: Optional[dict] = None,
     approval_decisions: Optional[dict[str, bool]] = None,
+    subflow_loader: Optional[Callable[[str], Awaitable[Optional[Flow]]]] = None,
+    _subflow_depth: int = 0,
 ) -> dict:
     """Execute ``flow`` and return a structured run record. Never raises.
 
@@ -542,11 +770,21 @@ async def run_flow(
     ``cv.load_base()`` from disk. ``None`` (the default) keeps the historical
     load-from-disk behaviour, so existing callers are unchanged.
 
+    ``context`` selects the :mod:`lhassa.flows.registries` context provider that
+    resolves ``{base_cv}``/``{company}`` (default ``"cv"`` — today's behaviour,
+    unchanged). A flow may instead set ``config.context`` on the trigger node
+    (checked first); an unknown provider degrades to the default, never raises.
+
     Durable execution is opt-in. ``run_id`` fixes the execution identity;
     ``resume_state`` restores a cursor previously returned as ``record["resume_state"]``;
     and ``checkpoint_hook`` receives a detached JSON cursor after every node.
     ``approval_decisions`` lets a resumed approval gate pass without parking another
     request. Calls that omit these arguments retain the historical in-memory behavior.
+
+    ``subflow_loader`` overrides how a ``subflow`` node resolves ``config.flow_id``
+    into a :class:`Flow` (the test seam; defaults to :class:`lhassa.flows.store.FlowStore`).
+    ``_subflow_depth`` is INTERNAL (a subflow's own recursive call bumps it) — never
+    set it directly; it is the bounded recursion-depth guard.
     """
     if config is None:
         # Local import: stay correct if a test reloads ``lhassa.config`` (a stale
@@ -556,18 +794,26 @@ async def run_flow(
         config = _Config()
     executor = executor or _default_executor
 
-    # Resolve the fixed base CV once (for {base_cv} interpolation + the contact gate)
-    # and the company (override → context → "untitled"). Both degrade gracefully.
-    # A caller-supplied ``base_cv`` wins (e.g. an uploaded CV); otherwise read disk.
-    if base_cv is None:
+    # Resolve the fixed base CV (for {base_cv} interpolation + the contact gate)
+    # and the company (override → context → "untitled") through the registered
+    # context provider (default "cv" — today's behaviour, unchanged). Degrades
+    # gracefully on any failure so a broken CV seam never crashes a run.
+    provider_name = context
+    if provider_name is None:
         try:
-            from lhassa import cv
-
-            base_cv = cv.load_base() or ""
-        except Exception as exc:  # a broken CV seam must never crash a run
-            logger.debug("flows: base CV unavailable ({})", exc)
-            base_cv = ""
-    resolved_company = resolve_company(company, inputs)
+            trigger_cfg = flow.trigger().config or {}
+            provider_name = trigger_cfg.get("context")
+        except Exception:
+            provider_name = None
+    ctx = await resolve_context(
+        provider_name,
+        inputs=inputs,
+        company_override=company,
+        base_cv_override=base_cv,
+        config=config,
+    )
+    base_cv = ctx.get("base_cv", base_cv or "")
+    resolved_company = str(ctx.get("company") or resolve_company(company, inputs))
     durable = any(
         value is not None
         for value in (
@@ -613,6 +859,10 @@ async def run_flow(
         base_cv = str(state.get("base_cv") if "base_cv" in state else base_cv)
         run_started = str(state.get("run_started") or run_started)
         pending_approval = state.get("pending_approval")
+        pending_retry = state.get("pending_retry")
+        retry_state = {
+            str(k): int(v) for k, v in (state.get("retry_state") or {}).items()
+        }
     else:
         steps = []
         visited = set()
@@ -620,6 +870,8 @@ async def run_flow(
         last_output = None
         final_data = inputs or {}
         pending_approval = None
+        pending_retry = None
+        retry_state = {}
 
     decisions = {
         str(key): bool(value)
@@ -631,6 +883,7 @@ async def run_flow(
     cap = len(flow.nodes) * _MAX_STEPS_FACTOR + 8
     failed = False
     waiting_approval = False
+    waiting_retry = False
 
     async def checkpoint(status: str) -> dict:
         cursor = _cursor_snapshot(
@@ -644,6 +897,8 @@ async def run_flow(
             run_started=run_started,
             pending_approval=pending_approval,
             approval_decisions=decisions,
+            pending_retry=pending_retry,
+            retry_state=retry_state,
             status=status,
         )
         if checkpoint_hook is not None:
@@ -666,6 +921,13 @@ async def run_flow(
             candidate = pending_approval.get("step_index")
             if isinstance(candidate, int) and 0 <= candidate < len(steps):
                 replace_step_idx = candidate
+        elif (
+            isinstance(pending_retry, dict)
+            and pending_retry.get("node_id") == node_id
+        ):
+            candidate = pending_retry.get("step_index")
+            if isinstance(candidate, int) and 0 <= candidate < len(steps):
+                replace_step_idx = candidate
 
         step_started = _iso_now()
         step_started_perf = time.perf_counter()
@@ -678,16 +940,78 @@ async def run_flow(
         }
         data_out: Any = data
         passed = True  # only gates can set this False
+        node_pending_retry: Optional[dict] = None
         try:
             if node.kind == NodeKind.TRIGGER:
                 step["trigger"] = node.config.get("type", "manual")
                 step["inputs"] = _safe(data)
             elif node.kind == NodeKind.TASK:
-                extra, data_out = await _run_task(
-                    node, data, config=config, executor=executor,
-                    base_cv=base_cv, company=resolved_company,
-                )
-                step.update(extra)
+                retry_cfg = _retry_config(node)
+                timeout_raw = (node.config or {}).get("timeout_seconds")
+                try:
+                    timeout_seconds = (
+                        float(timeout_raw) if timeout_raw is not None else None
+                    )
+                except (TypeError, ValueError):
+                    timeout_seconds = None
+                attempt = int(retry_state.get(node.id, 0))
+                while True:
+                    attempt += 1
+                    try:
+                        coro = _run_task(
+                            node, data, config=config, executor=executor,
+                            base_cv=base_cv, company=resolved_company,
+                        )
+                        if timeout_seconds is not None:
+                            extra, data_out = await asyncio.wait_for(
+                                coro, timeout=timeout_seconds
+                            )
+                        else:
+                            extra, data_out = await coro
+                        retry_state.pop(node.id, None)
+                        extra["attempt"] = attempt
+                        step.update(extra)
+                        break
+                    except Exception as exc:
+                        reason = (
+                            "timeout"
+                            if isinstance(exc, asyncio.TimeoutError)
+                            else "error"
+                        )
+                        retryable = (
+                            reason in retry_cfg["retry_on"]
+                            and attempt < retry_cfg["max_attempts"]
+                        )
+                        if not retryable:
+                            raise
+                        retry_state[node.id] = attempt
+                        if durable:
+                            wait_seconds = _backoff_seconds(retry_cfg, attempt)
+                            next_wakeup_at = datetime.now(timezone.utc) + timedelta(
+                                seconds=wait_seconds
+                            )
+                            node_pending_retry = {
+                                "node_id": node.id,
+                                "attempt": attempt,
+                                "reason": reason,
+                                "wait_seconds": wait_seconds,
+                                "next_wakeup_at": next_wakeup_at.isoformat(),
+                            }
+                            step["ok"] = False
+                            step["status"] = "waiting_retry"
+                            step["attempt"] = attempt
+                            step["error"] = str(exc)
+                            step["retry_reason"] = reason
+                            break
+                        # Non-durable (in-memory) run: retry inline, no real sleep —
+                        # the deterministic $0 plane never blocks on wall-clock time.
+                        logger.debug(
+                            "flows: node {} attempt {} failed ({}), retrying inline",
+                            node.id,
+                            attempt,
+                            exc,
+                        )
+                        continue
             elif node.kind == NodeKind.GATE:
                 extra, data_out, passed = await _run_gate(
                     node,
@@ -709,6 +1033,55 @@ async def run_flow(
                 data_out = data
             elif node.kind == NodeKind.BRANCH:
                 step["branch"] = True
+            elif node.kind == NodeKind.LOOP:
+                loop_cfg = node.config or {}
+                max_iterations = int(loop_cfg.get("max_iterations"))  # validated mandatory
+                verify_spec = loop_cfg.get("verify")
+                iterations: list[dict] = []
+                stop_reason = "max_iterations"
+                loop_data = data
+                for iteration in range(1, max_iterations + 1):
+                    body_steps, loop_data = await _run_loop_body(
+                        flow, node, loop_data, config=config, executor=executor,
+                        base_cv=base_cv, company=resolved_company, run_id=run_id,
+                    )
+                    iterations.append({"iteration": iteration, "steps": body_steps})
+                    if verify_spec:
+                        from lhassa.agents.verify import verify
+
+                        artifact = loop_data
+                        if isinstance(loop_data, dict):
+                            artifact = loop_data.get("summary", loop_data.get("output", loop_data))
+                        verdict = verify(artifact, spec=verify_spec, context={"base_cv": base_cv})
+                        if verdict.passed:
+                            stop_reason = "verified"
+                            break
+                data_out = loop_data
+                step["loop"] = {
+                    "iterations": len(iterations),
+                    "max_iterations": max_iterations,
+                    "stop_reason": stop_reason,
+                }
+                step["iterations"] = iterations
+            elif node.kind == NodeKind.WAIT:
+                extra, data_out, passed = await _run_gate(
+                    node,
+                    data,
+                    config=config,
+                    base_cv=base_cv,
+                    run_id=run_id if durable else None,
+                    flow_id=flow.id if durable else None,
+                    approval_context=approval_context,
+                    approval_decisions=decisions,
+                    default_type="approval",
+                )
+                step.update(extra)
+            elif node.kind == NodeKind.SUBFLOW:
+                extra, data_out = await _run_subflow(
+                    node, data, config=config, executor=executor,
+                    depth=_subflow_depth, flow_loader=subflow_loader,
+                )
+                step.update(extra)
         except Exception as exc:  # a node error is a failed step; the path stops here
             step["ok"] = False
             step["status"] = "failed"
@@ -730,7 +1103,7 @@ async def run_flow(
                     )
             continue
 
-        if node.kind == NodeKind.GATE and step.get("needs_approval"):
+        if node.kind in (NodeKind.GATE, NodeKind.WAIT) and step.get("needs_approval"):
             step["status"] = "needs_approval"
         step["finished_at"] = _iso_now()
         step["duration_ms"] = _elapsed_ms(step_started_perf)
@@ -746,9 +1119,10 @@ async def run_flow(
                     step.setdefault(field, previous_step[field])
             steps[replace_step_idx] = step
             pending_approval = None
+            pending_retry = None
         final_data = data_out
 
-        if node.kind == NodeKind.GATE and step.get("needs_approval") and durable:
+        if node.kind in (NodeKind.GATE, NodeKind.WAIT) and step.get("needs_approval") and durable:
             visited.discard(node.id)
             frontier.insert(0, (node.id, data_out))
             pending_approval = {
@@ -769,8 +1143,31 @@ async def run_flow(
                 logger.warning("flows: approval checkpoint failed: {}", exc)
             break
 
+        if node_pending_retry is not None and durable:
+            visited.discard(node.id)
+            frontier.insert(0, (node.id, data))
+            node_pending_retry["step_index"] = len(steps) - 1
+            pending_retry = node_pending_retry
+            waiting_retry = True
+            try:
+                latest_cursor = await checkpoint("waiting_retry")
+            except Exception as exc:
+                failed = True
+                waiting_retry = False
+                step["ok"] = False
+                step["status"] = "failed"
+                step["error"] = f"checkpoint failed: {exc}"
+                logger.warning("flows: retry checkpoint failed: {}", exc)
+            break
+
         # ── pick the outgoing edges to follow ────────────────────────────────
         out_edges = flow.edges_from(node.id)
+        if node.kind == NodeKind.LOOP:
+            # The edge into config.body was already run internally, N times, by
+            # the LOOP dispatch above — only its EXIT edges are a normal,
+            # top-level "downstream" hop.
+            loop_body_start = str((node.config or {}).get("body") or "").strip()
+            out_edges = [e for e in out_edges if e.to_node != loop_body_start]
         ctx = _edge_ctx(step, data_out)
         if node.kind == NodeKind.BRANCH:
             chosen = next((e for e in out_edges if eval_when(e.when, ctx)), None)
@@ -779,9 +1176,10 @@ async def run_flow(
                 frontier.append((chosen.to_node, data_out))
         else:
             for e in out_edges:
-                # A gate that did not pass drops its unconditional edges (path stops),
-                # but a `when` that explicitly handles the failure may still route.
-                if node.kind == NodeKind.GATE and not passed and e.when is None:
+                # A gate (or wait) that did not pass drops its unconditional edges
+                # (path stops), but a `when` that explicitly handles the failure
+                # may still route.
+                if node.kind in (NodeKind.GATE, NodeKind.WAIT) and not passed and e.when is None:
                     continue
                 if eval_when(e.when, ctx):
                     frontier.append((e.to_node, data_out))
@@ -798,11 +1196,15 @@ async def run_flow(
     status = (
         "failed"
         if failed
-        else ("waiting_approval" if waiting_approval else "completed")
+        else (
+            "waiting_approval"
+            if waiting_approval
+            else ("waiting_retry" if waiting_retry else "completed")
+        )
     )
     output = last_output if last_output is not None else _safe(final_data)
     cost_usd = sum(float(s.get("cost_usd") or 0.0) for s in steps)
-    if durable and not waiting_approval:
+    if durable and not waiting_approval and not waiting_retry:
         latest_cursor = _cursor_snapshot(
             frontier=frontier,
             visited=visited,
@@ -814,6 +1216,8 @@ async def run_flow(
             run_started=run_started,
             pending_approval=pending_approval,
             approval_decisions=decisions,
+            pending_retry=pending_retry,
+            retry_state=retry_state,
             status=status,
         )
     record = {
@@ -821,7 +1225,7 @@ async def run_flow(
         "flow_id": flow.id,
         "status": status,
         "started_at": run_started,
-        "finished_at": None if waiting_approval else _iso_now(),
+        "finished_at": None if (waiting_approval or waiting_retry) else _iso_now(),
         "duration_ms": _elapsed_ms(run_started_perf),
         "cost_usd": round(cost_usd, 6),
         "steps": steps,

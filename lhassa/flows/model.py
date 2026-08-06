@@ -1,9 +1,11 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """The work-flow graph model: nodes, edges, a flow, validation, JSON round-trip.
 
-A flow is a directed acyclic graph. Nodes are one of a CLOSED set of kinds
-(:class:`NodeKind`); edges wire one node to another and may carry a ``when``
-condition (used by ``branch`` nodes and to gate a path on a node's outcome).
+A flow is a directed graph, acyclic EXCEPT for one declared shape: a ``loop``
+node's own body may close a single back-edge into it. Nodes are one of a CLOSED
+set of kinds (:class:`NodeKind`); edges wire one node to another and may carry a
+``when`` condition (used by ``branch`` nodes and to gate a path on a node's
+outcome).
 
 Validation (:meth:`Flow.validate`) enforces the structural rules the engine relies
 on, and raises :class:`FlowValidationError` on the first problem:
@@ -12,8 +14,13 @@ on, and raises :class:`FlowValidationError` on the first problem:
   * exactly one ``trigger`` node (a flow has a single, unambiguous entry point),
   * every edge references real, distinct nodes and nothing points back INTO the
     trigger,
-  * the graph is acyclic — loops are NOT supported (a DAG executes in one pass);
-    this is a deliberate simplification documented for the execution engine.
+  * every ``loop`` node declares a positive ``config.max_iterations`` and a real
+    ``config.body`` node — bounded and verifier-terminated, mirroring
+    :func:`lhassa.agents.author.propose_tool`'s ``max_turns`` loop,
+  * the graph is acyclic apart from a loop's own declared body back-edge (an edge
+    from a node inside that loop's body back into the loop node itself); ANY
+    other cycle is still rejected. A flow with zero ``loop`` nodes validates
+    byte-for-byte as before this existed.
 
 ``to_dict``/``from_dict`` round-trip losslessly (the value of :class:`NodeKind`
 serialises to its plain string), so the store and the API can persist and rebuild a
@@ -43,6 +50,9 @@ class NodeKind(str, Enum):
     GATE = "gate"
     OUTPUT = "output"
     BRANCH = "branch"
+    LOOP = "loop"
+    WAIT = "wait"
+    SUBFLOW = "subflow"
 
     @classmethod
     def coerce(cls, value: Any) -> "NodeKind":
@@ -75,6 +85,19 @@ class FlowNode:
       * ``gate``    → ``{"type": "verify"|"approval", "spec": {...}}``
       * ``output``  → ``{"type": "notify"|"doc"|"log", "target"?: str}``
       * ``branch``  → ``{}`` (the condition lives on the outgoing edges' ``when``).
+      * ``loop``    → ``{"max_iterations": int (MANDATORY, >=1), "body": <node_id>,
+        "verify"?: {...same spec shape as a verify gate...}}``. The engine runs
+        the ``body`` node's chain (using its own outgoing edges) once per
+        iteration, up to ``max_iterations``, stopping early the moment
+        ``verify`` passes — bounded and verifier-terminated, never an unbounded
+        "call the model until it feels done". The BODY's own edges close the
+        cycle back into this node (see :meth:`Flow.validate`); an edge from
+        this node itself is its normal, non-cyclic EXIT of the loop.
+      * ``wait``    → ``{}`` (same payload shape as an ``approval`` gate). Parks
+        the run for an external event and resumes exactly like an approval —
+        a generalisation of the same park/resume seam, not a new one.
+      * ``subflow`` → ``{"flow_id": str}``. Composes another flow inline (bounded
+        by a recursion-depth guard); its output becomes this node's data.
     """
 
     id: str
@@ -207,14 +230,74 @@ class Flow:
             if e.to_node == trigger_id:
                 raise FlowValidationError("no edge may point back into the trigger")
 
+        # Every ``loop`` node is bounded (mandatory max_iterations) and names a
+        # real body entry — mirroring agents/author.py's max_turns loop.
+        for n in self.nodes:
+            if n.kind != NodeKind.LOOP:
+                continue
+            cfg = n.config or {}
+            try:
+                max_iterations = int(cfg.get("max_iterations"))
+            except (TypeError, ValueError):
+                max_iterations = None
+            if not max_iterations or max_iterations < 1:
+                raise FlowValidationError(
+                    f"loop node {n.id!r} needs a positive config.max_iterations"
+                )
+            body = cfg.get("body")
+            if not body or str(body).strip() not in seen:
+                raise FlowValidationError(
+                    f"loop node {n.id!r} needs config.body to name a real node"
+                )
+            if str(body).strip() == n.id:
+                raise FlowValidationError(f"loop node {n.id!r} cannot be its own body")
+
         self._assert_acyclic()
         return self
 
+    def _loop_back_edges(self) -> set[tuple[str, str]]:
+        """The set of ``(from_node, to_node)`` edges legal as a loop's back-edge.
+
+        For each ``loop`` node, BFS forward from its declared ``config.body``
+        WITHOUT continuing past an edge that lands back on the loop node itself
+        (arriving there ends one iteration) — every edge from that reachable body
+        set back into the loop is a declared, legal back-edge. Anything else that
+        closes a cycle into (or through) a loop node is still rejected.
+        """
+        adj: dict[str, list[str]] = {n.id: [] for n in self.nodes}
+        for e in self.edges:
+            adj.setdefault(e.from_node, []).append(e.to_node)
+
+        legal: set[tuple[str, str]] = set()
+        for n in self.nodes:
+            if n.kind != NodeKind.LOOP:
+                continue
+            body = str((n.config or {}).get("body") or "").strip()
+            if not body or body not in adj:
+                continue
+            body_set: set[str] = set()
+            stack = [body]
+            while stack:
+                current = stack.pop()
+                if current in body_set:
+                    continue
+                body_set.add(current)
+                for nxt in adj.get(current, []):
+                    if nxt == n.id:
+                        continue  # this is the terminal back-edge, not part of the body
+                    if nxt not in body_set:
+                        stack.append(nxt)
+            for e in self.edges:
+                if e.to_node == n.id and e.from_node in body_set:
+                    legal.add((e.from_node, e.to_node))
+        return legal
+
     def _assert_acyclic(self) -> None:
-        """DFS cycle check — the engine executes a DAG in a single pass."""
+        """DFS cycle check — acyclic except a loop node's own declared back-edge."""
         adj: dict[str, list[str]] = {n.id: [] for n in self.nodes}
         for e in self.edges:
             adj[e.from_node].append(e.to_node)
+        legal_back_edges = self._loop_back_edges()
         WHITE, GREY, BLACK = 0, 1, 2
         color = {n.id: WHITE for n in self.nodes}
 
@@ -222,6 +305,8 @@ class Flow:
             color[node_id] = GREY
             for nxt in adj[node_id]:
                 if color[nxt] == GREY:
+                    if (node_id, nxt) in legal_back_edges:
+                        continue  # a loop's own declared body back-edge — not a bug
                     cycle = " → ".join([*stack, node_id, nxt])
                     raise FlowValidationError(f"flow has a cycle: {cycle}")
                 if color[nxt] == WHITE:

@@ -1,5 +1,446 @@
 # Lhassa — decisions log
 
+## 2026-08-03 — Security sweep closure: every execution path enforces the same contract
+
+The findings deferred by the philosophy sweep, plus the follow-up audit findings,
+are closed in this pass. This entry is the durable project memory for the change;
+the normative behavior lives in `doc/security.md` and `doc/calendar.md`, and the
+regressions are executable in the corresponding `tests/test_*.py` modules.
+
+- **Local execution no longer bypasses policy.** Persisted tasks are signed at
+  creation, retain the exact signed creation timestamp across watchlist transport,
+  and are verified before fixed actions, reflexes, judgment or delegation. The
+  heartbeat and `run_task_now` both reload the stored envelope, cross the same
+  deny-by-default allowlist, and reject tampering terminally with an episode.
+- **Approval is evidence at execution time, not just a routing decision.** An
+  approval-required task can run only with either a valid autonomy decision or a
+  durable approved `mint_task` row for that exact task id. This final check applies
+  even to callers that reach the database/dispatch seam directly.
+- **Approval identity and separation of duties are fail-closed.** API, CLI, TUI and
+  Telegram resolve approvals as the canonical owner principal; user-controlled
+  `by_actor` is audit metadata, never authority. High-risk actions, including
+  `run_command`, `run_script`, protected-root reads and non-read-only project
+  attachment, require proposer and approver to differ. A missing proposer is not a
+  reason to waive the rule.
+- **The model kill switch is global.** Every provider checks it immediately before
+  opening HTTP or launching a local CLI subprocess. It also remains a hard stop in
+  the heartbeat, fallback chain, Telegram and `/ai`; no alternate provider may turn
+  an emergency stop into fallback behavior.
+- **Calendar feeds resist redirect and DNS-rebinding SSRF.** Every redirect target is
+  revalidated, automatic redirects are disabled, and the HTTP connection uses the
+  public IP that passed validation while preserving the original Host header and TLS
+  server name. Unsafe/unresolvable feeds may use an existing stale cache but never
+  make the network request.
+- **The skill store has one filesystem boundary.** Symlinked skill directories,
+  aliases, definitions and resources cannot escape or reinterpret the store. The
+  directory name is the canonical identity, so hostile frontmatter cannot redirect
+  export/delete behavior.
+- **Memory spend is explicit.** `LHASSA_MEMORY_DISTILL_ENABLED` is now a declared
+  configuration and live setting; disabling it stops episode distillation before
+  provider selection for scheduled, CLI and future callers.
+
+Verification at closure: **2407 passed**, `ruff check .` clean and
+`git diff --check` clean. The only suite warning is the pre-existing asyncio
+deprecation in `tests/test_actionpack.py::test_web_fetch_happy_path`.
+
+## 2026-08-03 — Round two: the traversal that could delete the brain
+
+A second wave of four reviewers closed the gaps the first six had not covered
+(all ~20 API routers, tools/remote/health, the rest of db.py plus skills/seeds/
+bench, and dashboard/voice/cli). It found the worst defect of the day.
+
+**CRITICAL — a skill name could delete `~/.lhassa`.** `SkillStore.folder_for`
+fell back to the RAW name whenever `slugify()` returned "" — and `slugify("..")`
+is "". So `DELETE /api/skills/..` (and `lhassa skills delete ..`) resolved to
+the store's PARENT and `shutil.rmtree`'d it: brain.db, the signing keys, the
+whole data dir. Two reviewers found this independently, and one verified that
+`GET /api/skills/%2e%2e` returned 200 reading the parent directory before the
+fix. Closed at the root: an unsluggable name becomes a stable sha256-derived
+folder INSIDE the store, and every resolved path is re-validated against the
+root. `get`, `delete` and `curator.restore` all cross the same boundary now,
+pinned by `tests/test_skills_traversal.py`.
+
+**`watch_command` bypassed the shell guardrail.** `handle_shell` routes every
+command through `validate_shell_command`; `watch_command` built an identical
+`subprocess.run(..., shell=True)` from model-supplied text and skipped it —
+a way around the destructive-pattern check the shell tool enforces.
+
+**Calendar feeds had no SSRF guard.** An owner-supplied feed URL is fetched on
+a SCHEDULE, so an unguarded one turns the heartbeat into a repeating probe of
+loopback/link-local/cloud-metadata addresses. It now crosses the same
+`ssrf_check` the research and web_fetch paths already did.
+
+Verified clean across the remainder: no unauthenticated route (all 24 routers
+sit under the middleware's prefixes), no unsigned path to `allow()`, no
+f-string SQL with user values, append-only tables genuinely append-only, seeds
+idempotent, bench scored only by objective verifiers, no
+`dangerouslySetInnerHTML` in the dashboard, the API token never in
+localStorage or a URL, and every CLI mutation going through the same seams as
+the API.
+
+Suite after both waves: 2375 passed.
+
+## 2026-08-03 — Six reviewers in parallel: the philosophy sweep, phase by phase
+
+Six read-only reviewers ran in parallel, one per subsystem, each against the
+repo's own invariants, each required to VERIFY findings before reporting.
+Applied on `review/philosophy-sweep`; the two heaviest findings are recorded
+here and deliberately deferred to a fresh session rather than rushed.
+
+**Fixed in this pass:**
+
+- **The kill switch now actually stops everything** (`core/step.py`).
+  `KillSwitchActive` subclasses `BudgetExceeded`, and the budget branch walks
+  the $0 CLI fallback — so with the switch engaged the heartbeat still called
+  claude/codex/opencode. A hard stop now skips the fallback entirely.
+- **The fallback chain pseudonymizes** (`llm/router.py`). `pick_provider`
+  wrapped remote seats in `PseudonymizingProvider`; `fallback_chain` did not —
+  the one turn that failed over carried raw text to the cloud.
+- **`/recall` stops conflating "no matches" with "recall is broken"**
+  (`core/db.py:recall_available` + the command). Machine callers keep the
+  degrade-to-empty contract; the owner-facing surface answers honestly.
+- **Self-approval refused at the general seam** (`security/approval.py`).
+  Proposer ≠ approver existed only inside org delegation; the generic
+  `tipo="task"` approvals — the ones carrying `run_command`-class actions —
+  had no check.
+- **Registry/allowlist parity is now a test**, and it caught real drift on its
+  first run: `check_integrity` was registered but never allowlisted.
+- **Four more phrasebook entries** (calendar_sync, derive_world_facts,
+  apply_feedback, draft_research_note) — formats verified against the actions'
+  real return strings. `distill_memory`/`ingest_knowledge`/`kg_sync`/
+  `kg_resolve` still reach the owner raw: their success formats were not
+  verifiable this pass, and guessing regexes is how dead phrasings are born.
+- **Monitor episodes carry `dominio`** (`org/watcher.py`), and the monitor's
+  direct-to-owner alert is now a DOCUMENTED exception to the deliver-chain
+  invariant (it is Lhassa's own ear, like health/checks.py) instead of being
+  indistinguishable from a bug.
+- **`distill_episodes` gained its own boundary flag** (`memory_distill_enabled`)
+  so no future caller can spend tokens without an explicit toggle at the
+  memory-module edge.
+
+**Found, verified, and DEFERRED (the next session's first work):**
+
+- **CRITICAL — the local execution path never consults the allowlist.**
+  `allow()` is called only by PTC and the remote agent; the heartbeat's
+  fixed-action branch runs `actions.run` directly, so `ActionSpec.objetivos`
+  and `min_trust` are silently unenforced on the dominant path (verified live:
+  a `sync_repo` outside `LHASSA_ALLOWLIST_REPOS` runs anyway). The fix must
+  thread signed-task verification through `step.py` without breaking the
+  sense-generated triggers (repo_changed auto-sync) — heartbeat semantics,
+  not a patch to rush.
+- **`/ai` is a third paid command** alongside `/moa` and `/cv`; the docs name
+  only two. Update the catalog and add a closed-set test.
+- The autonomy-streak knob never engages on the local path (`mint_task` passes
+  no autonomy verdict) — fail-safe today, but the documented feature is inert.
+
+## 2026-08-03 — The owner stops receiving machine output
+
+Two separate defects reached the owner's screen as the same symptom: raw,
+unreadable notifications.
+
+**The test suite was firing real desktop toasts.** `tests/conftest.py` carefully
+neutralises the calendar feed, the embedder and the quarantine, but never
+touched notifications — so `LHASSA_NOTIFY_CHANNELS` kept its default of
+`telegram,desktop` and any test exercising a notify path went out through the
+LIVE dispatcher. The goal-loop turn cap in `core/step.py` does exactly that, so
+every full-suite run popped a real `notify-send` toast reading *"Goal loop
+loop_… capped: 'watch for READY' did not verify-pass"* — `watch for READY` being
+the fixture goal in `tests/test_loop_runtime.py`. The Telegram channel was
+equally unguarded: with a token in `.env`, a test could have messaged the
+owner's real chat. Fixed by pinning the suite to the `log` channel and blanking
+the Telegram credentials, so fan-out still runs and nothing escapes the process.
+
+This is why the message could not be found earlier: it leaves no episode, no
+loop row and no journal line, because pytest writes to a temporary DB and is not
+a systemd unit. It was only ever visible in dunst's history.
+
+**`check_integrity` answered in JSON.** It returned `json.dumps({...})` while
+every sibling action (`curate_skills`, `distill_memory`) returns a readable
+line — and that string travels through `org/deliver.py` all the way to the
+owner, so a notification read `guardian completed check_integrity:
+{"findings_critical": 1, …}`. The notify voice layer was working correctly; it
+prefixes ("Done — ") but cannot translate a payload it was handed. The action
+now answers in a sentence, and `org/watcher.py` reads the structured verdict
+from `conformance_runs` — the source of truth — instead of parsing a return
+string that was never meant for a machine and a person at once.
+
+## 2026-08-03 — macOS CI corrects the audit that preceded it
+## 2026-08-03 — A real voice: the $0 plane finally speaks as Lhassa (Stream 4)
+
+Root cause, confirmed: the deterministic notification plane never consulted
+`persona.py`. `notify/voice.py`'s lead phrases and `persona.format_alert`'s
+lead phrases were two hand-maintained near-copies ("Heads up: " vs
+"Heads up — ") that were free to drift, and `notify_style="template"` (the
+default) never touched `persona.py` at all — only the opt-in, off-by-default
+persona pass did. So the messages the owner actually received never carried
+Lhassa's identity unless a model call happened to be spent on them.
+
+Fixed, all deterministic, zero model calls:
+
+1. **One source of voice.** `persona.LEAD_PHRASES` (+ a Spanish mirror,
+   `LEAD_PHRASES_ES`) is now the single vocabulary; `notify/voice.py` imports
+   it instead of carrying its own `_FRAMING` dict, and `persona.format_alert`
+   draws from the same table via a severity→lead mapping. The duplicated
+   strings are gone.
+2. **The phrasebook is an obligation.** New `notify/phrasebook.py` gives every
+   allowlisted action (the union of `security.allowlist.build_allowlist()` and
+   `actionpack._temple.TEMPLE_ACTIONS`) a natural first-person lead, plus
+   intent overrides (`LEARNED_ACTIONS`, `ATTENTION_ACTIONS`) so an
+   action-result reads as "Done — ", "Heads up — ", or "I learned
+   something — " depending on what actually happened, not one blanket
+   framing. `tests/test_notify_phrasebook.py` is the parity guard — it fails
+   the moment a new allowlisted action ships with no phrasing.
+3. **Identity reaches the $0 plane.** `voice.template()` now takes an optional
+   `config` and applies two deterministic identity effects with no model call:
+   localizes the lead phrase to the owner's language
+   (`config.digest_language`, reused as the general notify-language signal),
+   and caps notification length when the loaded identity carries a
+   "keep it concise" directive (`persona.load_identity`) — live today, since
+   the default personal identity already carries
+   "responder conciso por defecto".
+4. **Closed the `org/deliver.py` document bypass.** A delivered document's
+   caption used to go straight to `telegram_api.send_document`, skipping
+   `revoice()` entirely — the one surface where machine text could still
+   reach the owner. The caption now routes through the same voice layer a
+   text-only delivery already gets.
+5. **Templates by intent, not only by kind** — implemented as point 2's
+   intent overrides rather than a separate mechanism, since kind-level
+   framing was already too coarse for action-results specifically.
+
+Full suite: 2338 passed, ruff clean. `tests/test_notify_voice.py` and
+`tests/test_persona.py` were updated where the unified "Heads up — " phrasing
+(dash, not colon) changed an asserted string; behavior for `format_alert`
+itself is unchanged (verified by existing tests).
+## 2026-08-03 — Plan 4, Stream 1: the versatile brain (task type / mode / effort)
+
+`core/policy.py`'s `PolicyDecision` already carried a hidden binary
+(`context_tier` minimal/full). This stream makes it an explicit model of HOW
+work gets done, in three deterministic, $0 axes — no model call anywhere in
+this work, same "never raises, degrades to the cheapest safe default"
+contract as every existing $0 layer.
+
+1. **Task identification** — `notify/intent.py:classify_work_type()` grows a
+   second, independent regex axis alongside the existing `classify()` (chat-
+   cache eligibility): `question` / `research` / `build` / `review` /
+   `maintenance` / `decision`. Defaults to `question` (the cheapest bucket),
+   deliberately the opposite default from `classify()`'s `judgment` — this
+   axis's safe default is the cheapest trajectory, not the most expensive one.
+2. **Working mode** — `notify/modes.py` is a new `Registry`-backed swap point
+   (`MODES`, `@register_mode`, mirroring `PROVIDERS`/`VERIFIERS`/`CHANNELS`):
+   `answer_directly` / `search_and_cite` / `iterate_with_verifier` /
+   `delegate_to_hierarchy` / `open_flow`, with a default `WORK_TYPE_MODE` map.
+   `resolve_mode()` never raises — an unknown type or a deregistered mode name
+   degrades to `answer_directly`.
+3. **Effort level** — `core/effort.py` (spine, zero shell imports) defines
+   `minimal` / `standard` / `deep` / `exhaustive` profiles (token budget, loop
+   turns, verifier count, whether MoA opens, a declared pre-spend cost
+   estimate). `resolve_effort()` picks in priority order: an explicit
+   override > a `--<level>` marker parsed out of the message text itself >
+   the work type's policy default > the global default (`standard`).
+   `parse_effort_marker()` always strips the marker from the returned text,
+   whether or not it matched a real level, so a mistyped marker never reaches
+   a model.
+4. **Composition seam** — `notify/task_router.py:route()` wires the three
+   together for one message and returns a `RoutingDecision`; `describe()`
+   renders it into one Episode-ready line. Wired into
+   `notify/telegram_inbound.py:_brain_reply` BEFORE the answer-cache lookup
+   and BEFORE any provider call: the resolved `effort.token_budget` now sizes
+   the actual `max_tokens` request (replacing the old fixed `_CHAT_MAX_TOKENS`
+   constant), and every episode's `decision` is prefixed with the declared
+   trajectory (`route: type=... mode=... effort=... budget=...tk turns=...
+   verifiers=... moa=... declared_cost≈$...`) — the DoD ("minimal vs. deep
+   produce visibly different trajectories, cost declared before it's spent")
+   is checkable straight from the episode log, not only from a test.
+
+**Two pre-existing tests updated, not the design changed under them**:
+`tests/test_answer_cache_telegram.py`'s `decision.startswith("think:"/"cache-
+hit:")` assertions became `in` checks — the routing prefix now precedes both
+labels; the behaviour they actually assert (a real think happened / a cache
+hit was served) is unchanged.
+
+**Not done in this stream** (explicitly out of scope, left for later
+integration passes): wiring `loop_turns`/`verifier_count`/`moa` into the
+heartbeat's `_judge()` path in `core/step.py`, and into `/moa`'s panel-open
+decision — those consumers can adopt the resolved `EffortProfile` without
+further design work, they just haven't been touched yet so the risk surface
+of this stream stays small.
+## 2026-08-03 — `lhassa setup`: one command closes the eight-manual-step gap
+
+Verified problem (`doc/plan-4.md`, Stream 3): installing Lhassa never produced a
+working system. `seeds.apply_all` was only ever called from `lhassa seed
+apply-all` — a fresh clone gave a bare chat, with no departments, digest,
+maintenance or flows until eight manual steps were run by hand.
+
+**`lhassa setup`** (`cli/setup_cmds.py`) closes the gap with six deterministic,
+$0 steps, none of which touches a model: detect the host (reusing `host.py`
+unchanged — no new detection was written), detect or configure a brain
+($0-first: a subscription CLI on PATH, then a reachable local Ollama, then an
+existing API key), ask for permissions **by scope** in plain language (never
+all-or-nothing — declining a scope always leaves a working system with that
+capability off), apply the matching seeds for a chosen profile, install
+systemd/launchd services (the existing unit files, only the checkout path is
+templated in), and a smoke check that reports one honest sentence about what
+is now alive.
+
+**The actual fix**: every profile applies a fixed baseline
+(`temple`, `digest`, `maintenance`, `personal`) that alone already satisfies the
+DoD — a real department, the daily digest, the maintenance schedule, and at
+least one real work-flow (the personal secretary's morning/evening briefings)
+— then layers ONE domain seed on top (`research` → `research`, `dev` → `cv`,
+`knowledge` → none beyond the baseline, since its distinguishing scope is the
+`read` permission rather than a seed). This is a deliberate design choice, not
+an existing seed named per-profile — no "dev" or "knowledge" seed exists today.
+
+**Permissions write real config**, not a flag: `read` → `knowledge_roots` /
+`protected_roots`; `commands` → `auto_sync_repos` (+ optionally
+`LHASSA_ALLOWLIST_REPOS` via the settings advanced escape hatch, and a pointer
+to `scripts/install-privileged.sh` for sudoers, run separately); `network`
+declined pins `heartbeat_provider` to `local` so the routine think never
+reaches the network; `notify` toggles `notify_channels`. Every decision routes
+through `lhassa.settings` (never `.env`), so a re-run is idempotent by the same
+contract every setting write already carries.
+
+**Testable by construction**: every judgment — brain detection, scope
+decisions, which seeds a profile applies — is a pure function over injected
+inputs (`env`, `which`, `probe_ollama`, a plain `dict` of granted scopes),
+mirroring `host.py`'s own "pure parser + injected collector" pattern; no TTY
+and no network are needed to exercise the wizard's logic. `tests/test_setup_cmds.py`
+adds 32 tests, including two end-to-end ones that run the REAL seed registry
+(not a stub) for every profile and assert the DoD against `smoke_check`'s real
+topology/flow counts, plus an idempotency check.
+
+**DoD met**: one command, `lhassa setup --yes`, takes a fresh clone to a brain
+with departments, digest, maintenance and flows — no hidden manual step. Full
+suite green, ruff clean.
+## 2026-08-03 — Stream 5: four interfaces, one capability
+
+Plan 4's Stream 5 asked that anything doable in one surface be doable in the
+others, and that no endpoint be left without a surface. Three findings shaped
+the work, and each one is a variation of the same defect: a capability existed
+but only one door opened onto it.
+
+**The CLI could describe flows but not author them.** `lhassa flows` was
+read-only — list, templates, show, apply. Authoring, running and following a
+flow happened on the dashboard canvas or nowhere. A singular `lhassa flow` now
+carries the full lifecycle: `create` (from a template or a blank one-trigger
+scaffold), `edit` (a `$EDITOR` round-trip), `validate`, `run`, `watch`, `logs`,
+`runs`, `delete`.
+
+Two decisions inside it are load-bearing. First, **the run crosses
+`org/delegate.py:delegate_flow`, never `flows/engine.py:run_flow`** — the
+standing principle that a flow is never run bare binds a new surface exactly as
+it binds the old ones, and a test asserts that `run_flow` is unreachable from
+the CLI. Second, **`edit` never discards the operator's work**: an invalid
+buffer stays on disk, the command says where, and it offers to re-open rather
+than dropping the edit on the floor. Losing someone's typing to a validation
+error is not a validation failure, it is a data-loss bug.
+
+`watch`/`logs` read the durable kernel directly rather than through the API, so
+they keep the CLI's existing virtue — the terminal works with the server down.
+
+**The TUI covered 4 of ~18 domains and could not find anything.** It is now
+eight tabs (Flows, Skills, Memory and Org join the original four), but the
+structural change is `cli/tui/screens/base.py:TableScreen` — one place that
+owns the `/` filter, the live re-poll and the degrade-on-read-failure, so a
+future screen inherits all three instead of re-deriving them.
+
+Two small judgements there. The filter is a **substring match, not fuzzy**: a
+filter you can predict beats one that guesses, and there is nothing to learn.
+And the live refresh **skips the redraw when the rendered rows are unchanged**,
+which is what keeps an idle brain from flickering and keeps the cursor where the
+operator left it — a polling UI that redraws unconditionally is unusable long
+before it is slow. The command palette (`ctrl+p`) is Textual's own, fed a
+provider; it offers navigation only. Approve/deny/run stay on the screen that
+owns the selected row, because a palette entry cannot show you what you are
+about to act on.
+
+**The dashboard had no API client and seven endpoints with no consumer.**
+`lib/api.js` was ten lines. Every panel decided for itself whether to check the
+status, how to word the error, and whether to send credentials — and none of
+them sent credentials, so the dashboard only ever worked on loopback.
+`lib/apiClient.js` is now the one door (base URL, token header, status→Error,
+JSON parsing, one JSDoc-annotated function per endpoint). One behaviour
+improves as a side effect: the client surfaces the API's own `{"detail": …}`,
+so a flow that fails validation names the offending node instead of reporting
+`Save failed (400)`.
+
+Artifacts, Integrity, Research assessments, the memory graph/entities, episode
+search and `/api/flow-runs` all have surfaces now. **The memory graph renders as
+ranked lists, not a node-link diagram** — stated here rather than buried,
+because it is a real reduction. The read model is a projection over facts and
+episodes; a force layout would add a dependency and a screen full of pixels
+without adding a fact the lists do not already state. The client function is
+unchanged if a canvas is layered on later.
+
+**What was cut.** The v2 node kinds on the canvas (they belong to Stream 2's
+engine work, not to a surface), `lhassa init`, and a full migration of every
+dashboard panel off raw `fetch` — the client covers every domain, but roughly a
+dozen peripheral panels still call `fetch` directly and were left for a
+mechanical follow-up.
+## 2026-08-03 — Stream 6 Phase A: one brain per person, shared resources
+
+Multi-user, Phase A only (Phase B — a shared team instance with per-actor
+auth/RBAC — is explicitly out of scope). The owner's choice stands: multiple
+sovereign instances, not one shared instance.
+
+**`actor_id` promoted, not invented.** `Origin.actor_id` (`security/trust.py`)
+and `tasks.origen_actor` already existed; `approvals` carried an actor only
+inside its JSON `payload`. Migration 11 (`core/db.py`, additive, backfilled —
+existing approvals recover their actor from `payload["actor_id"]`, facts and
+knowledge default to `Config.root_admin_id`, no row is dropped or blanked)
+promotes it to a real column on `approvals`/`facts`/`knowledge` — the three
+places "who did/authored this" is load-bearing. Skills/flows/templates stay
+file-based and untouched.
+
+**The shared/private boundary is closed by construction.** `org/sharing.py`'s
+`SHAREABLE_TYPES` is `{skill, flow, template, knowledge}` — no code path
+accepts `fact` or `episode`, checked both at `publish()` and, defensively, at
+`list_offerings()` read time (so a row that reached `shared_resources` through
+any other writer still can't surface). Two new tables, `shared_resources` /
+`resource_subscriptions`, hold only what was explicitly published/subscribed.
+
+**Cross-instance permission rides `org/relationships.py:permits()` — the
+existing seam, extended, not bypassed.** A fifth, closed edge kind, `shares`
+(`RELATION_KINDS`), directed A→B ("A may discover/subscribe to B's
+resources"); it is INSTANCE-scoped (`INSTANCE_SCOPED_KINDS`), so its
+endpoints skip local-topology validation and instead enforce `to_id ==` the
+local instance's own id (an instance can only grant access to itself). Every
+publish/grant/subscribe/list call logs its own $0 `cross-instance-share`
+episode either way (allow or refuse), attributed `dominio=root_admin_id`.
+
+**Product decision made without asking (flagged, not silently assumed): the
+SHARES grant registry (`org_relationships_file`) is a file shared across every
+instance on one box** — the same assumption the existing multi-tenant DB shape
+already makes for `core.db`. There is no live multi-machine transport yet;
+once instances run on separate machines, either the grant must replicate or
+the requester must ask the provider over a real transport. This is written
+into `org/sharing.py`'s module docstring, not decided silently.
+
+**Surfaces:** `lhassa share publish|unpublish|grant|revoke|offerings|
+subscribe|unsubscribe|subscriptions` + `/api/share/*` (`api/share_routes.py`).
+
+**What the leak test actually proves, stated plainly.** Two tests exist:
+`test_private_facts_never_leak_across_instances` shows the happy path never
+returns a fact even with a full grant; the stronger
+`test_list_offerings_filters_out_a_row_that_bypassed_publish` writes a
+`fact`-typed row directly via the low-level `db.publish_resource` (bypassing
+`publish()`'s own check entirely) and asserts `list_offerings` still refuses
+it — that is the one that would actually fail if the read-time filter were
+ever removed. Both are `core.db`-row isolation tests (a real safety
+guarantee), not a network/process penetration test — no real cross-machine
+transport exists yet to attack.
+
+**Not touched:** `core/step.py`'s allowlist gate (Stream 0) is unchanged and
+not weakened; sharing operations are explicit CLI/API calls, not ACTIONS
+routed through the heartbeat. Trust degrade semantics for consumed shared
+content (treat as MUNDO) are documented in `org/sharing.py` but not yet wired
+into an actual consumption path — nothing subscribes-and-executes in Phase A.
+
+Full suite: 2352 passed (baseline was 2349 passed + 2 failures in
+`test_relationship_api.py` from a hardcoded four-kind assertion, updated to
+include `shares`; +1 net new test added while hardening the leak coverage
+below). `ruff check .`: all checks passed.
+
 ## 2026-08-03 — El CI de macOS corrige la auditoría que lo precedió
 
 The first real macOS CI run (triggered by the push to `main`) came back
@@ -38,6 +479,7 @@ running on Linux "genuinely cover the macOS branches". They cover the branches
 that were written; they do not cover the assumptions that were never questioned.
 Only the real runner found those.
 
+## 2026-08-03 — AGPL-3.0: sovereignty, attribution, and the commercial option
 ## 2026-08-03 — AGPL-3.0: soberanía, atribución y la opción comercial
 
 Lhassa is licensed under **AGPL-3.0-or-later**, with one additional term under
@@ -100,6 +542,7 @@ are 134 MIT / 19 ISC / 15 Apache-2.0 / 6 BSD-2 / 3 BSD-3 / 2 MPL-2.0 /
   `curl -o LICENSE https://www.gnu.org/licenses/agpl-3.0.txt`, then re-append
   the section 7 block.
 
+## 2026-08-03 — macOS as tier 2: a host layer, and a quarantine that does not yield
 ## 2026-08-03 — macOS como tier 2: una capa de host, y una cuarentena que no cede
 
 The audience for a local-first, open-source brain runs local inference, and that
@@ -153,6 +596,7 @@ regression. **The macOS CI run itself is still outstanding** — GitHub Actions
 only runs on pushed commits and this work is deliberately uncommitted, so the
 matrix is written and validated but its first real result is pending.
 
+## 2026-08-03 — Recall stops remembering its own paperwork
 ## 2026-08-03 — El recall deja de recordar su propio papeleo
 
 `db.search_episodes` already demoted automation episodes below interactive ones
@@ -183,6 +627,7 @@ that scores spread past the penalty and "a nudge, not a filter" is actually
 true. The test now builds a 200-episode corpus so it asserts the real behaviour
 rather than a convenient one, and the caveat is recorded in its docstring.
 
+## 2026-08-03 — Two bugs of a machine that sleeps
 ## 2026-08-03 — Dos bugs de una máquina que duerme
 
 Investigating repeated notifications surfaced two defects that only appear on a
@@ -222,6 +667,7 @@ emitted on this machine** — zero occurrences in the full user journal (back to
 (`core/step.py`) requires a loop row that has never existed. Recorded here as an
 open question rather than a fixed bug: the real text is still unidentified.
 
+## 2026-08-03 — The utility tribunal: the counterweight that was missing
 ## 2026-08-03 — El tribunal de utilidad: el contrapeso que faltaba
 
 Every invariant Lhassa had was an invariant of RESTRAINT — deny-by-default,

@@ -280,7 +280,23 @@ async def delegate_internal(
         try:
             from lhassa.org import deliver as deliver_mod
 
-            summary = f"{worker} completed {action}: {str(result)[:300]}"
+            # The owner reads this line, so it is written for a person, not for
+            # a log. The phrasebook (notify/voice.py) turns a known action's
+            # outcome into a plain sentence at $0 — no model, no tokens. When
+            # an action has no phrasing, or its output cannot be parsed, we fall
+            # back to the machine line rather than inventing a summary; the
+            # action's own name prefix is dropped so it does not stutter
+            # ("guardian completed check_integrity: check_integrity: fail…").
+            from lhassa.notify.voice import phrase as _phrase
+
+            said = _phrase(action, str(result))
+            if said:
+                summary = said
+            else:
+                body = str(result)
+                if body.startswith(f"{action}:"):
+                    body = body[len(action) + 1:].lstrip()
+                summary = f"{worker} completed {action}: {body[:300]}"
             delivered, _artifact_id = await deliver_mod.deliver(
                 text=summary,
                 kind="internal",

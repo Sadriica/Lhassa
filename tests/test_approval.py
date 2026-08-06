@@ -94,6 +94,142 @@ def test_high_risk_always_needs_approval(knob_config):
     assert approval.needs_approval(task, autonomy=True) is True
 
 
+@pytest.mark.asyncio
+async def test_high_risk_rejects_spoofed_untrusted_actor(tmp_path, monkeypatch, knob_config):
+    db = await _init(tmp_path, monkeypatch)
+    ap_id = await db.add_approval(
+        "inst_personal", "task", {"accion": "move_money", "actor_id": "owner"}
+    )
+    with pytest.raises(approval.UntrustedApproverError, match="authenticated channel"):
+        await approval.resolve(
+            "inst_personal", ap_id, approved=True, by_actor="different-person"
+        )
+    assert (await db.get_approval("inst_personal", ap_id))["estado"] == "pendiente"
+
+
+@pytest.mark.asyncio
+async def test_high_risk_owner_cannot_switch_channels_to_self_approve(
+    tmp_path, monkeypatch, knob_config
+):
+    db = await _init(tmp_path, monkeypatch)
+    ap_id = await db.add_approval(
+        "inst_personal", "task", {"accion": "move_money", "actor_id": "telegram"}
+    )
+    with pytest.raises(approval.SelfApprovalError, match="self-approval refused"):
+        await approval.resolve(
+            "inst_personal",
+            ap_id,
+            approved=True,
+            by_actor="manager",
+            approver=approval.TrustedApprover("owner", "api-token"),
+        )
+    assert (await db.get_approval("inst_personal", ap_id))["estado"] == "pendiente"
+
+
+@pytest.mark.asyncio
+async def test_high_risk_distinct_trusted_principal_can_approve(
+    tmp_path, monkeypatch, knob_config
+):
+    db = await _init(tmp_path, monkeypatch)
+    ap_id = await db.add_approval(
+        "inst_personal",
+        "task",
+        {"accion": "move_money", "actor_id": "finance-proposer"},
+    )
+    await approval.resolve(
+        "inst_personal",
+        ap_id,
+        approved=True,
+        approver=approval.TrustedApprover("finance-manager", "org-rbac"),
+    )
+    assert (await db.get_approval("inst_personal", ap_id))["estado"] == "aprobada"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("accion", ["run_command", "run_script"])
+async def test_action_spec_approval_requires_trusted_distinct_actor(
+    accion, tmp_path, monkeypatch, knob_config
+):
+    db = await _init(tmp_path, monkeypatch)
+    ap_id = await db.add_approval(
+        "inst_personal", "task", {"accion": accion, "actor_id": "brain"}
+    )
+    with pytest.raises(approval.UntrustedApproverError):
+        await approval.resolve(
+            "inst_personal", ap_id, approved=True, by_actor="different-label"
+        )
+    await approval.resolve(
+        "inst_personal",
+        ap_id,
+        approved=True,
+        approver=approval.TrustedApprover("owner", "loopback"),
+    )
+    assert (await db.get_approval("inst_personal", ap_id))["estado"] == "aprobada"
+
+
+@pytest.mark.asyncio
+async def test_parked_security_classification_survives_allowlist_drift(
+    tmp_path, monkeypatch, knob_config
+):
+    db = await _init(tmp_path, monkeypatch)
+    ap_id = await approval.request_approval(
+        "inst_personal",
+        tipo="task",
+        payload={"accion": "run_script", "actor_id": "brain"},
+    )
+    row = await db.get_approval("inst_personal", ap_id)
+    assert row["payload"]["requires_separation_of_duties"] is True
+
+    monkeypatch.setattr(al, "ALLOWLIST", {})
+    with pytest.raises(approval.UntrustedApproverError):
+        await approval.resolve(
+            "inst_personal", ap_id, approved=True, by_actor="different-label"
+        )
+
+
+@pytest.mark.asyncio
+async def test_protected_path_resolution_requires_separation(
+    tmp_path, monkeypatch, knob_config
+):
+    db = await _init(tmp_path, monkeypatch)
+    protected = tmp_path / "vault"
+    protected.mkdir()
+    monkeypatch.setattr(Config, "protected_roots", str(protected))
+    ap_id = await db.add_approval(
+        "inst_personal",
+        "task",
+        {
+            "accion": "read_file",
+            "actor_id": "brain",
+            "params": {"path": str(protected / "secret.md")},
+        },
+    )
+    with pytest.raises(approval.UntrustedApproverError):
+        await approval.resolve(
+            "inst_personal", ap_id, approved=True, by_actor="owner"
+        )
+
+
+@pytest.mark.asyncio
+async def test_non_read_only_attach_resolution_requires_separation(
+    tmp_path, monkeypatch, knob_config
+):
+    db = await _init(tmp_path, monkeypatch)
+    ap_id = await db.add_approval(
+        "inst_personal",
+        "task",
+        {
+            "accion": "attach_project_template",
+            "actor_id": "brain",
+            "params": {"read_only": False},
+        },
+    )
+    with pytest.raises(approval.UntrustedApproverError):
+        await approval.resolve(
+            "inst_personal", ap_id, approved=True, by_actor="owner"
+        )
+
+
 def test_autonomy_lowers_friction_for_non_high_risk(monkeypatch, knob_config):
     monkeypatch.setattr(
         al, "ALLOWLIST",
@@ -194,6 +330,7 @@ async def test_local_agent_parks_needs_approval_task(tmp_path, monkeypatch, knob
     queue = await approval.pending("inst_personal")
     assert len(queue) == 1
     assert queue[0]["payload"]["accion"] == "sync_repo"
+    assert queue[0]["payload"]["params"] == {"branch": "main"}
 
 
 @pytest.mark.asyncio
@@ -282,6 +419,48 @@ async def test_api_approvals_rejects_bad_body(tmp_path, monkeypatch, knob_config
             json={"approved": True, "by_actor": 42},
         )
         assert bad_actor.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_api_high_risk_actor_label_cannot_bypass_self_approval(
+    tmp_path, monkeypatch, knob_config
+):
+    db = await _init(tmp_path, monkeypatch)
+    from lhassa.api import server
+
+    ap_id = await db.add_approval(
+        "inst_personal", "task", {"accion": "move_money", "actor_id": "api"}
+    )
+    transport = httpx.ASGITransport(app=server.app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://brain") as client:
+        response = await client.post(
+            f"/api/approvals/{ap_id}",
+            json={"approved": True, "by_actor": "totally-different-person"},
+        )
+
+    assert response.status_code == 409
+    assert "self-approval refused" in response.json()["detail"]
+    assert (await db.get_approval("inst_personal", ap_id))["estado"] == "pendiente"
+
+
+@pytest.mark.asyncio
+async def test_api_maps_untrusted_approver_to_403(tmp_path, monkeypatch, knob_config):
+    db = await _init(tmp_path, monkeypatch)
+    from lhassa.api import server
+
+    ap_id = await db.add_approval("inst_personal", "task", {"accion": "move_money"})
+
+    async def refuse(*args, **kwargs):
+        raise approval.UntrustedApproverError("authenticated identity required")
+
+    monkeypatch.setattr(approval, "resolve", refuse)
+    transport = httpx.ASGITransport(app=server.app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://brain") as client:
+        response = await client.post(
+            f"/api/approvals/{ap_id}", json={"approved": True}
+        )
+    assert response.status_code == 403
+    assert response.json()["detail"] == "authenticated identity required"
 
 
 # ── describe(): the one human-readable render every queue surface uses ─────────────

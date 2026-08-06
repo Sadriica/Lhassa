@@ -107,6 +107,7 @@ async def _approval_gate(task: Task) -> "dict | None":
             "task_id": task.id,
             "accion": task.accion,
             "objetivo": task.objetivo,
+            "params": dict(task.params or {}),
             "actor_id": task.origen.actor_id,
             "origen_trust": int(task.origen.trust),
         },

@@ -723,6 +723,37 @@ def test_chain_walks_cli_subscriptions_before_cloud(monkeypatch):
     assert len(claude.calls) == 1 and len(codex.calls) == 1 and len(cloud.calls) == 1
 
 
+def test_chain_kill_switch_stops_before_later_configured_provider(monkeypatch):
+    from lhassa.llm.gateway import KillSwitchActive
+
+    payload = {
+        "ok": True,
+        "result": [
+            {"update_id": 85, "message": {"chat": {"id": 123}, "text": "hey"}}
+        ],
+    }
+    monkeypatch.setattr(
+        telegram_inbound.httpx, "AsyncClient", _client_returning(payload)
+    )
+    _patch_brain(monkeypatch, raise_exc=RuntimeError("primary flaked"))
+    sent = _patch_send(monkeypatch)
+
+    killed = _named("default", raise_exc=KillSwitchActive("manual stop"))
+    later = _named("claude", reply="must not run")
+    # Deliberately non-default order: the behavior must follow exception
+    # semantics, not assumptions about which provider is last.
+    monkeypatch.setattr(
+        telegram_inbound,
+        "_fallback_chain",
+        lambda config, primary: [(killed, None), (later, None)],
+    )
+
+    assert asyncio.run(telegram_inbound.poll_once(_cfg(), offset=None)) == 86
+    assert sent == [telegram_inbound._FALLBACK_REPLY]
+    assert len(killed.calls) == 1
+    assert later.calls == []
+
+
 # ── callback_query handling (inline Approve/Deny buttons) ──────────────────────
 
 
@@ -749,7 +780,11 @@ def _patch_answer_callback(monkeypatch):
 
 def test_callback_query_approve_resolves_and_acks(tmp_path, monkeypatch):
     db = asyncio.run(_init_approval_db(tmp_path, monkeypatch))
-    ap_id = asyncio.run(db.add_approval("inst_personal", "task", {"accion": "run_command"}))
+    ap_id = asyncio.run(
+        db.add_approval(
+            "inst_personal", "task", {"accion": "run_command", "actor_id": "brain"}
+        )
+    )
 
     payload = {
         "ok": True,
