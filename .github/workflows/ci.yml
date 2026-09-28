@@ -5,6 +5,12 @@ on:
     branches:
       - main
   pull_request:
+    branches:
+      - main
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   test:
@@ -31,6 +37,8 @@ jobs:
 
       - name: Setup uv
         uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
 
       - name: Setup Node
         if: matrix.os == 'ubuntu-latest'
@@ -53,11 +61,14 @@ jobs:
         working-directory: dashboard
         run: npx playwright install --with-deps chromium
 
-      - name: Run Python tests
-        run: uv run pytest -q -p no:cacheprovider
-
       - name: Run Python lint
         run: uv run ruff check .
+
+      - name: Run architecture guard
+        run: uv run pytest tests/test_architecture.py -q -p no:cacheprovider
+
+      - name: Run Python tests
+        run: uv run pytest -q -p no:cacheprovider
 
       - name: Run dashboard lint
         if: matrix.os == 'ubuntu-latest'
