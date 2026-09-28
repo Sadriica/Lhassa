@@ -307,7 +307,8 @@ TOOLS = ToolsSchema(
             name="track_postulaciones",
             description=(
                 "Track job/internship applications (CVs sent). op='add' records a new "
-                "application (needs empresa), op='update' advances one by id+estado, "
+                "application (needs empresa), op='update' changes one by id+estado (and "
+                "optionally link, notas, categoria, prioridad), "
                 "op='list' (default) lists tracked applications, optionally filtered by estado."
             ),
             properties={
@@ -316,7 +317,7 @@ TOOLS = ToolsSchema(
                 "rol": {"type": "string", "description": "Role / position"},
                 "estado": {"type": "string", "description": "Application status, e.g. pendiente, enviada, entrevista, oferta, rechazada"},
                 "fuente": {"type": "string", "description": "Where it came from, e.g. LinkedIn, email"},
-                "link": {"type": "string", "description": "Link to the posting"},
+                "link": {"type": "string", "description": "Link to the posting. On op='update' this backfills or corrects the stored URL."},
                 "notas": {"type": "string", "description": "Free-form notes"},
                 "id": {"type": "string", "description": "Application id (required for update)"},
                 "categoria": {"type": "string", "description": "Role category, e.g. IA/LLMs, HPC/CUDA, research. Stored, so it stays stable between renders."},

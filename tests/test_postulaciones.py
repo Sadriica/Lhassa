@@ -34,6 +34,32 @@ async def test_postulaciones_table_exists_with_instance_id(tmp_path, monkeypatch
 # ── DB helpers round-trip ───────────────────────────────────────────────────────
 
 @pytest.mark.asyncio
+@pytest.mark.asyncio
+async def test_update_can_backfill_link(tmp_path, monkeypatch):
+    """A later-found posting URL is writable, and a bare state change keeps it."""
+    db = await _init(tmp_path, monkeypatch)
+    pid = await db.add_postulacion("inst_personal", "Loka", "Data Eng Intern")
+    url = "https://job-boards.greenhouse.io/lokainc/jobs/5226236007"
+
+    ok = await db.update_postulacion_estado("inst_personal", pid, "pendiente", link=url)
+    assert ok is True
+    rows = await db.list_postulaciones("inst_personal")
+    assert rows[0]["link"] == url
+
+    await db.update_postulacion_estado("inst_personal", pid, "enviada")
+    rows = await db.list_postulaciones("inst_personal")
+    assert rows[0]["link"] == url, "estado-only update must not erase the link"
+
+    from lhassa.core import actions
+    out = await actions.tracking_postulaciones(
+        {"op": "update", "id": pid, "estado": "entrevista",
+         "link": "https://example.test/corrected"}
+    )
+    assert "entrevista" in out
+    rows = await db.list_postulaciones("inst_personal")
+    assert rows[0]["link"] == "https://example.test/corrected"
+
+
 async def test_add_update_list_roundtrip(tmp_path, monkeypatch):
     db = await _init(tmp_path, monkeypatch)
     pid = await db.add_postulacion(

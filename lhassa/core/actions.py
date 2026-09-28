@@ -105,7 +105,8 @@ async def tracking_postulaciones(params: dict) -> str:
         op / accion; "add" | "update" | "list" (default "list").
         instance_id; isolation scope (default ``Config.instance_id``).
         add:    empresa (required), rol, estado, fuente, link, notas.
-        update: id (required), estado (required), notas (optional).
+        update: id (required), estado (required); rol, notas, link, categoria,
+                prioridad (all optional, only supplied keys are written).
         list:   estado (optional filter).
         mcp_pull / mcp_tool. OPTIONAL, guarded external top-up (see below).
 
@@ -158,11 +159,15 @@ async def tracking_postulaciones(params: dict) -> str:
             notas = params.get("notas")
             categoria = params.get("categoria")
             prioridad = params.get("prioridad")
+            link = params.get("link")
+            rol = params.get("rol")
             ok = await db.update_postulacion_estado(
                 instance_id, pid, estado,
                 notas=str(notas) if notas is not None else None,
                 categoria=str(categoria) if categoria is not None else None,
                 prioridad=str(prioridad) if prioridad is not None else None,
+                link=str(link) if link is not None else None,
+                rol=str(rol) if rol is not None else None,
             )
             if not ok:
                 return f"tracking_postulaciones: no encontrada {pid}{pulled_note}"

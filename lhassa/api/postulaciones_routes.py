@@ -55,7 +55,7 @@ async def get_postulaciones(request: Request, estado: str | None = None):
 async def update_postulacion(
     request: Request, postulacion_id: str, body: dict
 ):
-    """Update estado/categoria/prioridad for one tracked application.
+    """Update estado/categoria/prioridad/link for one tracked application.
 
     Accepts a partial body: only the supplied keys change, the rest keep their
     current value. ``actualizado_en`` is bumped by the store, which is what the
@@ -71,6 +71,7 @@ async def update_postulacion(
         estado = body.get("estado", current.get("estado"))
         categoria = body.get("categoria", current.get("categoria"))
         prioridad = body.get("prioridad", current.get("prioridad"))
+        link = body.get("link", current.get("link"))
 
         ok = await update_postulacion_estado(
             instance,
@@ -78,6 +79,7 @@ async def update_postulacion(
             estado,
             categoria=categoria,
             prioridad=prioridad,
+            link=link,
         )
         if not ok:
             return {"ok": False, "error": "not found", "id": postulacion_id}

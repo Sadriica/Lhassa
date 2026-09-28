@@ -278,6 +278,8 @@ async def update_postulacion_estado(
     notas: Optional[str] = None,
     categoria: Optional[str] = None,
     prioridad: Optional[str] = None,
+    link: Optional[str] = None,
+    rol: Optional[str] = None,
 ) -> bool:
     """Advance one application's ``estado`` (and optionally append/replace notas).
 
@@ -298,6 +300,14 @@ async def update_postulacion_estado(
     if prioridad is not None:
         sets.append("prioridad = ?")
         args.append(prioridad)
+    # Same rule for the posting URL: a backfill ("I found the link later") must
+    # not blank out a link that is already stored, so only write when supplied.
+    if link is not None:
+        sets.append("link = ?")
+        args.append(link)
+    if rol is not None:
+        sets.append("rol = ?")
+        args.append(rol)
     args.extend([instance_id, postulacion_id])
     async with aiosqlite.connect(_pkg().DB_PATH) as db:
         cur = await db.execute(
