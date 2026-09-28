@@ -44,7 +44,7 @@ def _detect_ai_cli() -> str:
             return cli
     return "claude"
 
-# Default models per provider — used when LHASSA_MODEL is not set.
+# Default models per provider; used when LHASSA_MODEL is not set.
 _DEFAULT_MODELS = {
     "anthropic":  "claude-haiku-4-5-20251001",
     "openai":     "gpt-4o-mini",
@@ -145,11 +145,11 @@ class Config:
     #
     # Auto-detected from whichever API key is present if LHASSA_LLM_PROVIDER is
     # not set. Priority: anthropic → openai → groq → openrouter → cerebras.
-    # This means setting only ANTHROPIC_API_KEY is enough — no LHASSA_LLM_PROVIDER
+    # This means setting only ANTHROPIC_API_KEY is enough; no LHASSA_LLM_PROVIDER
     # needed, and vision tools will also work automatically.
     llm_provider: str = _detect_provider()
 
-    # Model name — interpreted by whichever provider is selected.
+    # Model name; interpreted by whichever provider is selected.
     # Auto-set to the provider default if LHASSA_MODEL is not set:
     #   anthropic  → claude-haiku-4-5-20251001
     #   openai     → gpt-4o-mini
@@ -167,7 +167,7 @@ class Config:
     cerebras_api_key: str   = os.getenv("CEREBRAS_API_KEY", "")
     deepseek_api_key: str   = os.getenv("DEEPSEEK_API_KEY", "")
 
-    # Ollama — local, no key needed.
+    # Ollama; local, no key needed.
     ollama_base_url: str = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 
     # ── STT ───────────────────────────────────────────────────────────────────
@@ -190,7 +190,7 @@ class Config:
     )
 
     # ── Instance identity + brain DB (data spine) ─────────────────────────────
-    # One instance, one owner — never an assumed single owner. Every row in the
+    # One instance, one owner; never an assumed single owner. Every row in the
     # "grande" brain DB carries this id and every query filters by it, so the
     # multi-tenant shape is seeded from day one (personal use keeps one value).
     instance_id: str = os.getenv("LHASSA_INSTANCE_ID", "inst_personal")
@@ -210,7 +210,7 @@ class Config:
     # Threshold at which the chica consolidates (mechanical LRU eviction of the
     # least-recently-used NON-pinned items down to this count). No tokens, no LLM.
     chica_max_items: int = _safe_int(os.getenv("LHASSA_CHICA_MAX_ITEMS", "200"), 200)
-    # Phase 2 — semantic consolidation (the cheap-LLM second pass on top of the
+    # Phase 2; semantic consolidation (the cheap-LLM second pass on top of the
     # mechanical LRU above). Default ON, but it only ever FIRES when the chica is
     # over ``chica_max_items`` (threshold-driven, never on a clock). Set to 0 to
     # disable the LLM pass entirely and keep only the mechanical LRU.
@@ -244,7 +244,7 @@ class Config:
         os.getenv("LHASSA_ALLOWLIST_REPOS", "*")
     )
 
-    # ── Approval frontier + autonomy knob (§2.6 — HITL per flow) ──────────────
+    # ── Approval frontier + autonomy knob (§2.6. HITL per flow) ──────────────
     # The autonomy knob lowers approval friction for repeatedly-approved human
     # actions: after this many CONSECUTIVE human-origin approvals of the same
     # (accion, actor) the action auto-approves ("una humano repetida se vuelve
@@ -268,7 +268,7 @@ class Config:
         os.getenv("LHASSA_WATCH_REPO_DIRS", "Code"), ["Code"]
     )
 
-    # ── Integrations: MCP (§2.11) — "plug in, don't program" ──────────────────
+    # ── Integrations: MCP (§2.11); "plug in, don't program" ──────────────────
     # Server definitions for the MCP client. JSON shape:
     #   {"servers": {"<name>": {"type":"stdio","command":[...]}
     #                        | {"type":"url","url":"https://…"}}}
@@ -304,12 +304,12 @@ class Config:
     llm_cache_ttl_days: int = _safe_int(
         os.getenv("LHASSA_LLM_CACHE_TTL_DAYS", "7"), 7
     )
-    # Extra/override model pricing merged OVER the built-in gateway table at init —
+    # Extra/override model pricing merged OVER the built-in gateway table at init;
     # a JSON object {"model-name": [input_per_1M, output_per_1M]} so the owner can
     # price any model without a code edit. Empty = built-in table only. Malformed
     # JSON is logged and ignored (never crashes).
     pricing_json: str = os.getenv("LHASSA_PRICING_JSON", "")
-    # Kill-switch — a hard manual stop, independent of the daily token budget.
+    # Kill-switch; a hard manual stop, independent of the daily token budget.
     # When on, the gateway refuses every cloud-LLM call before it reaches a
     # provider. Default off; flip it at runtime from the dashboard. This is the
     # boot default; gateway.set_kill_switch() overrides it for the live process.
@@ -317,7 +317,7 @@ class Config:
         "1", "true", "yes", "on",
     )
 
-    # ── Router (§2.4) — two axes + cascade ────────────────────────────────────
+    # ── Router (§2.4); two axes + cascade ────────────────────────────────────
     # "rules" (default) → pick cheap/smart by hardness, route sensitive data to a
     # zero-retention provider. "off" → always use ``model`` (no routing).
     router_mode: str = os.getenv("LHASSA_ROUTER", "rules").lower()
@@ -326,11 +326,23 @@ class Config:
     model_cheap: str = os.getenv("LHASSA_MODEL_CHEAP", "") or model
     model_smart: str = os.getenv("LHASSA_MODEL_SMART", "") or model
 
+    # DeepSeek V4 (and any deepseek-reasoner) thinks BEFORE it answers, into a
+    # separate ``reasoning_content`` field, and a bounded call spends its whole
+    # max_tokens there: the owner gets an empty or half-finished message. See
+    # ``llm/gateway.py:_reasoning_kwargs``. "auto" (default) turns reasoning off
+    # for bounded calls (the notify/digest persona passes, chat replies) and
+    # keeps it for calls generous enough that the answer still fits; "off"
+    # never reasons; "on" restores the raw provider behaviour.
+    deepseek_reasoning: str = os.getenv("LHASSA_DEEPSEEK_REASONING", "auto").strip().lower()
+    deepseek_reasoning_min_tokens: int = _safe_int(
+        os.getenv("LHASSA_DEEPSEEK_REASONING_MIN_TOKENS", "2048"), 2048
+    )
+
     # Token budget for the layered memory load when the brain wakes to think.
     context_token_budget: int = _safe_int(
         os.getenv("LHASSA_CONTEXT_TOKEN_BUDGET", "2000"), 2000
     )
-    # Token budget for a "minimal" context load — the tier the deterministic
+    # Token budget for a "minimal" context load; the tier the deterministic
     # policy layer (core/policy.py) requests for routine/default judgment (no
     # reflex flagged it hard). Cheaper than the full budget above; fewer recent
     # episodes are pulled too (see core/step.py's _judge tier handling).
@@ -347,7 +359,7 @@ class Config:
     # ── Budget soft-limit (router downgrade) ──────────────────────────────────
     # Once today's spend crosses this fraction of the daily token budget, the
     # router never picks the smart model for a "hard" judgment (it downgrades to
-    # the cheap/routine path, which also prefers $0 providers) — a soft brake
+    # the cheap/routine path, which also prefers $0 providers); a soft brake
     # before BudgetExceeded hits outright. Only meaningful when
     # llm_daily_token_budget > 0 (0 = unlimited, so no soft limit either).
     budget_soft_pct: float = _safe_float(
@@ -363,7 +375,7 @@ class Config:
         os.getenv("LHASSA_DEFERRED_RETRY_BACKOFF", "300"), 300.0
     )
     # After this many retries a still-deferred task is marked "rechazada"
-    # (terminal — never retried again) instead of requeued indefinitely.
+    # (terminal; never retried again) instead of requeued indefinitely.
     deferred_max_retries: int = _safe_int(
         os.getenv("LHASSA_DEFERRED_MAX_RETRIES", "3"), 3
     )
@@ -381,32 +393,32 @@ class Config:
     # origins plus this API port. Avoid "*" because this process can mutate state.
     api_cors_origins: str = os.getenv("LHASSA_API_CORS_ORIGINS", "")
 
-    # ── Microsoft Graph — Outlook email + calendar (optional) ─────────────────
+    # ── Microsoft Graph. Outlook email + calendar (optional) ─────────────────
     ms_tenant_id: str = os.getenv("MS_TENANT_ID", "")
     ms_client_id: str = os.getenv("MS_CLIENT_ID", "")
 
     # ── Calendar ICS feed (read-only, no admin/API) ──────────────────────────
-    # A published calendar's secret ICS URL — subscribing makes /today and the
+    # A published calendar's secret ICS URL; subscribing makes /today and the
     # briefing show your real events. Read-only; needs no app registration
     # (works for institutional calendars an admin would otherwise gate). SECRET.
     calendar_ics_url: str = os.getenv("LHASSA_CALENDAR_ICS_URL", "")
     # How long a fetched feed is cached before re-download (seconds; 1h default).
     calendar_feed_ttl: float = _safe_float(os.getenv("LHASSA_CALENDAR_FEED_TTL", "3600"), 3600.0)
-    # Multiple NAMED calendars (institutional/personal/project/...) — a JSON list
+    # Multiple NAMED calendars (institutional/personal/project/...); a JSON list
     # of {"name", "url"} at this path; see lhassa/calendar/store.py. The single
     # LHASSA_CALENDAR_ICS_URL above stays a convenience shortcut merged in as an
-    # implicit "default" feed — the store is for anyone with MORE than one.
+    # implicit "default" feed; the store is for anyone with MORE than one.
     calendars_file: str = os.getenv(
         "LHASSA_CALENDARS_FILE", str(Path.home() / ".lhassa" / "calendars.json")
     )
 
     # ── Web search ────────────────────────────────────────────────────────────
-    # Brave Search API key — optional, falls back to DuckDuckGo if not set.
+    # Brave Search API key; optional, falls back to DuckDuckGo if not set.
     brave_api_key: str = os.getenv("BRAVE_API_KEY", "")
 
     # ── Agent backend ─────────────────────────────────────────────────────────
-    # "claude_code" — agents run via `claude --print` (your Claude subscription).
-    # "builtin"     — agents use the internal LLM tool loop (LHASSA_LLM_PROVIDER).
+    # "claude_code": agents run via `claude --print` (your Claude subscription).
+    # "builtin"    : agents use the internal LLM tool loop (LHASSA_LLM_PROVIDER).
     #
     # If LHASSA_AGENT_BACKEND is not set, Lhassa auto-detects:
     #   - claude CLI found in PATH  → claude_code
@@ -437,7 +449,7 @@ class Config:
     # This is independent of agent_backend and never affects it.
     ai_cli: str = _detect_ai_cli()
 
-    # ── Delegated code work — harness override (Axis 2, §2.2/§2.4) ─────────────
+    # ── Delegated code work; harness override (Axis 2, §2.2/§2.4) ─────────────
     # Force which HarnessAdapter the router delegates code work to: opencode |
     # claude | codex. Empty → the router auto-picks the cheapest available muscle
     # (free/metered before subscription). This is the LHASSA_HARNESS override.
@@ -445,11 +457,11 @@ class Config:
 
     # ── Vision tools ──────────────────────────────────────────────────────────
     # Provider for analyze_screen / analyze_image.
-    # "auto"       — use the active LLM provider if it supports vision, else
+    # "auto"      : use the active LLM provider if it supports vision, else
     #                fall back to ANTHROPIC_API_KEY → OPENAI_API_KEY
-    # "anthropic"  — Claude Haiku (fast, great vision)
-    # "openai"     — GPT-4o-mini
-    # "openrouter" — any OpenRouter vision model
+    # "anthropic" : Claude Haiku (fast, great vision)
+    # "openai"    : GPT-4o-mini
+    # "openrouter": any OpenRouter vision model
     vision_provider: str = os.getenv("LHASSA_VISION_PROVIDER", "auto").lower()
 
     # Vision model override. Leave empty to use the provider default:
@@ -461,17 +473,17 @@ class Config:
     # ── GitHub (optional) ─────────────────────────────────────────────────────
     github_token: str = os.getenv("GITHUB_TOKEN", "")
 
-    # ── Tool versioning (§2.8 — "versionado/rollback gratis") ─────────────────
+    # ── Tool versioning (§2.8; "versionado/rollback gratis") ─────────────────
     # Local git repo holding auto-created tools. Each candidate tool is committed
     # on a ``candidate/<name>`` branch; "aprobación = merge" merges it into main;
     # rollback is a git revert. Offline-first: this is a plain local repo. When
     # ``github_token`` is set the versioning layer ALSO pushes the branch and opens
-    # a PR (the remote path) — but never requires a token to work locally.
+    # a PR (the remote path); but never requires a token to work locally.
     tools_repo_dir: str = os.getenv(
         "LHASSA_TOOLS_REPO_DIR", str(Path.home() / ".lhassa" / "tools")
     )
 
-    # ── Phase 6 — local heartbeat model (§3-Fase 6, invariant #3) ─────────────
+    # ── Phase 6; local heartbeat model (§3-Fase 6, invariant #3) ─────────────
     # Migrate the heartbeat off the cloud onto a LOCAL model behind the same
     # ModelProvider interface. ``local_model_url`` is an OpenAI-compatible base URL
     # (Ollama ``http://127.0.0.1:11434/v1``, llama.cpp/LM Studio, etc.); empty =
@@ -484,14 +496,14 @@ class Config:
     # ``cloud`` keeps the gateway. The smart/hard path is unaffected.
     heartbeat_provider: str = os.getenv("LHASSA_HEARTBEAT_PROVIDER", "auto").lower()
 
-    # ── Phase 6 — privacy / pseudonymization hook (§3-Fase 0/6) ───────────────
+    # ── Phase 6; privacy / pseudonymization hook (§3-Fase 0/6) ───────────────
     # Pseudonymize PII before sending context to a NON-local, non-zero-retention
     # provider (the mandatory hook while the heartbeat used free cloud models).
     # When the active provider is local the data never leaves the machine, so the
-    # hook RELAXES (no scrubbing) — set by the local provider, overridable here.
+    # hook RELAXES (no scrubbing); set by the local provider, overridable here.
     pseudonymize_remote: bool = os.getenv("LHASSA_PSEUDONYMIZE_REMOTE", "1") not in ("0", "false", "")
 
-    # ── Phase 6 — memory layer 4 (semantic retrieval, "si se ganó") ───────────
+    # ── Phase 6; memory layer 4 (semantic retrieval, "si se ganó") ───────────
     # The embeddings layer deferred since Phase 1. Off unless explicitly enabled.
     # When on, ``load()`` adds a semantic layer: facts whose embedding is closest to
     # the active query, after pinned/recent/tags. ``embedding_model`` names an
@@ -501,20 +513,20 @@ class Config:
     embedding_model: str = os.getenv("LHASSA_EMBEDDING_MODEL", "")
     memory_semantic_topk: int = int(os.getenv("LHASSA_MEMORY_SEMANTIC_TOPK", "5"))
 
-    # Phase 5 — dedicated embeddings endpoint (separate from the LLM endpoint).
+    # Phase 5; dedicated embeddings endpoint (separate from the LLM endpoint).
     # Points to an OpenAI-compatible /v1/embeddings endpoint; defaults to a local
     # Ollama instance. Any connection/HTTP failure degrades silently to the offline
-    # HashingEmbedder — memory loading never crashes.
+    # HashingEmbedder; memory loading never crashes.
     embeddings_url: str = os.getenv("LHASSA_EMBEDDINGS_URL", "http://localhost:11434")
     embeddings_model: str = os.getenv("LHASSA_EMBEDDINGS_MODEL", "nomic-embed-text")
     # Embedder backend gate (memory/embeddings.get_embedder): "auto" probes the
     # local Ollama and uses its NATIVE /api/embed when reachable (else offline
     # hashing); "ollama" forces native (degrades with a warning); "hash" forces
     # the offline embedder. The explicit embeddings_model/url knobs above still
-    # win when set — this gate matters when they are cleared.
+    # win when set; this gate matters when they are cleared.
     embedder_backend: str = os.getenv("LHASSA_EMBEDDER_BACKEND", "auto")
     embedder_model: str = os.getenv("LHASSA_EMBEDDER_MODEL", "nomic-embed-text")
-    # Knowledge-graph context layer (LightRAG-lite, Wave 3): OFF by default —
+    # Knowledge-graph context layer (LightRAG-lite, Wave 3): OFF by default;
     # behavior is unchanged until the owner opts in (same rollout as layer 4).
     memory_graph_enabled: bool = os.getenv("LHASSA_MEMORY_GRAPH", "0").strip().lower() in ("1", "true", "yes", "on")
     # Cheap-model triple extraction on kg_sync (subject-predicate-object edges
@@ -524,25 +536,31 @@ class Config:
     # The notification voice: "plain" sends machine-built lines as-is;
     # "template" reshapes them deterministically per notification kind ($0);
     # "persona" adds ONE cheap-model re-voicing pass on top (degrades to
-    # template, the message ALWAYS arrives — same discipline as digest_style).
+    # template, the message ALWAYS arrives; same discipline as digest_style).
     notify_style: str = os.getenv("LHASSA_NOTIFY_STYLE", "template")
+    # The language every model-written owner-facing message is pinned to
+    # ("es", "en", ...). Empty falls back to ``digest_language``, and with
+    # neither set the model mirrors the input's language, which is how a
+    # Spanish-reading owner once got a Portuguese alert. See
+    # ``persona.language_directive``.
+    notify_language: str = os.getenv("LHASSA_NOTIFY_LANGUAGE", "")
     # API key for hosted embedding endpoints (Ollama is keyless; set for cloud).
-    # NEVER write this to settings.env — it stays in .env (secret).
+    # NEVER write this to settings.env; it stays in .env (secret).
     embeddings_api_key: str = os.getenv("LHASSA_EMBEDDINGS_API_KEY", "")
 
-    # ── Document perception — knowledge roots (opt-in, empty by default) ──────
+    # ── Document perception; knowledge roots (opt-in, empty by default) ──────
     # Lhassa reads the OWNER'S OWN documents so thinking/recall/the graph are
-    # grounded in real material — $0, local, deterministic, no model. NOT "read
+    # grounded in real material; $0, local, deterministic, no model. NOT "read
     # the whole PC": the owner points Lhassa at a small set of KNOWLEDGE ROOTS
     # (CSV of directories, ``~``-relative allowed); nothing is indexed until
     # this is set. A hard, non-negotiable ignore-list (secrets/noise) always
-    # applies regardless of what's inside a root — see
+    # applies regardless of what's inside a root; see
     # ``lhassa.memory.knowledge``. The index itself lives in the grande
     # (``~/.lhassa/brain.db``), never in the repo.
     knowledge_roots: str = os.getenv("LHASSA_KNOWLEDGE_ROOTS", "")
     # Second tier: folders the brain MAY read but only with the owner's explicit
-    # per-access approval (each read/list parks an approval — the tap IS the
-    # verification). Same CSV shape as knowledge_roots; may overlap it — the
+    # per-access approval (each read/list parks an approval; the tap IS the
+    # verification). Same CSV shape as knowledge_roots; may overlap it; the
     # protected tier wins.
     protected_roots: str = os.getenv("LHASSA_PROTECTED_ROOTS", "")
     # Files larger than this are skipped outright (KB).
@@ -551,7 +569,7 @@ class Config:
     # used elsewhere in memory/load.py).
     knowledge_chunk_chars: int = _safe_int(os.getenv("LHASSA_KNOWLEDGE_CHUNK_CHARS", "2000"), 2000)
 
-    # ── Phase 6 — Telegram notifications (optional, token-gated) ──────────────
+    # ── Phase 6. Telegram notifications (optional, token-gated) ──────────────
     # Polished Telegram channel for alerts/reports. Both must be set to enable it;
     # otherwise the notifier is a no-op (the established credential-gated pattern,
     # like ``github_token``). No token → never touches the network.
@@ -562,14 +580,14 @@ class Config:
     telegram_poll_enabled: bool = os.getenv("LHASSA_TELEGRAM_POLL", "0") not in ("0", "false", "")
     # Provider for the Telegram CHAT reply specifically (the tool-less brain think).
     # Empty/"auto" → the router's routine decision (the heartbeat seat), as always.
-    # "default" pins the API cost gateway — ~1.5s replies vs ~9s for a cold CLI
-    # boot per message — WITHOUT touching what flows / hard work think with. The
+    # "default" pins the API cost gateway; ~1.5s replies vs ~9s for a cold CLI
+    # boot per message. WITHOUT touching what flows / hard work think with. The
     # fallback chain still backs a failing pick, so a bad value degrades, never breaks.
     telegram_provider: str = os.getenv("LHASSA_TELEGRAM_PROVIDER", "")
 
     # ── TUI (lhassa tui) ────────────────────────────────────────────────────
     # dark | light | auto. "auto" detects via COLORFGBG then a short-timeout
-    # OSC 11 terminal probe, defaulting to dark on any ambiguity or error — see
+    # OSC 11 terminal probe, defaulting to dark on any ambiguity or error; see
     # cli/tui/colors.py:detect_theme(). A bad value degrades to "auto".
     tui_theme: str = os.getenv("LHASSA_TUI_THEME", "auto").strip().lower() or "auto"
 
@@ -582,7 +600,7 @@ class Config:
         os.getenv("LHASSA_TELEGRAM_HISTORY_TURNS", "8"), 8
     )
     # A history entry older than this many seconds is dropped on read (not
-    # necessarily evicted eagerly) — an old conversation never leaks into a new one.
+    # necessarily evicted eagerly); an old conversation never leaks into a new one.
     telegram_history_ttl: float = _safe_float(
         os.getenv("LHASSA_TELEGRAM_HISTORY_TTL", "7200"), 7200.0
     )
@@ -598,22 +616,22 @@ class Config:
     # A deterministic intent classifier gates a semantic cache of past chat answers to
     # STABLE questions ("what's the capital of France") so a repeat ask is served free
     # instead of spending another model call. Time-sensitive questions (news/prices/
-    # weather/"today") are never cached — see notify/intent.py's live_data bucket.
+    # weather/"today") are never cached; see notify/intent.py's live_data bucket.
     answer_cache_enabled: bool = os.getenv("LHASSA_ANSWER_CACHE", "1") not in (
         "0", "false", "",
     )
-    # Cosine-similarity floor for a cache hit — high on purpose (0.90) so a
+    # Cosine-similarity floor for a cache hit; high on purpose (0.90) so a
     # merely-similar-but-different question is never served the wrong past answer.
     answer_cache_threshold: float = _safe_float(
         os.getenv("LHASSA_ANSWER_CACHE_THRESHOLD", "0.90"), 0.90
     )
     # A cached row older than this many seconds is ignored on lookup (default 7
-    # days) — even a "cacheable" question's answer can go stale over time.
+    # days); even a "cacheable" question's answer can go stale over time.
     answer_cache_ttl: float = _safe_float(
         os.getenv("LHASSA_ANSWER_CACHE_TTL", str(7 * 24 * 3600)), 7 * 24 * 3600.0
     )
 
-    # ── Phase 6 — heartbeat via opencode (no local model server needed) ───────
+    # ── Phase 6; heartbeat via opencode (no local model server needed) ───────
     # The owner has the opencode CLI (no Zen), so the routine/heartbeat thinking can
     # run through opencode instead of a local model server. ``OpenCodeProvider`` shells
     # ``opencode run --format json -m <model> <prompt>`` and uses the owner's existing
@@ -640,19 +658,19 @@ class Config:
     # (claude/codex) before paying for cloud.
     fallback_providers: str = os.getenv("LHASSA_FALLBACK_PROVIDERS", "claude,codex,default")
 
-    # ── Phase 6 — voice (brain ↔ existing pipecat skeleton) ───────────────────
+    # ── Phase 6; voice (brain ↔ existing pipecat skeleton) ───────────────────
     # Opt-in bridge so the voice pipeline's turns are answered by the brain (memory
     # + provider + episode) instead of a generic LLM. Off by default; needs the
     # Deepgram/Cartesia keys above to actually run audio.
     voice_enabled: bool = os.getenv("LHASSA_VOICE_ENABLED", "0") not in ("0", "false", "")
 
-    # ── Phase 7 — organizational layer (general + department brains) ──────────
+    # ── Phase 7; organizational layer (general + department brains) ──────────
     # Standalone by default (empty role). ``general`` = the coordinator brain (routes
     # typed tasks, never executes department work); ``department`` = an executor brain
     # with its own identity/memory/permissions. Start with TWO brains, never six.
     org_role: str = os.getenv("LHASSA_ORG_ROLE", "").strip().lower()  # ""|general|department
     org_department: str = os.getenv("LHASSA_ORG_DEPARTMENT", "")      # this brain's department name
-    # Elastic org: the department set is CONFIG-DRIVEN (comma-separated), not code —
+    # Elastic org: the department set is CONFIG-DRIVEN (comma-separated), not code;
     # scale the org up/down without editing the registry.
     org_departments: str = os.getenv(
         "LHASSA_ORG_DEPARTMENTS", "optimization,documentation,finance"
@@ -663,11 +681,11 @@ class Config:
     org_topology_file: str = os.getenv(
         "LHASSA_ORG_TOPOLOGY_FILE", str(Path.home() / ".lhassa" / "org.json")
     )
-    # Lhassa is the PERMANENT root administrator — the default/main brain that always
+    # Lhassa is the PERMANENT root administrator; the default/main brain that always
     # sits at the top of any org and is never removed or demoted ("orbits everything").
     # Reorganizing or adding brains happens beneath it.
     root_admin_id: str = os.getenv("LHASSA_ROOT_ADMIN", "lhassa")
-    # Typed org RELATIONSHIPS overlay (reads/notifies/reviews/collaborates) live here —
+    # Typed org RELATIONSHIPS overlay (reads/notifies/reviews/collaborates) live here;
     # a graph separate from the command tree (who-commands-whom stays in org.json).
     org_relationships_file: str = os.getenv(
         "LHASSA_ORG_RELATIONSHIPS_FILE", str(Path.home() / ".lhassa" / "relationships.json")
@@ -683,8 +701,8 @@ class Config:
 
     # ── Skills (first-class, SKILL.md format) ─────────────────────────────────
     # Skills live as folders here, each with a SKILL.md (YAML frontmatter
-    # name/description/metadata + markdown instructions + optional resources) — the
-    # skills.md / Agent-Skills convention — or a home-grown JSON form. Brains
+    # name/description/metadata + markdown instructions + optional resources); the
+    # skills.md / Agent-Skills convention; or a home-grown JSON form. Brains
     # reference skills by name in BrainNode.skills.
     skills_dir: str = os.getenv(
         "LHASSA_SKILLS_DIR", str(Path.home() / ".lhassa" / "skills")
@@ -695,19 +713,19 @@ class Config:
     skill_stale_days: int = _safe_int(os.getenv("LHASSA_SKILL_STALE_DAYS", "30"), 30)
     skill_archive_days: int = _safe_int(os.getenv("LHASSA_SKILL_ARCHIVE_DAYS", "90"), 90)
 
-    # The utility tribunal (``agents/utility.py``) — the curator's discipline
+    # The utility tribunal (``agents/utility.py``); the curator's discipline
     # applied to CAPABILITIES (registered actions). A capability with no
     # OWNER-driven use in this many days is reported "self_driven": it runs,
     # but only because Lhassa scheduled it for itself.
     utility_dormant_days: int = _safe_int(os.getenv("LHASSA_UTILITY_DORMANT_DAYS", "30"), 30)
-    # Nothing is put on trial until the instance has this much episode history —
+    # Nothing is put on trial until the instance has this much episode history;
     # a young brain has not had TIME to use anything.
     utility_grace_days: int = _safe_int(os.getenv("LHASSA_UTILITY_GRACE_DAYS", "14"), 14)
-    # Capabilities the owner declared deliberately dormant (comma-separated) —
+    # Capabilities the owner declared deliberately dormant (comma-separated);
     # surveyed, never proposed for retirement. The curator's "pinned", for actions.
     utility_pinned: str = os.getenv("LHASSA_UTILITY_PINNED", "")
 
-    # ── Modularity — registries, channels, plugins (elastic & modular) ────────
+    # ── Modularity; registries, channels, plugins (elastic & modular) ────────
     # Which notify CHANNELS are active (comma-separated); each is a registered,
     # swappable channel. Empty entries are ignored; unknown names are skipped with
     # a warning. Default: Telegram + desktop notifications.
@@ -722,7 +740,7 @@ class Config:
     # ── Monitor watcher (the always-on, $0 "ear") ────────────────────────────
     # A standing, deterministic loop that watches the environment cheaply (no
     # tokens) and only wakes the brain / alerts when something notable happens.
-    # OFF by default — opt in via the systemd service (scripts/systemd/
+    # OFF by default; opt in via the systemd service (scripts/systemd/
     # lhassa-monitor.service). The module no-ops + exits when this is off.
     monitor_enabled: bool = os.getenv("LHASSA_MONITOR_ENABLED", "0") not in ("0", "false", "")
     # Cadence: while nothing is running it checks every idle interval; while a run
@@ -750,11 +768,11 @@ class Config:
     # Push a Telegram/desktop alert for important events (failures / health-alert /
     # pending-approvals). On by default; episodes are always logged regardless.
     monitor_notify: bool = os.getenv("LHASSA_MONITOR_NOTIFY", "1") not in ("0", "false", "")
-    # Optionally spend a token on a richer live "think" per reaction — the ONLY
+    # Optionally spend a token on a richer live "think" per reaction; the ONLY
     # place the watcher can cost anything. OFF by default; also needs LHASSA_ORG_LIVE.
     monitor_think: bool = os.getenv("LHASSA_MONITOR_THINK", "0") not in ("0", "false", "")
     # When on, react() turns each delegation from the monitor's report (offline or
-    # live) into a minted org_run task — findings become work. Uses the offline,
+    # live) into a minted org_run task; findings become work. Uses the offline,
     # deterministic report by default (still $0); de-duped by fingerprint so a
     # standing condition is not re-minted every tick. OFF by default.
     monitor_delegate: bool = os.getenv("LHASSA_MONITOR_DELEGATE", "0") not in ("0", "false", "")
@@ -765,7 +783,7 @@ class Config:
         os.getenv("LHASSA_MONITOR_FAILURE_WINDOW_H", "24"), 24.0
     )
 
-    # ── Phase 2 — judgment dispatch (close the think-loop) ────────────────────
+    # ── Phase 2; judgment dispatch (close the think-loop) ────────────────────
     # When on (default), the judgment branch parses the model's JSON reply and
     # writes facts + mints tasks through the security machinery. Set to 0 to
     # disable (today's behavior: log the answer, do nothing else).
@@ -773,7 +791,7 @@ class Config:
         "LHASSA_JUDGMENT_DISPATCH", "1"
     ).lower() in ("1", "true", "yes")
 
-    # ── Phase 4 — watchlist senses ────────────────────────────────────────────
+    # ── Phase 4; watchlist senses ────────────────────────────────────────────
     # Comma-separated absolute paths of git repos to watch for new commits.
     # Empty = no repo watching. Each path is checked via ``git rev-parse HEAD``
     # (subprocess, timeout 5 s, never raises). Missing or non-repo paths are
@@ -790,7 +808,7 @@ class Config:
     )
 
     # JSON file of the self-routing "capability -> deterministic handler" table
-    # (the self-routing consciousness — see lhassa.notify.capabilities). An
+    # (the self-routing consciousness; see lhassa.notify.capabilities). An
     # approved "mint_route" self-improvement proposal adds an entry here (DATA,
     # not code); lhassa.notify.capabilities.apply_route reads it to serve a
     # recognised message for $0 instead of a think/research. Missing/malformed
@@ -800,15 +818,19 @@ class Config:
         str(Path.home() / ".lhassa" / "routes.json"),
     )
 
-    # ── Etapa 2 — scheduled operative digest (the "digest" seed) ─────────────
+    # ── Etapa 2; scheduled operative digest (the "digest" seed) ─────────────
     # Local hours (0-23) the twice-daily "send_digest" task is scheduled for by
     # the ``digest`` seed (``lhassa seed apply digest``). Two knobs rather than one
     # CSV so each is independently overridable without a parsing helper.
     digest_hour_morning: int = _safe_int(os.getenv("LHASSA_DIGEST_HOUR_MORNING", "8"), 8)
     digest_hour_evening: int = _safe_int(os.getenv("LHASSA_DIGEST_HOUR_EVENING", "21"), 21)
+    # An optional THIRD digest between the two, for an owner who wants the day
+    # reported while it is still the day. -1 (the default) means off, so the
+    # twice-daily schedule everyone already has is unchanged until it is set.
+    digest_hour_midday: int = _safe_int(os.getenv("LHASSA_DIGEST_HOUR_MIDDAY", "-1"), -1)
     # How the digest reads: "plain" → the deterministic $0 template (already in
     # Lhassa's first-person voice); "persona" → one cheap fast-model pass re-voices
-    # it naturally (same facts; ANY failure degrades to plain — it always arrives).
+    # it naturally (same facts; ANY failure degrades to plain; it always arrives).
     digest_style: str = os.getenv("LHASSA_DIGEST_STYLE", "plain")
     # Language for the persona pass ("" keeps the template's language; e.g. "es").
     digest_language: str = os.getenv("LHASSA_DIGEST_LANGUAGE", "")
@@ -826,11 +848,29 @@ class Config:
         "LHASSA_ALLOW_DESTRUCTIVE_SHELL", ""
     ).lower() in ("1", "true", "yes")
 
+    # The second guardrail tier: commands that PERSIST past the turn (systemd
+    # units and timers, cron, /etc, shell rc files) or escalate privilege. The
+    # destructive tier above only catches damage that is loud and immediate;
+    # persistence is quiet and outlives the conversation that created it, which
+    # is precisely what makes it worth the owner's explicit yes. Opt in with
+    # LHASSA_ALLOW_PERSISTENT_SHELL=1.
+    allow_persistent_shell: bool = os.getenv(
+        "LHASSA_ALLOW_PERSISTENT_SHELL", ""
+    ).lower() in ("1", "true", "yes")
+
+    # ── Org ───────────────────────────────────────────────────────────────────
+    # Whether the department brains actually THINK. Off by default: the org
+    # layer is offline-testable and spends nothing out of the box. Read through
+    # org.executor._live_enabled, where the env var still wins when set, so a
+    # one-off `LHASSA_ORG_LIVE=1 ...` keeps working; this attribute exists so
+    # the switch is reachable from the settings service at all.
+    org_live: bool = os.getenv("LHASSA_ORG_LIVE", "").lower() in ("1", "true", "yes", "on")
+
     # Optional filesystem root for write_file. If set, write_file may only
     # create or modify files inside this directory tree.
     file_write_root: str = os.getenv("LHASSA_FILE_WRITE_ROOT", "")
 
-    # ── Self-improvement — repeated-think detector (§2.8, visible self-improvement) ──
+    # ── Self-improvement; repeated-think detector (§2.8, visible self-improvement) ──
     # How many times a (despertar_por, accion) pattern must repeat within the
     # detection window before agents.repetition.detect_repetition proposes minting
     # a deterministic action to replace it.
@@ -917,7 +957,7 @@ class Config:
             cwd = os.getcwd()
             if not self.agent_dir:
                 logger.warning(
-                    f"LHASSA_AGENT_DIR is not set — agents will run in {cwd}. "
+                    f"LHASSA_AGENT_DIR is not set; agents will run in {cwd}. "
                     "Add LHASSA_AGENT_DIR=/path/to/your/project to .env."
                 )
             detected = " (auto-detected)" if not os.getenv("LHASSA_AGENT_BACKEND") else ""
@@ -939,7 +979,7 @@ class Config:
             logger.info(f"AI CLI: {ai_cli}{ai_detected}  (run_ai_cli tool)")
         else:
             logger.warning(
-                f"AI CLI: {ai_cli}{ai_detected} is not installed — the run_ai_cli "
+                f"AI CLI: {ai_cli}{ai_detected} is not installed; the run_ai_cli "
                 f"tool will report it as unavailable until it is on PATH."
             )
 
@@ -980,6 +1020,6 @@ class Config:
             logger.info(f"Vision provider: {resolved_vp}{auto_note}  model={vm}")
         else:
             logger.warning(
-                "Vision tools disabled — no vision-capable API key found. "
+                "Vision tools disabled; no vision-capable API key found. "
                 "Set ANTHROPIC_API_KEY or OPENAI_API_KEY to enable analyze_screen / analyze_image."
             )
