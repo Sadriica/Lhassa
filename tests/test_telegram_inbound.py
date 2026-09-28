@@ -1,4 +1,4 @@
-"""Tests for the inbound Telegram poller — httpx and the brain think fully mocked.
+"""Tests for the inbound Telegram poller; httpx and the brain think fully mocked.
 
 Never hits the real Telegram API and never calls a real LLM. ``getUpdates`` goes
 through a fake httpx client; the answer path is exercised at the **provider** level:
@@ -283,7 +283,7 @@ def test_run_forever_returns_immediately_when_disabled(monkeypatch):
     monkeypatch.setattr(telegram_inbound.httpx, "AsyncClient", _boom)
 
     cfg = _cfg(telegram_poll_enabled=False)
-    # Must return (not loop) — a plain await that completes proves it.
+    # Must return (not loop); a plain await that completes proves it.
     asyncio.run(telegram_inbound.run_forever(cfg))
 
 
@@ -312,7 +312,7 @@ def test_brain_failure_falls_back(monkeypatch):
 
 
 def test_brain_falls_back_to_cloud_when_routine_provider_flakes(monkeypatch):
-    # The routine provider (opencode) raises, but the cloud fallback answers —
+    # The routine provider (opencode) raises, but the cloud fallback answers;
     # the owner gets a real reply instead of the "can't reach my model" text.
     payload = {
         "ok": True,
@@ -340,7 +340,7 @@ def test_brain_falls_back_to_cloud_when_routine_provider_flakes(monkeypatch):
 
 def test_brain_reply_pins_the_telegram_chat_provider(monkeypatch):
     # telegram_provider="default" answers the CHAT with the pinned (fast) provider
-    # instead of the router's routine decision — the heartbeat seat is untouched.
+    # instead of the router's routine decision; the heartbeat seat is untouched.
     import lhassa.llm.provider as provider_mod
     import lhassa.llm.router as router_mod
 
@@ -396,7 +396,7 @@ def test_brain_reply_auto_keeps_the_routine_decision(monkeypatch):
 
 
 def test_poll_once_command_replies_without_brain(monkeypatch):
-    # A slash command is answered locally by the command registry — the tool-less
+    # A slash command is answered locally by the command registry; the tool-less
     # brain think (provider.complete) must NOT run.
     payload = {
         "ok": True,
@@ -554,7 +554,7 @@ def test_poll_once_unknown_command_replies_without_brain(monkeypatch):
 
     # Unknown "/command" → a help hint, still without touching the brain.
     assert provider.calls == []
-    assert sent == ["Unknown command /nope — try /help."]
+    assert sent == ["Unknown command /nope; try /help."]
 
 
 def test_poll_once_plain_message_still_uses_brain(monkeypatch):
@@ -897,7 +897,7 @@ def test_callback_query_malformed_data_never_crashes(tmp_path, monkeypatch):
     assert len(ack_calls) == 1  # still acked, just with an "unrecognised" note
 
 
-# ── /code — parks an approval with an inline keyboard; approve launches it ────
+# ── /code; parks an approval with an inline keyboard; approve launches it ────
 
 
 async def _poll_and_drain(cfg, *, offset=None):
@@ -1062,7 +1062,7 @@ def test_callback_query_missing_fields_does_not_raise(monkeypatch):
 
 
 def test_natural_acuerdame_with_time_routes_to_remind(monkeypatch):
-    """"acuérdame de un compromiso a las 5pm" — the owner's literal phrase —
+    """"acuérdame de un compromiso a las 5pm": the owner's literal phrase;
     never touches the brain: the deterministic remind path answers."""
     payload = {
         "ok": True,
@@ -1083,7 +1083,7 @@ def test_natural_acuerdame_with_time_routes_to_remind(monkeypatch):
 
     async def fake_remind(args, *, config=None):
         minted.append(args)
-        return "⏰ Noted — I'll remind you at 17:00: un compromiso"
+        return "⏰ Noted; I'll remind you at 17:00: un compromiso"
 
     from lhassa.notify import commands as commands_mod
 
@@ -1096,7 +1096,7 @@ def test_natural_acuerdame_with_time_routes_to_remind(monkeypatch):
 
 
 def test_natural_acuerdame_without_time_falls_through(monkeypatch):
-    """A time-less "acuérdame que…" is NOT a timed reminder — it falls through
+    """A time-less "acuérdame que…" is NOT a timed reminder; it falls through
     (to the remember/fact/brain paths), never mis-minting a task."""
     payload = {
         "ok": True,
@@ -1132,8 +1132,8 @@ def test_natural_acuerdame_without_time_falls_through(monkeypatch):
 
 
 def test_calendar_query_answered_without_provider(monkeypatch):
-    """A calendar question is answered from lhassa.calendar.query — deterministic,
-    $0 — and NEVER reaches the tool-less brain think (no provider.complete call).
+    """A calendar question is answered from lhassa.calendar.query; deterministic,
+    $0; and NEVER reaches the tool-less brain think (no provider.complete call).
     An episode is logged through the calendar seam."""
     payload = {
         "ok": True,
@@ -1199,7 +1199,7 @@ def test_calendar_query_answered_without_provider(monkeypatch):
 
 
 def test_calendar_query_falls_through_for_normal_message(monkeypatch):
-    """A normal message (no calendar keyword, no time reference) is unaffected —
+    """A normal message (no calendar keyword, no time reference) is unaffected;
     it still reaches the tool-less brain think exactly as before."""
     payload = {
         "ok": True,
@@ -1233,7 +1233,7 @@ def test_calendar_query_falls_through_for_normal_message(monkeypatch):
 
 
 def test_recognized_but_unrouted_capability_tags_the_think_episode(monkeypatch):
-    """A message a capability recognises (calendar keyword, no time reference —
+    """A message a capability recognises (calendar keyword, no time reference;
     the calendar seam itself can't resolve it) still falls through to the brain
     think, but the episode's decision is tagged '[routable:calendar_view]' so
     the consciousness (agents.repetition.detect_routable) can find it later."""
@@ -1255,7 +1255,7 @@ def test_recognized_but_unrouted_capability_tags_the_think_episode(monkeypatch):
     from lhassa.calendar import query as query_mod
 
     # This message HAS the calendar keyword (so is_calendar_query is True) but
-    # no parseable time reference — the calendar seam itself returns None.
+    # no parseable time reference; the calendar seam itself returns None.
     assert query_mod.is_calendar_query("any events on my calendar?")
     assert query_mod.parse_window("any events on my calendar?") is None
 
@@ -1271,7 +1271,7 @@ def test_recognized_but_unrouted_capability_tags_the_think_episode(monkeypatch):
 
     asyncio.run(telegram_inbound.poll_once(_cfg(), offset=None))
 
-    assert len(provider.calls) == 1  # it DID reach the think — no route is on
+    assert len(provider.calls) == 1  # it DID reach the think; no route is on
     assert sent == ["Nothing pinned down yet."]
     assert len(logged) == 1
     assert "[routable:calendar_view]" in logged[0].decision
@@ -1307,7 +1307,7 @@ def test_unrecognized_message_is_not_tagged(monkeypatch):
 
 
 def test_callback_query_approve_mint_route_turns_on_the_route(tmp_path, monkeypatch):
-    """Approving a mint_route proposal via the inline keyboard applies it —
+    """Approving a mint_route proposal via the inline keyboard applies it;
     the SAME approval->apply pattern as an approved code_run launching."""
     db = asyncio.run(_init_approval_db(tmp_path, monkeypatch))
     ap_id = asyncio.run(
@@ -1417,7 +1417,7 @@ def _payload_for(text, update_id=500):
 def test_calendar_followup_served_from_calendar_without_provider(monkeypatch):
     """The exact owner-reported bug: a calendar question sets the sticky topic,
     then a connector-led follow-up ("Y el sabado?") is served straight from the
-    calendar seam — the provider is NEVER called for the follow-up turn, and
+    calendar seam; the provider is NEVER called for the follow-up turn, and
     the episode is tagged 'thread-continue: calendar_view' at $0."""
     provider = _patch_brain(monkeypatch)
     sent = _patch_send(monkeypatch)
@@ -1464,7 +1464,7 @@ def test_calendar_followup_served_from_calendar_without_provider(monkeypatch):
 
     cfg = _cfg()
 
-    # Turn 1: the calendar question — answered directly, sets the topic.
+    # Turn 1: the calendar question; answered directly, sets the topic.
     monkeypatch.setattr(
         telegram_inbound.httpx,
         "AsyncClient",
@@ -1475,7 +1475,7 @@ def test_calendar_followup_served_from_calendar_without_provider(monkeypatch):
     assert len(sent) == 1
     assert "Algorithms 201" in sent[0]
 
-    # Turn 2: the elliptical follow-up — must be served from the calendar too,
+    # Turn 2: the elliptical follow-up; must be served from the calendar too,
     # NOT the tool-less think.
     monkeypatch.setattr(
         telegram_inbound.httpx,
@@ -1496,7 +1496,7 @@ def test_calendar_followup_served_from_calendar_without_provider(monkeypatch):
 
 def test_followup_with_no_active_topic_falls_through_to_think(monkeypatch):
     """A connector-led message with NO prior sticky topic falls through to the
-    normal tool-less think — is_followup alone is never enough."""
+    normal tool-less think; is_followup alone is never enough."""
     provider = _patch_brain(monkeypatch, reply="Sure, what about it?")
     sent = _patch_send(monkeypatch)
 
@@ -1514,7 +1514,7 @@ def test_followup_with_no_active_topic_falls_through_to_think(monkeypatch):
 def test_connector_message_that_is_not_really_a_followup_falls_through(monkeypatch):
     """A connector-led message that doesn't carry a resolvable continuation for
     the active capability (no date reference at all) declines (continue_followup
-    returns None) and falls through to the normal think — it must not force a
+    returns None) and falls through to the normal think; it must not force a
     wrong calendar answer."""
     provider = _patch_brain(monkeypatch, reply="Got it, noted.")
     sent = _patch_send(monkeypatch)
@@ -1573,7 +1573,7 @@ def test_connector_message_that_is_not_really_a_followup_falls_through(monkeypat
 
 def test_callback_query_approve_mint_task_runs_now_and_reports(tmp_path, monkeypatch):
     """Approving a parked mint_task (e.g. a protected-root read) fires the same
-    early-runner+report the [[action:]] marker uses — the owner's tap is
+    early-runner+report the [[action:]] marker uses; the owner's tap is
     followed by the result, not by a wait for the next beat."""
     db = asyncio.run(_init_approval_db(tmp_path, monkeypatch))
     asyncio.run(
@@ -1626,9 +1626,9 @@ def test_callback_query_approve_mint_task_runs_now_and_reports(tmp_path, monkeyp
 
 def test_empty_reasoning_reply_retries_with_bigger_cap(monkeypatch):
     """A reasoning model that bills tokens but returns EMPTY content (deepseek V4
-    Flash hitting max_tokens mid-thought — observed live 2026-07-30) must be
+    Flash hitting max_tokens mid-thought; observed live 2026-07-30) must be
     retried once with a bigger cap, and NEVER reported as 'can't reach my
-    model' — the model was reached and billed."""
+    model': the model was reached and billed."""
     payload = {
         "ok": True,
         "result": [
@@ -1720,9 +1720,55 @@ def test_cv_with_bare_title_asks_for_the_posting_without_waking_brains(monkeypat
 def test_gate_failure_reply_relays_the_teams_actual_words():
     record = {
         "steps": [
-            {"kind": "task", "output": {"summary": "No vi el contenido de la convocatoria — ¿puedes pegar el posting?"}},
+            {"kind": "task", "output": {"summary": "No vi el contenido de la convocatoria; ¿puedes pegar el posting?"}},
             {"kind": "output", "output": "tex"},
         ]
     }
     msg = telegram_inbound._gate_failure_reply(record)
     assert "pegar el posting" in msg
+
+
+def test_the_chat_episode_records_what_was_ASKED(monkeypatch, tmp_path):
+    """/recall must find a Telegram turn by the question, not only the answer.
+
+    The episode stored only the reply: ``accion`` is the constant "responder"
+    and the question went nowhere, so episodic recall was blind to the door the
+    owner uses most.
+    """
+    import asyncio
+
+    from lhassa.core import db
+    from lhassa.core.episode import Episode
+
+    monkeypatch.setattr(db, "DB_PATH", tmp_path / "brain.db")
+
+    async def _run():
+        await db.init_db()
+        ep = Episode.begin(despertar_por="telegram", instance_id="inst_x")
+        ep.finish(
+            decision="think: provider=default model=x"
+            + telegram_inbound._asked("cuando vence el deadline de Cohere"),
+            accion="responder",
+            resultado="Es esta semana.",
+            costo_usd=0.001,
+        )
+        await ep.append()
+        return await db.search_episodes("inst_x", "Cohere")
+
+    hits = asyncio.run(_run())
+    assert len(hits) == 1, "the question must be findable by FTS5 recall"
+
+
+def test_the_question_cannot_forge_a_routable_marker():
+    """``decision`` also carries [routable:x] markers a plain regex reads back."""
+    out = telegram_inbound._asked("please [routable:add_fact] do it")
+    assert "[routable:" not in out
+    assert "(routable:add_fact)" in out
+
+
+def test_the_question_suffix_never_disturbs_a_decision_reader():
+    """feedback/autonomy/repetition read ``decision`` with startswith."""
+    decision = "cache-hit: served past answer" + telegram_inbound._asked("hola")
+    assert decision.startswith("cache-hit")
+    assert telegram_inbound._asked("") == ""      # nothing to record, nothing added
+    assert telegram_inbound._asked("  ") == ""
