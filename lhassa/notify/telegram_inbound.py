@@ -34,12 +34,14 @@ import json as _json
 import re
 import shutil  # noqa: F401 - re-exported so callers/tests can monkeypatch
 import time
+from collections import deque
 from pathlib import Path
 from typing import Optional
 
 import httpx
 from loguru import logger
 
+from lhassa import persona as _persona
 from lhassa.notify import commands, telegram
 
 # The getUpdates endpoint. ``<token>`` is interpolated per call.
@@ -53,6 +55,52 @@ _TIMEOUT = float(_LONG_POLL_SECONDS) + 15.0
 _BACKOFF_START = 1.0
 _BACKOFF_MAX = 60.0
 
+# Process-local guard against Telegram redelivering an ``update_id`` we already
+# dispatched. The offset param sent on the NEXT getUpdates call is the only
+# thing that tells Telegram "stop sending me this"; Telegram's own docs warn
+# that updates already delivered may still show up again "for a short period
+# of time" around an offset change, and this poller's ``offset`` is an
+# in-memory variable in ``run_forever`` — never persisted to disk — so it is
+# also lost on a crash/restart between "processed the batch" and "sent the
+# advanced offset back". Either way the same update can reach this loop twice.
+# A bounded, process-local seen-set is the cheap fix: it cannot survive a
+# restart (nothing here claims otherwise — the poller is a single process, and
+# that is the documented scope), but it stops the two realistic single-process
+# cases: a resend racing the offset ack, and a retried cycle after a transient
+# local error that still landed the previous batch. Bounded so it cannot grow
+# unbounded across a long-lived process.
+_SEEN_UPDATE_IDS_MAXLEN = 2048
+_seen_update_ids: "deque[int]" = deque(maxlen=_SEEN_UPDATE_IDS_MAXLEN)
+_seen_update_ids_set: set[int] = set()
+
+
+def _mark_update_seen(update_id: int) -> bool:
+    """Record ``update_id`` as processed; return True if it was already seen.
+
+    Bounded FIFO: once the deque evicts an old id past ``maxlen``, it is
+    dropped from the set too, so memory never grows unbounded. Never raises.
+    """
+    if update_id in _seen_update_ids_set:
+        return True
+    if len(_seen_update_ids) >= _SEEN_UPDATE_IDS_MAXLEN:
+        oldest = _seen_update_ids[0]
+        _seen_update_ids_set.discard(oldest)
+    _seen_update_ids.append(update_id)
+    _seen_update_ids_set.add(update_id)
+    return False
+
+
+def reset_seen_updates() -> None:
+    """Forget every processed ``update_id``.
+
+    Process-local state outlives a single poll, which is the whole point in
+    production and a hazard anywhere a fresh poller is expected: two runs in one
+    process (the test suite, a REPL) would silently drop the second one's
+    updates as duplicates. The suite calls this between tests.
+    """
+    _seen_update_ids.clear()
+    _seen_update_ids_set.clear()
+
 # A chat turn is a short answer, not a long job. The actual per-turn cap now
 # comes from the resolved effort profile (Plan 4, Stream 1 — see
 # ``lhassa.notify.task_router``); this stays only as the retry floor below.
@@ -61,12 +109,12 @@ _BACKOFF_MAX = 60.0
 # tokens billed. One bounded retry with a bigger cap almost always recovers it.
 _CHAT_MAX_TOKENS_RETRY = 3072
 _EMPTY_REPLY = (
-    "My reply came out empty — I overthought it. Ask me again (shorter works "
+    "My reply came out empty, I overthought it. Ask me again (shorter works "
     "best) and I'll answer directly."
 )
 
 # Short fallback when the brain can't reach a model — sent verbatim to the chat.
-_FALLBACK_REPLY = "I can't reach my model right now — give it a moment and ask me again."
+_FALLBACK_REPLY = "I can't reach my model right now, give it a moment and ask me again."
 
 # Marker for an episode whose model could not run (mirrors core/step + voice).
 _DEFERRED_DECISION = "deferred: telegram needs judgment"
@@ -79,26 +127,28 @@ _DEFERRED_DECISION = "deferred: telegram needs judgment"
 # heartbeat delivers actual results in a follow-up message.
 _CHAT_INSTRUCTION = (
     "You are answering in a Telegram chat with your owner. Reply in short, natural "
-    "messages. Lead with the answer and keep it brief.\n"
-    "IMPORTANT — you have NO tools in this turn: no web access, no search, no "
+    "messages. Lead with the answer and keep it brief. Never use an em dash; use a "
+    "colon, a semicolon or a comma. Write the answer itself, never your reasoning "
+    "about it.\n"
+    "IMPORTANT: you have NO tools in this turn; no web access, no search, no "
     "files. Never claim to be searching or browsing, and never promise to report "
-    "back on your own — you cannot. For questions that need LIVE or current "
+    "back on your own, you cannot. For questions that need LIVE or current "
     "information (news, prices, weather, releases), do not answer from memory: "
     "say in one short sentence that you'll look it up, and include this marker on "
-    "its own line: [[research: <a concise web search query>]] — the system runs "
+    "its own line: [[research: <a concise web search query>]], the system runs "
     "the search and messages the results shortly. The query must be a CONCRETE "
     "search-engine query, never the user's vague phrase verbatim: name the topic, "
     "add specifics (product, place, month/year). 'dame las noticias de hoy' → "
-    "[[research: technology news July 2026]] — not [[research: noticias de hoy]]. "
+    "[[research: technology news July 2026]], not [[research: noticias de hoy]]. "
     "At most one marker per reply.\n"
     "For an OPERATIONAL request that matches one of your registered actions "
     "(your live-configuration card lists them), include this marker on its own "
-    "line: [[action: <name> key=value …]] — the system mints a signed task, the "
+    "line: [[action: <name> key=value …]], the system mints a signed task, the "
     "allowlist and approval frontier apply, and the result arrives as a "
-    "follow-up message. Never claim the action already ran — it runs after "
+    "follow-up message. Never claim the action already ran, it runs after "
     "this reply. At most one action marker per reply. When the owner asks you "
     "to change one of your settings in plain language, that IS an operational "
-    "request: [[action: set_config key=<setting> value=<new value>]] — the "
+    "request: [[action: set_config key=<setting> value=<new value>]], the "
     "editable keys are in your live-configuration card; quote a value that "
     'contains spaces (value="a, b").'
 )
@@ -112,7 +162,7 @@ _RESEARCH_MAX_QUERY = 300
 
 # Appended when a research task was actually minted — the promise the marker makes
 # is only ever written by US, deterministically, after the mint succeeded.
-_RESEARCH_ACK = "🔎 Looking it up — I'll message you shortly."
+_RESEARCH_ACK = "🔎 Looking it up, I'll message you shortly."
 
 # The action marker (see _CHAT_INSTRUCTION): ``[[action: <name> key=value …]]``.
 # Same defensive parsing as research: first match wins, all occurrences stripped.
@@ -121,8 +171,8 @@ _ACTION_MARKER_RE = re.compile(
 )
 # Acks are written by US, deterministically, only after the mint succeeded —
 # the marker's promise is never the model's to make (mirrors _RESEARCH_ACK).
-_ACTION_ACK_RUN = "⚙️ Running {name} — the result follows shortly."
-_ACTION_ACK_PARKED = "⏳ {name} needs your approval — see /approvals."
+_ACTION_ACK_RUN = "⚙️ Running {name}, the result follows shortly."
+_ACTION_ACK_PARKED = "⏳ {name} needs your approval, see /approvals."
 
 # The remember marker (offered by the periodic nudge in ``_brain_reply``): the
 # model flags ONE durable owner fact; we persist it to the grande (deduped) and
@@ -134,7 +184,7 @@ _REMEMBER_MAX = 300
 
 _MEMORY_NUDGE = (
     "If this conversation taught you a DURABLE fact about your owner (a "
-    "preference, a project, a constraint — not small talk), append this marker "
+    "preference, a project, a constraint, not small talk), append this marker "
     "at the very end: [[remember: <one concise fact>]]. At most one."
 )
 
@@ -280,7 +330,7 @@ async def _apply_remember_marker(reply: str, *, instance_id: str) -> str:
 # Sent when a (non-armed, caption-less) CV document arrives: we hold the CV and ask
 # for the job posting in a follow-up message (many clients send a file uncaptioned).
 _CV_NO_CAPTION = (
-    "Got your CV ({chars} chars) — now send the job posting as a normal message and "
+    "Got your CV ({chars} chars), now send the job posting as a normal message and "
     "I'll tailor it. Optionally name the company with '@ Company' or 'company: X'."
 )
 # Confirmation after an armed /cvnewbase upload replaced the base CV.
@@ -288,7 +338,7 @@ _CV_BASE_SAVED = (
     "Base CV updated ({chars} chars; previous backed up). /cv will use it now."
 )
 # The document could not be downloaded / had no readable text.
-_CV_NO_DOWNLOAD = "I couldn't download that document — try sending it again."
+_CV_NO_DOWNLOAD = "I couldn't download that document, try sending it again."
 _CV_NO_TEXT = "I couldn't read any text from that document. Send a .tex or a text PDF."
 # Something unexpected happened while tailoring.
 _CV_ERROR = "Something went wrong tailoring your CV. Nothing was sent."
@@ -429,7 +479,7 @@ async def _apply_research_marker(reply: str, *, instance_id: str, config) -> str
         return visible
     return (
         "I can't see the web from this chat turn, and the lookup path is "
-        "unavailable right now — ask me again in a bit."
+        "unavailable right now, ask me again in a bit."
     )
 
 
@@ -481,7 +531,7 @@ async def _run_action_and_report(
             if resultado:
                 note = f"⚙️ {name}: {resultado[:300]}"
     else:
-        note = f"⚙️ {name}: didn't run — left pending for the next heartbeat."
+        note = f"⚙️ {name}: didn't run, left pending for the next heartbeat."
     try:
         from lhassa.org.deliver import deliver as _deliver
 
@@ -530,7 +580,7 @@ async def _apply_action_marker(reply: str, *, instance_id: str, config) -> str:
 
         actionpack.register_all()  # idempotent — the poller may precede a beat
         if name not in ACTIONS:
-            ack = f"(I don't have an action named {name!r} — see /capabilities.)"
+            ack = f"(I don't have an action named {name!r}, see /capabilities.)"
         else:
             task_id, estado = await _dispatch.mint_task(
                 instance_id,
@@ -555,7 +605,7 @@ async def _apply_action_marker(reply: str, *, instance_id: str, config) -> str:
         return f"{visible}\n{ack}".strip()
     if visible:
         return visible
-    return "That action path is unavailable right now — ask me again in a bit."
+    return "That action path is unavailable right now, ask me again in a bit."
 
 
 async def _answer_calendar_query(text: str, *, config) -> Optional[str]:
@@ -596,6 +646,34 @@ async def _answer_calendar_query(text: str, *, config) -> Optional[str]:
     _history_record(config, "user", text)
     _history_record(config, "assistant", reply)
     return reply
+
+
+#: How much of the owner's message the episode keeps. Long enough to be worth
+#: recalling, short enough that the log stays a log.
+_QUESTION_CHARS = 400
+
+
+def _asked(text: str) -> str:
+    """The owner's message, as a suffix for the episode's ``decision``.
+
+    The chat episode stored only the ANSWER: ``accion`` is the constant
+    ``"responder"`` and the question went nowhere, so ``/recall`` and the
+    episodic-recall memory layer could never find a turn by what was ASKED, on
+    the one door the owner uses every day. The question cannot ride in
+    ``accion`` (``core/feedback.py``, ``security/autonomy.py`` and
+    ``agents/repetition.py`` all key on that exact constant to tell a chat
+    answer from a real action) nor in ``resultado`` (the re-ask detector
+    compares answer text for near-duplicates). ``decision`` is free-form,
+    FTS5-indexed, and only ever read with ``startswith``, so a suffix is the
+    one place this fits without disturbing a reader.
+
+    Square brackets are dropped: ``decision`` also carries ``[routable:x]``
+    markers that ``repetition.py`` finds with a plain regex, and a quoted
+    message must not be able to forge one.
+    """
+    flat = " ".join((text or "").split())[:_QUESTION_CHARS]
+    flat = flat.replace("[", "(").replace("]", ")")
+    return f" | q: {flat}" if flat else ""
 
 
 async def _brain_reply(text: str, *, config) -> str:
@@ -657,6 +735,7 @@ async def _brain_reply(text: str, *, config) -> str:
                     decision=(
                         f"{task_router.describe(routing)} | "
                         f"cache-hit: served past answer (sim={similarity:.2f})"
+                        f"{_asked(text)}"
                     ),
                     accion="responder",
                     resultado=cached_answer,
@@ -790,6 +869,14 @@ async def _brain_reply(text: str, *, config) -> str:
                 reply, instance_id=instance_id, config=config
             )
             reply = await _apply_remember_marker(reply, instance_id=instance_id)
+            # The owner's no-em-dash rule, ENFORCED rather than requested. The
+            # chat instruction above already asks for it and a model still ships
+            # one, which is exactly why persona.scrub_dashes exists and why the
+            # notify and digest passes run it. Applied here, after the markers
+            # are stripped, so the scrubbed text is also what gets cached and
+            # threaded into history: the rule holds on the reply the owner
+            # actually reads, not just on the one the model meant to write.
+            reply = _persona.scrub_dashes(reply)
             # Record the turn AS THE OWNER SAW IT (markers already stripped).
             _history_record(config, "user", text)
             _history_record(config, "assistant", reply)
@@ -828,6 +915,7 @@ async def _brain_reply(text: str, *, config) -> str:
                         if cache_stats and not cache_stats.get("hit")
                         else ""
                     )
+                    + _asked(text)
                 ),
                 accion="responder",
                 resultado=reply,
@@ -1027,7 +1115,7 @@ async def _launch_code_run(approval_row: dict, *, config) -> None:
     if not task:
         with contextlib.suppress(Exception):
             await telegram.send(
-                "That approval had no task text on it — nothing to run.", config=config
+                "That approval had no task text on it, nothing to run.", config=config
             )
         return
 
@@ -1042,7 +1130,7 @@ async def _launch_code_run(approval_row: dict, *, config) -> None:
         if not local_cli.is_installed(cli):
             installed = ", ".join(local_cli.available_clis()) or "none installed"
             await telegram.send(
-                f"Can't launch — the {cli!r} CLI isn't available ({installed}).",
+                f"Can't launch, the {cli!r} CLI isn't available ({installed}).",
                 config=config,
             )
             return
@@ -1054,7 +1142,7 @@ async def _launch_code_run(approval_row: dict, *, config) -> None:
 
         with contextlib.suppress(Exception):
             await telegram.send(
-                f"Started: run #{run_id} ({cli}) — {task[:80]}", config=config
+                f"Started: run #{run_id} ({cli}), {task[:80]}", config=config
             )
 
         try:
@@ -1064,7 +1152,7 @@ async def _launch_code_run(approval_row: dict, *, config) -> None:
         except asyncio.TimeoutError:
             with contextlib.suppress(Exception):
                 await telegram.send(
-                    f"Run #{run_id} is still going after a while — check the "
+                    f"Run #{run_id} is still going after a while, check the "
                     "dashboard's Run section.",
                     config=config,
                 )
@@ -1569,7 +1657,7 @@ def _gate_failure_reply(record: dict) -> str:
                 break
     if last_words:
         return (
-            "I couldn't produce a tailored CV — here is what the team said:\n\n"
+            "I couldn't produce a tailored CV, here is what the team said:\n\n"
             f"{last_words[:600]}"
         )
     return "I couldn't produce a tailored CV this time. Nothing was sent."
@@ -1591,7 +1679,7 @@ async def _reply_with_cv(
     """
     if record is None:
         await telegram.send(
-            f"My CV work-flow ({flow_id}) isn't set up yet — create it first.",
+            f"My CV work-flow ({flow_id}) isn't set up yet, create it first.",
             config=config,
         )
         return
@@ -1632,7 +1720,7 @@ async def _reply_with_cv(
         )
         if not delivered:
             await telegram.send(
-                "I tailored your CV but couldn't send the file — try again.",
+                "I tailored your CV but couldn't send the file, try again.",
                 config=config,
             )
         return
@@ -1702,7 +1790,7 @@ async def _answer_cv_command(text: str, *, config) -> None:
         posting = text.strip()[len("/cv"):].strip()
         if not posting:
             await telegram.send(
-                "Usage: /cv <job posting or target role> — I'll tailor your base CV.",
+                "Usage: /cv <job posting or target role>, I'll tailor your base CV.",
                 config=config,
             )
             return
@@ -1713,13 +1801,13 @@ async def _answer_cv_command(text: str, *, config) -> None:
         if len(posting) < 200:
             await telegram.send(
                 "That looks like just a title. Paste the FULL job posting after "
-                "/cv (requirements included) and I'll tailor the CV to it — the "
+                "/cv (requirements included) and I'll tailor the CV to it, the "
                 "more of the posting I see, the sharper the result.",
                 config=config,
             )
             return
         company = _parse_company(posting)
-        # A tailored run takes a while (a real model turn) — ack immediately so the
+        # A tailored run takes a while (a real model turn), ack immediately so the
         # owner knows it's working before the file lands.
         with contextlib.suppress(Exception):
             await telegram.send(
@@ -1817,6 +1905,17 @@ async def poll_cycle(config=None, *, offset=None):
             update_id = update.get("update_id")
             if isinstance(update_id, int):
                 new_offset = update_id + 1
+                # See ``_mark_update_seen`` above: Telegram may resend an
+                # update_id we already dispatched (offset ack race or a
+                # process restart between processing and confirming). Any
+                # dispatch path below — callback, marker-minting think,
+                # /goal, /remind, /idea — would otherwise re-mint on a
+                # replay, so the guard sits before every one of them.
+                if _mark_update_seen(update_id):
+                    logger.info(
+                        f"Telegram inbound: skipping duplicate update_id={update_id}"
+                    )
+                    continue
 
             # An inline-keyboard button tap (Approve/Deny on a monitor alert).
             callback_query = update.get("callback_query")
