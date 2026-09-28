@@ -16,7 +16,7 @@ from loguru import logger
 
 from lhassa.state import state
 from lhassa.tools.guardrails import validate_shell_command
-from lhassa.tools.handlers._shared import _bump_tool
+from lhassa.tools.handlers._shared import _bump_tool, current_door
 
 _SHELL_OUTPUT_MAX = int(os.getenv("LHASSA_SHELL_OUTPUT_MAX", "2000"))  # Max chars returned from shell to voice pipeline
 
@@ -32,7 +32,7 @@ async def handle_shell(params: FunctionCallParams):
         await state.record_audit_event(
             action="shell",
             target=command[:200],
-            source="voice_tool",
+            source=current_door(),
             status="blocked",
             detail=validation_error,
         )
@@ -55,7 +55,7 @@ async def handle_shell(params: FunctionCallParams):
         await state.record_audit_event(
             action="shell",
             target=command[:200],
-            source="voice_tool",
+            source=current_door(),
             status="ok" if result.returncode == 0 else "error",
             detail=f"exit_code={result.returncode}",
         )
@@ -64,7 +64,7 @@ async def handle_shell(params: FunctionCallParams):
         await state.record_audit_event(
             action="shell",
             target=command[:200],
-            source="voice_tool",
+            source=current_door(),
             status="error",
             detail="timeout",
         )
@@ -74,7 +74,7 @@ async def handle_shell(params: FunctionCallParams):
         await state.record_audit_event(
             action="shell",
             target=command[:200],
-            source="voice_tool",
+            source=current_door(),
             status="error",
             detail=str(e)[:200],
         )
@@ -89,7 +89,7 @@ async def handle_run_privileged(params: FunctionCallParams):
 
     try:
         from lhassa.tools.privileged import run_privileged
-        result = await run_privileged(command, source="voice_tool")
+        result = await run_privileged(command, source=current_door())
         await params.result_callback(result)
     except Exception as e:
         logger.error(f"run_privileged error: {e}")

@@ -15,7 +15,7 @@ from loguru import logger
 
 from lhassa.state import state
 from lhassa.tools.guardrails import validate_write_path
-from lhassa.tools.handlers._shared import _bump_tool
+from lhassa.tools.handlers._shared import _bump_tool, current_door
 
 _FILE_CONTENT_MAX = int(os.getenv("LHASSA_FILE_CONTENT_MAX", "4000"))  # Max chars returned from read_file to voice pipeline
 
@@ -29,7 +29,7 @@ async def handle_read_file(params: FunctionCallParams):
     try:
         p = Path(path).expanduser()
         size = p.stat().st_size
-        if size > 512 * 1024:  # 512 KB hard cap — avoid flooding the LLM context
+        if size > 512 * 1024:  # 512 KB hard cap; avoid flooding the LLM context
             await params.result_callback(
                 f"File is too large to read ({size // 1024} KB). "
                 "Use shell with head/tail/grep to inspect specific parts."
@@ -58,7 +58,7 @@ async def handle_write_file(params: FunctionCallParams):
             await state.record_audit_event(
                 action="write_file",
                 target=path[:200],
-                source="voice_tool",
+                source=current_door(),
                 status="blocked",
                 detail=validation_error,
             )
@@ -70,7 +70,7 @@ async def handle_write_file(params: FunctionCallParams):
         await state.record_audit_event(
             action="write_file",
             target=str(p)[:200],
-            source="voice_tool",
+            source=current_door(),
             status="ok",
             detail=f"bytes={len(content)}",
         )
@@ -79,7 +79,7 @@ async def handle_write_file(params: FunctionCallParams):
         await state.record_audit_event(
             action="write_file",
             target=path[:200],
-            source="voice_tool",
+            source=current_door(),
             status="error",
             detail=str(e)[:200],
         )
