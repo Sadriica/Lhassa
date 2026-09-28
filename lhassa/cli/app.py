@@ -66,7 +66,7 @@ class _ChatDefaultGroup(TyperGroup):
     """Route an unrecognized first token to the implicit ``chat`` command.
 
     The CLI has power subcommands (tools/report/fleet/...) AND must keep its three
-    legacy input modes — ``lhassa "question"``, ``echo x | lhassa``, and bare REPL.
+    legacy input modes; ``lhassa "question"``, ``echo x | lhassa``, and bare REPL.
     A plain Typer group would reject ``lhassa "free text"`` with "No such command".
     Here, when the first token doesn't match a registered subcommand, we fall back
     to the hidden ``chat`` command so the free-text prompt still works. (A prompt
@@ -94,13 +94,13 @@ def _print_cost(err: Console, result: "agent.CliResult") -> None:
     )
 
 
-def _run_sync(prompt: str) -> "agent.CliResult":
+def _run_sync(prompt: str, history=None) -> "agent.CliResult":
     """Run one turn, with a gold stderr spinner when stderr is an interactive terminal."""
     err = _console(stderr=True)
     if err.is_terminal:
         with err.status("[prompt]Thinking…[/]", spinner="dots", spinner_style="prompt"):
-            return asyncio.run(agent.run_once(prompt))
-    return asyncio.run(agent.run_once(prompt))
+            return asyncio.run(agent.run_once(prompt, history=history))
+    return asyncio.run(agent.run_once(prompt, history=history))
 
 
 def _emit(result: "agent.CliResult", json_out: bool) -> None:
@@ -124,12 +124,13 @@ def _emit(result: "agent.CliResult", json_out: bool) -> None:
 
 
 _REPL_HELP = (
-    "[title]Lhassa[/] [dim]— commands:[/]\n"
+    "[title]Lhassa[/] [dim]commands:[/]\n"
     "  [accent]/help[/]    [dim]show this[/]\n"
     "  [accent]/status[/]  [dim]the brain at a glance (overview)[/]\n"
     "  [accent]/skills[/]  [dim]installed skills[/]\n"
     "  [accent]/tools[/]   [dim]self-written tools[/]\n"
     "  [accent]/usage[/]   [dim]tokens + cost this session[/]\n"
+    "  [accent]/reset[/]   [dim]forget this conversation (start fresh)[/]\n"
     "  [accent]/clear[/]   [dim]clear the screen[/]\n"
     "  [accent]/exit[/]    [dim]quit (or Ctrl-D)[/]\n"
     "[dim]Anything else is a message. For power tools run e.g. "
@@ -148,7 +149,11 @@ def _repl() -> None:
     prompt_text, prompt_style = prompt_fragments()
 
     totals = {"in": 0, "out": 0, "cost": 0.0}
-    # A clean, quiet header (no log spam — see _boot.quiet_logging).
+    # The conversation, in process memory only (never written to disk): the REPL is a
+    # conversation, not a row of unrelated one-shots. Trimmed to the last N turns in
+    # agent._seed_messages, and dropped entirely on /reset.
+    history: list[tuple[str, str]] = []
+    # A clean, quiet header (no log spam; see _boot.quiet_logging).
     err.print()
     err.print("  [brand]ᕮ Lhassa[/]  [dim]· quietly awake. Ask me anything.[/]")
     err.print("  [dim]/help · /exit (Ctrl-D) · /usage[/]")
@@ -169,6 +174,10 @@ def _repl() -> None:
             continue
         if line == "/clear":
             out.clear()
+            continue
+        if line in ("/reset", "/new"):
+            history.clear()
+            err.print("[dim]conversation reset.[/]")
             continue
         if line in ("/status", "/overview"):
             try:
@@ -195,11 +204,21 @@ def _repl() -> None:
             )
             continue
         try:
-            result = _run_sync(line)
+            result = _run_sync(line, history)
+        except KeyboardInterrupt:
+            # Ctrl-C cancels the TURN, not the session. It is BaseException, so the
+            # generic handler below never saw it and one impatient Ctrl-C used to
+            # throw the whole conversation away.
+            err.print("[dim]· cancelled. The conversation is still here.[/]")
+            continue
         except Exception as e:  # keep the REPL alive on any single-turn failure
             err.print(f"[error]✗[/] [accent]{e}[/]")
             continue
         out.print(Markdown(result.response))
+        history.append(("user", line))
+        history.append(("assistant", result.response))
+        if result.truncated:
+            err.print("[dim]· step cap reached; the work above may be unfinished.[/]")
         totals["in"] += result.input_tokens
         totals["out"] += result.output_tokens
         totals["cost"] += result.cost_usd
@@ -235,7 +254,7 @@ def _chat_entry(prompt_text: str, json_out: bool) -> None:
 def _root(ctx: typer.Context) -> None:
     """Build the brain, rent the body.
 
-    I am Lhassa. I live on this machine — I watch quietly, remember what
+    I am Lhassa. I live on this machine; I watch quietly, remember what
     matters, and think only when it is worth the spend. Most of my day costs
     nothing; the wheel turns on its own.
 
@@ -288,13 +307,13 @@ app.add_typer(_flow_cmds.one_flow_app, name="flow")
 # Attach the `lhassa calendar` sub-app (named calendar feeds: add/list/remove).
 app.add_typer(_calendar_cmds.calendar_app, name="calendar")
 
-# Attach the `lhassa artifacts` sub-app (registered artifacts — the delivery chain).
+# Attach the `lhassa artifacts` sub-app (registered artifacts; the delivery chain).
 app.add_typer(_artifact_cmds.artifact_app, name="artifacts")
 
-# Attach the `lhassa seed` sub-app (reproducible bootstrap seeds — cv, …).
+# Attach the `lhassa seed` sub-app (reproducible bootstrap seeds; cv, …).
 app.add_typer(_seed_cmds.seed_app, name="seed")
 
-# Attach `lhassa setup` — one command, one wizard: clone to a working brain.
+# Attach `lhassa setup`: one command, one wizard: clone to a working brain.
 _setup_cmds.register(app)
 
 # Attach the `lhassa config` sub-app (runtime settings → ~/.lhassa/settings.env).
