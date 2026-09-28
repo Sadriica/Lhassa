@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""``lhassa flows`` / ``lhassa flow`` — the work-flow surface of the CLI.
+"""``lhassa flows`` / ``lhassa flow``: the work-flow surface of the CLI.
 
 Two sub-apps live here, deliberately:
 
@@ -8,23 +8,23 @@ Two sub-apps live here, deliberately:
 
 ``lhassa flow`` (singular, the full lifecycle)
     ``create`` / ``edit`` / ``validate`` / ``run`` / ``watch`` / ``logs`` /
-    ``delete`` — the CLI half of what the dashboard canvas and
+    ``delete``: the CLI half of what the dashboard canvas and
     ``api/flow_routes.py`` already do, over the SAME seams:
 
       * writes go through :class:`~lhassa.flows.store.FlowStore` (which validates
         via :meth:`~lhassa.flows.model.Flow.validate`, exactly like the API's
         ``_parse``);
-      * a **run** goes through :func:`lhassa.org.delegate.delegate_flow` — never
+      * a **run** goes through :func:`lhassa.org.delegate.delegate_flow`: never
         :func:`lhassa.flows.engine.run_flow` directly. A flow is never run bare;
         it flows down the command chain with a $0 audit episode at the hop.
       * ``watch`` / ``logs`` read the durable kernel
         (:class:`~lhassa.flows.runtime.FlowRuntimeRepository`) directly, so they
-        work with the API server down — the same virtue as ``lhassa tui``.
+        work with the API server down; the same virtue as ``lhassa tui``.
 
 No LLM and no network are touched by anything except ``run`` (and that only if
 ``LHASSA_ORG_LIVE`` makes the flow's own task nodes think).
 
-Both sub-apps are registered onto the main Typer ``app`` — see ``lhassa.cli.app``.
+Both sub-apps are registered onto the main Typer ``app``: see ``lhassa.cli.app``.
 """
 
 from __future__ import annotations
@@ -193,7 +193,7 @@ def _slug(text: str) -> str:
 
 
 def _fresh_id(store, base_id: str) -> str:
-    """``base_id`` / ``base_id-2`` / … — the first id not already in the store."""
+    """``base_id`` / ``base_id-2`` / …; the first id not already in the store."""
     if store.get(base_id) is None:
         return base_id
     n = 2
@@ -270,7 +270,7 @@ def create_cmd(
     ),
     json_out: bool = typer.Option(False, "--json", help="Emit the new flow as JSON."),
 ) -> None:
-    """Create a work-flow — from a template, or a blank one-trigger scaffold."""
+    """Create a work-flow; from a template, or a blank one-trigger scaffold."""
     from lhassa.flows import templates
     from lhassa.flows.model import FlowValidationError
 
@@ -303,8 +303,8 @@ def create_cmd(
         return
     origin = f"template {template!r}" if template else "a blank scaffold"
     _out().print(
-        f"Created flow [bold]{flow.id}[/] ({flow.name!r}) from {origin} "
-        f"— {len(flow.nodes)} node(s)."
+        f"Created flow [bold]{flow.id}[/] ({flow.name!r}) from {origin}: "
+        f"{len(flow.nodes)} node(s)."
     )
     _out().print(f"[dim]Edit it with:[/] lhassa flow edit {flow.id}")
 
@@ -317,17 +317,52 @@ def _editor_command() -> list[str]:
 
 def edit_cmd(
     flow_id: str = typer.Argument(..., help="Flow id to edit."),
+    from_json: Optional[str] = typer.Option(
+        None,
+        "--from-json",
+        help="Replace the flow from a JSON file (or '-' for stdin) instead of opening an editor.",
+    ),
 ) -> None:
     """Open a flow's JSON in ``$EDITOR``; persist only if it still validates.
 
     Invalid JSON or a failed validation NEVER discards the edits: the buffer stays
     on disk and the command offers to re-open it (or prints its path on abort).
+
+    ``--from-json`` is the same operation without a human at a terminal. It
+    exists because Lhassa itself is a caller here: asked to author a work-flow,
+    it could scaffold one with ``create`` and then had no way to fill in the
+    nodes, since ``$EDITOR`` needs a session it does not have. Validation is
+    identical to the interactive path; a rejected document changes nothing.
     """
     from lhassa.flows.model import Flow, FlowValidationError
 
     flow = _require_flow(flow_id)
     store = _store()
     out, err = _out(), _err()
+
+    if from_json is not None:
+        try:
+            raw = (
+                sys.stdin.read()
+                if from_json == "-"
+                else Path(from_json).read_text(encoding="utf-8")
+            )
+            data = json.loads(raw)
+            if not isinstance(data, dict):
+                raise FlowValidationError("a flow must be a JSON object")
+            data["id"] = flow_id  # the addressed id is authoritative, as in PUT
+            edited = Flow.from_dict(data)
+            edited.validate()
+        except OSError as exc:
+            err.print(f"Could not read {from_json}: {exc}", style="red")
+            raise typer.Exit(code=1)
+        except (json.JSONDecodeError, FlowValidationError, ValueError) as exc:
+            err.print(f"Not a valid flow: {exc}", style="red")
+            err.print("Nothing was written to the store.", style="yellow")
+            raise typer.Exit(code=1)
+        store.save(edited)
+        out.print(f"Saved flow [bold]{edited.id}[/]; {len(edited.nodes)} node(s).")
+        return
 
     fd, tmp_name = tempfile.mkstemp(prefix=f"lhassa-flow-{_slug(flow_id)}-", suffix=".json")
     tmp = Path(tmp_name)
@@ -360,7 +395,7 @@ def edit_cmd(
                 continue
 
             store.save(edited)
-            out.print(f"Saved flow [bold]{edited.id}[/] — {len(edited.nodes)} node(s).")
+            out.print(f"Saved flow [bold]{edited.id}[/]; {len(edited.nodes)} node(s).")
             tmp.unlink(missing_ok=True)
             return
     except typer.Exit:
@@ -411,7 +446,7 @@ def validate_cmd(
         )
         return
     _out().print(
-        f"✓ [bold]{flow.id}[/] is valid — {len(flow.nodes)} node(s), {len(flow.edges)} edge(s)."
+        f"✓ [bold]{flow.id}[/] is valid; {len(flow.nodes)} node(s), {len(flow.edges)} edge(s)."
     )
 
 
@@ -500,7 +535,7 @@ def watch_cmd(
 ) -> None:
     """Tail a durable run's event stream until it reaches a terminal status.
 
-    Reads the durable kernel directly — no API server required.
+    Reads the durable kernel directly; no API server required.
     """
     instance_id = _instance_id()
     out, err = _out(), _err()
@@ -646,7 +681,7 @@ flow_app.command("templates")(templates_cmd)
 flow_app.command("apply")(apply_cmd)
 flow_app.command("show")(show_cmd)
 
-# `lhassa flow …` — the full lifecycle. `list`/`show`/`templates` are shared with the
+# `lhassa flow …`: the full lifecycle. `list`/`show`/`templates` are shared with the
 # plural sub-app so neither spelling is a dead end.
 one_flow_app.command("list")(list_cmd)
 one_flow_app.command("show")(show_cmd)
