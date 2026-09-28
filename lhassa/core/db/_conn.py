@@ -1,18 +1,18 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """
-Async SQLite store for the "grande" — the append-only source of truth.
+Async SQLite store for the "grande": the append-only source of truth.
 
 This is the durable brain DB (`~/.lhassa/brain.db` by default), separate from
 the conversational memory DB in ``lhassa.memory.store``. It is single-writer by
 discipline; WAL lets readers run freely against the immutable log.
 
 Schema (Apéndice A of the brief):
-  episodes      — what happened (APPEND-ONLY; never UPDATE/DELETE)
-  tasks         — typed, signed work items
-  jobs          — long-running harness processes (PID bookkeeping)
-  desired_state — per-machine reconciliation target (check-in, not push)
-  tools         — self-written tools and their gate metrics (APPEND row, metrics update)
-  approvals     — the human-in-the-loop queue
+  episodes     ; what happened (APPEND-ONLY; never UPDATE/DELETE)
+  tasks        ; typed, signed work items
+  jobs         ; long-running harness processes (PID bookkeeping)
+  desired_state; per-machine reconciliation target (check-in, not push)
+  tools        ; self-written tools and their gate metrics (APPEND row, metrics update)
+  approvals    ; the human-in-the-loop queue
 
 Invariants:
   - EVERY table carries an ``instance_id`` column.
@@ -53,7 +53,7 @@ def _pkg():
     Every other submodule routes its reads of ``DB_PATH`` and calls to
     ``_now``/``_dumps``/``_loads``/``_new_id`` through this lookup (instead of
     importing them directly) so that ``monkeypatch.setattr(db, "DB_PATH", ...)``
-    — or patching any of those helpers — on the *package* (``from lhassa.core
+    (or patching any of those helpers) on the *package* (``from lhassa.core
     import db``) is honored no matter which submodule actually runs the code.
     Mirrors the pattern used by ``lhassa/notify/commands/_ai.py``.
     """
@@ -65,7 +65,7 @@ DB_PATH = Path(Config.brain_db_path)
 
 # Validated-schema cache: a DB path is migrated + schema-validated ONCE per
 # process. Re-validation is the expensive part of init_db (every migration
-# validator runs a PRAGMA table_info — ~23+ checks across the whole registry)
+# validator runs a PRAGMA table_info; ~23+ checks across the whole registry)
 # and is a pure no-op when the DB is already at a version we brought to the
 # current schema. Keyed by resolved path AND the schema version we validated,
 # so a replaced/recreated file (fresh user_version) still migrates.
@@ -113,7 +113,7 @@ async def _migration_001_baseline(db) -> None:
     """Reconcile an empty or unversioned legacy database to the baseline."""
     await db.execute("SAVEPOINT migration_001_baseline")
     try:
-        # LA GRANDE — append-only; never UPDATE/DELETE episodes.
+        # LA GRANDE; append-only; never UPDATE/DELETE episodes.
         await db.execute("""
             CREATE TABLE IF NOT EXISTS episodes (
                 id               TEXT PRIMARY KEY,
@@ -134,11 +134,11 @@ async def _migration_001_baseline(db) -> None:
             ON episodes(instance_id, creado_en)
         """)
 
-        # episodes_fts — Fase 1 "Recall": a full-text index over the episode log
+        # episodes_fts. Fase 1 "Recall": a full-text index over the episode log
         # (§ decisions log Fase 1). An FTS5 EXTERNAL-CONTENT table over `episodes`
-        # (no row duplication — content lives only in `episodes`), kept in sync by
-        # triggers. Defensive: some SQLite builds omit FTS5, so this — and ONLY
-        # this — is wrapped so init_db() never crashes on an old/stripped build.
+        # (no row duplication; content lives only in `episodes`), kept in sync by
+        # triggers. Defensive: some SQLite builds omit FTS5, so this; and ONLY
+        # this; is wrapped so init_db() never crashes on an old/stripped build.
         await db.execute("SAVEPOINT migration_001_fts")
         try:
             await db.execute("""
@@ -169,10 +169,10 @@ async def _migration_001_baseline(db) -> None:
             """)
 
             # Backfill: episodes existed before the index (or from a version
-            # without triggers) — if the index is empty but episodes aren't,
+            # without triggers); if the index is empty but episodes aren't,
             # rebuild it from the content table in one shot. NOTE: `SELECT
             # count(*) FROM episodes_fts` is NOT a reliable emptiness check for
-            # an external-content table — SQLite answers a plain count(*) off
+            # an external-content table. SQLite answers a plain count(*) off
             # the content table itself, not the index. The `_docsize` shadow
             # table (one row per row actually INDEXED) is the true signal.
             async with db.execute("SELECT COUNT(*) FROM episodes_fts_docsize") as cur:
@@ -262,7 +262,7 @@ async def _migration_001_baseline(db) -> None:
             )
         """)
 
-        # autonomy — the friction knob (§2.6, principle #9). One row per
+        # autonomy; the friction knob (§2.6, principle #9). One row per
         # (instance_id, accion, actor_id) holding the count of CONSECUTIVE
         # human-origin approvals of that action by that actor. The knob only
         # LOWERS friction for already-human-approved actions; it never changes an
@@ -278,7 +278,7 @@ async def _migration_001_baseline(db) -> None:
             )
         """)
 
-        # facts — typed durable knowledge (dato | directiva). APPEND-ONLY:
+        # facts; typed durable knowledge (dato | directiva). APPEND-ONLY:
         # a superseding fact is a NEW row; rows are never destructively rewritten.
         await db.execute("""
             CREATE TABLE IF NOT EXISTS facts (
@@ -299,7 +299,7 @@ async def _migration_001_baseline(db) -> None:
             ON facts(instance_id, tipo, pinned)
         """)
 
-        # postulaciones — the tracking_postulaciones typed task (§2.5): tracked
+        # postulaciones; the tracking_postulaciones typed task (§2.5): tracked
         # job/internship applications (CVs sent). A small mutable workbook scoped
         # to instance_id; ``estado`` advances as an application progresses. An
         # external source (email/sheet via an MCP tool) MAY top it up, but the
@@ -314,6 +314,8 @@ async def _migration_001_baseline(db) -> None:
                 fuente         TEXT,
                 link           TEXT,
                 notas          TEXT,
+                categoria      TEXT,
+                prioridad      TEXT,
                 creado_en      TEXT NOT NULL,
                 actualizado_en TEXT NOT NULL
             )
@@ -323,7 +325,7 @@ async def _migration_001_baseline(db) -> None:
             ON postulaciones(instance_id, estado)
         """)
 
-        # fact_embeddings — memory layer 4 (semantic retrieval, §3-Fase 6). One
+        # fact_embeddings; memory layer 4 (semantic retrieval, §3-Fase 6). One
         # row per (instance_id, fact_id) holding the fact's embedding as a
         # JSON-encoded list of floats plus the embedder ``model`` tag. ADDITIVE:
         # the semantic layer is OFF by default, so this table stays empty unless
@@ -340,7 +342,7 @@ async def _migration_001_baseline(db) -> None:
             )
         """)
 
-        # org_messages — the typed task queue between brains (§2.coordinación,
+        # org_messages; the typed task queue between brains (§2.coordinación,
         # Fase 7). Inter-brain communication is TYPED messages, never free prose:
         # a closed set of kinds (TASK_ASSIGN / TASK_RESULT / STATUS_REQUEST /
         # STATUS_REPORT) correlated by ``corr_id`` so a result maps back to its
@@ -369,10 +371,10 @@ async def _migration_001_baseline(db) -> None:
             ON org_messages(instance_id, corr_id)
         """)
 
-        # org_commons — the ONE cross-cutting read-only source of truth (Fase 7):
+        # org_commons; the ONE cross-cutting read-only source of truth (Fase 7):
         # policies, org chart, shared data. Readable by ALL brains; written ONLY
-        # by the curator (the general — enforced in lhassa.org.commons / rbac).
-        # A single shared row per (instance_id, clave) — no per-department copies
+        # by the curator (the general; enforced in lhassa.org.commons / rbac).
+        # A single shared row per (instance_id, clave); no per-department copies
         # that could diverge. ``curator`` records who last wrote it (audit).
         await db.execute("""
             CREATE TABLE IF NOT EXISTS org_commons (
@@ -415,7 +417,7 @@ async def _migration_001_baseline(db) -> None:
         if not await _has_column(db, "jobs", "acked"):
             await db.execute("ALTER TABLE jobs ADD COLUMN acked INTEGER DEFAULT 0")
 
-        # tasks: updated_en — last time estado changed (drives the deferred-retry
+        # tasks: updated_en; last time estado changed (drives the deferred-retry
         # backoff sweep: a task sits "diferida" for at least the backoff window
         # before it is retried). Defaults to creado_en for pre-existing rows via
         # the UPDATE below so the very first sweep after upgrade doesn't treat
@@ -428,12 +430,12 @@ async def _migration_001_baseline(db) -> None:
 
         # ── Phase 5 migration: fact_embeddings.model (embedder stamp) ────────
         # The column is in the CREATE TABLE above (new DBs have it), but a DB
-        # created before the stamp existed lacks it — add it idempotently so
+        # created before the stamp existed lacks it; add it idempotently so
         # semantic queries can filter rows by the embedder that produced them.
         if not await _has_column(db, "fact_embeddings", "model"):
             await db.execute("ALTER TABLE fact_embeddings ADD COLUMN model TEXT")
 
-        # watch_state — generic key/value store for watchlist dedup hashes.
+        # watch_state; generic key/value store for watchlist dedup hashes.
         # Each sense writes its last-seen state here so a persistent condition
         # fires ONCE per transition rather than on every 2-minute beat.
         await db.execute("""
@@ -446,7 +448,7 @@ async def _migration_001_baseline(db) -> None:
             )
         """)
 
-        # runs / run_steps — durable execution history for analytics. Episodes stay
+        # runs / run_steps; durable execution history for analytics. Episodes stay
         # the narrative audit log; these rows answer operational questions like
         # "how many times did this flow/brain run, how long did it take, did it fail".
         await db.execute("""
@@ -504,7 +506,7 @@ async def _migration_001_baseline(db) -> None:
             ON run_steps(instance_id, kind, entity_id)
         """)
 
-        # artifacts — durable, append-only record of a delivered WORK PRODUCT (a CV
+        # artifacts; durable, append-only record of a delivered WORK PRODUCT (a CV
         # .tex + .pdf, a report, …). "Lhassa is the sender of record" (§org, the
         # hierarchy is the philosophy): whatever a leaf produces is registered here
         # BEFORE it is handed up the chain, so the audit trail always has something
@@ -527,14 +529,14 @@ async def _migration_001_baseline(db) -> None:
             ON artifacts(instance_id, creado_en)
         """)
 
-        # answer_cache — the "$0 intelligence" answer cache (§ notify.intent /
+        # answer_cache; the "$0 intelligence" answer cache (§ notify.intent /
         # memory.answer_cache): one row per PAST (question, answer) turn the chat
         # actually thought through, so a semantically-similar future question can be
         # served again for FREE instead of spending another model call. Scoped to
         # ``instance_id``; ``embedding`` is the question's vector (JSON-encoded floats,
         # same shape as ``fact_embeddings.vector``) so a lookup is a cosine scan, no
         # extra index needed at this scale. ``hits`` counts how many times a cached
-        # row has served a lookup above threshold — an observability/tuning signal,
+        # row has served a lookup above threshold; an observability/tuning signal,
         # not a cache-invalidation mechanism (TTL, applied at read time in
         # memory/answer_cache.py, is what ages a row out).
         await db.execute("""
@@ -554,14 +556,14 @@ async def _migration_001_baseline(db) -> None:
             ON answer_cache(instance_id, creado_en)
         """)
 
-        # knowledge — document perception (§ memory.knowledge): chunks of the
+        # knowledge; document perception (§ memory.knowledge): chunks of the
         # owner's OWN documents from opt-in ``config.knowledge_roots``, embedded
         # offline so the brain's thinking/recall/graph can be grounded in real
         # material at $0. One row per chunk; ``source_path`` + ``mtime`` make
         # ingestion incremental (a file whose mtime is unchanged is skipped; a
         # changed file has its old chunks deleted and re-indexed). Scoped to
         # ``instance_id`` like everything else in the grande. This table is
-        # local-only (``~/.lhassa/brain.db``), never the repo — see
+        # local-only (``~/.lhassa/brain.db``), never the repo; see
         # doc/boundaries.md.
         await db.execute("""
             CREATE TABLE IF NOT EXISTS knowledge (
@@ -619,7 +621,7 @@ _BASELINE_REQUIRED_COLUMNS: dict[str, set[str]] = {
     },
     "postulaciones": {
         "id", "instance_id", "empresa", "rol", "estado", "creado_en",
-        "fuente", "link", "notas", "actualizado_en",
+        "fuente", "link", "notas", "categoria", "prioridad", "actualizado_en",
     },
     "fact_embeddings": {
         "fact_id", "instance_id", "dim", "vector", "model", "creado_en",
@@ -851,7 +853,7 @@ async def _migration_003_knowledge_size(db) -> None:
 
     Incremental re-ingest compares both: an mtime match alone can miss a real
     rewrite (coarse filesystem clocks, same-second saves, mtime-preserving
-    tools). ``-1`` marks pre-migration rows whose size was never captured —
+    tools). ``-1`` marks pre-migration rows whose size was never captured;
     the ingester treats it as "unknown, trust the mtime".
     """
     await db.execute(
@@ -867,13 +869,13 @@ async def _validate_migration_003(db) -> None:
 
 
 async def _migration_004_projects(db) -> None:
-    """The PROJECT entity — the first-class workspace Lhassa works ON.
+    """The PROJECT entity; the first-class workspace Lhassa works ON.
 
     A project is a named unit of the owner's work (a repo, a research effort,
     an ops surface), typed by ``kind`` so project-type policy (standing review
     brains, default flows) can key off it. Scoping of existing tables happens
     WITHOUT new columns: ``runs.entity_id`` carries ``project:<id>`` and
-    ``artifacts.metadata`` carries a ``project_id`` key — the namespaced-string
+    ``artifacts.metadata`` carries a ``project_id`` key; the namespaced-string
     convention, promoted to schema only if it ever proves insufficient.
     """
     await db.execute("""
@@ -913,7 +915,7 @@ async def _migration_005_project_brains(db) -> None:
 
     The durable record behind "a code project always has its reviewer brains":
     the standing-brains sense fires only for projects with no row here, and the
-    ``attach_project_template`` action writes one after instantiating — the row
+    ``attach_project_template`` action writes one after instantiating; the row
     IS the idempotency (mirrors ``watch_state`` dedup, but queryable both ways).
     """
     await db.execute("""
@@ -1002,7 +1004,7 @@ async def _migration_007_loops(db) -> None:
     goal, a turn/deadline cap enforced BEFORE any work, an independent verifier
     spec (the doer never judges), and the last verdict whose detail seeds the
     next turn. The loop row is thin state; TICKING reuses the tasks table (one
-    task per active loop) and the audit trail is episodes — one per turn, like
+    task per active loop) and the audit trail is episodes; one per turn, like
     every other observable act. Statuses walk the loop-engineering stages:
     discover|plan|execute|verify|iterate|done|failed|capped.
     """
@@ -1048,7 +1050,7 @@ async def _migration_008_bench_runs(db) -> None:
 
     Eval-driven development's substrate: every bench run records which fixture
     ran against which subject (a provider, a route, a loop config), whether the
-    EXISTING objective verifier passed it, and what it cost — data the router
+    EXISTING objective verifier passed it, and what it cost; data the router
     and the consciousness can later weigh. Append-only.
     """
     await db.execute("""
@@ -1271,16 +1273,16 @@ async def _migration_011_multiuser(db) -> None:
 
     Additive and backward-compatible (Stream 6 Phase A): existing rows never
     lose data, they just get a WHO. ``actor_id`` is added to the three tables
-    where "who did/authored this" is genuinely load-bearing — approvals (who
+    where "who did/authored this" is genuinely load-bearing; approvals (who
     proposed it; it already rides in ``payload["actor_id"]`` via
     :class:`lhassa.security.trust.Origin`, this promotes it to a queryable
     column), facts (who authored a durable memory row) and knowledge (who
-    ingested a chunk) — defaulting existing rows to ``Config.root_admin_id``
+    ingested a chunk); defaulting existing rows to ``Config.root_admin_id``
     (the owner, "lhassa"), never blank.
 
     ``shared_resources`` / ``resource_subscriptions`` are the new tables behind
     cross-instance sharing (:mod:`lhassa.org.sharing`): a CLOSED, small set of
-    shareable kinds (skill/flow/template/knowledge) — deliberately NOT facts or
+    shareable kinds (skill/flow/template/knowledge); deliberately NOT facts or
     episodes, which stay private by construction (there is no column here to
     mark a fact/episode "shared", so leaking memory across instances is a
     schema-level impossibility, not just a runtime check).
@@ -1288,7 +1290,7 @@ async def _migration_011_multiuser(db) -> None:
     for table in ("approvals", "facts", "knowledge"):
         await db.execute(f"ALTER TABLE {table} ADD COLUMN actor_id TEXT")
     # Backfill: an approval's actor_id was already carried in its JSON payload
-    # (Origin.actor_id) — recover it where present, else the owner.
+    # (Origin.actor_id); recover it where present, else the owner.
     async with db.execute("SELECT id, payload FROM approvals") as cur:
         approval_rows = await cur.fetchall()
     for row in approval_rows:
@@ -1311,9 +1313,9 @@ async def _migration_011_multiuser(db) -> None:
         (Config.root_admin_id,),
     )
 
-    # shared_resources — what THIS instance has published for other instances to
+    # shared_resources; what THIS instance has published for other instances to
     # discover. The CLOSED shareable-kind vocabulary is enforced in Python
-    # (lhassa.org.sharing.SHAREABLE_TYPES), never in schema — but no column here
+    # (lhassa.org.sharing.SHAREABLE_TYPES), never in schema; but no column here
     # ever names "fact" or "episode" as a resource_type, so the private plane is
     # structurally absent from this table, not merely filtered out at read time.
     await db.execute("""
@@ -1332,9 +1334,9 @@ async def _migration_011_multiuser(db) -> None:
         ON shared_resources(instance_id, resource_type, resource_name)
     """)
 
-    # resource_subscriptions — what THIS instance has subscribed to from another
+    # resource_subscriptions; what THIS instance has subscribed to from another
     # instance's offerings. Always minted AFTER a permits() check (deny-by-default
-    # — see lhassa.org.sharing.subscribe): the row itself is not a grant, it is a
+    #; see lhassa.org.sharing.subscribe): the row itself is not a grant, it is a
     # record that a permitted subscription happened.
     await db.execute("""
         CREATE TABLE resource_subscriptions (
@@ -1381,7 +1383,7 @@ async def _validate_migration_011(db) -> None:
 
 
 async def _migration_012_answer_cache_embedder(db) -> None:
-    """``answer_cache.embedder`` — the embedder stamp that produced ``embedding``.
+    """``answer_cache.embedder``: the embedder stamp that produced ``embedding``.
 
     Mirrors the ``fact_embeddings.model`` stamp (migration 001's Phase 5 add):
     without it, ``memory.answer_cache.lookup`` has no way to tell whether a
@@ -1389,7 +1391,7 @@ async def _migration_012_answer_cache_embedder(db) -> None:
     a cosine comparison across embedders (garbage) looks identical to a real
     match. Existing rows all predate the stamp and were produced by the
     offline default (``HashingEmbedder.name``, hardcoded here rather than
-    imported — ``core/`` is inner to ``memory/`` and must not import it), so
+    imported; ``core/`` is inner to ``memory/`` and must not import it), so
     they backfill to that literal name; anything embedded after this
     migration carries the embedder that actually produced it.
     """
@@ -1406,6 +1408,34 @@ async def _validate_migration_012(db) -> None:
         raise MigrationValidationError(
             "invalid answer_cache schema: missing embedder"
         )
+
+
+async def _migration_013_postulacion_classification(db) -> None:
+    """``postulaciones.categoria`` + ``.prioridad``: a judgement worth keeping.
+
+    The brain already derived both on every render, an area for the role and a
+    rank against the owner's stated criteria, and then threw them away. So the
+    same application could read "critical" today and "high" tomorrow with
+    nothing about it having changed, and the owner had no way to correct a
+    classification, only to re-roll it. Storing them makes the judgement
+    reviewable and the dashboard $0 to redraw.
+
+    Both stay nullable with no backfill: a row nobody has classified is
+    honestly unclassified, and inventing a default would put a judgement in the
+    owner's mouth that neither of us made.
+    """
+    if not await _has_column(db, "postulaciones", "categoria"):
+        await db.execute("ALTER TABLE postulaciones ADD COLUMN categoria TEXT")
+    if not await _has_column(db, "postulaciones", "prioridad"):
+        await db.execute("ALTER TABLE postulaciones ADD COLUMN prioridad TEXT")
+
+
+async def _validate_migration_013(db) -> None:
+    for column in ("categoria", "prioridad"):
+        if not await _has_column(db, "postulaciones", column):
+            raise MigrationValidationError(
+                f"invalid postulaciones schema: missing {column}"
+            )
 
 
 MIGRATIONS = (
@@ -1431,6 +1461,12 @@ MIGRATIONS = (
         _migration_012_answer_cache_embedder,
         _validate_migration_012,
     ),
+    Migration(
+        13,
+        "postulacion-classification",
+        _migration_013_postulacion_classification,
+        _validate_migration_013,
+    ),
 )
 SCHEMA_VERSION = MIGRATIONS[-1].version
 
@@ -1446,7 +1482,7 @@ async def init_db() -> None:
         ensure_supported(version, SCHEMA_VERSION)
         await db.execute("PRAGMA journal_mode=WAL")
         await db.execute("PRAGMA busy_timeout=5000")
-        # Already brought this DB file to the current schema in THIS process —
+        # Already brought this DB file to the current schema in THIS process;
         # the migration/validation pass (the expensive part) is a no-op.
         if _MIGRATED_VERSIONS.get(key) == version:
             return

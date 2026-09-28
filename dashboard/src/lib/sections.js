@@ -1,4 +1,4 @@
-// Sidebar sections — the brain's command surfaces. Brains is the primary section.
+// Sidebar sections; the brain's command surfaces. Brains is the primary section.
 // The ids are load-bearing: they drive the hash routing (#<id>), localStorage
 // persistence, the nav rail, the mobile drawer title, and the command palette.
 export const SECTIONS = [
@@ -20,6 +20,7 @@ export const SECTIONS = [
   { id: 'integrity', label: 'Integrity', group: 'Operations' },
   { id: 'fleet', label: 'Readiness', group: 'Operations' },
   { id: 'calendar', label: 'Calendar', group: 'Operations' },
+  { id: 'postulaciones', label: 'Postulaciones', group: 'Operations' },
   { id: 'reports', label: 'Analytics', group: 'Operations' },
   { id: 'activity', label: 'Activity', group: 'Operations' },
   { id: 'settings', label: 'Settings', group: 'System' },

@@ -27,6 +27,7 @@ import ReportsPanel from './components/ReportsPanel'
 import ExecutionAnalyticsPanel from './components/ExecutionAnalyticsPanel'
 import FleetPanel from './components/FleetPanel'
 import CalendarPanel from './components/CalendarPanel'
+import ApplicationsPanel from './components/PostulacionesPanel'
 import HealthPanel from './components/HealthPanel'
 import SettingsPanel from './components/SettingsPanel'
 import ErrorBoundary from './components/ErrorBoundary'
@@ -134,6 +135,10 @@ export default function App() {
 
         {section === 'calendar' && (
           <ErrorBoundary><CalendarPanel /></ErrorBoundary>
+        )}
+
+        {section === 'postulaciones' && (
+          <ErrorBoundary><ApplicationsPanel /></ErrorBoundary>
         )}
 
         {section === 'reports' && (

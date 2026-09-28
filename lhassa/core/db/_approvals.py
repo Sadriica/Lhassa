@@ -186,7 +186,7 @@ async def resolve_approval(instance_id: str, approval_id: str, estado: str) -> b
     return cur.rowcount == 1
 
 
-# ── autonomy (the friction knob — consecutive human approvals) ──────────────────
+# ── autonomy (the friction knob; consecutive human approvals) ──────────────────
 
 async def get_autonomy_streak(instance_id: str, accion: str, actor_id: str) -> int:
     """Return the consecutive-human-approval streak for one (accion, actor_id).
@@ -234,7 +234,7 @@ async def reset_autonomy_streak(instance_id: str, accion: str, actor_id: str) ->
         await db.commit()
 
 
-# ── postulaciones (tracked applications — tracking_postulaciones task) ───────────
+# ── postulaciones (tracked applications; tracking_postulaciones task) ───────────
 
 async def add_postulacion(
     instance_id: str,
@@ -245,6 +245,8 @@ async def add_postulacion(
     fuente: str = "",
     link: str = "",
     notas: str = "",
+    categoria: str = "",
+    prioridad: str = "",
     postulacion_id: Optional[str] = None,
 ) -> str:
     """Insert one tracked application. Returns its id (generated if not supplied).
@@ -257,11 +259,11 @@ async def add_postulacion(
         await db.execute(
             """INSERT INTO postulaciones(
                    id, instance_id, empresa, rol, estado, fuente, link, notas,
-                   creado_en, actualizado_en)
-               VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                   categoria, prioridad, creado_en, actualizado_en)
+               VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 postulacion_id, instance_id, empresa, rol, estado, fuente, link,
-                notas, now, now,
+                notas, categoria, prioridad, now, now,
             ),
         )
         await db.commit()
@@ -274,6 +276,8 @@ async def update_postulacion_estado(
     estado: str,
     *,
     notas: Optional[str] = None,
+    categoria: Optional[str] = None,
+    prioridad: Optional[str] = None,
 ) -> bool:
     """Advance one application's ``estado`` (and optionally append/replace notas).
 
@@ -285,6 +289,15 @@ async def update_postulacion_estado(
     if notas is not None:
         sets.append("notas = ?")
         args.append(notas)
+    # Only overwrite a classification when one is actually supplied: a plain
+    # state change ("enviada" -> "entrevista") must not silently erase the
+    # category and priority the owner reviewed.
+    if categoria is not None:
+        sets.append("categoria = ?")
+        args.append(categoria)
+    if prioridad is not None:
+        sets.append("prioridad = ?")
+        args.append(prioridad)
     args.extend([instance_id, postulacion_id])
     async with aiosqlite.connect(_pkg().DB_PATH) as db:
         cur = await db.execute(
@@ -317,7 +330,7 @@ async def list_postulaciones(
             return [dict(row) for row in await cur.fetchall()]
 
 
-# ── artifacts (append-only work products — "Lhassa is the sender of record") ────
+# ── artifacts (append-only work products; "Lhassa is the sender of record") ────
 
 async def get_watch_state(instance_id: str, key: str) -> Optional[str]:
     """Return the stored value for ``key``, or ``None`` if not yet set.

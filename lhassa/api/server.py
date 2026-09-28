@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """
-FastAPI server — REST API + WebSocket fan-out + React static file serving.
+FastAPI server. REST API + WebSocket fan-out + React static file serving.
 Runs at http://127.0.0.1:7766 by default (configurable via LHASSA_API_HOST / LHASSA_API_PORT).
 
 This module is the INTEGRATOR: it constructs the app, installs the local-or-token
@@ -25,7 +25,7 @@ from lhassa.config import Config
 
 # Re-exported through this module for the runtime router's whole-state export/import
 # seam: ``/api/export`` + ``/api/import`` (in api.runtime_routes) resolve these as
-# ``server.load_facts`` / ``server.load_recent_sessions`` / … — the single seam the
+# ``server.load_facts`` / ``server.load_recent_sessions`` / …; the single seam the
 # endpoint tests patch. They are imported here (not used directly) on purpose.
 from lhassa.memory.store import (  # noqa: F401
     load_facts,
@@ -55,7 +55,7 @@ def _cors_origins() -> list[str]:
 # Methods/headers actually used by the REST surface (see api/*_routes.py). When an
 # explicit ``LHASSA_API_CORS_ORIGINS`` is configured (a production deployment naming
 # real origins), CORS is tightened to this closed set instead of "*". The default
-# (unconfigured, localhost-only) origins keep the permissive "*" behavior — that
+# (unconfigured, localhost-only) origins keep the permissive "*" behavior; that
 # path is already gated by the loopback/token check above and dev tooling (Vite,
 # curl, etc.) benefits from not having to match headers/methods exactly.
 _CORS_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
@@ -138,7 +138,7 @@ app.add_middleware(
 
 # ── Feature routers (each owns a cohesive slice of the REST surface) ──────────
 # Kept in their own modules; the integrator only mounts them. No router imports
-# ``server`` at load time (that would risk a cycle) — shared constants live in
+# ``server`` at load time (that would risk a cycle); shared constants live in
 # ``api/_shared.py`` and the few call-time seams import ``server`` lazily.
 from lhassa.api import (  # noqa: E402
     activity_routes,
@@ -169,8 +169,9 @@ from lhassa.api import (  # noqa: E402
 )
 
 # Re-exported for the CLI's ``lhassa status``, which reuses the aggregate in-process
-# (``lhassa.cli.extra_cmds`` imports ``server.build_overview`` — no HTTP round-trip).
+# (``lhassa.cli.extra_cmds`` imports ``server.build_overview``: no HTTP round-trip).
 from lhassa.api.overview_routes import build_overview  # noqa: F401,E402
+from lhassa.api.postulaciones_routes import router as postulaciones_routes
 
 app.include_router(task_routes.router)
 app.include_router(analytics_routes.router)
@@ -197,6 +198,7 @@ app.include_router(calendar_routes.router)
 app.include_router(project_routes.router)
 app.include_router(research_routes.router)
 app.include_router(share_routes.router)
+app.include_router(postulaciones_routes)
 
 
 # ── WebSocket ──────────────────────────────────────────────────────────────────
