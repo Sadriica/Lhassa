@@ -1,4 +1,4 @@
-"""Phase 4 tests — standing goals, watchlist senses, task routes, CLI parsing.
+"""Phase 4 tests; standing goals, watchlist senses, task routes, CLI parsing.
 
 All tests are FULLY OFFLINE: no network calls, no real provider.
 Migrations are tested against a temp DB created with the OLD schema then migrated.
@@ -261,7 +261,7 @@ async def test_repo_sense_seeds_then_fires(tmp_path, monkeypatch):
 
     from lhassa.core import watchlist
 
-    # Patch the Config binding that watchlist.py holds directly — this is stable
+    # Patch the Config binding that watchlist.py holds directly; this is stable
     # even if test_api_server.py reloaded lhassa.config and made the module-level
     # Config reference stale.
     monkeypatch.setattr(watchlist.Config, "watch_repos", "/fake/repo")
@@ -570,6 +570,23 @@ def test_cli_task_add_parses_recurrence():
     assert _parse_recurrence("7200s") == "7200"
     assert _parse_recurrence(None) is None
     assert _parse_recurrence("") is None
+
+
+def test_cli_task_list_detail_says_what_the_task_is():
+    """A column of bare action names cannot answer 'is my reminder in there?'."""
+    from lhassa.cli.task_cmds import _task_detail
+
+    assert _task_detail({"params": {"text": "deadline de Cohere"}}) == "deadline de Cohere"
+    assert _task_detail({"params": {"action": "calendar_sync"}}) == "calendar_sync"
+    # An unrecognized shape still says something rather than nothing.
+    assert _task_detail({"params": {"weird_key": "a subject"}}) == "a subject"
+    # Degrades quietly on the shapes a row can actually take.
+    assert _task_detail({"params": {}}) == ""
+    assert _task_detail({}) == ""
+    assert _task_detail({"params": None}) == ""
+    # Long text is cut, not wrapped into an unreadable column.
+    long_detail = _task_detail({"params": {"text": "x" * 200}})
+    assert len(long_detail) <= 46 and long_detail.endswith("…")
 
 
 def test_cli_task_add_parses_due():
