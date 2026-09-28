@@ -32,27 +32,36 @@ cirugía. Esa es toda la tesis: **construye el cerebro, alquila el cuerpo.**
 > minutos, y pensar (una llamada real a un modelo) es la excepción, no la
 > regla.
 
-## Para quién es
+## Qué es esto
 
-Lhassa es para ti si quieres un asistente que **es tuyo**: que corre en tu
-propia máquina, te recuerda entre cada sesión, no cuesta nada mantener
-despierto, y responde a un registro auditable que *tú* controlas. Una apuesta
-radical guía todo el diseño: **pensar es la excepción.** Un plano determinista
-de $0 resuelve casi todo; solo se toca un modelo cuando el juicio de verdad no
-se puede evitar. Todo lo demás; la soberanía, la memoria, las herramientas que
-se forja solo, el org de cerebros; sale de ahí.
+Lhassa es el **cerebro soberano** propio del autor: corre en su máquina, lo
+recuerda entre cada sesión, no cuesta nada mantener despierto, y responde a
+un registro auditable que el autor controla. Una apuesta radical guía todo el
+diseño: **pensar es la excepción.** Un plano determinista de $0 resuelve casi
+todo; solo se toca un modelo cuando el juicio de verdad no se puede evitar.
+Todo lo demás; la soberanía, la memoria, las herramientas que se forja solo,
+el org de cerebros; sale de ahí.
+
+El código es público (este repo, AGPL-3.0) por dos razones: es la
+implementación de referencia del diseño de arriba, y es la fuente de
+evidencia de un proyecto hermano de [Witara](https://witara.site) que
+necesita un sistema real con historial de uso real para poder medirse contra
+algo. No se ofrece aquí como producto hospedado ni como servicio para otras
+personas; si corres tu propia instancia, obtienes exactamente lo mismo que
+tiene el autor, nada alquilado, nada gestionado.
 
 A propósito, **no** es varias cosas:
 
-- **no es un chatbot hospedado**: vive en tu disco, no en la nube de otro;
-- **no es magia lista-para-usar**: traes tu propio cerebro (una llave de API,
-  o un modelo 100% local; nada se alquila de nosotros, porque no hay *nosotros*);
+- **no es un chatbot hospedado**: vive en disco, no en la nube de otro;
+- **no es magia lista-para-usar**: necesita su propio cerebro (una llave de
+  API, o un modelo 100% local; nada se alquila desde este proyecto, porque no
+  hay un servicio detrás);
 - **no es un framework para construir encima**: es un cerebro completo y
   opinionado, no un kit de piezas.
 
-Si "soberano, ambiente y $0 por defecto" es el trato que prefieres sobre "magia
-sin setup en la nube de otro", esto se hizo para ti. Si solo quieres abrir una
-app y chatear, un asistente hospedado te servirá mejor; y está bien.
+Si "soberano, ambiente y $0 por defecto" es un trato que te interesa, el
+código está aquí para leerlo, correrlo o bifurcarlo. Si quieres un asistente
+hospedado que solo abres y usas, esto no es eso, y está bien.
 
 ## Por qué Lhassa
 

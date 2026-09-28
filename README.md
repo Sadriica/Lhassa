@@ -36,28 +36,35 @@ the whole thesis: **build the brain, rent the body.**
 > state lives on disk, a heartbeat advances it one deterministic tick every two
 > minutes, and thinking (an actual model call) is the exception, not the rule.
 
-## Who it's for
+## What this is
 
-Lhassa is for you if you want an assistant you **own**: one that runs on your
-own machine, remembers you across every session, costs nothing to keep awake,
-and answers to an audit log *you* control. One radical bet drives the whole
-design: **thinking is the exception.** A deterministic, $0 plane handles almost
-everything; a model is touched only when judgment truly can't be avoided.
-Everything else; the sovereignty, the memory, the self-forged tools, the
-org of brains; follows from that.
+Lhassa is the author's own **sovereign brain**: it runs on the author's
+machine, remembers across every session, costs nothing to keep awake, and
+answers to an audit log the author controls. One radical bet drives the whole
+design: **thinking is the exception.** A deterministic, $0 plane handles
+almost everything; a model is touched only when judgment truly can't be
+avoided. Everything else; the sovereignty, the memory, the self-forged tools,
+the org of brains; follows from that.
+
+The code is public (this repo, AGPL-3.0) for two reasons: it is the reference
+implementation of the design above, and it is the evidence source for a
+sibling [Witara](https://witara.site) project that needs a real system with a
+real usage history to account against. It is not offered here as a hosted
+product or a service for other people; if you run your own instance, you get
+exactly what the author gets, nothing rented, nothing managed.
 
 It is, on purpose, **not** a few things:
 
-- **not a hosted chatbot**: it lives on your disk, not someone else's cloud;
-- **not plug-and-play magic**: you bring your own brain (one API key, or a
-  fully local model; nothing is rented from us, because there is no *us*);
+- **not a hosted chatbot**: it lives on disk, not someone else's cloud;
+- **not plug-and-play magic**: it needs your own brain (one API key, or a
+  fully local model; nothing is rented from this project, because there is
+  no service behind it);
 - **not a framework to build on**: it's a complete, opinionated brain, not a
   toolkit of parts.
 
-If "sovereign, ambient, and $0 by default" is the trade you'd take over
-"zero-setup magic in someone else's cloud," this was built for you. If you just
-want to open an app and chat, a hosted assistant will serve you better; and
-that's fine.
+If "sovereign, ambient, and $0 by default" is a trade you find interesting,
+the code is here to read, run and fork. If you want a hosted assistant you
+can just open and chat with, this is not that, and that's fine.
 
 ## Why Lhassa
 
