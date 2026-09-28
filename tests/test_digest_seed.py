@@ -1,4 +1,4 @@
-"""Tests for the ``digest`` seed (lhassa.seeds.digest) — Etapa 2's scheduled digest.
+"""Tests for the ``digest`` seed (lhassa.seeds.digest); Etapa 2's scheduled digest.
 
 Fully offline: the brain DB and signing key are redirected to tmp paths (the same
 seam ``test_approval.py`` uses), so nothing touches the owner's real ``~/.lhassa``.
@@ -75,7 +75,7 @@ def test_apply_is_idempotent_no_duplicate_schedule(cfg):
 
 
 def test_idempotency_is_per_slot_not_count(cfg):
-    """A DOUBLED morning slot must not mask a missing evening one — the seed is
+    """A DOUBLED morning slot must not mask a missing evening one; the seed is
     per-hour, so re-applying against two same-hour tasks still mints the absent
     evening (the real "two morning digests, no evening" bug)."""
     import asyncio
@@ -107,7 +107,7 @@ def test_idempotency_is_per_slot_not_count(cfg):
     assert minted_hour == evening_hour
 
     # The seed is non-destructive, so the pre-existing duplicate morning stays
-    # (that's for a cleanup to remove, not a seed) — but BOTH scheduled hours are
+    # (that's for a cleanup to remove, not a seed); but BOTH scheduled hours are
     # now covered: the point is that the evening slot got healed.
     tasks = asyncio.run(db.list_tasks("inst_personal", estado="pendiente"))
     hours = {
@@ -141,3 +141,59 @@ def test_schedule_falls_back_to_defaults_on_bad_override(cfg):
     cfg.digest_hour_morning = 99  # out of range → falls back to default
     cfg.digest_hour_evening = "not-an-int"
     assert digest_seed._schedule(cfg) == ((8, 0), (21, 0))
+
+
+# ── the optional midday slot ─────────────────────────────────────────────────
+
+
+def test_midday_slot_is_off_unless_configured(cfg):
+    """Everyone who has not asked for a third digest keeps getting two."""
+    assert not hasattr(cfg, "digest_hour_midday")  # an old config double
+    assert digest_seed._schedule(cfg) == ((8, 0), (21, 0))
+
+    cfg.digest_hour_midday = -1
+    assert digest_seed._schedule(cfg) == ((8, 0), (21, 0))
+
+
+def test_midday_slot_is_added_in_day_order(cfg):
+    cfg.digest_hour_midday = 13
+    assert digest_seed._schedule(cfg) == ((8, 0), (13, 0), (21, 0))
+
+
+def test_a_midday_slot_colliding_with_a_standing_one_is_not_doubled(cfg):
+    """Two tasks at the same hour would be two digests one after the other."""
+    cfg.digest_hour_midday = 8
+    assert digest_seed._schedule(cfg) == ((8, 0), (21, 0))
+
+
+def test_bad_midday_value_is_ignored_not_guessed(cfg):
+    for bad in (24, 99, "noon", None):
+        cfg.digest_hour_midday = bad
+        assert digest_seed._schedule(cfg) == ((8, 0), (21, 0))
+
+
+def test_applying_with_a_new_midday_slot_mints_only_the_missing_one(cfg):
+    """The seed is self-healing per slot, so turning the third one on later
+    adds it without disturbing (or duplicating) the two already scheduled."""
+    import asyncio
+
+    import lhassa.core.db as db
+
+    asyncio.run(digest_seed.seed_digest_schedule(cfg))
+    before = asyncio.run(db.list_tasks("inst_personal", estado="pendiente", limit=50))
+    assert len([t for t in before if t["accion"] == "send_digest"]) == 2
+
+    cfg.digest_hour_midday = 13
+    second = asyncio.run(digest_seed.seed_digest_schedule(cfg))
+    assert second["errors"] == []
+
+    after = [
+        t
+        for t in asyncio.run(db.list_tasks("inst_personal", estado="pendiente", limit=50))
+        if t["accion"] == "send_digest"
+    ]
+    assert len(after) == 3
+    hours = sorted(
+        datetime.fromisoformat(t["due_at"]).astimezone().hour for t in after
+    )
+    assert hours == [8, 13, 21]

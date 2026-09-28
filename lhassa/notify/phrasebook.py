@@ -1,29 +1,29 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""The action phrasebook — a natural, first-person lead for every action-result
+"""The action phrasebook; a natural, first-person lead for every action-result
 notification, so nothing that reaches the owner reads like a log line.
 
 Without this table :func:`lhassa.notify.voice._clean_action_result` falls back
 to a mechanical ``"Title-Case-Action: <raw detail>"`` rendering (e.g.
 ``"Check-spend: 2040 output tokens today..."``) for any action it doesn't
-recognize — still readable, but not Lhassa speaking. :data:`PHRASES` covers
+recognize; still readable, but not Lhassa speaking. :data:`PHRASES` covers
 every action the owner can actually be told about (the closed union of
 :func:`lhassa.security.allowlist.build_allowlist` and
 :data:`lhassa.actionpack._temple.TEMPLE_ACTIONS`); ``tests/test_notify_phrasebook.py``
-is the parity guard — it fails the moment a new allowlisted action ships with
+is the parity guard; it fails the moment a new allowlisted action ships with
 no entry here, the same pattern already proven for other closed-set tables in
 this codebase (see e.g. ``tests/test_knowledge_temple.py``).
 
 **The lesson already paid for once**: a phrasing is worthless unless it is
 checked against the action's REAL return string (grep the actual
-``return f"..."`` in the actionpack module), never an invented one — two
+``return f"..."`` in the actionpack module), never an invented one; two
 phrasings shipped dead in an earlier pass because nobody did that. Every entry
 below was verified against its action's current return shape before landing.
 
 :data:`INTENT_OVERRIDES` implements "templates by intent, not only by kind"
 (Stream 4, point 5): most action-results are simply "I finished something"
-(the default ``action-result`` framing, "Done — "), but a few are better read
-as "something needs your attention" (``alert``, "Heads up — ") or "I learned
-something" (``learned``, "I learned something — "). :func:`intent_for` is the
+(the default ``action-result`` framing, "Done: "), but a few are better read
+as "something needs your attention" (``alert``, "Heads up: ") or "I learned
+something" (``learned``, "I learned something: "). :func:`intent_for` is the
 lookup :mod:`lhassa.notify.voice` calls to pick the outer framing.
 """
 
@@ -76,8 +76,9 @@ PHRASES: dict[str, str] = {
     "attach_project_template": "I attached a project template",
     "draft_research_note": "I drafted a research note",
     "research_intake": "I took in a research idea",
-    # ── Org — real delegation ──────────────────────────────────────────────
+    # ── Org; real delegation ──────────────────────────────────────────────
     "org_run": "I delegated the work",
+    "run_flow": "I ran one of your work-flows",
     # ── Self-improvement ────────────────────────────────────────────────────
     "detect_repetition": "I looked for repeating patterns",
     "review_tools": "I reviewed self-written tools",
@@ -95,8 +96,8 @@ PHRASES: dict[str, str] = {
     "send_reminder": "I sent a reminder",
 }
 
-# Actions whose action-result is better framed as "I learned something — "
-# than the default "Done — ": they ADD to what Lhassa knows rather than just
+# Actions whose action-result is better framed as "I learned something: "
+# than the default "Done: ": they ADD to what Lhassa knows rather than just
 # finishing a chore.
 LEARNED_ACTIONS: frozenset[str] = frozenset(
     {
@@ -111,8 +112,8 @@ LEARNED_ACTIONS: frozenset[str] = frozenset(
     }
 )
 
-# Actions whose action-result surfaces a finding that deserves "Heads up — "
-# rather than a plain "Done — ": completion isn't the point, the finding is.
+# Actions whose action-result surfaces a finding that deserves "Heads up: "
+# rather than a plain "Done: ": completion isn't the point, the finding is.
 ATTENTION_ACTIONS: frozenset[str] = frozenset(
     {
         "detect_repetition",
@@ -133,7 +134,7 @@ def phrase_for(action: str) -> "str | None":
 def intent_for(action: str) -> str:
     """The notify-voice framing key for ``action``'s action-result.
 
-    One of ``"learned"`` / ``"alert"`` / ``"action-result"`` (the default) —
+    One of ``"learned"`` / ``"alert"`` / ``"action-result"`` (the default);
     see :data:`lhassa.persona.LEAD_PHRASES` for what each renders as.
     """
     if action in LEARNED_ACTIONS:

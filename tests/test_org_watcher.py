@@ -1,4 +1,4 @@
-"""Tests for lhassa.org.watcher — the always-on, $0 monitor watcher.
+"""Tests for lhassa.org.watcher; the always-on, $0 monitor watcher.
 
 Fully offline + $0: ``gather_signals`` / ``notify`` / ``asyncio.sleep`` are patched,
 no real loop ever spins and no model is ever called. The pure helpers
@@ -81,7 +81,7 @@ def test_detect_new_failures():
 
 
 def test_detect_new_failures_names_them_without_a_total():
-    """The alert quotes WHAT is new this tick — never the standing total, which
+    """The alert quotes WHAT is new this tick; never the standing total, which
     read as if the whole backlog had just failed."""
     prev = _snap()
     curr = _snap()
@@ -89,12 +89,49 @@ def test_detect_new_failures_names_them_without_a_total():
     ev = watcher.detect_events(prev, curr)
     fail = [e for e in ev if e["kind"] == "failures_new"]
     assert len(fail) == 1
-    assert fail[0]["summary"] == "1 new failure(s): distill_memory"
+    assert fail[0]["summary"] == "1 new failure: distill_memory"
     assert "total" not in fail[0]["summary"]
 
 
+def test_a_failure_is_named_by_its_outcome_not_its_intent():
+    """The owner is told what WENT WRONG, not what the brain set out to do.
+
+    The regression: the summary was built from ``decision``, which states the
+    intent ("guardian executes check_integrity"), so an alert about a failed
+    integrity check read like a status update and never said it failed. The
+    outcome lives in ``resultado``; the internal hop trail and the run id are
+    plumbing and are stripped.
+    """
+    curr = _snap()
+    curr["failures"] = [
+        {
+            "id": "ep_a",
+            "decision": "guardian executes check_integrity",
+            "accion": "check_integrity",
+            "resultado": (
+                "check_integrity: fail; 1 critical and 1 warning "
+                "(run conf_a7aeb7e8) · reports ↑ temple"
+            ),
+        }
+    ]
+    summary = watcher.detect_events(_snap(), curr)[0]["summary"]
+    assert summary == "1 new failure: check_integrity: fail; 1 critical and 1 warning"
+    assert "executes" not in summary  # the intent never stands in for the outcome
+    assert "↑" not in summary and "run conf_" not in summary  # plumbing stripped
+
+
+def test_a_failure_with_no_resultado_still_names_something():
+    """An episode with no outcome recorded degrades to decision, then accion."""
+    curr = _snap()
+    curr["failures"] = [{"id": "ep_a", "accion": "distill_memory", "resultado": "  "}]
+    assert "distill_memory" in watcher.detect_events(_snap(), curr)[0]["summary"]
+
+    curr["failures"] = [{"id": "ep_b"}]
+    assert "episode" in watcher.detect_events(_snap(), curr)[0]["summary"]
+
+
 def test_detect_new_failures_by_identity_not_count():
-    """An old failure aging OUT while a new one arrives keeps the count flat —
+    """An old failure aging OUT while a new one arrives keeps the count flat;
     the id diff still reports the genuinely new one."""
     prev = _snap()
     prev["failures"] = [{"id": "ep_old", "decision": "org: deferred"}]
@@ -153,6 +190,50 @@ def test_is_active_reflects_agent_runs(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_an_already_delivered_event_is_logged_but_not_pushed(tmp_path, monkeypatch):
+    """The watcher does not send a second message about work it delegated.
+
+    It is the CLOCK for the conformance pass, not its discoverer: it runs
+    check_integrity down the chart and the result comes back up through
+    ``org.deliver``, which already tells the owner in the owner's own words.
+    Pushing the watcher's own line too put two differently-worded toasts about
+    one run side by side, one of them machine-worded with a run id. The event
+    is still logged, and can still become work through the delegation seam.
+    """
+    db = await _init_db(tmp_path, monkeypatch)
+    calls: list[tuple] = []
+
+    async def fake_notify(text, *, level="info", config=None, **_kwargs):
+        calls.append((text, level))
+        return True
+
+    import lhassa.notify.dispatch as dispatch
+
+    monkeypatch.setattr(dispatch, "notify", fake_notify)
+
+    delivered = [
+        {
+            "kind": "conformance_failed",
+            "level": "alert",
+            "summary": "integrity=fail: 1 critical, 0 warning finding(s) (run conf_x)",
+            "already_delivered": True,
+        }
+    ]
+    r = await watcher.react(delivered, department="interns", config=_cfg())
+    assert r["notified"] is False
+    assert calls == []  # no second toast
+
+    eps = await db.load_recent_episodes("inst_personal", 10)
+    assert [e for e in eps if e.get("despertar_por") == "monitor"]  # still logged
+
+    # The same event WITHOUT the flag is a normal push; the suppression is the
+    # delivery, never the kind.
+    undelivered = [{k: v for k, v in delivered[0].items() if k != "already_delivered"}]
+    r2 = await watcher.react(undelivered, department="interns", config=_cfg())
+    assert r2["notified"] is True and len(calls) == 1
+
+
+@pytest.mark.asyncio
 async def test_react_logs_episode_notifies_important_and_dedupes(tmp_path, monkeypatch):
     db = await _init_db(tmp_path, monkeypatch)
 
@@ -167,13 +248,17 @@ async def test_react_logs_episode_notifies_important_and_dedupes(tmp_path, monke
     monkeypatch.setattr(dispatch, "notify", fake_notify)
 
     important = [
-        {"kind": "failures_new", "level": "alert", "summary": "2 new failure(s) (total 2)"}
+        {"kind": "failures_new", "level": "alert", "summary": "2 new failures: gate refused"}
     ]
 
     r1 = await watcher.react(important, department="interns", config=_cfg())
     assert r1["notified"] is True
     assert len(calls) == 1 and calls[0][1] == "error"
-    assert "monitor · interns" in calls[0][0]
+    # The message says WHAT happened; the internal seat that noticed it
+    # ("monitor · interns: ") was org plumbing to the one person reading this,
+    # and its attribution lives on the episode instead.
+    assert "2 new failures: gate refused" in calls[0][0]
+    assert "monitor ·" not in calls[0][0] and "interns" not in calls[0][0]
 
     # De-dupe: an identical STANDING important set does not re-notify …
     await watcher.react(important, department="interns", config=_cfg())
@@ -461,7 +546,7 @@ def test_run_forever_disabled_is_a_noop(monkeypatch):
     assert rc == 0
 
 
-# ── Etapa 2 — Approve/Deny inline keyboard on new-approval alerts ─────────────
+# ── Etapa 2. Approve/Deny inline keyboard on new-approval alerts ─────────────
 
 
 @pytest.mark.asyncio
@@ -523,7 +608,7 @@ def test_repeated_failure_reasons_are_grouped_with_a_tally():
 
     The regression: five hygiene tasks refused by the same gate rendered as
     "rejected by task signature gate; rejected by task signature gate; rejected
-    by task signature gate (+1 more)" — which hid both the real count and the
+    by task signature gate (+1 more)": which hid both the real count and the
     fact that there was only ONE distinct cause.
     """
     from lhassa.org.watcher import detect_events
@@ -536,7 +621,7 @@ def test_repeated_failure_reasons_are_grouped_with_a_tally():
     }
     events = detect_events({"failures": []}, curr)
     summaries = [e["summary"] for e in events]
-    assert summaries == ["4 new failure(s): rejected by task signature gate ×4"]
+    assert summaries == ["4 new failures: rejected by task signature gate ×4"]
 
 
 def test_distinct_failure_reasons_are_each_named_once():
