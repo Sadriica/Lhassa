@@ -1,17 +1,17 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """
-Fixed, deterministic actions — the "do" half of "hace y duerme" (§2.4).
+Fixed, deterministic actions; the "do" half of "hace y duerme" (§2.4).
 
 A trigger that maps to one of these runs in code with ZERO tokens: no model,
 no judgment. The router/think branch (§2.4, Phase 2) is the *other* path; this
 module is only the closed set of typed actions the brain can execute directly.
 
 Each action is a callable ``(params: dict) -> str`` that returns a short outcome
-string and NEVER raises — failures are captured and reported as text so the
+string and NEVER raises; failures are captured and reported as text so the
 episode always records *what happened*. The registry ``ACTIONS`` is the closed
 set; ``watchlist.Trigger.maps_to_fixed_action`` checks membership against it.
 
-First typed action: ``sync_repo`` (``git pull --ff-only``), per §2.5 — a check-in
+First typed action: ``sync_repo`` (``git pull --ff-only``), per §2.5; a check-in
 reconciliation step, not a push.
 """
 
@@ -52,11 +52,11 @@ def _short(text: str, limit: int = 300) -> str:
 def sync_repo(params: dict) -> str:
     """
     Reconcile a local git repo to its remote with ``git -C <dir> pull --ff-only``
-    (§2.5: ``git pull`` is reconciliation). Fast-forward only — never creates a
+    (§2.5: ``git pull`` is reconciliation). Fast-forward only; never creates a
     merge commit, so a diverged repo fails loudly instead of guessing.
 
     ``params``:
-        repo_dir / objetivo / dir / path — the repository directory (required).
+        repo_dir / objetivo / dir / path; the repository directory (required).
 
     Returns a short outcome string. Guards a missing/blank dir and a dir that is
     not a git repo; captures stdout/stderr; never raises.
@@ -97,24 +97,24 @@ def sync_repo(params: dict) -> str:
 
 async def tracking_postulaciones(params: dict) -> str:
     """
-    Track job/internship applications (CVs sent) in the brain DB — the second
+    Track job/internship applications (CVs sent) in the brain DB; the second
     typed task (§2.5) and the first concrete MCP-backed one. Deterministic and
     offline: all add/update/list work hits the local ``postulaciones`` table.
 
     ``params``:
-        op / accion — "add" | "update" | "list" (default "list").
-        instance_id — isolation scope (default ``Config.instance_id``).
+        op / accion; "add" | "update" | "list" (default "list").
+        instance_id; isolation scope (default ``Config.instance_id``).
         add:    empresa (required), rol, estado, fuente, link, notas.
         update: id (required), estado (required), notas (optional).
         list:   estado (optional filter).
-        mcp_pull / mcp_tool — OPTIONAL, guarded external top-up (see below).
+        mcp_pull / mcp_tool. OPTIONAL, guarded external top-up (see below).
 
     Optional MCP pull (guarded): if ``mcp_pull`` (a sync/async callable returning
     a list of ``{empresa, rol, estado, fuente, link, notas}`` dicts) is supplied,
     or ``mcp_tool`` names a registered MCP tool, the action MAY pull updates from
     an external source (email/sheet) and insert them before answering. The pull is
     wrapped so a missing SDK / unreachable server NEVER breaks the deterministic
-    core — it just adds nothing. Tests inject ``mcp_pull`` to stay fully offline.
+    core; it just adds nothing. Tests inject ``mcp_pull`` to stay fully offline.
 
     Returns a short summary string and NEVER raises.
     """
@@ -143,6 +143,8 @@ async def tracking_postulaciones(params: dict) -> str:
                 fuente=str(params.get("fuente") or ""),
                 link=str(params.get("link") or ""),
                 notas=str(params.get("notas") or ""),
+                categoria=str(params.get("categoria") or ""),
+                prioridad=str(params.get("prioridad") or ""),
             )
             rol = params.get("rol")
             rol_str = f" ({rol})" if rol else ""
@@ -154,9 +156,13 @@ async def tracking_postulaciones(params: dict) -> str:
             if not pid or not estado:
                 return "tracking_postulaciones: 'id' and 'estado' are required to update"
             notas = params.get("notas")
+            categoria = params.get("categoria")
+            prioridad = params.get("prioridad")
             ok = await db.update_postulacion_estado(
                 instance_id, pid, estado,
                 notas=str(notas) if notas is not None else None,
+                categoria=str(categoria) if categoria is not None else None,
+                prioridad=str(prioridad) if prioridad is not None else None,
             )
             if not ok:
                 return f"tracking_postulaciones: no encontrada {pid}{pulled_note}"
@@ -172,6 +178,8 @@ async def tracking_postulaciones(params: dict) -> str:
             return f"tracking_postulaciones: 0 postulaciones{pulled_note}"
         head = ", ".join(
             f"{r['empresa']}{(' ' + r['rol']) if r['rol'] else ''}={r['estado']}"
+            + (f" [{r['categoria']}]" if r.get("categoria") else "")
+            + (f" p={r['prioridad']}" if r.get("prioridad") else "")
             for r in rows[:5]
         )
         more = f" …(+{len(rows) - 5})" if len(rows) > 5 else ""
@@ -227,7 +235,7 @@ async def _pull_postulaciones(instance_id: str, params: dict) -> int:
 
 # ── registry + dispatch ──────────────────────────────────────────────────────────
 
-# The set of fixed deterministic actions (no LLM) lives in a ``Registry`` — the
+# The set of fixed deterministic actions (no LLM) lives in a ``Registry``: the
 # shared swap-point primitive (``lhassa/registry.py``). This makes actions a
 # **drop-in** capability: a plugin module can ``@register_action("x")`` a new
 # typed action WITHOUT editing this file (the elastic/modular principle), and a
@@ -256,7 +264,7 @@ register_action("tracking_postulaciones", tracking_postulaciones)
 # Backward-compatible module-level mapping. It is a LIVE, read-only view of the
 # registry's backing store, so existing consumers keep working byte-for-byte:
 # ``watchlist`` does ``action in actions.ACTIONS`` and this module's ``run`` reads
-# it — both supported (``in``/``[]``/``.get()``/``len()``/iteration) — while later
+# it; both supported (``in``/``[]``/``.get()``/``len()``/iteration); while later
 # ``register_action`` calls (incl. from plugins) are reflected automatically. It is
 # read-only so nothing can bypass the registry's duplicate-protection by assigning.
 ACTIONS: "Any" = _REGISTRY.as_mapping()
@@ -273,7 +281,7 @@ def register_precondition(name: str, fn: "Callable[[dict], str]") -> None:
     """Declare when ``name`` is capable of doing anything at all.
 
     A precondition answers "could this possibly produce a result?", NOT "should
-    this run?" — it is for the structurally impossible case: a feature flag off,
+    this run?": it is for the structurally impossible case: a feature flag off,
     nothing configured to read. Four scheduled actions were running on a daily
     cadence with no calendar, no knowledge roots and the graph disabled, and each
     no-op still cost a full down-execute-up delivery trail; between them they were
@@ -292,7 +300,7 @@ def precondition_unmet(action: str, params: "dict | None" = None) -> str:
     """Why ``action`` cannot act right now, or ``""`` when it can.
 
     FAIL-OPEN by design: no precondition, or one that raises, means runnable. A
-    buggy capability check must never be able to silence a working action —
+    buggy capability check must never be able to silence a working action;
     running an action that then reports a no-op is a far cheaper mistake than
     silently disabling maintenance.
     """
