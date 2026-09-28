@@ -1,9 +1,9 @@
-"""``lhassa flow`` — the singular work-flow lifecycle (create/edit/validate/run/…).
+"""``lhassa flow``: the singular work-flow lifecycle (create/edit/validate/run/…).
 
 Every test is offline: a tmp flows file and a tmp brain DB. The load-bearing
 invariant asserted here is that a CLI run goes through
 ``lhassa.org.delegate.delegate_flow`` and NEVER through
-``lhassa.flows.engine.run_flow`` directly — a flow is never run bare.
+``lhassa.flows.engine.run_flow`` directly; a flow is never run bare.
 """
 
 from __future__ import annotations
@@ -127,6 +127,35 @@ def test_edit_never_persists_an_invalid_buffer(cli, monkeypatch, tmp_path):
     assert result.exit_code == 1
     assert _flows(tmp_path)["fragile"] == before
     assert "preserved at" in result.output
+
+
+def test_edit_from_json_persists_without_an_editor(cli, monkeypatch, tmp_path):
+    """The non-interactive path is what lets Lhassa author its own flows."""
+    cli("flow", "create", "Headless")
+
+    def explode(argv):  # an editor must never be launched on this path
+        raise AssertionError("--from-json must not open an editor")
+
+    monkeypatch.setattr("lhassa.cli.flow_cmds.subprocess.call", explode)
+    doc = _flows(tmp_path)["headless"]
+    doc["description"] = "authored headlessly"
+    src = tmp_path / "flow.json"
+    src.write_text(json.dumps(doc), encoding="utf-8")
+
+    result = cli("flow", "edit", "headless", "--from-json", str(src))
+    assert result.exit_code == 0, result.output
+    assert _flows(tmp_path)["headless"]["description"] == "authored headlessly"
+
+
+def test_edit_from_json_rejects_an_invalid_document(cli, monkeypatch, tmp_path):
+    cli("flow", "create", "Guarded")
+    before = _flows(tmp_path)["guarded"]
+    src = tmp_path / "bad.json"
+    src.write_text("{ not json", encoding="utf-8")
+
+    result = cli("flow", "edit", "guarded", "--from-json", str(src))
+    assert result.exit_code == 1
+    assert _flows(tmp_path)["guarded"] == before  # store untouched
 
 
 # ── run (the delegate_flow invariant) ────────────────────────────────────────────

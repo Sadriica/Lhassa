@@ -1,4 +1,4 @@
-"""Tests for lhassa.llm.gateway — cache, daily budget, and cost ledger.
+"""Tests for lhassa.llm.gateway; cache, daily budget, and cost ledger.
 
 All tests run fully offline: a fake completion callable stands in for the
 provider, and the gateway DB is redirected to a tmp_path file so the real
@@ -22,7 +22,7 @@ from lhassa.state import state
 
 
 class FakeConfig:
-    """Minimal stand-in for lhassa.config.Config — only the fields the gateway reads."""
+    """Minimal stand-in for lhassa.config.Config; only the fields the gateway reads."""
 
     def __init__(
         self,
@@ -66,7 +66,7 @@ def make_fake_tools_completion(
     return fake, calls
 
 
-# A representative tool schema (shape is opaque to the gateway — it just hashes it).
+# A representative tool schema (shape is opaque to the gateway; it just hashes it).
 TOOLS = [
     {
         "type": "function",
@@ -470,7 +470,7 @@ async def test_tool_turn_cost_correct_for_known_model(gw, metrics_guard):
     assert rows[-1]["cost_usd"] == pytest.approx(expected)
 
 
-# ── spend_summary — "spend as a signal" ─────────────────────────────────────
+# ── spend_summary; "spend as a signal" ─────────────────────────────────────
 
 
 async def test_spend_summary_reports_tokens_budget_pct_and_cost(gw, metrics_guard):
@@ -526,3 +526,66 @@ async def test_module_level_spend_summary_wraps_default_gateway(monkeypatch, met
     result = await gw_mod.spend_summary(cfg)
     assert result["pct_used"] == 0.5
     assert called["config"] is cfg
+
+
+# ── Reasoning models (DeepSeek V4): the answer must survive the thinking ─────
+
+
+class ReasoningConfig(FakeConfig):
+    """A FakeConfig carrying the two reasoning knobs the gateway reads."""
+
+    def __init__(self, *, mode="auto", floor=2048, **kwargs):
+        super().__init__(llm_provider="deepseek", model="deepseek-v4-flash", **kwargs)
+        self.deepseek_reasoning = mode
+        self.deepseek_reasoning_min_tokens = floor
+
+
+def test_is_reasoning_model_matches_the_v4_family_only():
+    from lhassa.llm.gateway import _is_reasoning_model
+
+    assert _is_reasoning_model("deepseek-v4-flash")
+    assert _is_reasoning_model("deepseek-v4-pro")
+    assert _is_reasoning_model("deepseek-reasoner")
+    assert not _is_reasoning_model("deepseek-chat")
+    assert not _is_reasoning_model("llama-3.3-70b-versatile")
+    assert not _is_reasoning_model("")
+
+
+def test_auto_disables_reasoning_for_a_bounded_call():
+    """The bug this fixes: a 200-token persona pass spent its whole budget on
+    reasoning_content and returned an EMPTY message to the owner."""
+    from lhassa.llm.gateway import _reasoning_kwargs
+
+    cfg = ReasoningConfig()
+    assert _reasoning_kwargs(cfg, cfg.model, 200) == {"reasoning_effort": "none"}
+
+
+def test_auto_keeps_reasoning_when_the_budget_fits_both():
+    from lhassa.llm.gateway import _reasoning_kwargs
+
+    cfg = ReasoningConfig()
+    assert _reasoning_kwargs(cfg, cfg.model, 4096) == {}
+
+
+def test_reasoning_modes_off_and_on_are_absolute():
+    from lhassa.llm.gateway import _reasoning_kwargs
+
+    assert _reasoning_kwargs(ReasoningConfig(mode="off"), "deepseek-v4-pro", 99999) == {
+        "reasoning_effort": "none"
+    }
+    assert _reasoning_kwargs(ReasoningConfig(mode="on"), "deepseek-v4-pro", 10) == {}
+
+
+def test_a_non_reasoning_model_is_never_touched():
+    from lhassa.llm.gateway import _reasoning_kwargs
+
+    cfg = ReasoningConfig(mode="off")
+    assert _reasoning_kwargs(cfg, "claude-opus-4-8", 10) == {}
+
+
+def test_missing_knobs_default_to_auto():
+    """An older Config (or a test double) without the knobs still gets the fix."""
+    from lhassa.llm.gateway import _reasoning_kwargs
+
+    cfg = FakeConfig(llm_provider="deepseek", model="deepseek-v4-flash")
+    assert _reasoning_kwargs(cfg, cfg.model, 200) == {"reasoning_effort": "none"}
