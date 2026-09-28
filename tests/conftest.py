@@ -166,12 +166,22 @@ def _reset_seen_telegram_updates():
     correct for one long-lived poller and wrong for a suite where each test is
     a fresh poller reusing small ids: without this, the second test to use
     ``update_id`` 200 has its update silently dropped as a redelivery.
+
+    Also resets the poller's other module-level state (held CVs, armed
+    base-CV requests, chat history/turn counters, sticky topic): same
+    process-local-state-outlives-a-poll hazard, just for different dicts.
+    Without this, whichever test happened to run first for a given chat id
+    left its conversation state behind for the next test that reused it,
+    which is exactly the kind of order-dependent flake
+    ``tests/test_telegram_inbound.py`` was seeing.
     """
     from lhassa.notify import telegram_inbound
 
     telegram_inbound.reset_seen_updates()
+    telegram_inbound.reset_conversation_state()
     yield
     telegram_inbound.reset_seen_updates()
+    telegram_inbound.reset_conversation_state()
 
 
 @pytest.fixture

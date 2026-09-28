@@ -101,6 +101,24 @@ def reset_seen_updates() -> None:
     _seen_update_ids.clear()
     _seen_update_ids_set.clear()
 
+
+def reset_conversation_state() -> None:
+    """Forget every chat's in-memory conversation/CV state.
+
+    Mirrors :func:`reset_seen_updates`: the poller is meant to be one
+    long-lived process, so ``_CHAT_HISTORY`` / ``_CHAT_TURNS`` / ``_CHAT_TOPIC``
+    / ``_PENDING_CV`` / ``_AWAIT_BASE`` are all plain module-level dicts keyed
+    by chat id, never reset. A test suite reusing small chat ids across tests
+    is not one long-lived process, so without this, a later test can silently
+    inherit an earlier test's held CV, armed base-CV request, sticky topic or
+    conversation history. Call between tests, same as ``reset_seen_updates``.
+    """
+    _CHAT_HISTORY.clear()
+    _CHAT_TURNS.clear()
+    _CHAT_TOPIC.clear()
+    _PENDING_CV.clear()
+    _AWAIT_BASE.clear()
+
 # A chat turn is a short answer, not a long job. The actual per-turn cap now
 # comes from the resolved effort profile (Plan 4, Stream 1 — see
 # ``lhassa.notify.task_router``); this stays only as the retry floor below.
