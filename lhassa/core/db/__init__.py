@@ -2,26 +2,26 @@
 """
 Facade package for the former monolithic ``lhassa/core/db.py``.
 
-Async SQLite store for the "grande" — the append-only source of truth. This
+Async SQLite store for the "grande": the append-only source of truth. This
 package re-exports the FULL public+monkeypatch-seam surface of the original
 flat module, split into domain submodules purely for readability:
 
-  ``_conn``      — connection helpers, serialization, migrations, ``init_db``
-  ``_episodes``  — episode log (append-only) + FTS5 recall
-  ``_tasks``     — tasks, jobs, desired state, deferred-retry sweep, loops
-  ``_approvals`` — approvals, owner prompts, autonomy streaks, watch_state
-  ``_facts``     — facts, fact embeddings, answer cache, knowledge chunks
-  ``_kg``        — the persisted knowledge graph (entities + edges)
-  ``_org``       — org messages, commons, cross-instance sharing
-  ``_projects``  — runs/run_steps, artifacts, projects, project brains, bench runs
-  ``_misc``      — idea assessments, conformance runs, self-written tools
+  ``_conn``     : connection helpers, serialization, migrations, ``init_db``
+  ``_episodes`` : episode log (append-only) + FTS5 recall
+  ``_tasks``    : tasks, jobs, desired state, deferred-retry sweep, loops
+  ``_approvals``: approvals, owner prompts, autonomy streaks, watch_state
+  ``_facts``    : facts, fact embeddings, answer cache, knowledge chunks
+  ``_kg``       : the persisted knowledge graph (entities + edges)
+  ``_org``      : org messages, commons, cross-instance sharing
+  ``_projects`` : runs/run_steps, artifacts, projects, project brains, bench runs
+  ``_misc``     : idea assessments, conformance runs, self-written tools
 
 ``from lhassa.core import db`` + ``db.<any function>`` and ``from
 lhassa.core.db import <name>`` both keep working identically to the flat
 module. Every submodule looks up ``DB_PATH``/``_now``/``_dumps``/``_loads``/
 ``_new_id`` through this package at CALL time (see ``_conn.py:_pkg()``) so
 ``monkeypatch.setattr(db, "DB_PATH", ...)`` (and friends) is honored no
-matter which submodule actually runs the code — the same pattern
+matter which submodule actually runs the code; the same pattern
 ``lhassa/notify/commands/_ai.py`` uses for its own cross-module seam.
 """
 
@@ -86,6 +86,7 @@ from ._tasks import (
     load_pending_tasks,
     get_task,
     list_tasks,
+    set_task_recurrence,
     set_task_state,
     sweep_deferred_tasks,
     record_job,
@@ -339,6 +340,7 @@ __all__ = [
     "search_episodes",
     "set_commons",
     "set_org_message_status",
+    "set_task_recurrence",
     "set_task_state",
     "set_watch_state",
     "start_conformance_run",

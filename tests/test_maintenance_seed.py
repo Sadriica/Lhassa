@@ -114,7 +114,7 @@ async def test_a_wrapped_maintenance_task_runs_through_temple(tmp_path, monkeypa
     monkeypatch.setattr(notify_dispatch, "notify", fake_notify)
 
     # distill_memory with no episodes to distill degrades to a cheap no-op string
-    # — we only care that it ran and the temple chain logged, not its content.
+    #; we only care that it ran and the temple chain logged, not its content.
     from lhassa.actionpack._temple import temple_run
 
     cfg = SimpleNamespace(
@@ -137,3 +137,89 @@ def test_unwrapped_action_is_refused():
 
     result = _asyncio.run(temple_run({"action": "run_command"}))
     assert "not routed through temple" in result
+
+
+# ── retuning a cadence that changed in the declaration ───────────────────────
+
+
+def test_a_changed_cadence_retunes_the_live_task(_db, monkeypatch):
+    """The declaration table is the source of truth for HOW OFTEN.
+
+    Before this, the seed could only mint or skip, so editing an interval
+    changed nothing for an already-seeded brain: `ingest_knowledge` was moved
+    from weekly to daily and the live task stayed weekly forever. The edit
+    looked applied and was not.
+    """
+    import sqlite3
+
+    monkeypatch.setattr(
+        maint_seed, "_RECURRING_ACTIONS", (("distill_memory", 604800),)
+    )
+    maint_seed.seed_maintenance(_Cfg())
+
+    con = sqlite3.connect(str(_db.DB_PATH))
+    assert con.execute("SELECT recurrence FROM tasks").fetchone()[0] == "604800"
+
+    monkeypatch.setattr(
+        maint_seed, "_RECURRING_ACTIONS", (("distill_memory", 86400),)
+    )
+    summary = maint_seed.seed_maintenance(_Cfg())
+    assert summary["retuned"] == ["distill_memory"]
+    assert summary["created"] == [] and summary["errors"] == []
+
+    con = sqlite3.connect(str(_db.DB_PATH))
+    rows = con.execute("SELECT recurrence FROM tasks").fetchall()
+    assert len(rows) == 1 and rows[0][0] == "86400"  # retuned in place, not doubled
+
+
+def test_a_retune_to_a_shorter_interval_pulls_the_next_run_in(_db, monkeypatch):
+    """Half an applied fix: the cadence changes but the next occurrence was
+    scheduled under the OLD one, so a weekly task retuned to daily still sleeps
+    out its original weekly slot and nothing appears to have happened."""
+    import sqlite3
+    from datetime import datetime, timedelta, timezone
+
+    monkeypatch.setattr(
+        maint_seed, "_RECURRING_ACTIONS", (("distill_memory", 604800),)
+    )
+    maint_seed.seed_maintenance(_Cfg())
+
+    far = (datetime.now(timezone.utc) + timedelta(days=6)).isoformat()
+    con = sqlite3.connect(str(_db.DB_PATH))
+    con.execute("UPDATE tasks SET due_at = ?", (far,))
+    con.commit()
+
+    monkeypatch.setattr(
+        maint_seed, "_RECURRING_ACTIONS", (("distill_memory", 86400),)
+    )
+    maint_seed.seed_maintenance(_Cfg())
+
+    con = sqlite3.connect(str(_db.DB_PATH))
+    due = datetime.fromisoformat(con.execute("SELECT due_at FROM tasks").fetchone()[0])
+    assert due <= datetime.now(timezone.utc) + timedelta(seconds=86400 + 60)
+
+
+def test_a_retune_to_a_longer_interval_never_pulls_work_earlier(_db, monkeypatch):
+    """Lengthening an interval must not move the next run forward: the owner
+    was promised that occurrence at that time."""
+    import sqlite3
+    from datetime import datetime, timedelta, timezone
+
+    monkeypatch.setattr(maint_seed, "_RECURRING_ACTIONS", (("distill_memory", 86400),))
+    maint_seed.seed_maintenance(_Cfg())
+
+    soon = (datetime.now(timezone.utc) + timedelta(hours=2)).isoformat()
+    con = sqlite3.connect(str(_db.DB_PATH))
+    con.execute("UPDATE tasks SET due_at = ?", (soon,))
+    con.commit()
+
+    monkeypatch.setattr(maint_seed, "_RECURRING_ACTIONS", (("distill_memory", 604800),))
+    maint_seed.seed_maintenance(_Cfg())
+
+    con = sqlite3.connect(str(_db.DB_PATH))
+    assert con.execute("SELECT due_at FROM tasks").fetchone()[0] == soon  # untouched
+
+
+def test_an_unparseable_due_date_is_left_alone_not_guessed(_db):
+    assert maint_seed._clamped_due("not-a-date", 86400) is None
+    assert maint_seed._clamped_due(None, 86400) is None

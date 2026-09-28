@@ -144,7 +144,7 @@ async def list_tasks(
 async def set_task_state(instance_id: str, task_id: str, estado: str) -> None:
     """Update a task's state, scoped to ``instance_id``.
 
-    Also stamps ``updated_en`` — the deferred-retry sweep uses it to know how
+    Also stamps ``updated_en``: the deferred-retry sweep uses it to know how
     long a task has sat "diferida" before it is due for a retry.
     """
     async with aiosqlite.connect(_pkg().DB_PATH) as db:
@@ -155,14 +155,45 @@ async def set_task_state(instance_id: str, task_id: str, estado: str) -> None:
         await db.commit()
 
 
+async def set_task_recurrence(
+    task_id: str, recurrence: str, *, due_at: Optional[str] = None
+) -> None:
+    """Retune a recurring task's interval (SECONDS, stored as a string).
+
+    The cadence of a standing task is a DECLARATION (see
+    ``lhassa.seeds.maintenance._RECURRING_ACTIONS``), and until this existed a
+    seed could only mint or skip: editing the declared interval changed nothing
+    for a brain that was already seeded, so the edit looked applied and was
+    not.
+
+    ``due_at`` moves the NEXT occurrence too, and a retune that shortens the
+    interval must pass it: the next run was scheduled under the OLD cadence, so
+    a weekly task retuned to daily still sleeps until its original weekly slot
+    and the change appears to have done nothing for six more days. Half an
+    applied fix is the failure mode this whole function exists to close.
+
+    Deliberately not scoped by instance: the caller reads the row it is
+    retuning from the instance-scoped listing first.
+    """
+    sets = "recurrence = ?, updated_en = ?"
+    args: list = [str(recurrence), _pkg()._now()]
+    if due_at is not None:
+        sets += ", due_at = ?"
+        args.append(due_at)
+    args.append(task_id)
+    async with aiosqlite.connect(_pkg().DB_PATH) as db:
+        await db.execute(f"UPDATE tasks SET {sets} WHERE id = ?", tuple(args))
+        await db.commit()
+
+
 # ── deferred-task retry sweep (Phase-Resilience) ──────────────────────────────
 #
 # A task the judgment path could not run (no usable provider, or the daily
-# budget spent) is marked "diferida" and, today, never revisited — the provider
+# budget spent) is marked "diferida" and, today, never revisited; the provider
 # outage/budget window can pass and the task simply rots. This sweep re-queues
 # a "diferida" task back to "pendiente" once it has sat for at least
 # ``backoff_seconds``, tracking a retry counter in its params; once that counter
-# reaches ``max_retries`` the task is marked "rechazada" (terminal — never
+# reaches ``max_retries`` the task is marked "rechazada" (terminal; never
 # retried again) instead of being requeued forever.
 
 
@@ -176,7 +207,7 @@ async def sweep_deferred_tasks(
     if it has already reached ``max_retries``, marked "rechazada" (terminal).
     Returns ``{"requeued": int, "rejected_ids": [task_id, ...]}``. Scoped to
     ``instance_id``. This function itself does not raise on a normal DB error
-    path (the caller — ``step()`` — additionally wraps the call in a
+    path (the caller (``step()``) additionally wraps the call in a
     try/except so a sweep failure can never crash a heartbeat tick).
     """
     from datetime import datetime, timedelta, timezone
@@ -448,6 +479,6 @@ async def advance_loop(
         return bool(cur.rowcount)
 
 
-# ── bench_runs (LhassaBench results — append-only) ───────────────────────────
+# ── bench_runs (LhassaBench results; append-only) ───────────────────────────
 
 
