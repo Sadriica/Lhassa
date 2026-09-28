@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """
-Lhassa tool schemas — the JSON tool definitions the LLM sees.
+Lhassa tool schemas; the JSON tool definitions the LLM sees.
 
 This is the single ``TOOLS`` catalog (a :class:`ToolsSchema` of
 :class:`FunctionSchema` entries). Handlers live in ``lhassa.tools.handlers.*``
@@ -8,8 +8,44 @@ and the wiring lives in ``lhassa.tools.registry``. Keeping the schema list here
 lets the catalog grow without touching handler code.
 """
 
-from pipecat.adapters.schemas.function_schema import FunctionSchema
-from pipecat.adapters.schemas.tools_schema import ToolsSchema
+try:  # the voice extra is optional; the catalog itself is not
+    from pipecat.adapters.schemas.function_schema import FunctionSchema
+    from pipecat.adapters.schemas.tools_schema import ToolsSchema
+except ModuleNotFoundError:  # pragma: no cover - exercised by the no-voice install
+    # The default install (API/heartbeat/telegram/CLI) ships without pipecat, and
+    # this catalog is what the CLI door sends the model; importing it must not
+    # drag the voice stack in. These two are plain data holders there, so a local
+    # equivalent keeps every non-voice door working on the default install.
+    # ``tests/test_tool_schema_shim.py`` pins the rendered dict to pipecat's own
+    # whenever pipecat IS installed, so the two can never drift apart.
+    from dataclasses import dataclass, field
+
+    @dataclass
+    class FunctionSchema:  # type: ignore[no-redef]
+        """Minimal stand-in for pipecat's ``FunctionSchema``."""
+
+        name: str
+        description: str
+        properties: dict
+        required: list = field(default_factory=list)
+
+        def to_default_dict(self) -> dict:
+            return {
+                "name": self.name,
+                "description": self.description,
+                "parameters": {
+                    "type": "object",
+                    "properties": self.properties,
+                    "required": self.required,
+                },
+            }
+
+    @dataclass
+    class ToolsSchema:  # type: ignore[no-redef]
+        """Minimal stand-in for pipecat's ``ToolsSchema``."""
+
+        standard_tools: list
+        custom_tools: dict | None = None
 
 
 # ── Tool schemas (what the LLM sees) ──────────────────────────────────────────
@@ -106,7 +142,7 @@ TOOLS = ToolsSchema(
                 "name": {"type": "string", "description": "Short name for the reminder"},
                 "message": {"type": "string", "description": "Message Lhassa will say when the reminder fires"},
                 "in_minutes": {"type": "integer", "description": "Fire after this many minutes from now"},
-                "at_time": {"type": "string", "description": "Fire at this exact time — HH:MM (24h local) or ISO 8601"},
+                "at_time": {"type": "string", "description": "Fire at this exact time. HH:MM (24h local) or ISO 8601"},
             },
             required=["name", "message"],
         ),
@@ -283,6 +319,8 @@ TOOLS = ToolsSchema(
                 "link": {"type": "string", "description": "Link to the posting"},
                 "notas": {"type": "string", "description": "Free-form notes"},
                 "id": {"type": "string", "description": "Application id (required for update)"},
+                "categoria": {"type": "string", "description": "Role category, e.g. IA/LLMs, HPC/CUDA, research. Stored, so it stays stable between renders."},
+                "prioridad": {"type": "string", "description": "Priority against the owner's stated criteria, e.g. critica, alta, media, baja. Stored, not recomputed."},
             },
             required=[],
         ),
