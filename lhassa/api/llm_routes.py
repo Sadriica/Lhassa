@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""LLM cost routes — the gateway ledger, runtime limits, and cross-harness ccusage.
+"""LLM cost routes; the gateway ledger, runtime limits, and cross-harness ccusage.
 
 The dashboard's cost surface. Reads the cost-gateway ledger (per-call tokens/cost),
 exposes + updates the runtime daily token budget and the kill-switch, and folds in
@@ -7,6 +7,8 @@ the ``ccusage`` CLI's cross-harness subscription accounting (defensive; never bl
 
 Mounted by the integrator with ``app.include_router(llm_routes.router)``.
 """
+
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException
 
@@ -25,12 +27,29 @@ async def get_llm_ledger():
     recent = list(reversed(rows[-20:]))  # newest first
     output_tokens_today = await gateway.daily_output_tokens()
 
+    # Real, persistent totals from the ledger DB (same source as /api/overview
+    # and /api/projections), summed for today (UTC). In-memory state.metrics
+    # resets on restart, which made this panel disagree with the others.
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    calls = 0
+    input_tokens = 0
+    output_tokens = 0
+    cost_usd = 0.0
+    cache_hits = 0
+    for r in rows:
+        if str(r.get("ts") or "").startswith(today):
+            calls += 1
+            input_tokens += int(r.get("input_tokens") or 0)
+            output_tokens += int(r.get("output_tokens") or 0)
+            cost_usd += float(r.get("cost_usd") or 0.0)
+            cache_hits += int(r.get("cache_hit") or 0)
     totals = {
-        "llm_calls": state.metrics.get("llm_calls", 0),
-        "llm_input_tokens": state.metrics.get("llm_input_tokens", 0),
-        "llm_output_tokens": state.metrics.get("llm_output_tokens", 0),
-        "llm_cost_usd": state.metrics.get("llm_cost_usd", 0.0),
-        "llm_cache_hits": state.metrics.get("llm_cache_hits", 0),
+        "llm_calls": calls,
+        "llm_input_tokens": input_tokens,
+        "llm_output_tokens": output_tokens,
+        "llm_cost_usd": round(cost_usd, 6),
+        "llm_cache_hits": cache_hits,
+        "period": "today",
     }
 
     return {
@@ -99,9 +118,9 @@ async def set_llm_limits(payload: dict):
 async def get_llm_ccusage():
     """Cross-harness accounting from the ``ccusage`` CLI (Claude Code / Codex /
     opencode subscription usage). Defensive: returns ``available: False`` when the
-    tool is absent or errors — never blocks the dashboard."""
+    tool is absent or errors; never blocks the dashboard."""
     from lhassa.llm.ccusage import read_ccusage
 
     # Bounded budget: enough for the ~3-4s offline ccusage read (real data), but never
-    # the slow npx cold-start — degrade fast when the binary is absent.
+    # the slow npx cold-start; degrade fast when the binary is absent.
     return await read_ccusage(timeout=6.0, allow_npx=False)
