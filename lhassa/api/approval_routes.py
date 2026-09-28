@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Approval frontier routes — the HITL queue (§2.6, §2.9-(1)).
+"""Approval frontier routes; the HITL queue (§2.6, §2.9-(1)).
 
 The dashboard's first panel is "la cola de aprobaciones". GET returns the pending
 queue; POST resolves one approval and feeds the autonomy knob (a repeatedly approved
@@ -10,6 +10,9 @@ Mounted by the integrator with ``app.include_router(approval_routes.router)``.
 """
 
 from fastapi import APIRouter, HTTPException, Request
+import json
+import re
+from loguru import logger
 
 import lhassa.config as lhassa_config
 from lhassa.core import db
@@ -97,3 +100,133 @@ async def resolve_approval_endpoint(approval_id: str, payload: dict, request: Re
         "resolved_by": trusted.actor_id,
         **(result or {}),
     }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Briefs: enriched decision queue (categoria, origen, resumen, recomendacion).
+# Append-only addition; the original GET /api/approvals is untouched.
+# ─────────────────────────────────────────────────────────────────────────────
+
+_CATEGORIAS = {
+    "retire_capability": ("Self-improvement", "Utility tribunal",   "low"),
+    "mint_action":       ("Self-improvement", "Repetition agent",   "medium"),
+    "mint_script":       ("Self-improvement", "Repetition agent",   "medium"),
+    "mint_memory":       ("Memory",           "Repetition agent",   "low"),
+    "mint_schedule":     ("Scheduler",        "Repetition agent",   "low"),
+    "seed_cache":        ("Self-improvement", "Repetition agent",   "low"),
+    "tool_graduation":   ("Tools",            "Security",           "medium"),
+    "flow_gate":         ("Flows",            "Coordinator",        "medium"),
+    "org_task":          ("Organization",     "Org",                "high"),
+}
+
+
+def _categorize(tipo: str) -> dict:
+    categoria, origen, riesgo = _CATEGORIAS.get(tipo, ("General", "Lhassa", "medium"))
+    return {"categoria": categoria, "origen": origen, "riesgo": riesgo}
+
+
+async def _ensure_brief_column() -> None:
+    import aiosqlite
+    from lhassa.core.db._conn import _pkg
+    async with aiosqlite.connect(_pkg().DB_PATH) as db:
+        async with db.execute("PRAGMA table_info(approvals)") as cur:
+            cols = [r[1] for r in await cur.fetchall()]
+        if "brief" not in cols:
+            await db.execute("ALTER TABLE approvals ADD COLUMN brief TEXT")
+            await db.commit()
+
+
+def _no_em_dash(text: str) -> str:
+    """The owner's rule: no em dashes anywhere, including model-written text."""
+    return re.sub(r"\s*[\u2014\u2013]\s*", ": ", text or "").strip()
+
+
+async def _store_brief(approval_id: str, brief: dict) -> None:
+    import aiosqlite
+    from lhassa.core.db._conn import _pkg
+    async with aiosqlite.connect(_pkg().DB_PATH) as db:
+        await db.execute(
+            "UPDATE approvals SET brief = ? WHERE id = ?",
+            (json.dumps(brief, ensure_ascii=False), approval_id),
+        )
+        await db.commit()
+
+
+async def _generate_briefs(rows: list[dict]) -> None:
+    """Batch-generate missing briefs with one cheap-model call; cached by gateway."""
+    from lhassa.config import Config
+    from lhassa.llm.gateway import gateway
+    items = [
+        {
+            "id": r["id"],
+            "tipo": r.get("tipo"),
+            "title": (r.get("payload") or {}).get("title", ""),
+            "rationale": (r.get("payload") or {}).get("rationale", ""),
+            "detail": approval.describe(r).get("detail", ""),
+        }
+        for r in rows
+    ]
+    prompt = (
+        "You are Lhassa, the owner's personal assistant. For EACH item in the "
+        "decision queue write a short summary (1-2 sentences) and a clear "
+        "recommendation: approve or reject, with the reason. Write in ENGLISH, "
+        "direct and warm tone, no fluff. Never use em dashes; use ':' or ',' "
+        "instead. Return ONLY JSON: a list of objects "
+        '{"id", "summary", "recommendation"} where "recommendation" starts with '
+        '"Approve" or "Reject".\n\nItems:\n'
+        + json.dumps(items, ensure_ascii=False)
+    )
+    result = await gateway.complete(
+        [{"role": "user", "content": prompt}],
+        model=Config().model_cheap,
+        max_tokens=2500,
+        temperature=0.2,
+    )
+    _raw = (result.text or "").strip()
+    _raw = re.sub(r"^```(?:json)?\s*|\s*```$", "", _raw, flags=re.S)
+    _m = re.search(r"\[[\s\S]*\]", _raw)
+    data = json.loads(_m.group(0) if _m else _raw)
+    if not isinstance(data, list):
+        return
+    for item in data:
+        if isinstance(item, dict) and item.get("id"):
+            await _store_brief(str(item["id"]), {
+                "summary": _no_em_dash(str(item.get("summary", ""))),
+                "recommendation": _no_em_dash(str(item.get("recommendation", ""))),
+            })
+
+
+@router.get("/api/approvals/briefs")
+async def get_approval_briefs():
+    """Pending queue enriched with categoria, origen, riesgo, resumen y recomendacion."""
+    import json as _json
+    await db.init_db()
+    await _ensure_brief_column()
+    rows = await approval.pending(lhassa_config.Config.instance_id)
+    missing = [r for r in rows if not (r.get("brief") or "").strip()]
+    if missing:
+        try:
+            await _generate_briefs(missing)
+            rows = await approval.pending(lhassa_config.Config.instance_id)
+        except Exception as exc:  # never fail the queue over a brief
+            logger.warning(f"brief generation failed: {exc}")
+    out = []
+    for row in rows:
+        cat = _categorize(row.get("tipo") or "?")
+        brief = {}
+        try:
+            brief = _json.loads(row.get("brief") or "{}")
+        except Exception:
+            brief = {}
+        out.append({
+            **row,
+            "categoria": brief.get("categoria") or cat["categoria"],
+            "origen": brief.get("origen") or cat["origen"],
+            "riesgo": brief.get("riesgo") or cat["riesgo"],
+            "resumen": brief.get("summary") or brief.get("resumen", ""),
+            "recomendacion": brief.get("recommendation") or brief.get("recomendacion", ""),
+            "summary": approval.describe(row),
+        })
+    # Newest decision first: the queue reads like an inbox, not a backlog.
+    out.sort(key=lambda r: str(r.get("creado_en") or ""), reverse=True)
+    return out

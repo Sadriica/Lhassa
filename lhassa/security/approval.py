@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""The approval frontier — the human-in-the-loop gate, by flow not by global knob.
+"""The approval frontier; the human-in-the-loop gate, by flow not by global knob.
 
 This is the third piece of the brain's árbitro (§2.6, §2.9-(1) the approval queue,
 §3-Fase 3 DoD). It sits AFTER the deterministic allowlist: once a task is *allowed*
 to run, this layer decides whether a human still has to say "OK" first.
 
-**HITL per flow, NOT global.** The decision is per-action, by risk — exactly the
+**HITL per flow, NOT global.** The decision is per-action, by risk; exactly the
 lesson the brief draws from enterprise practice: "el umbral de confianza/aprobación
 se define por tipo de acción según su riesgo, no uno global. Mover dinero o borrar
 datos exige más (aprobación humana siempre); redactar un borrador exige menos."
@@ -118,7 +118,7 @@ _PATH_ACTIONS = ("read_file", "list_dir")
 def _touches_protected_root(accion: str, params) -> bool:
     """True when a file action's path resolves inside ``Config.protected_roots``.
 
-    Fail-CLOSED: if the check itself errors we say True — when we can't tell
+    Fail-CLOSED: if the check itself errors we say True; when we can't tell
     whether a path is protected, the human decides.
     """
     if accion not in _PATH_ACTIONS:
@@ -154,7 +154,7 @@ def _attach_template_needs_gate(accion: str, params) -> bool:
     Input (e): whether the standing-brains reflex's attach needs a human tap
     depends on the target org template's risk
     (``org.templates.template_is_read_only``). ``org`` is a SHELL and this module
-    is an INTERFACE — it must never import a shell, even lazily (the architecture
+    is an INTERFACE; it must never import a shell, even lazily (the architecture
     guard in ``tests/test_architecture.py`` walks every import regardless of
     nesting, so a function-body import would still trip it). So this does NOT
     import ``org.templates``: the classification is computed once, upstream, by
@@ -164,7 +164,7 @@ def _attach_template_needs_gate(accion: str, params) -> bool:
 
     Fail-CLOSED like (d): missing/non-``True`` ⇒ gated. Only accion this applies
     to is ``attach_project_template``; any other accion returns ``False`` (no
-    opinion — the other inputs decide).
+    opinion; the other inputs decide).
     """
     if accion != "attach_project_template":
         return False
@@ -180,27 +180,27 @@ def needs_approval(
 ) -> bool:
     """Decide whether a human must approve before this action runs. Per-action.
 
-    Inputs combined (HITL per flow — the threshold lives PER ACTION, never global):
+    Inputs combined (HITL per flow; the threshold lives PER ACTION, never global):
 
     (a) **The allowlist's per-action approval flag.** ``ActionSpec.requires_approval``
         for the action (or ``AllowDecision.requires_approval`` when a decision is
-        passed) — the policy table says, action by action, whether HITL applies.
+        passed); the policy table says, action by action, whether HITL applies.
     (b) **Origin trust below the action's threshold.** When a ``Task`` is given, an
-        origin whose ``TrustLevel`` is below the action's ``min_trust`` — and ALWAYS
+        origin whose ``TrustLevel`` is below the action's ``min_trust``: and ALWAYS
         when the origin is ``MUNDO`` (world-derived content is never trusted to act
-        on its own) — needs a human OK. ("una tarea origen `mundo`... espera tu OK".)
+        on its own); needs a human OK. ("una tarea origen `mundo`... espera tu OK".)
     (c) **The high-risk always-approve set.** Actions in
         ``Config.always_approve_actions`` (e.g. move_money / delete_data) ALWAYS need
-        approval, regardless of everything else — including the autonomy knob.
-    (d) **A protected-path file read** (see ``_touches_protected_root``) — per
+        approval, regardless of everything else; including the autonomy knob.
+    (d) **A protected-path file read** (see ``_touches_protected_root``); per
         access, never lowered by autonomy.
     (e) **A standing-brains attach whose template isn't provably read-only** (see
-        ``_attach_template_needs_gate``) — per attach, never lowered by autonomy.
+        ``_attach_template_needs_gate``); per attach, never lowered by autonomy.
 
-    ``decision_or_task`` may be a ``Task`` (the rich case — all three inputs apply)
+    ``decision_or_task`` may be a ``Task`` (the rich case; all three inputs apply)
     or an ``AllowDecision`` (only input (a) is knowable). ``autonomy`` is the knob's
     verdict for this (accion, actor): when ``True`` it LOWERS friction and this
-    returns ``False`` — UNLESS the action is high-risk (c), which can never be
+    returns ``False``: UNLESS the action is high-risk (c), which can never be
     lowered. The autonomy knob does not (and cannot) change trust here.
     """
     if isinstance(decision_or_task, AllowDecision):
@@ -220,7 +220,7 @@ def needs_approval(
         high_risk = accion in _always_approve()
 
     # (d) Protected-path reads: a file action whose path resolves inside
-    # ``Config.protected_roots`` ALWAYS asks the owner — per access, and (like
+    # ``Config.protected_roots`` ALWAYS asks the owner; per access, and (like
     # high-risk) never lowered by the autonomy knob: the tap IS the verification.
     if not isinstance(decision_or_task, AllowDecision) and _touches_protected_root(
         decision_or_task.accion, getattr(decision_or_task, "params", None)
@@ -228,13 +228,13 @@ def needs_approval(
         return True
 
     # (e) A standing-brains attach whose target template is not provably read-only
-    # ALWAYS asks the owner — same never-lowered-by-autonomy standing as (d).
+    # ALWAYS asks the owner; same never-lowered-by-autonomy standing as (d).
     if not isinstance(decision_or_task, AllowDecision) and _attach_template_needs_gate(
         decision_or_task.accion, getattr(decision_or_task, "params", None)
     ):
         return True
 
-    # (c) High-risk ALWAYS needs approval — never lowered by autonomy or history.
+    # (c) High-risk ALWAYS needs approval; never lowered by autonomy or history.
     if high_risk:
         return True
 
@@ -277,7 +277,7 @@ async def request_approval(
     Do-and-sleep: the task waits as pending; the machine reports
     ``pendiente_aprobacion`` and never executes. ``payload`` should carry enough to
     both show the human what they are approving AND feed the autonomy knob on
-    resolution — at minimum ``accion``, ``actor_id`` and ``origen_trust``.
+    resolution; at minimum ``accion``, ``actor_id`` and ``origen_trust``.
     """
     # Snapshot the security classification into the durable row. A later config
     # or allowlist edit must never downgrade a request that was parked as
@@ -290,9 +290,14 @@ async def request_approval(
         if existing is not None:
             return approval_id
     try:
-        return await db.add_approval(
+        approval_id_out = await db.add_approval(
             instance_id, tipo, payload, approval_id=approval_id
         )
+        try:
+            await _stamp_english_brief(instance_id, approval_id_out, tipo, payload)
+        except Exception:
+            pass  # brief enrichment must never break the approval itself
+        return approval_id_out
     except Exception:
         # A durable flow may retry after parking the request but before saving its
         # checkpoint.  The deterministic id turns that replay into a read.
@@ -327,7 +332,7 @@ async def resolve(
 
     # Proposer ≠ approver, at the GENERAL seam. org/coordinator.py already
     # enforces this for its own delegate flow, but the generic tipo="task"
-    # approvals — the ones carrying always_approve_actions like run_command —
+    # approvals; the ones carrying always_approve_actions like run_command;
     # had no check: any caller reaching the endpoint could self-approve by
     # naming any by_actor. High-risk only; routine approvals stay one-tap.
     if approved:
@@ -380,7 +385,7 @@ async def resolve(
                 f"approval {approval_id} is already {ap.get('estado') or 'resolved'}"
             )
         # RELEASE the parked task the approval was minted for: an approve flips
-        # it back to 'pendiente' (the next heartbeat — or run_task_now — picks
+        # it back to 'pendiente' (the next heartbeat (or run_task_now) picks
         # it up); a deny closes it as 'rechazada'. Without this the tap resolved
         # the QUEUE row but the task itself waited forever. Best-effort: a
         # release failure must not undo an already-recorded human decision.
@@ -412,15 +417,15 @@ async def pending(instance_id: str) -> list:
 
 
 def describe(row: dict) -> dict:
-    """A human-readable ``{title, detail}`` for one approval row — deterministic, $0.
+    """A human-readable ``{title, detail}`` for one approval row; deterministic, $0.
 
     Every surface that shows the queue (the Telegram ``/approvals`` command, the
     dashboard panels, the digest) renders through this ONE helper, so "what am I
     approving?" reads the same everywhere. It understands the payload shape each
     ``request_approval`` caller writes (``mint_action``, ``mint_script``,
-    ``mint_memory``, ``mint_schedule``, ``seed_cache`` — the self-improvement
+    ``mint_memory``, ``mint_schedule``, ``seed_cache``: the self-improvement
     consciousness's :func:`lhassa.agents.repetition.recommend_intervention`
-    kinds — plus ``retire_capability`` (the utility tribunal),
+    kinds; plus ``retire_capability`` (the utility tribunal),
     ``tool_graduation``, ``flow_gate``, ``org_task``, dispatch/
     remote tasks) and degrades to
     ``tipo``+``accion`` for anything unknown. Never raises.
@@ -487,7 +492,7 @@ def describe(row: dict) -> dict:
             bits = []
             if payload.get("count"):
                 bits.append(f"already served from cache ×{payload['count']}")
-            bits.append("already $0 — nothing further to mint")
+            bits.append("already $0; nothing further to mint")
             return {
                 "title": f"'{subject}' is already answered from the cache",
                 "detail": " · ".join(bits),
@@ -530,7 +535,7 @@ def describe(row: dict) -> dict:
             }
         if tipo == "tool_graduation":
             tool = payload.get("tool") or "?"
-            detail = "passed the gates in quarantine — approving activates it"
+            detail = "passed the gates in quarantine; approving activates it"
             if payload.get("branch"):
                 detail += f" (branch {payload['branch']})"
             return {"title": f"Graduate self-written tool '{tool}'", "detail": detail}
@@ -541,7 +546,7 @@ def describe(row: dict) -> dict:
             cwd = payload.get("cwd") or "?"
             return {
                 "title": f"Run a coding agent: {preview}",
-                "detail": f"{cli} · {cwd} · write access to your files — approving launches it",
+                "detail": f"{cli} · {cwd} · write access to your files; approving launches it",
             }
         if tipo == "product_change_experiment":
             project = payload.get("project") or payload.get("project_id") or "?"
@@ -597,3 +602,48 @@ def describe(row: dict) -> dict:
         return {"title": title, "detail": detail}
     except Exception:  # a malformed payload must never break a queue render
         return {"title": tipo + (f": {accion}" if accion else ""), "detail": ""}
+
+async def _stamp_english_brief(instance_id: str, approval_id: str, tipo: str, payload: dict) -> None:
+    """Generate and store the English decision brief at request time."""
+    import json
+    from lhassa.config import Config
+    from lhassa.llm.gateway import gateway
+    item = {
+        "tipo": tipo,
+        "title": str((payload or {}).get("title") or ""),
+        "rationale": str((payload or {}).get("rationale") or ""),
+        "detail": str((payload or {}).get("detail") or ""),
+        "accion": str((payload or {}).get("accion") or ""),
+    }
+    prompt = (
+        "You are Lhassa, the owner's personal assistant. An approval request was "
+        "created. Write a short English summary (1-2 sentences) of what is being "
+        "asked and a clear recommendation: approve or reject, with the reason. "
+        "Never use em dashes; use ':' or ',' instead. "
+        'Return ONLY JSON: {"summary": "...", "recommendation": "Approve/Reject ..."}.\n'
+        + json.dumps(item, ensure_ascii=False)
+    )
+    result = await gateway.complete(
+        [{"role": "user", "content": prompt}],
+        model=Config().model_cheap,
+        max_tokens=400,
+        temperature=0.2,
+    )
+    raw = (result.text or "").strip()
+    import re as _re
+    raw = _re.sub(r"^```(?:json)?\s*|\s*```$", "", raw, flags=_re.S)
+    m = _re.search(r"\{[\s\S]*\}", raw)
+    data = json.loads(m.group(0) if m else raw)
+    if not isinstance(data, dict):
+        return
+    # The owner's rule: no em dashes anywhere, including model-written text.
+    data = {k: _re.sub(r"\s*[\u2014\u2013]\s*", ": ", str(v)).strip() for k, v in data.items()}
+    from lhassa.core.db._conn import _pkg
+    import aiosqlite
+    async with aiosqlite.connect(_pkg().DB_PATH) as db:
+        await db.execute(
+            "UPDATE approvals SET brief = ? WHERE id = ?",
+            (json.dumps(data, ensure_ascii=False), approval_id),
+        )
+        await db.commit()
+
