@@ -77,7 +77,7 @@ export default function ApprovalQueuePanel() {
             const risk = RIESGO_PILL[a.riesgo] || RIESGO_PILL.medium
             const rec = /^(reject|rechazar)/i.test(a.recomendacion || '')
               ? { label: a.recomendacion, cls: 'lh-pill lh-pill-danger' }
-              : { label: a.recomendacion || '—', cls: 'lh-pill lh-pill-ok' }
+              : { label: a.recomendacion || '-', cls: 'lh-pill lh-pill-ok' }
             return (
               <li key={a.id} className="lh-row">
                 <div className="flex items-center justify-between gap-2">

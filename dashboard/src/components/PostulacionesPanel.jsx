@@ -54,9 +54,9 @@ function labelFor(opts, value) {
 }
 
 function fmtFecha(iso) {
-  if (!iso) return '—'
+  if (!iso) return '-'
   const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return '—'
+  if (Number.isNaN(d.getTime())) return '-'
   return d.toLocaleDateString([], { month: 'short', day: 'numeric' })
 }
 
@@ -210,7 +210,7 @@ export default function PostulacionesPanel() {
                         <span style={{ color: 'var(--lh-text)', fontWeight: 500 }}>{it.empresa}</span>
                       )}
                     </td>
-                    <td style={{ ...td, color: 'var(--lh-text)' }}>{it.rol || '—'}</td>
+                    <td style={{ ...td, color: 'var(--lh-text)' }}>{it.rol || '-'}</td>
                     <td style={td}>
                       <select
                         className="lh-select"
@@ -219,7 +219,7 @@ export default function PostulacionesPanel() {
                         disabled={!!saving[it.id]}
                         onChange={(e) => patch(it.id, 'categoria', e.target.value)}
                       >
-                        <option value="">—</option>
+                        <option value="">-</option>
                         {optsWithValue(CATEGORIAS, it.categoria).map((c) => (
                           <option key={c.value} value={c.value}>{c.label}</option>
                         ))}
@@ -233,7 +233,7 @@ export default function PostulacionesPanel() {
                         disabled={!!saving[it.id]}
                         onChange={(e) => patch(it.id, 'prioridad', e.target.value)}
                       >
-                        <option value="">—</option>
+                        <option value="">-</option>
                         {optsWithValue(PRIORIDADES, it.prioridad).map((p) => (
                           <option key={p.value} value={p.value} style={{ color: PRIO_COLOR[p.value] }}>
                             {p.label}
