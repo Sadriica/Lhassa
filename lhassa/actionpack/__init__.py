@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """
-actionpack — the built-in set of deterministic actions (Phase 3; org_run Etapa 3).
+actionpack; the built-in set of deterministic actions (Phase 3; org_run Etapa 3).
 
 Shell-layer package: composes notify/, health/, memory/, cv/, security/, core/,
 org/. Nothing in core/ or other inner layers may import from here.
@@ -9,7 +9,7 @@ Public surface
 --------------
 register_all()
     Register every action in this package with the core ACTIONS registry.
-    Idempotent — safe to call any number of times. Call it from every
+    Idempotent; safe to call any number of times. Call it from every
     long-lived process entrypoint (main.py, heartbeat, CLI, API, Telegram,
     monitor) so the judgment dispatcher always has the full action set.
 """
@@ -20,7 +20,7 @@ _REGISTERED = False
 
 
 def register_all() -> None:
-    """Register all actionpack actions. Idempotent — safe to call multiple times.
+    """Register all actionpack actions. Idempotent; safe to call multiple times.
 
     Imports each sub-module (which defines the action functions) and wires
     them into ``lhassa.core.actions.ACTIONS`` via ``register_action``.
@@ -36,7 +36,7 @@ def register_all() -> None:
 
     from lhassa.core.actions import _REGISTRY, register_action
 
-    # Import sub-modules — this defines the functions without side-effects.
+    # Import sub-modules; this defines the functions without side-effects.
     from lhassa.actionpack import (  # noqa: F401
         _brain,
         _calendar_sync,
@@ -56,6 +56,7 @@ def register_all() -> None:
         _llm,
         _memory,
         _net,
+        _flow,
         _org,
         _reminder,
         _research,
@@ -100,17 +101,17 @@ def register_all() -> None:
     # ── LLM spend visibility ───────────────────────────────────────────────────
     _reg("check_spend", _llm.check_spend)
 
-    # ── Digest (Etapa 2 — operative day via Telegram) ─────────────────────────
+    # ── Digest (Etapa 2; operative day via Telegram) ─────────────────────────
     _reg("send_digest", _digest.send_digest)
 
     # ── Master calendar reconcile ($0 set diff, no model) ─────────────────────
     _reg("calendar_sync", _calendar_sync.calendar_sync)
 
-    # ── Calendar-derived world model ($0, deterministic — courses/commitments/
+    # ── Calendar-derived world model ($0, deterministic; courses/commitments/
     # rhythm bootstrapped from the calendar feed into durable facts) ──────────
     _reg("derive_world_facts", _derive.derive_world_facts)
 
-    # ── Document perception — index the owner's opt-in knowledge roots ───────
+    # ── Document perception; index the owner's opt-in knowledge roots ───────
     _reg("ingest_knowledge", _knowledge.ingest_knowledge)
     _reg("list_dir", _files.list_dir)
     _reg("read_file", _files.read_file)
@@ -120,7 +121,7 @@ def register_all() -> None:
     _reg("kg_sync", _kg.kg_sync)
     _reg("kg_resolve", _kg.kg_resolve)
 
-    # Preconditions — an action that structurally CANNOT act is skipped by the
+    # Preconditions; an action that structurally CANNOT act is skipped by the
     # heartbeat instead of running to a no-op and paying a full delivery trail
     # for saying nothing. Declared beside the registration, never inside core.
     from lhassa.core.actions import register_precondition
@@ -137,8 +138,11 @@ def register_all() -> None:
     _projects.register_sense()
     _standing.register_sense()
 
-    # ── Org — real delegation into the hierarchy (Etapa 3) ────────────────────
+    # ── Org; real delegation into the hierarchy (Etapa 3) ────────────────────
     _reg("org_run", _org.org_run)
+
+    # ── Work-flows on the ONE clock (see actionpack/_flow.py) ────────────────
+    _reg("run_flow", _flow.run_flow_action)
 
     # Drain THIS instance's org inbox on every tick (enqueue → heartbeat closes
     # the loop). Registers a watchlist check-func; see org/inbox_sense.py for
@@ -153,15 +157,15 @@ def register_all() -> None:
     # ── Skills curator (deterministic lifecycle sweep) ─────────────────────────
     _reg("curate_skills", _curate.curate_skills)
 
-    # ── Utility tribunal — the counterweight: does a capability still SERVE?
+    # ── Utility tribunal; the counterweight: does a capability still SERVE?
     # (agents/utility.py, $0 derived read over the episode log) ───────────────
     _reg("review_capabilities", _utility.review_capabilities)
 
-    # ── Temple — internal hygiene work routed down-execute-up through the
+    # ── Temple; internal hygiene work routed down-execute-up through the
     # temple department (see lhassa.org.temple / lhassa.seeds.temple) ────────
     _reg("temple_run", _temple.temple_run)
 
-    # ── PTC — Programmatic Tool Calling (script-over-RPC in quarantine) ────────
+    # ── PTC. Programmatic Tool Calling (script-over-RPC in quarantine) ────────
     _reg("run_script", _script.run_script)
 
     # ── Research bridge (Telegram [[research: …]] → live web results) ──────────
