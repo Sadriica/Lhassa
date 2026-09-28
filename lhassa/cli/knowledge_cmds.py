@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""``lhassa knowledge`` — document perception from the terminal.
+"""``lhassa knowledge``: document perception from the terminal.
 
 Mirrors the ``lhassa calendar``/``lhassa memory`` sub-app pattern: a small
-Typer group over :mod:`lhassa.memory.knowledge`. $0, offline, no LLM — a
+Typer group over :mod:`lhassa.memory.knowledge`. $0, offline, no LLM; a
 filesystem walk + the offline embedder + a local SQLite index.
 """
 
@@ -15,6 +15,7 @@ import sys
 import typer
 from rich.console import Console
 
+from lhassa.cli import capability_log as _capability_log
 from lhassa.cli.theme import LHASSA_THEME
 
 knowledge_app = typer.Typer(
@@ -56,12 +57,13 @@ def ingest_cmd(
             _dump_json({"roots": 0, "message": "no knowledge roots set"})
             return
         _out().print(
-            "[dim]No knowledge roots set — configure LHASSA_KNOWLEDGE_ROOTS "
+            "[dim]No knowledge roots set; configure LHASSA_KNOWLEDGE_ROOTS "
             "to point Lhassa at your notes/papers.[/]"
         )
         return
 
     summary = asyncio.run(knowledge.ingest(instance_id, config=cfg))
+    _capability_log.record_sync("knowledge ingest")
     if json_out:
         _dump_json(summary)
         return
@@ -78,7 +80,7 @@ def search_cmd(
     limit: int = typer.Option(5, "--limit", help="Max results."),
     json_out: bool = typer.Option(False, "--json", help="Emit the results as JSON."),
 ) -> None:
-    """Search the owner's indexed documents — $0, offline cosine search."""
+    """Search the owner's indexed documents; $0, offline cosine search."""
     import os as _os
 
     from lhassa.memory import knowledge
@@ -101,7 +103,7 @@ def search_cmd(
         snippet = (h.get("text") or "").replace("\n", " ").strip()
         if len(snippet) > 150:
             snippet = snippet[:147] + "…"
-        out.print(f"  [dim]{name}[/] — {snippet}")
+        out.print(f"  [dim]{name}[/]; {snippet}")
 
 
 def clear_cmd(

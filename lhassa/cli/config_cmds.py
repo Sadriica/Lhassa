@@ -1,12 +1,12 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""``lhassa config`` — read and change the runtime SETTINGS allowlist.
+"""``lhassa config``: read and change the runtime SETTINGS allowlist.
 
 A small, offline surface over :mod:`lhassa.settings`: list the editable settings
 (grouped, secrets masked), read one, or change one (persisted to
 ``~/.lhassa/settings.env`` and applied to the live :class:`Config`, never ``.env``).
 
-Registered onto the main Typer ``app`` as a sub-app — see ``lhassa.cli.app``
-(``app.add_typer(config_cmds.config_app, name="config")``) — alongside, and without
+Registered onto the main Typer ``app`` as a sub-app; see ``lhassa.cli.app``
+(``app.add_typer(config_cmds.config_app, name="config")``); alongside, and without
 disturbing, the default chat/REPL and the existing power subcommands.
 """
 
@@ -17,6 +17,8 @@ import sys
 
 import typer
 from rich.console import Console
+
+from lhassa.cli import capability_log as _capability_log
 
 config_app = typer.Typer(
     add_completion=False,
@@ -114,6 +116,7 @@ def set_cmd(
     if not result.get("applied"):
         _err().print(result.get("error", "could not apply setting"), style="red")
         raise typer.Exit(code=1)
+    _capability_log.record_sync("config set")
     out = _out()
     out.print(f"{result['key']} = {result['value']}")
     out.print(result.get("restart_hint", ""), style="dim")

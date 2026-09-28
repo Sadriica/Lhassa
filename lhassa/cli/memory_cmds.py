@@ -1,20 +1,20 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""``lhassa memory`` — search durable facts, add one, and a guided onboarding.
+"""``lhassa memory``: search durable facts, add one, and a guided onboarding.
 
 Three surfaces over the grande's typed facts (:mod:`lhassa.memory.facts`):
 
-  - ``lhassa memory <query> [--json]`` — the pre-existing substring/tag search
+  - ``lhassa memory <query> [--json]``: the pre-existing substring/tag search
     (unchanged in behavior; still lives in :mod:`lhassa.cli.commands` as
     ``memory_cmd``, re-registered here as the hidden default subcommand so the
     legacy call shape keeps working).
   - ``lhassa memory add "<text>" [--tipo dato|directiva] [--tags a,b] [--pin]
-    [--confianza 0.9]`` — write one fact through :func:`lhassa.memory.facts.add_fact`.
-  - ``lhassa onboard`` — a short guided questionnaire (~5 questions) that seeds
+    [--confianza 0.9]``: write one fact through :func:`lhassa.memory.facts.add_fact`.
+  - ``lhassa onboard``: a short guided questionnaire (~5 questions) that seeds
     the grande with the first durable facts about the owner. Interactive only
     (a non-TTY invocation exits cleanly, doing nothing).
 
 ``memory`` is a small Typer GROUP (like ``lhassa org``/``lhassa skills``) rather
-than a single command, but the group must not break ``lhassa memory <query>`` —
+than a single command, but the group must not break ``lhassa memory <query>``;
 the pre-existing call shape with no subcommand name. A custom group class
 (mirroring ``lhassa.cli.app``'s ``_ChatDefaultGroup``) falls back to the hidden
 ``search`` command whenever the first token isn't a known subcommand name.
@@ -30,6 +30,7 @@ import typer
 from rich.console import Console
 from typer.core import TyperGroup
 
+from lhassa.cli import capability_log as _capability_log
 from lhassa.cli import commands as _commands
 from lhassa.cli.theme import LHASSA_THEME
 
@@ -66,8 +67,8 @@ memory_app = typer.Typer(
 )
 
 
-# ``search`` reuses the exact pre-existing implementation (commands.memory_cmd) —
-# same behavior, same tests — just registered as a (hidden) subcommand so the
+# ``search`` reuses the exact pre-existing implementation (commands.memory_cmd);
+# same behavior, same tests; just registered as a (hidden) subcommand so the
 # group can also carry ``add``.
 memory_app.command("search", hidden=True)(_commands.memory_cmd)
 
@@ -107,6 +108,7 @@ def add_cmd(
             confianza=confianza,
         )
     )
+    _capability_log.record_sync("memory add")
     if json_out:
         _commands._dump_json(
             {"id": fact.id, "tipo": fact.tipo, "contenido": fact.contenido, "pinned": fact.pinned}
@@ -118,7 +120,7 @@ def add_cmd(
 memory_app.command("add")(add_cmd)
 
 
-# ── graph / entities — the deterministic knowledge graph over the grande ─────
+# ── graph / entities; the deterministic knowledge graph over the grande ─────
 
 
 def graph_cmd(
@@ -126,7 +128,7 @@ def graph_cmd(
     limit: int = typer.Option(10, "--limit", help="Max facts/episodes/terms to show."),
     json_out: bool = typer.Option(False, "--json", help="Emit the raw result as JSON."),
 ) -> None:
-    """Answer 'what do I know about X?' from stored facts/episodes — $0, no model."""
+    """Answer 'what do I know about X?' from stored facts/episodes; $0, no model."""
     from lhassa.config import Config
     from lhassa.memory import graph
 
@@ -168,7 +170,7 @@ def graph_cmd(
 def entities_cmd(
     json_out: bool = typer.Option(False, "--json", help="Emit the raw list as JSON."),
 ) -> None:
-    """List the distinct entities the brain tracks — a map of what it knows."""
+    """List the distinct entities the brain tracks; a map of what it knows."""
     from lhassa.config import Config
     from lhassa.memory import graph
 
@@ -198,7 +200,7 @@ memory_app.command("graph")(graph_cmd)
 memory_app.command("entities")(entities_cmd)
 
 
-# ── reindex — re-embed everything with the CURRENT embedder ──────────────────
+# ── reindex; re-embed everything with the CURRENT embedder ──────────────────
 
 
 def reindex_cmd(
@@ -207,7 +209,7 @@ def reindex_cmd(
     """Re-embed all facts and cached answers with the current embedder.
 
     Run this after switching the embedder backend/model (e.g. enabling Ollama
-    with ``pull``ed model, or moving off the offline hashing embedder) — vectors
+    with ``pull``ed model, or moving off the offline hashing embedder); vectors
     stored under a different embedder are cosine-garbage against a new one, so
     this brings every stored vector back in sync. Best-effort per row: a single
     row failing never aborts the batch.
@@ -233,15 +235,15 @@ def reindex_cmd(
 memory_app.command("reindex")(reindex_cmd)
 
 
-# ── onboard — a short guided questionnaire seeding the first owner facts ──────
+# ── onboard; a short guided questionnaire seeding the first owner facts ──────
 
 # Each entry: (prompt text, tipo, pinned).
 _ONBOARD_QUESTIONS: list[tuple[str, str, bool]] = [
-    ("Who are you — name, role, any context worth knowing?", "dato", False),
+    ("Who are you; name, role, any context worth knowing?", "dato", False),
     ("What are you currently working on?", "dato", False),
-    ("How do you like my answers — style, length, tone?", "directiva", False),
+    ("How do you like my answers; style, length, tone?", "directiva", False),
     ("Your working hours and timezone?", "dato", False),
-    ("Any hard limits — things I must never do?", "directiva", True),
+    ("Any hard limits; things I must never do?", "directiva", True),
 ]
 
 
@@ -277,7 +279,7 @@ def onboard_cmd() -> None:
 
     Skippable per-question (empty answer = skip, nothing written). Dedupes
     against what's already known (substring match) before writing. Interactive
-    only — a non-TTY invocation (piped/no stdin) prints a short hint and exits.
+    only; a non-TTY invocation (piped/no stdin) prints a short hint and exits.
     """
     out = _out()
     if not sys.stdin.isatty():
@@ -292,7 +294,7 @@ def onboard_cmd() -> None:
     instance_id = Config.instance_id
     existing = asyncio.run(_existing_contents(instance_id))
 
-    out.print("[title]A few questions[/] [dim]— press Enter on any of them to skip.[/]")
+    out.print("[title]A few questions[/] [dim](press Enter on any of them to skip).[/]")
     learned = 0
     for question, tipo, pinned in _ONBOARD_QUESTIONS:
         try:
@@ -303,7 +305,7 @@ def onboard_cmd() -> None:
         if not answer:
             continue
         if _already_known(answer, existing):
-            out.print("[dim]I already carry that — no need to say it twice.[/]")
+            out.print("[dim]I already carry that; no need to say it twice.[/]")
             continue
         asyncio.run(_write_onboard_fact(instance_id, tipo, answer, pinned))
         existing.append(answer)
@@ -312,11 +314,11 @@ def onboard_cmd() -> None:
     if learned:
         out.print(
             f"[success]✓[/] I've taken in {learned} thing{'s' if learned != 1 else ''} "
-            "about you — quietly filed, and I'll carry them from here."
+            "about you; quietly filed, and I'll carry them from here."
         )
     else:
         out.print(
-            "[success]✓[/] Nothing new to file today — I already carry what matters."
+            "[success]✓[/] Nothing new to file today; I already carry what matters."
         )
 
 

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""``lhassa project`` — the first-class workspace entity from the terminal.
+"""``lhassa project``: the first-class workspace entity from the terminal.
 
 Commands::
 
@@ -24,12 +24,13 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
+from lhassa.cli import capability_log as _capability_log
 from lhassa.cli.theme import LHASSA_THEME, TABLE_KWARGS
 
 project_app = typer.Typer(
     add_completion=False,
     no_args_is_help=True,
-    help="Manage projects — the workspaces Lhassa works on.",
+    help="Manage projects; the workspaces Lhassa works on.",
 )
 
 _console = Console(theme=LHASSA_THEME)
@@ -57,8 +58,9 @@ def create(
     except ValueError as exc:
         _console.print(f"[warn]refused:[/warn] {exc}")
         raise typer.Exit(1) from None
+    _capability_log.record_sync("project create")
     where = f" · {row['path']}" if row.get("path") else ""
-    _console.print(f"[ok]created[/ok] {row['name']} ({row['kind']}){where} — id [accent]{row['id']}[/accent]")
+    _console.print(f"[ok]created[/ok] {row['name']} ({row['kind']}){where}; id [accent]{row['id']}[/accent]")
 
 
 @project_app.command("list")
@@ -75,7 +77,7 @@ def list_cmd(
         )
     )
     if not rows:
-        _console.print("[stone]no projects yet — lhassa project create <name>[/stone]")
+        _console.print("[stone]no projects yet; lhassa project create <name>[/stone]")
         return
     table = Table(**TABLE_KWARGS)
     for col in ("id", "name", "kind", "status", "path"):
