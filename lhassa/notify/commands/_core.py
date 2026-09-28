@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """Core system commands: /start /help /status /version /config /report.
 
-Moved verbatim out of the former ``lhassa/notify/commands.py`` — see the
+Moved verbatim out of the former ``lhassa/notify/commands.py``: see the
 package ``__init__.py`` for where every other command handler now lives.
 """
 
@@ -20,18 +20,18 @@ __all__ = ["DESCRIPTIONS", "menu_entries"]
 
 @register_command("start")
 async def _cmd_start(args: str, *, config=None) -> str:
-    """Lhassa introduces itself — first person, the monk's register (see
+    """Lhassa introduces itself; first person, the monk's register (see
     doc/narrative.md). Short, warm, gender-neutral, pointing at /help."""
     return (
-        "I am Lhassa. I live on your machine — I watch quietly, remember what "
+        "I am Lhassa. I live on your machine; I watch quietly, remember what "
         "matters, and think only when it is worth the spend. Speak to me in "
         "plain words and I will answer; /help shows everything I can do."
     )
 
 
 # One-line description for each built-in command, grouped for /help. A command
-# registered by a plugin but missing here still appears — see _cmd_help's final
-# "also available" line — so a drop-in command can never vanish from /help.
+# registered by a plugin but missing here still appears; see _cmd_help's final
+# "also available" line; so a drop-in command can never vanish from /help.
 _HELP_GROUPS: list[Tuple[str, list[str]]] = [
     ("Chat & memory", ["ai", "moa", "recall", "memory", "knowledge", "remind", "event", "checkin", "today", "tomorrow"]),
     ("Calendars", ["calendar", "calendars"]),
@@ -45,16 +45,16 @@ _HELP_GROUPS: list[Tuple[str, list[str]]] = [
 DESCRIPTIONS: dict[str, str] = {
     "start": "Introduce myself.",
     "help": "This catalog.",
-    "ai": "<question> — I search the web AND answer it specifically (not just links).",
-    "moa": "<question> — ask a panel of models (not just one) and synthesize their answers; costs more, use for high-stakes decisions.",
-    "recall": "<text> — search past episodes.",
-    "memory": "<query> — search durable facts.",
-    "knowledge": "<query> — search your indexed notes/papers (document perception).",
-    "checkin": "<text> — save a personal morning/evening note.",
-    "remind": "<what> a las 5pm | in 30 min — a timed reminder + a calendar file.",
-    "event": "<what> a las 5pm | in 30 min — just the calendar file, no reminder.",
+    "ai": "<question>; I search the web AND answer it specifically (not just links).",
+    "moa": "<question>; ask a panel of models (not just one) and synthesize their answers; costs more, use for high-stakes decisions.",
+    "recall": "<text>; search past episodes.",
+    "memory": "<query>; search durable facts.",
+    "knowledge": "<query>; search your indexed notes/papers (document perception).",
+    "checkin": "<text>; save a personal morning/evening note.",
+    "remind": "<what> a las 5pm | in 30 min; a timed reminder + a calendar file.",
+    "event": "<what> a las 5pm | in 30 min; just the calendar file, no reminder.",
     "calendar": (
-        "add <name> <url> | remove <name> | primary <name> | sync | view <when> — "
+        "add <name> <url> | remove <name> | primary <name> | sync | view <when>; "
         "manage your named calendars, the master-calendar reconcile, and a "
         "$0 deterministic 'what's on my calendar' lookup."
     ),
@@ -62,38 +62,38 @@ DESCRIPTIONS: dict[str, str] = {
     "today": "Personal agenda for today.",
     "tomorrow": "Personal agenda for tomorrow.",
     "approvals": "List what's waiting on your decision.",
-    "approve": "<id> — approve a pending action.",
-    "deny": "<id> — deny a pending action.",
-    "watch": "<pattern> -> <accion> — add a watch rule.",
+    "approve": "<id>; approve a pending action.",
+    "deny": "<id>; deny a pending action.",
+    "watch": "<pattern> -> <accion>; add a watch rule.",
     "watches": "List configured watch rules.",
-    "unwatch": "<index> — remove a watch rule.",
+    "unwatch": "<index>; remove a watch rule.",
     "goal": (
         "<text> [--every daily|hourly] [--verify command:<cmd>|regex:<pattern>] "
-        "[--turns N] — schedule a recurring think, optionally bounded + "
+        "[--turns N]; schedule a recurring think, optionally bounded + "
         "verify-terminated."
     ),
     "temple": (
-        "<instruction> | schedule — internal work / the temple's own clock "
+        "<instruction> | schedule; internal work / the temple's own clock "
         "(e.g. 'distill', 'curate skills', 'sync calendar', 'derive world')."
     ),
     "cvnewbase": "Arm a base-CV replacement.",
     "cvbase": "Show the base CV on file.",
-    "code": "<task> — launch a coding agent on your files (asks for your approval first).",
+    "code": "<task>; launch a coding agent on your files (asks for your approval first).",
     "status": "Provider, health and today's spend.",
-    "report": "[days] — spend summary (default 7d).",
+    "report": "[days]; spend summary (default 7d).",
     "capabilities": "What I have wired and what's on.",
     "tools": "The tools I've written myself, and their state.",
     "skills": "The skills installed on me.",
-    "org": "The org chart — brains and how they hang together.",
+    "org": "The org chart; brains and how they hang together.",
     "fleet": "Known machines, last check-in, desired state.",
     "version": "My version, runtime and key toggles.",
-    "config": "[key [value]] — read or change a runtime setting.",
-    "idea": "<text|link> — the geshe's aides investigate it into a corpus draft.",
+    "config": "[key [value]]; read or change a runtime setting.",
+    "idea": "<text|link>; the geshe's aides investigate it into a corpus draft.",
 }
 
 
 def menu_entries() -> list[tuple[str, str]]:
-    """The bot-menu command list for Telegram's ``setMyCommands`` — one source.
+    """The bot-menu command list for Telegram's ``setMyCommands``: one source.
 
     Built from the SAME registry + descriptions ``/help`` renders, so the menu
     can never drift from what actually answers: every described command first
@@ -107,7 +107,7 @@ def menu_entries() -> list[tuple[str, str]]:
     def _desc(text: str) -> str:
         text = " ".join((text or "").split()) or "A Lhassa command."
         if len(text) < 3:
-            text = f"{text} — a Lhassa command."
+            text = f"{text}; a Lhassa command."
         return text[:256]
 
     registered = set(COMMANDS.names())
@@ -117,7 +117,7 @@ def menu_entries() -> list[tuple[str, str]]:
             seen.add(name)
     for name in sorted(registered - seen):
         if re.fullmatch(r"[a-z0-9_]{1,32}", name):
-            entries.append((name, "A Lhassa command — /help describes it."))
+            entries.append((name, "A Lhassa command; /help describes it."))
     return entries
 
 
@@ -133,7 +133,7 @@ async def _cmd_help(args: str, *, config=None) -> str:
         registered = set(COMMANDS.names())
         lines = [
             "I'm Lhassa. Talk to me in plain words and I'll answer through my "
-            "brain — a live-web question gets researched and I'll reply again "
+            "brain; a live-web question gets researched and I'll reply again "
             "once I have it.",
             "",
             "Here is what my commands do:",
@@ -147,7 +147,7 @@ async def _cmd_help(args: str, *, config=None) -> str:
             lines.append(f"{title}:")
             for n in present:
                 seen.add(n)
-                lines.append(f"  /{n} — {DESCRIPTIONS.get(n, '')}".rstrip())
+                lines.append(f"  /{n}; {DESCRIPTIONS.get(n, '')}".rstrip())
         extra = sorted(n for n in registered if n not in seen)
         if extra:
             lines.append("")
@@ -187,7 +187,7 @@ async def _ledger_window_cost(config, days: int) -> Optional[Tuple[float, float]
     """(today_cost_usd, window_cost_usd) from the gateway ledger, or ``None``.
 
     Reads the ledger DB directly (same override as :func:`_today_spend`) so this
-    stays LLM-free and testable against a temp DB — never constructs a provider.
+    stays LLM-free and testable against a temp DB; never constructs a provider.
     """
     try:
         from datetime import datetime, timedelta, timezone
@@ -224,7 +224,7 @@ async def _ledger_window_cost(config, days: int) -> Optional[Tuple[float, float]
 
 @register_command("report")
 async def _cmd_report(args: str, *, config=None) -> str:
-    """``/report [days]`` — spend summary: today + a trailing window (default 7d).
+    """``/report [days]``: spend summary: today + a trailing window (default 7d).
 
     Reads the gateway ledger directly, LLM-free. No ledger yet → a plain "$0 so
     far" line rather than an error.
@@ -235,7 +235,7 @@ async def _cmd_report(args: str, *, config=None) -> str:
         try:
             days = max(int(days_raw), 1)
         except ValueError:
-            return "Usage: /report [days] — a whole number of days, default 7."
+            return "Usage: /report [days]; a whole number of days, default 7."
 
     cfg = _config(config)
     result = await _ledger_window_cost(cfg, days)
@@ -247,7 +247,7 @@ async def _cmd_report(args: str, *, config=None) -> str:
 
 @register_command("config")
 async def _cmd_config(args: str, *, config=None) -> str:
-    """``/config [key [value]]`` — read/change a runtime setting, LLM-free.
+    """``/config [key [value]]``: read/change a runtime setting, LLM-free.
 
     The CLI-parity door onto the settings service: the same EDITABLE allowlist,
     coercion, provider guard, live-apply and ``settings.env`` persistence that
@@ -275,7 +275,7 @@ async def _cmd_config(args: str, *, config=None) -> str:
         if len(parts) == 1:
             row = _settings.get(key, cfg)
             if row.get("error"):
-                return f"No editable setting {key!r} — see /config for the list."
+                return f"No editable setting {key!r}; see /config for the list."
             lines = [
                 f"{row['key']} = {row['value']}"
                 + (" (overridden)" if row.get("overridden") else ""),
@@ -301,10 +301,10 @@ async def _cmd_config(args: str, *, config=None) -> str:
 
 @register_command("version")
 async def _cmd_version(args: str, *, config=None) -> str:
-    """``/version`` — version, runtime and key config toggles, LLM-free.
+    """``/version``: version, runtime and key config toggles, LLM-free.
 
-    Reuses :func:`lhassa.cli.extra_cmds.version_info` — the same source
-    ``lhassa version`` prints — so the two surfaces never drift apart.
+    Reuses :func:`lhassa.cli.extra_cmds.version_info`: the same source
+    ``lhassa version`` prints; so the two surfaces never drift apart.
     """
     try:
         from lhassa.cli.extra_cmds import version_info

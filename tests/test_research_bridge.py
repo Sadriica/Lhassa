@@ -1,4 +1,4 @@
-"""The Telegram research bridge — the [[research: …]] marker + research_reply.
+"""The Telegram research bridge; the [[research: …]] marker + research_reply.
 
 The chat think is tool-less; these tests pin the two halves that make its "I'll
 look it up" promise REAL: the poller turns the marker into a minted task (and
@@ -92,7 +92,7 @@ def test_mint_failure_degrades_without_a_false_promise(monkeypatch):
             config=_cfg(),
         )
     )
-    # The marker is gone, the visible text survives, and — crucially — the
+    # The marker is gone, the visible text survives, and (crucially) the
     # follow-up promise is NOT made (the task was never minted).
     assert "[[" not in reply
     assert "Déjame ver." in reply
@@ -178,7 +178,7 @@ def test_research_reply_sends_sourced_results(monkeypatch):
 
 def test_research_reply_delivers_through_org_deliver_root_hop(monkeypatch):
     """research_reply now sends via ``org.deliver.deliver`` (an empty
-    ``origin_department`` — research is Lhassa's own hand, not delegated work) —
+    ``origin_department``: research is Lhassa's own hand, not delegated work);
     a single root-attributed ``org-deliver`` Episode should land alongside the
     Telegram send, same as ``send_reminder``."""
     from lhassa.actionpack._research import research_reply
@@ -261,7 +261,7 @@ def test_research_reply_found_nothing_says_so_honestly(monkeypatch):
 
 
 def test_news_intent_routes_to_the_news_vertical_first(monkeypatch):
-    """"noticias de hoy" is answerable because the NEWS vertical answers it —
+    """"noticias de hoy" is answerable because the NEWS vertical answers it;
     the routing a general search engine does internally."""
     from lhassa.actionpack._research import research_reply
 

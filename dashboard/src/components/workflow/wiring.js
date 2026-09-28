@@ -1,11 +1,11 @@
 // ── edge wiring + edge-visual helpers (pure) ────────────────────────────────────
 // Where a freshly-added palette node auto-connects FROM, plus the label/style an
-// edge gets from its optional `when` condition. No React — the editor closures
+// edge gets from its optional `when` condition. No React; the editor closures
 // (addNode / onConnect / updateEdgeWhen / initialGraph) call these.
 import { kindMeta } from '../flowNodeKinds'
 
 // Pick a sensible node to auto-wire a freshly-added node FROM: the currently
-// selected node (if it can emit), else the nearest "tail" — a node with a source
+// selected node (if it can emit), else the nearest "tail"; a node with a source
 // handle and no outgoing edge (most-recently-added first), else the last emitter.
 export function pickAutoSource(nodes, edges, selId) {
   const byId = {}

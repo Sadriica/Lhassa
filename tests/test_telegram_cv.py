@@ -149,7 +149,7 @@ def test_document_update_runs_flow_and_sends_tex(monkeypatch, tmp_path):
         telegram_inbound.httpx, "AsyncClient", _client_returning(payload)
     )
 
-    # Bot API file helpers — no network.
+    # Bot API file helpers; no network.
     async def _fake_get_file(file_id, *, config=None):
         assert file_id == "FID"
         return tex_body.encode()
@@ -662,7 +662,7 @@ def test_base_info_shape(monkeypatch, tmp_path):
         "first_line": "",
     }
 
-    # Present base — first non-blank line is reported.
+    # Present base; first non-blank line is reported.
     paths.base_path().write_text("\n  \n\\documentclass{article}\nrest\n", encoding="utf-8")
     info = cv.base_info()
     assert info["exists"] is True
@@ -671,7 +671,7 @@ def test_base_info_shape(monkeypatch, tmp_path):
     assert info["path"] == str(paths.base_path())
 
 
-# ── compile_pdf (tectonic) — never runs a real engine in the suite ────────────
+# ── compile_pdf (tectonic); never runs a real engine in the suite ────────────
 def test_compile_pdf_missing_engine_returns_none(monkeypatch, tmp_path):
     import shutil as _shutil
 
@@ -752,7 +752,7 @@ def _run_reply_with_record(monkeypatch, tmp_path, compile_result):
     """Drive ``_reply_with_cv`` with a completed tex record; return the sent paths.
 
     ``compile_result`` is a callable ``(tex_path) -> Path | None`` patched over
-    ``cv.compile_pdf`` (a fake — no real engine).
+    ``cv.compile_pdf`` (a fake; no real engine).
     """
     tex = tmp_path / "ab12_acme.tex"
     tex.write_text("% tailored", encoding="utf-8")
@@ -797,7 +797,7 @@ def test_reply_falls_back_to_tex_when_compile_fails(monkeypatch, tmp_path):
 
 
 # ── THE flagship migration: the tailored CV travels UP the org chain ──────────
-# (§org: "the hierarchy is the philosophy, not a feature" — a surface-direct send
+# (§org: "the hierarchy is the philosophy, not a feature": a surface-direct send
 # is a design bug). ``_reply_with_cv`` now goes through ``org.deliver.deliver``
 # instead of calling ``telegram_api.send_document`` itself: every brain on the
 # command chain (the owning department, then Lhassa) logs its own ``org-deliver``
@@ -854,7 +854,7 @@ def test_cv_reply_writes_the_per_brain_delivery_chain(monkeypatch, tmp_path):
     )
 
     # The final outcome: exactly the same file/caption the owner used to get
-    # directly from ``telegram_api.send_document`` — UX is byte-for-byte identical.
+    # directly from ``telegram_api.send_document``: UX is byte-for-byte identical.
     assert sent_docs == [{"path": str(tex), "caption": "Tailored CV for Acme."}]
 
     rows = asyncio.run(db.load_recent_episodes("inst_personal", n=100))

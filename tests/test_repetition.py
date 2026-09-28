@@ -1,4 +1,4 @@
-"""Tests for lhassa.agents.repetition — the $0 repeated-think detector.
+"""Tests for lhassa.agents.repetition; the $0 repeated-think detector.
 
 Offline: episodes are inserted directly via lhassa.core.db.append_episode against
 a tmp brain DB. No LLM, no network.
@@ -14,7 +14,7 @@ from lhassa.agents.repetition import detect_repetition, effective_threshold, pat
 
 @dataclass
 class _FakeEpisode:
-    """Minimal Episode double — just enough for db.append_episode."""
+    """Minimal Episode double; just enough for db.append_episode."""
 
     id: str
     instance_id: str
@@ -226,7 +226,7 @@ def test_is_infrastructure_recognizes_own_machinery():
     assert is_infrastructure("task:distill_memory")
     assert is_infrastructure("task:detect_repetition")
     assert is_infrastructure("task:send_digest")
-    # Owner-driven wakes are NOT infra — real repeated work must still surface.
+    # Owner-driven wakes are NOT infra; real repeated work must still surface.
     assert not is_infrastructure("telegram")
     assert not is_infrastructure("task:send_reminder")
     assert not is_infrastructure("task:research_reply")
@@ -293,7 +293,7 @@ async def test_detect_recurring_finds_many_times_zero_cost_pattern(brain):
     hit = next(f for f in findings if f["accion"] == "responder")
     assert hit["count"] == 4
     assert hit["judgment"] is True  # "responder" is a chat judgment, not a tool candidate
-    assert hit["cadence"] is None  # all seeded at ~the same instant — no regular gap
+    assert hit["cadence"] is None  # all seeded at ~the same instant; no regular gap
 
 
 @pytest.mark.asyncio
@@ -648,7 +648,7 @@ def test_effective_threshold_never_raises_on_bad_input():
 async def test_detect_repetition_fires_with_few_repeats_in_a_tiny_population(brain):
     """No explicit threshold: DEFAULT_THRESHOLD=5 would never fire on 3 repeats,
     but a young/tiny window (population==3, nothing else in the log) relaxes the
-    bar toward the floor — this is the whole point of item 2.1."""
+    bar toward the floor; this is the whole point of item 2.1."""
     for _ in range(3):
         await _seed_episode(
             brain, instance_id="inst_young", despertar_por="pending_task",
@@ -665,7 +665,7 @@ async def test_detect_repetition_fires_with_few_repeats_in_a_tiny_population(bra
 @pytest.mark.asyncio
 async def test_detect_repetition_does_not_fire_with_same_repeats_in_a_large_population(brain):
     """Same 3 repeats of the target pattern, but a large window (many other
-    episodes) keeps the effective threshold at the strict base — no noise for a
+    episodes) keeps the effective threshold at the strict base; no noise for a
     mature brain."""
     for _ in range(3):
         await _seed_episode(
@@ -684,7 +684,7 @@ async def test_detect_repetition_does_not_fire_with_same_repeats_in_a_large_popu
 @pytest.mark.asyncio
 async def test_detect_repetition_explicit_threshold_is_never_adapted(brain):
     """An explicit `threshold=` argument wins unchanged even in a tiny population
-    that would otherwise relax the bar — backward compatible with existing callers."""
+    that would otherwise relax the bar; backward compatible with existing callers."""
     for _ in range(3):
         await _seed_episode(
             brain, instance_id="inst_explicit", despertar_por="pending_task",

@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { SECTIONS } from '../lib/sections'
 
-// Valid section keys + persistence — the active section deep-links via the URL
+// Valid section keys + persistence; the active section deep-links via the URL
 // hash (#flows, #brains…) and remembers the last one in localStorage.
 const SECTION_IDS = new Set(SECTIONS.map((s) => s.id))
 const DEFAULT_SECTION = 'overview'
@@ -31,13 +31,13 @@ function initialSection() {
     const stored = localStorage.getItem(SECTION_STORAGE_KEY)
     if (stored && SECTION_IDS.has(stored)) return stored
   } catch {
-    // localStorage may be unavailable (private mode) — fall through to default.
+    // localStorage may be unavailable (private mode); fall through to default.
   }
   return DEFAULT_SECTION
 }
 
 /**
- * useSectionRouting — the active `section` (+ optional `subRoute` deep-link tail)
+ * useSectionRouting; the active `section` (+ optional `subRoute` deep-link tail)
  * mirrored to the URL hash and localStorage, with Back/Forward support.
  *
  * Returns { section, subRoute, goToSection, onFlowRoute }. `goToSection` switches
@@ -51,7 +51,7 @@ export default function useSectionRouting() {
   const hashInitRef = useRef(false) // first hash sync normalizes without a history push
 
   // Section (+ optional sub-route) ↔ URL hash + localStorage. On change, mirror
-  // the section — and any `#<section>/<sub>` tail — into the hash (so it's
+  // the section; and any `#<section>/<sub>` tail; into the hash (so it's
   // bookmarkable) and remember the SECTION only (never the sub-route). The first
   // sync normalizes the URL without adding a junk history entry; later changes
   // push one so the browser Back/Forward buttons walk between sections *and*

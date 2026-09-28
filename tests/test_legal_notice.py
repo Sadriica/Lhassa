@@ -3,7 +3,7 @@
 Lhassa's LICENSE carries an additional term under AGPL-3.0 section 7(b): the
 attribution notice must be preserved and displayed wherever legal or version
 information is shown. A term like that is worth nothing if the notice is a
-decorative string someone can delete without consequence — so these tests are
+decorative string someone can delete without consequence; so these tests are
 the consequence. Removing the notice from the CLI, the API, the dashboard, or
 LICENSE itself fails the suite.
 """
@@ -59,7 +59,7 @@ def test_license_no_longer_grants_mit():
 
 
 def test_cli_version_renders_the_notice():
-    """`lhassa version` must show it — and `--json` must not be a way around it."""
+    """`lhassa version` must show it; and `--json` must not be a way around it."""
     from lhassa.cli.extra_cmds import version_info
 
     info = version_info()
@@ -118,5 +118,5 @@ def test_readmes_declare_agpl_and_not_mit():
     for name in ("README.md", "README.es.md"):
         text = (REPO / name).read_text()
         assert "AGPL" in text, f"{name} does not mention AGPL"
-        assert "MIT — see" not in text, f"{name} still declares MIT"
-        assert "MIT — ver" not in text, f"{name} still declares MIT"
+        assert "MIT; see" not in text, f"{name} still declares MIT"
+        assert "MIT; ver" not in text, f"{name} still declares MIT"

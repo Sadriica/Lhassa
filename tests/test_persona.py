@@ -1,4 +1,4 @@
-"""Parametrized identity — org hook #2 (§3-Fase 0): persona.py loads the
+"""Parametrized identity; org hook #2 (§3-Fase 0): persona.py loads the
 instance's identity at startup, not a constant. Backward-compat exports must stay
 identical so the LLM path and the LLM-free alert path keep working unchanged.
 """
@@ -52,5 +52,5 @@ def test_backward_compatible_exports_unchanged():
     assert persona.PERSONA_NAME == "Lhassa"
     # STYLE_GUIDE + format_alert still present and behaving as before.
     assert "humble" in persona.STYLE_GUIDE["tone"]  # the tone evolved; humility is permanent
-    assert format_alert("disk almost full", level="warn") == "Heads up — disk almost full"
+    assert format_alert("disk almost full", level="warn") == "Heads up: disk almost full"
     assert format_alert("all good", level="info") == "all good"

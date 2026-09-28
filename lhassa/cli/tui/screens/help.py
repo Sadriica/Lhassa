@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""The keyboard-help overlay — a modal listing every binding, bound to ``?``/``F1``.
+"""The keyboard-help overlay; a modal listing every binding, bound to ``?``/``F1``.
 
 Textual's Footer only has room for the active screen's bindings; this modal is
 the whole map in one place, grouped by scope. It is a plain ``ModalScreen``
-dismissed by ``escape``, ``?`` or ``q`` — the conventional Textual help idiom.
+dismissed by ``escape``, ``?`` or ``q``: the conventional Textual help idiom.
 """
 
 from __future__ import annotations
@@ -13,12 +13,12 @@ from textual.containers import Vertical, VerticalScroll
 from textual.screen import ModalScreen
 from textual.widgets import Static
 
-#: ``(scope, [(keys, what it does), …])`` — the single source of the help text.
+#: ``(scope, [(keys, what it does), …])``: the single source of the help text.
 HELP: list[tuple[str, list[tuple[str, str]]]] = [
     (
         "Anywhere",
         [
-            ("ctrl+p", "Command palette — jump to a screen or run an action"),
+            ("ctrl+p", "Command palette; jump to a screen or run an action"),
             ("?  /  f1", "This help"),
             ("r", "Refresh the current screen now"),
             ("q", "Quit"),
@@ -27,7 +27,7 @@ HELP: list[tuple[str, list[tuple[str, str]]]] = [
     (
         "Tables (Projects · Runs · Approvals · Flows · Skills · Memory · Org)",
         [
-            ("/", "Filter — case-insensitive substring over the row"),
+            ("/", "Filter; case-insensitive substring over the row"),
             ("escape", "Clear the filter"),
             ("↑ ↓ · pgup pgdn", "Move the cursor"),
             ("enter", "Select the row (loads its detail pane where there is one)"),
@@ -65,7 +65,7 @@ class HelpScreen(ModalScreen):
 
     def compose(self) -> ComposeResult:
         with Vertical():
-            yield Static("Lhassa TUI — keyboard map", classes="help-title")
+            yield Static("Lhassa TUI; keyboard map", classes="help-title")
             with VerticalScroll():
                 for scope, bindings in HELP:
                     yield Static(scope, classes="help-scope")

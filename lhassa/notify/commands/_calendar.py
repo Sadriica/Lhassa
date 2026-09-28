@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Named calendar feeds + the master-calendar reconcile — /calendar /calendars.
+"""Named calendar feeds + the master-calendar reconcile; /calendar /calendars.
 
 Moved verbatim out of the former ``lhassa/notify/commands.py``.
 
 An owner can subscribe several calendars (institutional, personal, a project
 one), each with a name, so /today shows which calendar an event is from (see
-lhassa.calendar.store). These commands never touch the network — they only
+lhassa.calendar.store). These commands never touch the network; they only
 edit the JSON store; the next /today simply picks up the new list.
 """
 
@@ -20,7 +20,7 @@ from ._shared import _config, _oops
 
 
 def _mask_url(url: str) -> str:
-    """A short, non-secret preview of a feed url — never the full thing.
+    """A short, non-secret preview of a feed url; never the full thing.
 
     Calendar URLs carry read access to the owner's calendar, so /calendars must
     never echo one back in full. Shows scheme+host plus a short prefix of the
@@ -34,7 +34,7 @@ def _mask_url(url: str) -> str:
 
 @register_command("calendars")
 async def _cmd_calendars(args: str, *, config=None) -> str:
-    """``/calendars`` — list configured named calendars (name + a masked url)."""
+    """``/calendars``: list configured named calendars (name + a masked url)."""
     try:
         cfg = _config(config)
         from lhassa.calendar import store as _cal_store
@@ -59,10 +59,10 @@ async def _cmd_calendars(args: str, *, config=None) -> str:
 
 @register_command("calendar")
 async def _cmd_calendar(args: str, *, config=None) -> str:
-    """``/calendar add <name> <url> | remove <name> | primary <name> | sync`` —
+    """``/calendar add <name> <url> | remove <name> | primary <name> | sync``;
     manage named calendar feeds and the master-calendar reconcile.
 
-    ``add``/``remove`` never touch the network — they only edit the JSON store
+    ``add``/``remove`` never touch the network; they only edit the JSON store
     (:mod:`lhassa.calendar.store`); the feed is fetched lazily, the next time
     /today (or /calendar sync) runs. ``primary`` designates the MASTER calendar
     (see :mod:`lhassa.calendar.reconcile`); ``sync`` runs the $0 diff now and
@@ -71,11 +71,11 @@ async def _cmd_calendar(args: str, *, config=None) -> str:
     text = (args or "").strip()
     if not text:
         return (
-            "Usage: /calendar add <name> <url> — subscribe a named calendar.\n"
-            "       /calendar remove <name> — drop one.\n"
-            "       /calendar primary <name> — set your master calendar.\n"
-            "       /calendar sync — find events missing from the master.\n"
-            "       /calendar view <when> — e.g. 'friday', 'esta semana', 'hoy'.\n"
+            "Usage: /calendar add <name> <url>; subscribe a named calendar.\n"
+            "       /calendar remove <name>; drop one.\n"
+            "       /calendar primary <name>; set your master calendar.\n"
+            "       /calendar sync; find events missing from the master.\n"
+            "       /calendar view <when>; e.g. 'friday', 'esta semana', 'hoy'.\n"
             "See /calendars to list what's configured."
         )
     parts = text.split(maxsplit=1)
@@ -94,7 +94,7 @@ async def _cmd_calendar(args: str, *, config=None) -> str:
             ok = _cal_store.add_calendar(name, url, config=cfg)
             if not ok:
                 return (
-                    "Couldn't add that — check the name isn't empty and the url "
+                    "Couldn't add that; check the name isn't empty and the url "
                     "starts with http:// or https://."
                 )
             return f"Calendar added: {name}. See /calendars, /today."
@@ -127,12 +127,12 @@ async def _cmd_calendar(args: str, *, config=None) -> str:
         if sub in ("view", "on", "when"):
             when = rest.strip()
             if not when:
-                return "Usage: /calendar view <when> — e.g. 'friday', 'esta semana', 'hoy'."
+                return "Usage: /calendar view <when>; e.g. 'friday', 'esta semana', 'hoy'."
             from lhassa.calendar import query as _cal_query
 
             instance_id = getattr(cfg, "instance_id", None) or "inst_personal"
             # Force a calendar answer even for a bare time phrase with no
-            # calendar keyword ("/calendar view friday") — the command itself
+            # calendar keyword ("/calendar view friday"); the command itself
             # already establishes intent, so route straight past
             # is_calendar_query's stricter chat-message heuristic.
             reply = await _cal_query.answer(instance_id, f"calendar {when}", config=cfg)
@@ -160,7 +160,7 @@ _CALENDAR_SYNC_RE = re.compile(
 def _calendar_sync_reply(summary: str) -> str:
     """Render :func:`lhassa.actionpack._calendar_sync.calendar_sync`'s plain
     outcome string in the Telegram voice. Falls back to the raw string for the
-    "no primary" / "nothing to sync" / error outcomes — those already read
+    "no primary" / "nothing to sync" / error outcomes; those already read
     fine verbatim."""
     m = _CALENDAR_SYNC_RE.match(summary or "")
     if not m:
@@ -170,5 +170,5 @@ def _calendar_sync_reply(summary: str) -> str:
         return "Your other calendars are already in sync with your master calendar."
     return (
         f"I found {n} event(s) on your other calendars not in your master "
-        f"calendar — sent you {delivered} to add."
+        f"calendar; sent you {delivered} to add."
     )

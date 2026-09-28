@@ -1,22 +1,22 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Document perception — the brain reads the OWNER'S OWN documents, $0, local.
+"""Document perception; the brain reads the OWNER'S OWN documents, $0, local.
 
 The owner points Lhassa at a small set of KNOWLEDGE ROOTS (``config.knowledge_roots``,
-``LHASSA_KNOWLEDGE_ROOTS``, a CSV of directories — notes, papers, projects), NOT
+``LHASSA_KNOWLEDGE_ROOTS``, a CSV of directories; notes, papers, projects), NOT
 "read the whole PC": nothing is indexed until this is set, and a HARD,
 non-negotiable ignore-list keeps secrets out regardless of what a root contains
-(mirrors the calendar design — specific sources, not all your data; see
+(mirrors the calendar design; specific sources, not all your data; see
 ``doc/boundaries.md``). :func:`ingest` walks each root, chunks and embeds every
 allowed text/PDF file with the same offline-capable embedder memory layer 4 uses
 (:func:`lhassa.memory.embeddings.get_embedder`), and stores the chunks in the
-``knowledge`` table (:mod:`lhassa.core.db`) — local to ``~/.lhassa/brain.db``,
+``knowledge`` table (:mod:`lhassa.core.db`); local to ``~/.lhassa/brain.db``,
 never the repo. :func:`search` is a bounded cosine scan over this instance's
 chunks, the same pattern as :mod:`lhassa.memory.answer_cache`. Every public
-function here is $0, deterministic, and NEVER raises — a failure degrades to an
+function here is $0, deterministic, and NEVER raises; a failure degrades to an
 empty result, exactly like the recall/semantic layers in ``memory/load.py``.
 
 Interface layer: imports only ``memory.embeddings``, ``core.db``, stdlib, and
-``pypdf`` (lazy, optional) — no shell. See ``tests/test_architecture.py``.
+``pypdf`` (lazy, optional); no shell. See ``tests/test_architecture.py``.
 """
 
 from __future__ import annotations
@@ -33,7 +33,7 @@ from lhassa.cv.extract import extract_text
 from lhassa.memory.embeddings import cosine, get_embedder
 
 # ── the HARD ignore-list (privacy-critical, non-negotiable) ─────────────────
-# Applied regardless of what a knowledge root contains — this is not a default
+# Applied regardless of what a knowledge root contains; this is not a default
 # that the owner can accidentally widen; it is baked into ``ingest`` itself.
 
 # Directory names pruned outright (walk never descends into them).
@@ -65,7 +65,7 @@ _IGNORE_FILE_GLOBS: tuple[str, ...] = (
 )
 
 # Only these extensions are indexed by default (text + PDF). Code and anything
-# else is out of scope on purpose — this is document perception, not a code
+# else is out of scope on purpose; this is document perception, not a code
 # indexer.
 _ALLOWED_TEXT_EXTS: frozenset[str] = frozenset(
     {".md", ".txt", ".rst", ".org", ".tex", ".markdown"}
@@ -119,7 +119,7 @@ def _extract_text(path: Path) -> str:
     """Read one indexable file's text. Returns ``""`` on any failure (skip).
 
     Delegates PDF/text extraction to :func:`lhassa.cv.extract.extract_text`
-    (the leaf file-I/O seam) — one pypdf/UTF-8 implementation, not two.
+    (the leaf file-I/O seam); one pypdf/UTF-8 implementation, not two.
     """
     try:
         data = path.read_bytes()
@@ -157,7 +157,7 @@ async def ingest(instance_id: str, *, config=None) -> dict:
     """Walk every root in ``config.knowledge_roots``, indexing new/changed files.
 
     Returns ``{"roots": int, "files_scanned": int, "files_indexed": int,
-    "chunks": int, "skipped_secrets": int}``. Never raises — any per-file or
+    "chunks": int, "skipped_secrets": int}``. Never raises; any per-file or
     per-root failure is logged and skipped, the walk continues.
     """
     config = config or Config
@@ -217,7 +217,7 @@ async def ingest(instance_id: str, *, config=None) -> dict:
                         # pre-size-column row, trust the mtime alone.
                         and (prior[1] < 0 or prior[1] == size)
                     ):
-                        continue  # unchanged — skip
+                        continue  # unchanged; skip
 
                     text = _extract_text(path)
                     if not text:
@@ -259,7 +259,7 @@ async def ingest(instance_id: str, *, config=None) -> dict:
 async def search(
     instance_id: str, query: str, *, limit: int = 5, config=None
 ) -> list[dict]:
-    """Return the top ``limit`` chunks matching ``query`` — $0, never raises.
+    """Return the top ``limit`` chunks matching ``query``: $0, never raises.
 
     Embeds ``query`` with the configured embedder, cosine-scans a bounded
     recent set of this instance's indexed chunks, and returns

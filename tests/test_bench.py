@@ -1,4 +1,4 @@
-"""LhassaBench (Wave E) — fully offline.
+"""LhassaBench (Wave E); fully offline.
 
 Covers: every bundled fixture loads and its ``verify`` spec constructs
 cleanly through the REAL :func:`lhassa.agents.verify.make_verifier` (no
@@ -6,7 +6,7 @@ bypass); :func:`lhassa.bench.runner.run_bench` scores pass/fail correctly
 with a stubbed ``complete_fn`` and writes rows to ``bench_runs``; an
 unresolvable subject degrades to an honest failed row, never an exception;
 :func:`lhassa.bench.runner.summarize` reports pass-rates; and the scorer is
-LOCKED to ``agents.verify.verify`` — monkeypatching it to raise still yields
+LOCKED to ``agents.verify.verify``: monkeypatching it to raise still yields
 failed rows through ``run_bench``, proving there is no separate/bypassable
 scoring path.
 """
@@ -54,7 +54,7 @@ class FakeProvider:
     is_local = False
 
     async def complete(self, messages, *, model=None, max_tokens=1024, **opts):
-        return FakeCompletion("unused — complete_fn stub bypasses this")
+        return FakeCompletion("unused; complete_fn stub bypasses this")
 
 
 # ── fixtures: load + validate against the real verifier ──────────────────────
@@ -225,8 +225,8 @@ def test_scorer_is_locked_to_agents_verify(brain, monkeypatch):
     monkeypatch.setattr(verify_agent, "verify", _raise)
     rows = _run(["fake"], fixtures=["factual_capital_france"], complete_fn=_canned_complete_fn)
     assert len(rows) == 1
-    # The raise propagates out of run_bench's own call to verify_agent.verify —
-    # proving run_bench really calls THAT function (not a private copy) — but
+    # The raise propagates out of run_bench's own call to verify_agent.verify;
+    # proving run_bench really calls THAT function (not a private copy); but
     # run_bench still must not crash: it degrades to a failed row.
     assert rows[0]["passed"] is False
 

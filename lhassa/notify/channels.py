@@ -1,21 +1,21 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Notification channels — a modular registry of outbound delivery targets.
+"""Notification channels; a modular registry of outbound delivery targets.
 
 The owner's standing principle is that Lhassa must be **fully elastic and highly
 modular**: every swap point sits behind an interface + a registry, and new
 capabilities are **drop-in** (add a module, never edit core). Outbound
 notifications are one such swap point: today Telegram + a desktop toast + a log
-sink, tomorrow email / SMS / a webhook — each is just another registered channel.
+sink, tomorrow email / SMS / a webhook; each is just another registered channel.
 
 This module defines:
 
-* :class:`Channel` — the Protocol every channel implements (a ``name``, a
+* :class:`Channel`: the Protocol every channel implements (a ``name``, a
   ``is_configured(config)`` predicate, and an ``async send(...)`` that **never
   raises** and returns whether the message was delivered);
-* :data:`CHANNELS` — the module-level :class:`~lhassa.registry.Registry` of
+* :data:`CHANNELS`: the module-level :class:`~lhassa.registry.Registry` of
   channels, plus :func:`register_channel`, a thin decorator/direct-call wrapper so
   a plugin can drop in a new channel **without editing core**;
-* :func:`active_channels` — resolves ``config.notify_channels`` (a comma-separated
+* :func:`active_channels`: resolves ``config.notify_channels`` (a comma-separated
   order) into the registered **and configured** channels, in that order; unknown
   names are skipped with a warning, unconfigured channels are skipped silently.
 
@@ -69,18 +69,18 @@ class Channel(Protocol):
         ...
 
 
-# The channel registry — the single swap point for outbound delivery targets.
+# The channel registry; the single swap point for outbound delivery targets.
 CHANNELS: Registry[Channel] = Registry("channel")
 
 
 def register_channel(name: str, item: Optional[Channel] = None, *, override: bool = False):
-    """Register a channel under ``name`` — a thin wrapper over :data:`CHANNELS`.
+    """Register a channel under ``name``: a thin wrapper over :data:`CHANNELS`.
 
-    Usable as a **decorator** on a channel class (``@register_channel("x")`` — the
+    Usable as a **decorator** on a channel class (``@register_channel("x")``: the
     class is instantiated with no arguments and the **instance** is registered, the
     class itself is returned unchanged) or on a ready instance, and as a **direct
     call** (``register_channel("x", instance)``). A duplicate ``name`` raises unless
-    ``override=True`` — so two plugins can never silently clobber each other.
+    ``override=True``: so two plugins can never silently clobber each other.
     """
 
     def _store(obj):
@@ -102,7 +102,7 @@ def active_channels(config) -> list[Channel]:
     registered **and configured** channels in that order. An unknown name is
     skipped with a warning; an unconfigured (or misbehaving) channel is skipped
     silently. When ``config`` has no ``notify_channels`` attribute the default is
-    ``"telegram"`` — the historical single-channel behaviour, so existing callers
+    ``"telegram"``: the historical single-channel behaviour, so existing callers
     are unchanged.
     """
     raw = getattr(config, "notify_channels", "telegram")
@@ -179,7 +179,7 @@ class LogChannel:
         return True
 
     async def send(self, text: str, *, level: str = "info", config=None, **kwargs) -> bool:
-        # kwargs (e.g. Telegram's parse_mode/reply_markup) are irrelevant here — a
+        # kwargs (e.g. Telegram's parse_mode/reply_markup) are irrelevant here; a
         # log line has no notion of formatting/buttons, so they are simply ignored.
         log_level = _LOG_LEVELS.get(str(level).lower(), "INFO")
         try:

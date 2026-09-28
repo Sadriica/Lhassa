@@ -1,4 +1,4 @@
-"""Work-flow ENGINE tests — offline, with an injected executor (no live model)."""
+"""Work-flow ENGINE tests; offline, with an injected executor (no live model)."""
 
 import asyncio
 import json
@@ -220,7 +220,7 @@ async def test_node_error_becomes_failed_step(offline_env):
     assert rec["status"] == "failed"
     task_step = next(s for s in rec["steps"] if s["kind"] == "task")
     assert task_step["ok"] is False and "provider exploded" in task_step["error"]
-    # the path stopped at the error — the output is not reached
+    # the path stopped at the error; the output is not reached
     assert not any(s["kind"] == "output" for s in rec["steps"])
 
 
@@ -555,7 +555,7 @@ async def test_loop_stops_early_when_verifier_passes(offline_env):
     )
     rec = await run_flow(flow, config=offline_env, executor=counter)
     assert rec["status"] == "completed"
-    assert len(calls) == 2  # bounded — stopped as soon as the verifier passed
+    assert len(calls) == 2  # bounded; stopped as soon as the verifier passed
     loop_step = next(s for s in rec["steps"] if s["kind"] == "loop")
     assert loop_step["loop"]["stop_reason"] == "verified"
     assert loop_step["loop"]["iterations"] == 2
@@ -563,7 +563,7 @@ async def test_loop_stops_early_when_verifier_passes(offline_env):
 
 @pytest.mark.asyncio
 async def test_loop_body_approval_gate_is_refused(offline_env):
-    """A loop body is bounded & verifier-terminated — a human-in-the-loop gate
+    """A loop body is bounded & verifier-terminated; a human-in-the-loop gate
     (approval) would break that contract, so it is refused, not silently run."""
     flow = Flow(
         id="bad-loop", name="bad-loop",
@@ -676,7 +676,7 @@ async def test_subflow_missing_flow_id_fails_the_path(offline_env):
 @pytest.mark.asyncio
 async def test_subflow_recursion_depth_is_bounded(offline_env):
     """A subflow that (transitively) composes itself is refused, not a stack
-    overflow — the bounded recursion-depth guard."""
+    overflow; the bounded recursion-depth guard."""
     recursive = Flow(
         id="recursive",
         name="recursive",

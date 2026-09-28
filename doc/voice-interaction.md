@@ -1,10 +1,10 @@
 # Voice Interaction
 
-Voice is one **opt-in** surface among CLI / Telegram / dashboard — not the
+Voice is one **opt-in** surface among CLI / Telegram / dashboard; not the
 identity of the project (Lhassa is a brain that rents audio as one of its
 bodies, not a voice-first product). It is off
 by default: set `LHASSA_VOICE_ENABLED=1`, install the `voice` extra
-(`uv sync --extra voice` — pulls in `pipecat`/`torch`/`pyaudio`, see
+(`uv sync --extra voice`: pulls in `pipecat`/`torch`/`pyaudio`, see
 [`deployment.md`](deployment.md)), and provide the Deepgram (STT) and
 Cartesia (TTS) keys. It is a laptop-only surface: it needs local audio
 hardware, so it runs via `make run` / `make dev`, never in the container
@@ -60,8 +60,8 @@ Lhassa uses short audio tones to signal its state without interrupting the flow 
 
 | Tone | Frequency | Duration | Meaning |
 |---|---|---|---|
-| High beep | 880 Hz | 120 ms | **Lhassa just woke up** — it heard your wake word and is now listening for your request |
-| Low beep | 440 Hz | 80 ms | **Lhassa went to sleep** — the 5-minute inactivity timeout fired |
+| High beep | 880 Hz | 120 ms | **Lhassa just woke up**: it heard your wake word and is now listening for your request |
+| Low beep | 440 Hz | 80 ms | **Lhassa went to sleep**: the 5-minute inactivity timeout fired |
 
 If you hear nothing when you say "Lhassa", the wake word was not recognised. Try again, or check your microphone.
 
@@ -72,12 +72,12 @@ If you hear nothing when you say "Lhassa", the wake word was not recognised. Try
 After Lhassa wakes up, if it doesn't detect you speaking for **5 minutes**, it automatically goes back to sleep. You'll hear the low beep and see:
 
 ```
-[Lhassa sleeping — say 'Lhassa' to wake]
+[Lhassa sleeping; say 'Lhassa' to wake]
 ```
 
 This prevents the LLM from receiving accidental transcriptions of background audio. To use Lhassa again, say the wake word.
 
-The timeout counter resets every time Lhassa finishes speaking a response — so as long as the conversation is active, it won't time out mid-session.
+The timeout counter resets every time Lhassa finishes speaking a response; so as long as the conversation is active, it won't time out mid-session.
 
 ---
 
@@ -102,9 +102,9 @@ Lhassa: [stops immediately] Rome was traditionally founded in 753 BC.
 
 Deepgram STT is configured with `language="es"` (Spanish) and `keyterm=["Lhassa"]` for boosted recognition of the wake word. This means:
 
-- **Speech recognition performs best with Spanish** — but it handles code-switching (mixing Spanish and English) well.
+- **Speech recognition performs best with Spanish**: but it handles code-switching (mixing Spanish and English) well.
 - **Lhassa responds in whatever language you speak to it.** The system prompt does not impose a language on the LLM. If you speak English, Lhassa answers in English. If you speak Spanish, it answers in Spanish.
-- The Spanish STT setting is why some wake word variants are Spanish words — they're phonetic near-matches that the model might output for the sound "Lhassa."
+- The Spanish STT setting is why some wake word variants are Spanish words; they're phonetic near-matches that the model might output for the sound "Lhassa."
 
 If you primarily speak English and are experiencing wake word issues, you can experiment with changing the `language` setting in `lhassa/voice/pipeline.py`, but be aware this may affect recognition quality for Spanish.
 
@@ -114,17 +114,17 @@ If you primarily speak English and are experiencing wake word issues, you can ex
 
 If you're having trouble with wake word recognition, enable debug mode to see exactly what the STT is transcribing in real time.
 
-**Method 1 — Makefile:**
+**Method 1. Makefile:**
 ```bash
 make dev
 ```
 
-**Method 2 — Environment variable:**
+**Method 2. Environment variable:**
 ```bash
 LHASSA_DEBUG=1 uv run lhassa
 ```
 
-**Method 3 — `.env` file:**
+**Method 3; `.env` file:**
 ```
 LHASSA_DEBUG=1
 ```
@@ -146,14 +146,14 @@ With debug mode on, every transcription frame prints to the terminal as it arriv
 ### Microphone position and gain
 - Use a dedicated microphone rather than a built-in laptop mic if possible.
 - Position it so your mouth is within 30–60 cm.
-- Check your input level in PipeWire with `pavucontrol` — you want to be hitting roughly 50–70% on the input meter when speaking normally.
+- Check your input level in PipeWire with `pavucontrol`: you want to be hitting roughly 50–70% on the input meter when speaking normally.
 
 ### Environment
 - Reduce background noise. Fans, music, and TV audio all degrade transcription quality.
 - If you're in a noisy environment, speak slightly louder or move closer to the mic.
 
 ### Pronunciation
-- The STT is tuned for Spanish. Saying "Lhassa" with a Spanish accent — somewhere between "pots" and "pods" — often improves recognition.
+- The STT is tuned for Spanish. Saying "Lhassa" with a Spanish accent (somewhere between "pots" and "pods") often improves recognition.
 - A short, clear utterance works better than drawing out the word.
 - You don't need a specific tone of voice; a normal conversational volume is fine.
 

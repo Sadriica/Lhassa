@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Notification dispatcher — the single fan-out entry point for outbound alerts.
+"""Notification dispatcher; the single fan-out entry point for outbound alerts.
 
 Other modules call :func:`notify` rather than poking a channel adapter directly.
 It fans out over the **modular channel registry** (:mod:`lhassa.notify.channels`):
@@ -8,11 +8,11 @@ It fans out over the **modular channel registry** (:mod:`lhassa.notify.channels`
 module), never an edit here.
 
 Discipline mirrors the channels it drives:
-- **credential-gated** — an unconfigured channel is skipped (no network/no toast);
-- **never raises** — a channel failure is logged and swallowed, so a notification
+- **credential-gated**: an unconfigured channel is skipped (no network/no toast);
+- **never raises**: a channel failure is logged and swallowed, so a notification
   can never break the caller.
 
-Before fan-out, ``text`` passes through :func:`lhassa.notify.voice.revoice` — the
+Before fan-out, ``text`` passes through :func:`lhassa.notify.voice.revoice`: the
 brain's own voice layer (``config.notify_style``: plain / template / persona) that
 reshapes machine-built lines into something a person would actually read. Voicing
 is itself defensive: any failure there degrades to the original ``text``, so a
@@ -37,7 +37,7 @@ async def notify(
     """Fan ``text`` out to every configured notification channel.
 
     ``kind`` names the notification's shape for the voice layer (see
-    ``lhassa.notify.voice.KINDS`` — "alert" / "reminder" / "action-result" /
+    ``lhassa.notify.voice.KINDS``: "alert" / "reminder" / "action-result" /
     "approval" / "report" / "generic"); callers that omit it get a cheap
     deterministic sniff instead. ``**kwargs`` carries channel-specific extras
     (e.g. Telegram's ``parse_mode`` / ``reply_markup``, an inline keyboard)

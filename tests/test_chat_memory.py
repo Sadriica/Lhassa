@@ -1,4 +1,4 @@
-"""Telegram chat memory — rolling history, the remember nudge, instant tasks.
+"""Telegram chat memory; rolling history, the remember nudge, instant tasks.
 
 All offline: providers, facts and the task runner are monkeypatched fakes.
 """

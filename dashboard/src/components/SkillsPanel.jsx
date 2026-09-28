@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { toast } from '../lib/toast'
 
-// SKILLS admin panel — first-class SKILL.md skills. Drives the skills API:
+// SKILLS admin panel; first-class SKILL.md skills. Drives the skills API:
 //   GET    /api/skills                    list installed
 //   GET    /api/skills/recommend?context= offline catalog minus installed
 //   POST   /api/skills                    create from a form (or "add" a rec)
@@ -11,7 +11,7 @@ import { toast } from '../lib/toast'
 //   POST   /api/skills/{n}/assign {brain_id}
 //   DELETE /api/skills/{n}
 // Brains for the assign selector come from /api/org/topology. AI calls degrade to
-// a clear error (no model configured) — we surface {detail}/{error} verbatim.
+// a clear error (no model configured); we surface {detail}/{error} verbatim.
 
 // Pull a body of text from an API error response ({detail} or {error}).
 async function errText(r, fallback) {
@@ -203,7 +203,7 @@ function AIForm({ busy, onDraft, result, onClose }) {
       </div>
       <div className="space-y-2">
         <textarea
-          className="lh-input" rows={3} placeholder="Brief — what should this skill do?"
+          className="lh-input" rows={3} placeholder="Brief; what should this skill do?"
           value={brief} onChange={(e) => setBrief(e.target.value)} style={{ resize: 'vertical' }}
         />
         <button type="button" className="lh-btn lh-btn-primary" disabled={busy || !brief.trim()} onClick={() => onDraft(brief.trim())}>
@@ -494,7 +494,7 @@ export default function SkillsPanel() {
           {/* recommended */}
           <div className="mt-4">
             <div className="flex items-center justify-between mb-2 gap-2 flex-wrap">
-              <div className="lh-label">recommended — not yet installed</div>
+              <div className="lh-label">recommended; not yet installed</div>
               <div className="flex gap-1.5">
                 <input
                   className="lh-input" style={{ width: 200 }} placeholder="context (optional)"
@@ -506,7 +506,7 @@ export default function SkillsPanel() {
             </div>
             {recList.length === 0 ? (
               <p className="text-[11px]" style={{ color: 'var(--lh-text-faint)' }}>
-                Nothing to recommend — every catalog skill is installed.
+                Nothing to recommend; every catalog skill is installed.
               </p>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-2">

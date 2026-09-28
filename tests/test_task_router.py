@@ -3,7 +3,7 @@ Plan 4 Stream 1).
 
 The DoD for this stream: the SAME request at minimal vs. deep effort produces
 a visibly different trajectory (mode/budget/turns/verifiers/moa), and the
-whole thing is resolvable — cost declared — before any spend.
+whole thing is resolvable (cost declared) before any spend.
 """
 
 from lhassa.notify.task_router import describe, route
@@ -22,7 +22,7 @@ def test_same_request_minimal_vs_deep_diverges_visibly():
 
     assert minimal.effort.level == "minimal"
     assert deep.effort.level == "deep"
-    # Work type and mode are identical (same request) — only effort differs...
+    # Work type and mode are identical (same request); only effort differs...
     assert minimal.work_type == deep.work_type == "research"
     assert minimal.mode.name == deep.mode.name == "search_and_cite"
     # ...but the trajectory diverges on every governed axis.

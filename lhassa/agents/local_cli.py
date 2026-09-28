@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """
-LocalCliAgent — drive any of several local AI coding CLIs as a subprocess.
+LocalCliAgent; drive any of several local AI coding CLIs as a subprocess.
 
 Lhassa can dispatch a coding task to whichever local CLI the user has installed
 and authenticated, taking advantage of an existing subscription instead of a
@@ -14,7 +14,7 @@ Supported CLIs (selectable via LHASSA_AI_CLI):
   opencode  → `opencode run "<task>"`   (opencode non-interactive subcommand)
 
 The per-CLI argv prefixes live in the _CLI_ARGV table below. If a CLI changes
-its non-interactive flag, edit that single table — the task string is always
+its non-interactive flag, edit that single table; the task string is always
 appended as the final argument.
 
 This is additive: it does not replace the claude_code agent backend. Auto-detection
@@ -80,7 +80,7 @@ else:
 # in-memory; entries are freed when the run ends (normally or via a stop). Stopping
 # an unknown / already-finished run is a safe no-op.
 _RUNNING: dict[str, object] = {}
-# run_ids we deliberately stopped — a resulting nonzero exit is expected, not an error.
+# run_ids we deliberately stopped; a resulting nonzero exit is expected, not an error.
 _STOPPED: set[str] = set()
 
 # Grace period between SIGTERM and SIGKILL when stopping a run.
@@ -110,14 +110,14 @@ def _kill_group(proc: object, sig: int) -> None:
     """Send `sig` to the child's whole process group; degrade to the lone pid.
 
     Reuses the project's killpg pattern (see security/quarantine.py) so child CLIs
-    spawned by the agent die too. Never raises — the process may already be gone.
+    spawned by the agent die too. Never raises; the process may already be gone.
     """
     try:
         os.killpg(os.getpgid(proc.pid), sig)  # type: ignore[attr-defined]
     except (ProcessLookupError, PermissionError, AttributeError):
         try:
             proc.send_signal(sig)  # type: ignore[attr-defined]
-        except Exception:  # already dead / no such signal — nothing to do
+        except Exception:  # already dead / no such signal; nothing to do
             pass
 
 
@@ -125,7 +125,7 @@ async def stop_run(run_id: str) -> bool:
     """Terminate a tracked run's process group (graceful SIGTERM → SIGKILL).
 
     Returns True if a live subprocess was found and signalled, False if the run is
-    unknown or already finished (idempotent no-op). Never raises — a stop must never
+    unknown or already finished (idempotent no-op). Never raises; a stop must never
     take down the caller.
     """
     proc = _RUNNING.get(run_id)
@@ -137,7 +137,7 @@ async def stop_run(run_id: str) -> bool:
         await asyncio.sleep(_STOP_GRACE)
         if getattr(proc, "returncode", None) is None:  # still alive after grace
             _kill_group(proc, signal.SIGKILL)
-    except Exception as e:  # never propagate — the run is already being torn down
+    except Exception as e:  # never propagate; the run is already being torn down
         logger.error(f"[ai-cli] stop_run({run_id}) failed: {e}")
     return True
 
@@ -185,7 +185,7 @@ def context_pack_hint(pack_dir) -> str:
 
     Context is a gift, not a gate: this is pure string formatting over an
     already-resolved pack directory, so it never fails a launch. Callers pass
-    ``None``/falsy when no project matched — the prompt is simply unchanged.
+    ``None``/falsy when no project matched; the prompt is simply unchanged.
     """
     if not pack_dir:
         return ""
@@ -205,7 +205,7 @@ class LocalCliAgent:
         self._hint = hint
         self._timeout = timeout if timeout is not None else _DEFAULT_TIMEOUT
         # Optional sink called with each stdout line as it streams (e.g. the CLI's
-        # `lhassa code` prints them live). Best-effort — a failing sink never stops the run.
+        # `lhassa code` prints them live). Best-effort; a failing sink never stops the run.
         self._on_line = on_line
         # An already-resolved project context pack dir (see harness/context_pack.py),
         # or None when no project matched the run's cwd. Prepended to the prompt as a
@@ -213,7 +213,7 @@ class LocalCliAgent:
         self.context_pack_dir = context_pack_dir
 
     async def run(self, task: str) -> str:
-        """Dispatch `task` to the selected CLI. Never raises — returns a string."""
+        """Dispatch `task` to the selected CLI. Never raises; returns a string."""
         from lhassa.config import Config
         config = Config()
         cwd = Path(config.agent_dir).expanduser() if config.agent_dir else Path.cwd()
@@ -323,7 +323,7 @@ class LocalCliAgent:
                     f"{self.cli} timed out after {self._timeout}s and was cancelled."
                 )
 
-            # A stopped run exits nonzero by design (we killed it) — that's a clean
+            # A stopped run exits nonzero by design (we killed it); that's a clean
             # stop, not a failure. Return whatever it streamed so far.
             if proc.returncode != 0 and not was_stopped(run_id):
                 err = "".join(stderr_lines)

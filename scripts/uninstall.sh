@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Lhassa — uninstall the always-on systemd USER services.
+# Lhassa; uninstall the always-on systemd USER services.
 #
 # Stops + disables the units, removes the unit files, and reloads the user
-# manager. By default it touches ONLY the systemd units — your brain data in
+# manager. By default it touches ONLY the systemd units; your brain data in
 # ~/.lhassa and the Docker image/volume are left intact.
 #
 # Usage:
@@ -62,7 +62,7 @@ done
 # ── Stop + disable + remove unit files ────────────────────────────────────────
 remove_units() {
     log "Removing systemd USER units"
-    command -v systemctl >/dev/null 2>&1 || die "systemctl not found — nothing to remove"
+    command -v systemctl >/dev/null 2>&1 || die "systemctl not found; nothing to remove"
     local u
     for u in "${UNITS[@]}"; do
         # disable --now also stops the unit; ignore failures (not installed).
@@ -94,10 +94,10 @@ disable_linger() {
 purge_docker() {
     [ "$DO_PURGE" -eq 1 ] || return 0
     if ! command -v docker >/dev/null 2>&1; then
-        warn "docker not found — skipping image/volume purge"
+        warn "docker not found; skipping image/volume purge"
         return 0
     fi
-    log "Purge — removing Docker image $IMAGE"
+    log "Purge; removing Docker image $IMAGE"
     if docker image inspect "$IMAGE" >/dev/null 2>&1; then
         docker image rm "$IMAGE" >/dev/null 2>&1 && ok "removed image $IMAGE" \
             || warn "could not remove image $IMAGE (in use?)"
@@ -105,7 +105,7 @@ purge_docker() {
         warn "image not present: $IMAGE"
     fi
 
-    # The data volume holds the brain — extra explicit confirmation required.
+    # The data volume holds the brain; extra explicit confirmation required.
     if docker volume inspect "$DATA_VOLUME" >/dev/null 2>&1; then
         printf 'Also DELETE the Docker data volume "%s" (wipes the brain)? [y/N] ' "$DATA_VOLUME"
         local reply=""
@@ -122,7 +122,7 @@ purge_docker() {
 # ── Optional: purge local data dir ────────────────────────────────────────────
 purge_data() {
     [ "$DO_PURGE_DATA" -eq 1 ] || return 0
-    log "Purge — deleting local brain data $DATA_DIR"
+    log "Purge; deleting local brain data $DATA_DIR"
     if [ -d "$DATA_DIR" ]; then
         printf 'PERMANENTLY delete %s (DBs, keys, backups)? [y/N] ' "$DATA_DIR"
         local reply=""

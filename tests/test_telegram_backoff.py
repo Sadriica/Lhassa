@@ -1,7 +1,7 @@
 """The inbound poller must BACK OFF when the network is down.
 
 Regression cover: ``poll_once`` swallows transport errors and returns the offset
-unchanged — indistinguishable from a clean idle long-poll — so ``run_forever``'s
+unchanged (indistinguishable from a clean idle long-poll) so ``run_forever``'s
 exponential backoff could never fire and the loop spun at the speed of the
 failures (measured ~45 getUpdates attempts per second with DNS down). Offline:
 httpx is monkeypatched, asyncio.sleep is recorded, no network.
@@ -42,7 +42,7 @@ class _BoomClient:
 def test_poll_cycle_reports_transport_failure(monkeypatch):
     monkeypatch.setattr(telegram_inbound.httpx, "AsyncClient", _BoomClient)
     offset, ok = asyncio.run(telegram_inbound.poll_cycle(_cfg(), offset=7))
-    assert offset == 7  # cursor preserved — updates are not skipped
+    assert offset == 7  # cursor preserved; updates are not skipped
     assert ok is False
 
 
@@ -62,7 +62,7 @@ def test_poll_cycle_reports_http_error(monkeypatch):
 
 
 def test_poll_cycle_reports_success_on_an_idle_long_poll(monkeypatch):
-    """No updates is NOT a failure — it must not trigger a backoff."""
+    """No updates is NOT a failure; it must not trigger a backoff."""
 
     class _Resp:
         status_code = 200

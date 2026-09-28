@@ -1,21 +1,21 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""``LhassaTui`` — the Textual application shell for ``lhassa tui``.
+"""``LhassaTui``: the Textual application shell for ``lhassa tui``.
 
-A tabbed layout over eight screens — Overview / Projects / Runs / Approvals /
-Flows / Skills / Memory / Org — styled with the Lhasa palette (temple gold /
+A tabbed layout over eight screens. Overview / Projects / Runs / Approvals /
+Flows / Skills / Memory / Org; styled with the Lhasa palette (temple gold /
 monk-robe red / snow white / sage green / stone) from ``lhassa.cli.theme``.
 
 Three app-wide affordances sit on top of the tabs:
 
-* **Command palette** (``ctrl+p``) — Textual's own palette, fed by
+* **Command palette** (``ctrl+p``); Textual's own palette, fed by
   ``lhassa.cli.tui.palette.LhassaCommands``: jump to any screen, open the help,
   refresh, quit.
-* **Keyboard help** (``?`` / ``F1``) — the whole keymap in one modal.
-* **Live refresh** — every table screen re-polls on a timer (see
+* **Keyboard help** (``?`` / ``F1``); the whole keymap in one modal.
+* **Live refresh**: every table screen re-polls on a timer (see
   ``screens/base.py``); ``r`` forces it now.
 
 All data access is DIRECT reads off ``lhassa.core.db`` / ``flows.store`` /
-``skills.store`` / ``org.topology`` (see each screen module) — the TUI works with
+``skills.store`` / ``org.topology`` (see each screen module); the TUI works with
 the API server down. Mutating actions cross the SAME seams every other surface
 uses: approve/deny through ``lhassa.security.approval.resolve``, a flow run
 through ``lhassa.org.delegate.delegate_flow``. Never raw SQL.
@@ -45,7 +45,7 @@ class LhassaTui(App):
     TITLE = "Lhassa"
     SUB_TITLE = "the brain, in a terminal"
 
-    #: ``(tab id, label)`` — the ONE table the tabs, the palette and the help read.
+    #: ``(tab id, label)``: the ONE table the tabs, the palette and the help read.
     TABS: tuple[tuple[str, str], ...] = (
         ("overview", "Overview"),
         ("projects", "Projects"),
@@ -62,7 +62,7 @@ class LhassaTui(App):
     #: All styling lives in the stylesheet now (resolved relative to this
     #: module's directory: ``lhassa/cli/tui/lhassa.tcss``). Colors reach it as
     #: ``$lh-*`` CSS variables via :meth:`get_css_variables`, sourced from
-    #: ``lhassa.cli.tui.colors`` — never a literal hex in this file.
+    #: ``lhassa.cli.tui.colors``: never a literal hex in this file.
     CSS_PATH = "lhassa.tcss"
 
     BINDINGS = [
@@ -72,7 +72,7 @@ class LhassaTui(App):
     ]
 
     def __init__(self, instance_id: "str | None" = None, **kwargs) -> None:
-        # Resolved BEFORE super().__init__() — Textual's own App.__init__ calls
+        # Resolved BEFORE super().__init__(); Textual's own App.__init__ calls
         # get_css_variables() while building the initial stylesheet, so
         # ``_theme_name`` must already exist by then. Degrades to dark on ANY
         # detection error, and is fixed for the session (a probe never re-fires
@@ -126,7 +126,7 @@ class LhassaTui(App):
         ``cli/app.py:tui_cmd`` already calls ``_boot.quiet_logging()`` before the
         app is constructed, which drops the DEBUG→stderr default sink for a
         WARNING+ one. That is still a stderr sink, though, and Textual owns the
-        alternate screen from here on — ANY stderr write bleeds through and
+        alternate screen from here on. ANY stderr write bleeds through and
         paints over the chrome. So on mount every sink is swapped for one that
         writes to ``self.log`` (Textual's own, off-screen log) instead; on
         unmount the WARNING+ stderr sink is restored so a plain CLI session
@@ -207,7 +207,7 @@ class LhassaTui(App):
             pass
 
     def action_help(self) -> None:
-        """Open the keyboard-help overlay (idempotent — never stacks two)."""
+        """Open the keyboard-help overlay (idempotent; never stacks two)."""
         if isinstance(self.screen, HelpScreen):
             return
         self.push_screen(HelpScreen())

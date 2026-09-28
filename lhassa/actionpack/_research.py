@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""research_reply — fetch live web results and answer the owner over Telegram.
+"""research_reply; fetch live web results and answer the owner over Telegram.
 
-The Telegram chat think is deliberately TOOL-LESS (fast, cheap) — it cannot see
+The Telegram chat think is deliberately TOOL-LESS (fast, cheap); it cannot see
 the web. When the owner asks for live information, the inbound poller mints THIS
 action instead (the ``[[research: …]]`` marker protocol in
 :mod:`lhassa.notify.telegram_inbound`) and the next heartbeat runs it: one web
-search (Brave → DuckDuckGo fallback — the same seam the voice tool uses), a
+search (Brave → DuckDuckGo fallback; the same seam the voice tool uses), a
 compact deterministic summary with sources, delivered back through the Telegram
 channel. No LLM call: the results speak for themselves, with their links. $0.
 """
@@ -19,10 +19,10 @@ from loguru import logger
 # A chat-born query is a sentence, not a document.
 _MAX_QUERY = 300
 
-# Results kept in the reply — a phone screen, not a report.
+# Results kept in the reply; a phone screen, not a report.
 _MAX_RESULTS = 4
 
-# News-intent detection: these queries route to the NEWS vertical first — the
+# News-intent detection: these queries route to the NEWS vertical first; the
 # reason a general engine answers "noticias de hoy" and a bare text search
 # doesn't is exactly this routing.
 _NEWS_RE = re.compile(
@@ -31,7 +31,7 @@ _NEWS_RE = re.compile(
 
 # TODAY-intent: "de hoy"/"today" means the SYSTEM date, not whatever the index
 # coughs up. These queries get timelimit="d" (free, when the backend honors it)
-# plus OUR deterministic freshness sort/filter below — the reliable half.
+# plus OUR deterministic freshness sort/filter below; the reliable half.
 _TODAY_RE = re.compile(
     r"\b(hoy|today|ahora|right now|esta (mañana|tarde|noche)|tonight|latest|"
     r"últim[oa]s?( hora)?)\b",
@@ -65,7 +65,7 @@ def _age_days(date_str: str, *, now=None) -> float:
 
 def _freshest_first(results: list[dict], *, today_only: bool, now=None) -> list[dict]:
     """Sort by freshness; for today-intent keep the ≤``_FRESH_DAYS``-old subset
-    when at least two such results exist (never fabricate freshness — with too
+    when at least two such results exist (never fabricate freshness; with too
     few fresh items the sorted full list is the honest answer)."""
     ordered = sorted(results, key=lambda r: _age_days(r.get("date", ""), now=now))
     if today_only:
@@ -76,7 +76,7 @@ def _freshest_first(results: list[dict], *, today_only: bool, now=None) -> list[
 
 
 def _format_results(query: str, results: list[dict]) -> str:
-    """A compact, sourced digest of the results — deterministic, chat-sized."""
+    """A compact, sourced digest of the results; deterministic, chat-sized."""
     lines = [f"🔎 What I found for “{query}”:"]
     for r in results[:_MAX_RESULTS]:
         title = str(r.get("title") or "").strip()[:90]
@@ -99,7 +99,7 @@ async def research_reply(params: dict | None = None) -> str:
     """Search the live web for ``params['query']`` and message the owner the sources.
 
     Deterministic and defensive: a failed search degrades to an honest "couldn't
-    reach a search backend" message rather than silence — the owner was promised
+    reach a search backend" message rather than silence; the owner was promised
     a follow-up, so a follow-up always arrives. Returns the action-result string
     for the episode.
     """
@@ -115,9 +115,9 @@ async def research_reply(params: dict | None = None) -> str:
 
         today_intent = bool(_TODAY_RE.search(query))
 
-        # News intent routes to the news vertical first — that's what makes
+        # News intent routes to the news vertical first; that's what makes
         # "noticias de hoy" answerable at all. Today-intent adds timelimit="d"
-        # (free when honored) and — reliably — OUR freshness sort/filter, keyed
+        # (free when honored) and (reliably) OUR freshness sort/filter, keyed
         # to the SYSTEM date. Any vertical failure falls through to the plain
         # web path rather than ending the run.
         if _NEWS_RE.search(query):
@@ -134,7 +134,7 @@ async def research_reply(params: dict | None = None) -> str:
         if not results:
             results = await _search.web_search(query, max_results=_MAX_RESULTS) or []
         if not results:
-            # A vague query often finds nothing where a dated one succeeds —
+            # A vague query often finds nothing where a dated one succeeds;
             # one deterministic retry anchored to the SYSTEM date (exact for
             # today-intent, month/year otherwise).
             from datetime import datetime, timezone
@@ -159,7 +159,7 @@ async def research_reply(params: dict | None = None) -> str:
     else:
         text = (
             f"I searched for “{query}” and found nothing useful. A more specific "
-            "phrasing — topic, name, place — usually does it; ask me again."
+            "phrasing (topic, name, place) usually does it; ask me again."
         )
 
     delivered = False
@@ -180,7 +180,7 @@ async def research_reply(params: dict | None = None) -> str:
             text=text,
             kind="research",
             metadata={"query": query, "results": len(results)},
-            origin_department="",  # research is Lhassa's own hand — root-only hop
+            origin_department="",  # research is Lhassa's own hand; root-only hop
             config=research_config,
         )
     except Exception as exc:

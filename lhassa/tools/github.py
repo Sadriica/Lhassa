@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """
-GitHub tools — read repos, issues, PRs, and create comments via the GitHub REST API.
+GitHub tools; read repos, issues, PRs, and create comments via the GitHub REST API.
 Requires GITHUB_TOKEN in .env (Settings → Developer settings → Personal access tokens).
 """
 
@@ -8,7 +8,7 @@ import httpx
 
 GITHUB_BASE = "https://api.github.com"
 
-# Cached client — reuses TCP connections across calls
+# Cached client; reuses TCP connections across calls
 _http: httpx.AsyncClient | None = None
 
 
@@ -63,7 +63,7 @@ async def list_repos(token: str, limit: int = 10) -> list[dict]:
 async def list_issues(token: str, repo: str, state: str = "open", limit: int = 10) -> list[dict]:
     """List issues for owner/repo."""
     data = await _get(token, f"/repos/{repo}/issues", {"state": state, "per_page": limit})
-    # GitHub returns PRs in the issues endpoint too — filter them out
+    # GitHub returns PRs in the issues endpoint too; filter them out
     issues = [i for i in data if "pull_request" not in i]
     return [
         {"number": i["number"], "title": i["title"], "state": i["state"], "url": i["html_url"], "body": (i.get("body") or "")[:500]}

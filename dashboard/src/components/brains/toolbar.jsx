@@ -1,6 +1,6 @@
 // ── toolbar / header ─────────────────────────────────────────────────────────
 // The panel header: the Brains title + count, the Flow/Tree/Templates view switch,
-// Refresh, and + Create brain. Purely presentational — all state lives in the
+// Refresh, and + Create brain. Purely presentational; all state lives in the
 // composition (BrainsPanel) via the data hook; this just renders + calls back.
 export function Toolbar({ nodes, isStandalone, view, setView, onRefresh, onToggleCreate, busy }) {
   return (
@@ -45,12 +45,12 @@ export function Toolbar({ nodes, isStandalone, view, setView, onRefresh, onToggl
   )
 }
 
-// ── route preview — where would a goal land? ──────────────────────────────────
+// ── route preview; where would a goal land? ──────────────────────────────────
 // The goal input + Preview button + the resolved root→leaf path (last hop warned).
 export function RoutePreview({ goal, setGoal, previewRoute, routeErr, route }) {
   return (
     <div className="lh-row mb-3" style={{ background: 'var(--lh-surface-2)' }}>
-      <span className="lh-label">route preview — where would a goal land?</span>
+      <span className="lh-label">route preview; where would a goal land?</span>
       <div className="flex gap-1.5 mt-1.5">
         <input
           className="lh-input" placeholder="e.g. optimize the database query"

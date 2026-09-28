@@ -3,24 +3,24 @@
 Las cuatro compuertas de la auto-mejora 2b (§2.8).
 
 A self-written *candidate* graduates into a trusted tool only by passing, **in
-order**, the gates of self-improvement 2b — and graduation is *deny-by-default*:
+order**, the gates of self-improvement 2b; and graduation is *deny-by-default*:
 a candidate is rejected unless every gate explicitly passes.
 
-  1. **Segura**  — it runs in the cuarentena sandbox (no network, no real data).
-  2. **Correcta** — it works: a test/command verifier exits 0.
-  3. **Mejor**   — it beats a concrete baseline on a concrete metric
+  1. **Segura** : it runs in the cuarentena sandbox (no network, no real data).
+  2. **Correcta**: it works: a test/command verifier exits 0.
+  3. **Mejor**  : it beats a concrete baseline on a concrete metric
      (tokens/tiempo/pasos). No baseline → cannot prove "better" → fail.
-  4. **Retiro**  — *continuous*, not inline: a graduated tool that fails in
+  4. **Retiro** : *continuous*, not inline: a graduated tool that fails in
      production or goes unused is demoted back to cuarentena.
 
 The pipeline stops at the first failed gate (later gates do not run): there is no
 point measuring "better" on something that is not even "correct". Gates are
-**modular per domain** — the first domain is ``optimization`` (clean metrics).
+**modular per domain**: the first domain is ``optimization`` (clean metrics).
 
 Reuse, not reinvention: gate 1 is :func:`lhassa.security.quarantine.run_in_quarantine`;
 gates 2 and 3 are the existing :mod:`lhassa.agents.verify` ``Verifier`` built-ins
 (``CommandVerifier``/``TestsVerifier`` for *correcta*, ``MetricVerifier`` for
-*mejor*) — the árbitro layer is objective and NEVER calls an LLM.
+*mejor*); the árbitro layer is objective and NEVER calls an LLM.
 """
 
 from __future__ import annotations
@@ -41,7 +41,7 @@ GATE_CORRECTA = "2_correcta"
 GATE_MEJOR = "3_mejor"
 
 # Gate 4 (Retiro) thresholds. ``[SUPUESTO]``: "went unused" is proxied by a
-# graduated tool with zero recorded uses — the supervisor only evaluates a tool
+# graduated tool with zero recorded uses; the supervisor only evaluates a tool
 # for retirement after a grace window, so a freshly graduated tool is not retired
 # the instant it lands.
 RETIRE_FAILURE_RATE = 0.5
@@ -78,12 +78,12 @@ async def run_gates(
 
     Returns the list of :class:`GateResult` up to and including the gate that
     failed (or all three if every gate passed). A candidate graduates iff every
-    returned result passed — deny-by-default, so an empty/short list never means
+    returned result passed; deny-by-default, so an empty/short list never means
     "ok by omission".
     """
     results: list[GateResult] = []
 
-    # ── Gate 1: Segura — run it caged (no red/datos). ─────────────────────────
+    # ── Gate 1: Segura; run it caged (no red/datos). ─────────────────────────
     q = await run_in_quarantine(candidate, timeout=quarantine_timeout)
     g1_ok = q.ok and not q.escaped and not q.timed_out
     detail = (
@@ -97,7 +97,7 @@ async def run_gates(
         logger.debug("gates[{}]: failed gate 1 (segura): {}", domain, detail)
         return results
 
-    # ── Gate 2: Correcta — a test/command verifier must exit 0. ───────────────
+    # ── Gate 2: Correcta; a test/command verifier must exit 0. ───────────────
     if not tests_spec:
         results.append(
             GateResult(
@@ -113,7 +113,7 @@ async def run_gates(
         logger.debug("gates[{}]: failed gate 2 (correcta): {}", domain, vr.detail)
         return results
 
-    # ── Gate 3: Mejor — must beat a concrete baseline on a concrete metric. ───
+    # ── Gate 3: Mejor; must beat a concrete baseline on a concrete metric. ───
     if metric_fn is None or baseline is None:
         results.append(
             GateResult(

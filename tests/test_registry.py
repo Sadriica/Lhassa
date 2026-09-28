@@ -88,7 +88,7 @@ def test_names_all_items_preserve_order():
     assert reg.names() == ["b", "a", "c"]
     assert reg.all() == [2, 1, 3]
     assert reg.items() == {"b": 2, "a": 1, "c": 3}
-    # items() is a copy — mutating it must not affect the registry.
+    # items() is a copy; mutating it must not affect the registry.
     reg.items()["b"] = 999
     assert reg.get("b") == 2
 

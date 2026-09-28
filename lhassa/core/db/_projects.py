@@ -301,11 +301,11 @@ async def update_project_row(
         return bool(cur.rowcount)
 
 
-# ── project_brains (standing-brain attachments — Wave 1) ─────────────────────
+# ── project_brains (standing-brain attachments. Wave 1) ─────────────────────
 
 
 async def insert_project_brains(row: dict) -> None:
-    """Record one template attachment. INSERT OR IGNORE — the row is the idempotency."""
+    """Record one template attachment. INSERT OR IGNORE; the row is the idempotency."""
     async with aiosqlite.connect(_pkg().DB_PATH) as db:
         await db.execute(
             """INSERT OR IGNORE INTO project_brains(
@@ -337,7 +337,7 @@ async def list_project_brains(
             return [dict(row) for row in await cur.fetchall()]
 
 
-# ── knowledge graph (kg_entities / kg_edges — Wave 3, dumb storage) ──────────
+# ── knowledge graph (kg_entities / kg_edges. Wave 3, dumb storage) ──────────
 
 
 async def insert_bench_run(row: dict) -> str:
@@ -386,6 +386,6 @@ async def list_bench_runs(
             return [dict(row) for row in await cur.fetchall()]
 
 
-# ── kg entity merge (resolution — repoint edges, keep provenance) ────────────
+# ── kg entity merge (resolution; repoint edges, keep provenance) ────────────
 
 

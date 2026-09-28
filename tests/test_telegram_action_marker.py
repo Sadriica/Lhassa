@@ -1,4 +1,4 @@
-"""The Telegram [[action: …]] marker — chat-requested actions, allowlist-gated.
+"""The Telegram [[action: …]] marker; chat-requested actions, allowlist-gated.
 
 Mirrors test_research_bridge: the chat think stays tool-less; the marker is the
 signal, the poller mints the signed task (same HUMANO/telegram origin as /goal),

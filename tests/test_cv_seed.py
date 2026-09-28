@@ -125,11 +125,11 @@ def test_apply_cv_never_overwrites_an_existing_base_cv(cfg):
 
     base = cv_paths.base_path()
     base.parent.mkdir(parents=True, exist_ok=True)
-    base.write_text("REAL OWNER CV — DO NOT TOUCH", encoding="utf-8")
+    base.write_text("REAL OWNER CV. DO NOT TOUCH", encoding="utf-8")
 
     summary = seeds.apply_seed("cv", cfg)
     assert summary["base_cv"] == "kept"
-    assert base.read_text(encoding="utf-8") == "REAL OWNER CV — DO NOT TOUCH"
+    assert base.read_text(encoding="utf-8") == "REAL OWNER CV. DO NOT TOUCH"
 
 
 def test_flow_id_override(cfg):

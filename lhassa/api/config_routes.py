@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Runtime settings routes — the panel's editable allowlist (§ settings service).
+"""Runtime settings routes; the panel's editable allowlist (§ settings service).
 
 GET the effective read model (current value + default + overridden, masked) and
 PATCH a single key (or {updates:{...}}) → persisted to ~/.lhassa/settings.env and
@@ -50,6 +50,6 @@ async def patch_config(payload: dict):
     hints = [r["restart_hint"] for r in results if r.get("restart_needed")]
     return {
         "results": results,
-        "restart_hint": hints[0] if hints else "Applied live — no restart needed.",
+        "restart_hint": hints[0] if hints else "Applied live; no restart needed.",
         "effective": settings.effective(),
     }

@@ -336,7 +336,7 @@ async def test_memory_filter_also_drives_episodic_recall(brain):
         await pilot.pause()
         app.query_one("#memory-table-filter", Input).value = "anything"
         await pilot.pause()
-        # The recall table exists and stayed empty on an empty log — never crashed.
+        # The recall table exists and stayed empty on an empty log; never crashed.
         assert app.query_one("#memory-recall-table", DataTable).row_count == 0
 
 
@@ -419,7 +419,7 @@ async def test_org_screen_collapses_empty_relationships_panel(brain, tmp_path, m
 
     The regression this guards: the panel held ~half the screen on a machine
     with zero relationships, truncating the brain tree, and it only ever
-    re-evaluated after a row selection — so simply OPENING the tab left it
+    re-evaluated after a row selection; so simply OPENING the tab left it
     expanded and empty.
     """
     from textual.widgets import TabbedContent
@@ -432,7 +432,7 @@ async def test_org_screen_collapses_empty_relationships_panel(brain, tmp_path, m
         screen = app.query_one("OrgScreen")
         await screen.action_refresh()
         await pilot.pause()
-        # No row was ever selected — the collapse still applied.
+        # No row was ever selected; the collapse still applied.
         assert screen.has_class("-no-relationships")
         assert app.query_one("#org-relationships-table", DataTable).display is False
         legend = app.query_one("#org-relationships-legend")

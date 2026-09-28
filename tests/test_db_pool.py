@@ -54,7 +54,7 @@ async def test_rollback_on_checkin(tmp_path):
     c1 = await aiosqlite.connect(path)
     await c1.execute("CREATE TABLE t(a)")
     await c1.execute("INSERT INTO t VALUES(42)")
-    # No commit — a plain close must drop the uncommitted write (sqlite close
+    # No commit; a plain close must drop the uncommitted write (sqlite close
     # semantics), so the next borrower sees a clean database.
     await c1.close()
     c2 = await aiosqlite.connect(path)

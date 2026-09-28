@@ -34,7 +34,7 @@ class FakeConfig:
         self.local_model_url = ""
         self.pseudonymize_remote = False
         self.instance_id = "inst_test"
-        # A binary that certainly does not exist — makes "claude" honestly
+        # A binary that certainly does not exist; makes "claude" honestly
         # unavailable without touching the real PATH.
         self.claude_bin = "definitely-not-a-real-binary-xyz"
         self.codex_bin = "codex"
@@ -65,7 +65,7 @@ class StubProvider:
 
 @pytest.mark.asyncio
 async def test_fanout_is_honest_and_never_raises(monkeypatch):
-    """claude: missing binary: codex: raises; default: ok — <2 successes -> no aggregator."""
+    """claude: missing binary: codex: raises; default: ok; <2 successes -> no aggregator."""
     codex = StubProvider("codex", error="codex CLI exploded")
     default = StubProvider("default", text="the real answer", cost=0.002)
 
@@ -84,7 +84,7 @@ async def test_fanout_is_honest_and_never_raises(monkeypatch):
 
     # Which CLI binaries exist is a property of the HOST, so it is pinned by
     # injection: this test needs `claude` absent and `codex` present. Leaving it
-    # to shutil.which made the outcome depend on the dev machine — macOS CI,
+    # to shutil.which made the outcome depend on the dev machine; macOS CI,
     # where neither CLI is installed, caught it.
     monkeypatch.setattr(
         moa_mod, "_binary_missing", lambda name, config: name == "claude"
@@ -123,7 +123,7 @@ async def test_zero_answers_degrades_honestly(monkeypatch):
 
     # Which CLI binaries exist is a property of the HOST, so it is pinned by
     # injection: this test needs `claude` absent and `codex` present. Leaving it
-    # to shutil.which made the outcome depend on the dev machine — macOS CI,
+    # to shutil.which made the outcome depend on the dev machine; macOS CI,
     # where neither CLI is installed, caught it.
     monkeypatch.setattr(
         moa_mod, "_binary_missing", lambda name, config: name == "claude"
@@ -156,7 +156,7 @@ async def test_aggregation_synthesizes_and_sums_cost(monkeypatch):
 
     # Which CLI binaries exist is a property of the HOST, so it is pinned by
     # injection: this test needs `claude` absent and `codex` present. Leaving it
-    # to shutil.which made the outcome depend on the dev machine — macOS CI,
+    # to shutil.which made the outcome depend on the dev machine; macOS CI,
     # where neither CLI is installed, caught it.
     monkeypatch.setattr(
         moa_mod, "_binary_missing", lambda name, config: name == "claude"
@@ -190,7 +190,7 @@ async def test_aggregator_failure_degrades_to_first_panel_answer(monkeypatch):
 
     # Which CLI binaries exist is a property of the HOST, so it is pinned by
     # injection: this test needs `claude` absent and `codex` present. Leaving it
-    # to shutil.which made the outcome depend on the dev machine — macOS CI,
+    # to shutil.which made the outcome depend on the dev machine; macOS CI,
     # where neither CLI is installed, caught it.
     monkeypatch.setattr(
         moa_mod, "_binary_missing", lambda name, config: name == "claude"
@@ -337,7 +337,7 @@ async def test_moa_verdict_false_leaves_approval_unchanged(brain, monkeypatch):
     )
 
     assert outcome["graduated"] is True
-    assert calls["n"] == 0  # moa never consulted — byte-identical behavior
+    assert calls["n"] == 0  # moa never consulted; byte-identical behavior
 
     row = await brain.get_approval("inst_test", outcome["approval_id"])
     assert "moa_review" not in (row.get("payload") or {})
@@ -385,7 +385,7 @@ async def test_moa_verdict_true_attaches_review_to_approval(brain, monkeypatch):
 @needs_git
 @pytest.mark.asyncio
 async def test_moa_verdict_true_degrades_without_blocking_graduation(brain, monkeypatch):
-    """A failing MoA review is advisory-only — it must never block graduation."""
+    """A failing MoA review is advisory-only; it must never block graduation."""
     from lhassa.agents import author as author_mod
 
     async def broken_moa_consult(*a, **k):

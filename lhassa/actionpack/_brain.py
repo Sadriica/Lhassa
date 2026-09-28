@@ -28,12 +28,12 @@ _HEALTH_OUTPUT_CAP = 1500
 async def notify(params: dict) -> str:
     """Fan out a notification to every configured channel.
 
-    Wraps ``lhassa.notify.dispatch.notify``. Never raises — a delivery failure
+    Wraps ``lhassa.notify.dispatch.notify``. Never raises; a delivery failure
     is reported as a string, not an exception.
 
     params:
-        text  (required)  — the notification message.
-        level             — severity hint: "info" | "warning" | "error"
+        text  (required) ; the notification message.
+        level            ; severity hint: "info" | "warning" | "error"
                             (default "info").
 
     Returns "notify: delivered" or "notify: no channel delivered" or an error
@@ -56,18 +56,18 @@ async def add_task(params: dict) -> str:
     """Mint a new fixed-action task through the security machinery.
 
     Uses ``core.dispatch.mint_task`` (extracted refactor) so the full approval
-    frontier + signing + DB write path is applied — exactly the same as the
+    frontier + signing + DB write path is applied; exactly the same as the
     judgment dispatcher. accion must be in ACTIONS; unknown names are refused.
 
     Origin trust: TrustLevel.INTERNO, actor_id="action:add_task", degraded by
     the calling task's trust if params carry "origen_trust".
 
     params:
-        accion       (required)  — a registered action name.
-        objetivo                 — task objective string.
-        params                   — dict of params for the minted task.
-        instance_id              — defaults to Config.instance_id.
-        origen_trust             — int trust level (for contagion degradation).
+        accion       (required) ; a registered action name.
+        objetivo                ; task objective string.
+        params                  ; dict of params for the minted task.
+        instance_id             ; defaults to Config.instance_id.
+        origen_trust            ; int trust level (for contagion degradation).
 
     Never raises.
     """
@@ -120,12 +120,12 @@ async def set_task_state(params: dict) -> str:
     """Update a task's state to one of the allowed terminal values.
 
     Allowed states: "hecha", "rechazada". "pendiente" is explicitly forbidden
-    — an action must not be able to resurrect completed work.
+   ; an action must not be able to resurrect completed work.
 
     params:
-        id          (required)  — the task id.
-        estado      (required)  — "hecha" or "rechazada".
-        instance_id             — defaults to Config.instance_id.
+        id          (required) ; the task id.
+        estado      (required) ; "hecha" or "rechazada".
+        instance_id            ; defaults to Config.instance_id.
 
     Never raises.
     """
@@ -160,7 +160,7 @@ async def list_approvals(params: dict) -> str:
     human-readable summary.
 
     params:
-        instance_id  — defaults to Config.instance_id.
+        instance_id ; defaults to Config.instance_id.
 
     Never raises.
     """
@@ -184,7 +184,7 @@ async def list_approvals(params: dict) -> str:
             lines.append(f"{ap_id} [{label}]")
 
         more = f" …+{len(rows) - 10}" if len(rows) > 10 else ""
-        return f"list_approvals: {len(rows)} pending — " + ", ".join(lines) + more
+        return f"list_approvals: {len(rows)} pending; " + ", ".join(lines) + more
 
     except Exception as exc:
         return f"list_approvals: error: {exc}"
@@ -197,7 +197,7 @@ def check_health(params: dict) -> str:
     formats the result via ``health.checks.format_digest``.
 
     params:
-        out_dir  — optional snapshot directory override (default ~/.lhassa/health).
+        out_dir ; optional snapshot directory override (default ~/.lhassa/health).
 
     Never raises.
     """
@@ -239,7 +239,7 @@ def compile_cv(params: dict) -> str:
     compile fails. Never raises.
 
     params:
-        tex_path  — path to a .tex file (default: ~/.lhassa/cv/cv_largo.tex).
+        tex_path ; path to a .tex file (default: ~/.lhassa/cv/cv_largo.tex).
     """
     try:
         tex_path_raw = params.get("tex_path") or None

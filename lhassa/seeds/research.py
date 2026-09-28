@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""The ``research`` seed — the geshe's aid department + the idea-intake flow.
+"""The ``research`` seed; the geshe's aid department + the idea-intake flow.
 
 The geshe (the temple's scholar-monk, owner of ``research/METHOD.md``) gains
 its support team: four AIDE brains under it, one per step of the corpus
@@ -9,7 +9,7 @@ link, a technique, a claim) into a corpus-style draft:
   collector  → capture the idea's core + every source/nested resource to chase
   analyst    → mechanics down to the base
   skeptic    → verify claims against sources; label theirs-vs-ours; name the
-               attribution chain and the unverified (the doer never judges —
+               attribution chain and the unverified (the doer never judges;
                verification is its own brain)
   synthesist → write the seven-section corpus document
 
@@ -43,7 +43,7 @@ AIDE_SKILLS = ("research-method", "no-ai-slop")
 
 _FLOW_JSON = """{
   "id": "flow-research-intake",
-  "name": "Idea intake — down to the base",
+  "name": "Idea intake; down to the base",
   "description": "From an idea (a link, a technique, a claim): capture sources, analyze mechanics, verify claims, synthesize a corpus-style draft per research/METHOD.md.",
   "nodes": [
     {"id": "trigger-1", "kind": "trigger", "config": {"type": "manual"},
@@ -88,7 +88,7 @@ _FLOW_JSON = """{
 
 _ASSESSMENT_FLOW_JSON = """{
   "id": "flow-idea-assessment",
-  "name": "Idea assessment — earn the research budget",
+  "name": "Idea assessment; earn the research budget",
   "description": "Theory-first screening before an idea receives applied or rigorous research effort.",
   "nodes": [
     {"id": "trigger-1", "kind": "trigger", "config": {"type": "manual"},
@@ -101,7 +101,7 @@ _ASSESSMENT_FLOW_JSON = """{
     {"id": "task-2", "kind": "task",
      "config": {"brain": "skeptic", "max_tokens": 2200,
        "input_mode": "full", "preserve_context": true,
-       "prompt": "Audit the idea and theory brief, then output ONLY one valid JSON object (no commentary). Copy source_registry ONLY from source ids present in the custody dossier. Shape: {\\\"source_registry\\\":[\\\"S1\\\"],\\\"theory\\\":{\\\"mechanism\\\":\\\"at least 30 chars, cited [S#] or explicitly UNVERIFIED\\\",\\\"assumptions\\\":[\\\"...\\\"],\\\"source_ids\\\":[\\\"S1\\\"]},\\\"criteria\\\":{...},\\\"uncertainties\\\":[\\\"...\\\"]}. criteria MUST contain exactly: strategic_value, architectural_fit, theoretical_grounding, evidence_quality, testability, novelty, knowledge_reuse, feasibility, reversibility. Each value is {\\\"score\\\": integer 0..3, \\\"rationale\\\": \\\"specific reason, at least 12 chars\\\", \\\"source_ids\\\": [captured S ids]}. Score conservatively: 0 absent/contradicted, 1 weak, 2 credible, 3 strong. For theoretical_grounding/evidence_quality/novelty, a positive score needs captured source ids or rationale must say UNVERIFIED. Strategic fit is Lhassa-specific judgment and need not cite. Name uncertainties; never hide missing evidence. Do not choose the investment level—the deterministic gate does that.\\n\\n{input}"},
+       "prompt": "Audit the idea and theory brief, then output ONLY one valid JSON object (no commentary). Copy source_registry ONLY from source ids present in the custody dossier. Shape: {\\\"source_registry\\\":[\\\"S1\\\"],\\\"theory\\\":{\\\"mechanism\\\":\\\"at least 30 chars, cited [S#] or explicitly UNVERIFIED\\\",\\\"assumptions\\\":[\\\"...\\\"],\\\"source_ids\\\":[\\\"S1\\\"]},\\\"criteria\\\":{...},\\\"uncertainties\\\":[\\\"...\\\"]}. criteria MUST contain exactly: strategic_value, architectural_fit, theoretical_grounding, evidence_quality, testability, novelty, knowledge_reuse, feasibility, reversibility. Each value is {\\\"score\\\": integer 0..3, \\\"rationale\\\": \\\"specific reason, at least 12 chars\\\", \\\"source_ids\\\": [captured S ids]}. Score conservatively: 0 absent/contradicted, 1 weak, 2 credible, 3 strong. For theoretical_grounding/evidence_quality/novelty, a positive score needs captured source ids or rationale must say UNVERIFIED. Strategic fit is Lhassa-specific judgment and need not cite. Name uncertainties; never hide missing evidence. Do not choose the investment level; the deterministic gate does that.\\n\\n{input}"},
      "label": "Score the complete rubric"},
     {"id": "gate-1", "kind": "gate",
      "config": {"type": "verify", "spec": {"type": "idea_assessment"}},
@@ -149,7 +149,7 @@ def seed_research(config: "Optional[Config]" = None) -> dict:
         "errors": [],
     }
 
-    # The aides hang UNDER the geshe — ensure the temple (and the geshe) first.
+    # The aides hang UNDER the geshe; ensure the temple (and the geshe) first.
     try:
         temple = seed_temple(cfg)
         if temple.get("errors"):
@@ -231,5 +231,5 @@ def seed_research(config: "Optional[Config]" = None) -> dict:
     "turns an idea into a corpus-style draft per research/METHOD.md.",
 )
 def apply(config: "Optional[Config]" = None) -> dict:
-    """The ``research`` seed entry point — see :func:`seed_research`."""
+    """The ``research`` seed entry point; see :func:`seed_research`."""
     return seed_research(config)

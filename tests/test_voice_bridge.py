@@ -1,7 +1,7 @@
 """
 Tests for the voice ↔ brain bridge (``lhassa.voice.brain_bridge``).
 
-These exercise ``answer()`` directly with a mocked provider and a temp brain DB —
+These exercise ``answer()`` directly with a mocked provider and a temp brain DB;
 NO pipecat, NO audio hardware, NO real model keys. The live audio path (pipecat
 FrameProcessor wiring, Deepgram STT, Cartesia TTS, a microphone) can only be
 validated with real creds + hardware and is marked [SUPUESTO] in the report.
@@ -119,7 +119,7 @@ async def test_answer_degrades_on_unexpected_error(tmp_path, monkeypatch):
 @pytest.mark.asyncio
 async def test_answer_empty_turn_returns_empty(tmp_path, monkeypatch):
     db = await _init_db(tmp_path, monkeypatch)
-    # No provider needed — empty turns never reach the model.
+    # No provider needed; empty turns never reach the model.
     reply = await brain_bridge.answer("   ", config=_config())
 
     assert reply == ""

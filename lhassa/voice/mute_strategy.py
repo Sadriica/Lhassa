@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """
 Mute strategy that silences user audio while Lhassa is speaking,
-EXCEPT when a wake phrase is detected — in that case the frame is allowed through
+EXCEPT when a wake phrase is detected; in that case the frame is allowed through
 so WakePhraseUserTurnStartStrategy can trigger an interruption.
 """
 
@@ -13,20 +13,20 @@ from pipecat.frames.frames import (
 )
 from pipecat.turns.user_mute.base_user_mute_strategy import BaseUserMuteStrategy
 
-# Core wake variants — mishearings of "Lhassa" (LAH-sah) in any language
+# Core wake variants; mishearings of "Lhassa" (LAH-sah) in any language
 WAKE_PHRASES_CORE: set[str] = {
     "lhassa", "lhasa", "lasa", "lassa", "lasha", "laza", "lasso", "la sa",
     "hey lhassa", "hey lhasa", "hey lasa",
 }
 
-# Spanish-specific variants — only used when LHASSA_STT_LANGUAGE starts with "es"
+# Spanish-specific variants; only used when LHASSA_STT_LANGUAGE starts with "es"
 WAKE_PHRASES_ES: set[str] = {
     "oye lhassa", "oye lhasa", "oye lasa",
     "a ver lhassa", "a ver lasa",
     "laza", "lasha", "lhaza",
 }
 
-# Full set used by the mute strategy (safety net — keeps all variants for interruption)
+# Full set used by the mute strategy (safety net; keeps all variants for interruption)
 WAKE_VARIANTS: set[str] = WAKE_PHRASES_CORE | WAKE_PHRASES_ES
 
 

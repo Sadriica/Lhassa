@@ -1,4 +1,4 @@
-# Integrity Watcher — executable Witara/Lhassa contracts
+# Integrity Watcher; executable Witara/Lhassa contracts
 
 The ordinary monitor watches operational transitions: failures, health, runs
 and approvals. Integrity watches a different question:

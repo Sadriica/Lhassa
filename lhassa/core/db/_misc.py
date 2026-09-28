@@ -403,7 +403,7 @@ async def get_conformance_state(instance_id: str) -> list[dict]:
     return rows
 
 
-# ── tools (self-written tools + their gate metrics — §2.8) ──────────────────────
+# ── tools (self-written tools + their gate metrics; §2.8) ──────────────────────
 #
 # A ``tools`` row is APPEND-as-source-of-truth: one row per (instance_id, nombre);
 # the only in-place mutations allowed are the gate ``estado`` and the metric/usage
@@ -520,7 +520,7 @@ async def bump_tool_usage(instance_id: str, nombre: str, *, ok: bool) -> None:
         await db.commit()
 
 
-# ── org_messages (the typed task queue between brains — Fase 7) ──────────────────
+# ── org_messages (the typed task queue between brains. Fase 7) ──────────────────
 #
 # Inter-brain messages are TYPED, never free prose: the ``kind`` is one of a closed
 # set (validated by lhassa.org.messaging before it reaches here). A ``corr_id``

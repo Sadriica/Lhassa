@@ -10,7 +10,7 @@ export default function HistoryPanel() {
       .then(data => { setSessions(data); setLoading(false) })
       .catch(() => setLoading(false))
 
-    // Refresh every 60s — new sessions are written on Lhassa shutdown
+    // Refresh every 60s; new sessions are written on Lhassa shutdown
     const t = setInterval(() => {
       fetch('/api/memory/sessions')
         .then(r => r.json())

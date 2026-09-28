@@ -1,4 +1,4 @@
-"""Tests for Fase 1 "Recall" — FTS5 full-text search over the episode log.
+"""Tests for Fase 1 "Recall": FTS5 full-text search over the episode log.
 
 Covers: index creation + backfill of pre-existing rows, content search,
 automation-episode demotion, hostile-query safety, the /api/episodes/search
@@ -42,7 +42,7 @@ async def test_backfill_indexes_pre_existing_episodes(tmp_path, monkeypatch):
     monkeypatch.setattr(db, "DB_PATH", db_path)
 
     # Simulate an "old" DB: only the episodes table exists (no FTS index yet),
-    # with rows already in it — as if upgrading from a pre-Fase-1 install.
+    # with rows already in it; as if upgrading from a pre-Fase-1 install.
     db_path.parent.mkdir(parents=True, exist_ok=True)
     async with aiosqlite.connect(db_path) as conn:
         await conn.execute("""
@@ -70,7 +70,7 @@ async def test_backfill_indexes_pre_existing_episodes(tmp_path, monkeypatch):
         )
         await conn.commit()
 
-    # Now run init_db() as if upgrading — it must create the FTS index AND
+    # Now run init_db() as if upgrading; it must create the FTS index AND
     # backfill the pre-existing row (rebuild), never crash.
     await db.init_db()
 
@@ -202,7 +202,7 @@ async def test_org_execution_is_demoted_more_gently_than_transport(tmp_path, mon
 async def test_a_strong_automation_match_still_beats_a_weak_interactive_one(
     tmp_path, monkeypatch
 ):
-    """The penalty is a nudge, not a filter — relevance can still win.
+    """The penalty is a nudge, not a filter; relevance can still win.
 
     This needs a REALISTIC corpus to be meaningful. bm25 is scored against
     corpus statistics: with only two documents its IDF term collapses to ~0, so
@@ -251,7 +251,7 @@ async def test_a_strong_automation_match_still_beats_a_weak_interactive_one(
 async def test_hostile_queries_never_raise(tmp_path, monkeypatch, hostile_query):
     db = await _init_db(tmp_path, monkeypatch)
     await _make_episode(db, "inst_personal", despertar_por="telegram", resultado="algo normal")
-    # Must not raise — a bad user query degrades to (possibly empty) results.
+    # Must not raise; a bad user query degrades to (possibly empty) results.
     results = await db.search_episodes("inst_personal", hostile_query, 10)
     assert isinstance(results, list)
 

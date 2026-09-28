@@ -7,7 +7,7 @@ from __future__ import annotations
 async def check_spend(params: dict) -> str:
     """Report today's LLM spend as a short, human-readable summary line.
 
-    Wraps ``lhassa.llm.gateway.spend_summary()`` — today's output tokens, the
+    Wraps ``lhassa.llm.gateway.spend_summary()``: today's output tokens, the
     effective daily budget (0 = unlimited), the fraction of that budget used,
     and today's real cost in USD. Deterministic and $0 itself (it only reads the
     ledger, it never calls a model). Never raises.

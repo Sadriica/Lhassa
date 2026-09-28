@@ -1,9 +1,9 @@
 """
-Tests for ``lhassa.agents.verify`` — the objective gates that NEVER call an LLM.
+Tests for ``lhassa.agents.verify``: the objective gates that NEVER call an LLM.
 
 Fully offline: the ``_run`` subprocess seam and ``health.run_all`` are mocked, so
 nothing is spawned and no network/LLM is touched. A dedicated test patches the
-LLM provider to blow up and confirms the verifiers still run — proving the gate
+LLM provider to blow up and confirms the verifiers still run; proving the gate
 is model-free.
 """
 
@@ -186,7 +186,7 @@ def _valid_corpus():
     return """## The idea in one sentence
 One bounded claim [S1].
 
-## Mechanics — down to the base
+## Mechanics - down to the base
 The captured mechanism has two stages [S1].
 
 ## Evidence the authors present
@@ -199,7 +199,7 @@ The captured mechanism has two stages [S1].
 ## Mapping to Lhassa
 No mapping has been verified.
 
-## Not yet verified by us — and the experiment that would
+## Not yet verified by us - and the experiment that would
 Baseline: current route
 Instrument: LhassaBench
 Metric: verified pass rate
@@ -267,7 +267,7 @@ def test_top_level_verify_runs_regex():
 
 
 def test_top_level_verify_degrades_on_bad_spec():
-    # Never raises — a bad spec is a failed result.
+    # Never raises; a bad spec is a failed result.
     assert V.verify("x", spec={"type": "nope"}).passed is False
     assert V.verify("x", spec={}).passed is False
 

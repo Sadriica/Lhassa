@@ -1,18 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 
 /**
- * CommandPalette — a ⌘K / Ctrl+K modal launcher.
+ * CommandPalette; a ⌘K / Ctrl+K modal launcher.
  *
  * Props:
- *   sections   : [{ id, label }]  — the nav sections (from App).
- *   onNavigate : (id) => void     — jump to a section (updates the URL hash too).
+ *   sections   : [{ id, label }] ; the nav sections (from App).
+ *   onNavigate : (id) => void    ; jump to a section (updates the URL hash too).
  *
  * Commands are data-driven: one JUMP command per section, plus a few quick
  * actions that (for now) simply route to the relevant section. Extend by adding
  * to QUICK_ACTIONS or the derived list.
  */
 
-// Quick actions — each just jumps to a section for now. `to` matches a section id.
+// Quick actions; each just jumps to a section for now. `to` matches a section id.
 const QUICK_ACTIONS = [
   { id: 'action:open-inbox', label: 'Review attention queue', hint: 'Inbox', to: 'inbox' },
   { id: 'action:open-watchlist', label: 'Check watchers', hint: 'Watchlist', to: 'watchlist' },
@@ -59,7 +59,7 @@ export default function CommandPalette({ sections = [], onNavigate }) {
     })
   }, [commands, query])
 
-  // Open helper — remember focus, reset the query/selection, then open. Doing the
+  // Open helper; remember focus, reset the query/selection, then open. Doing the
   // resets here (not in an effect) keeps the effect free of cascading setState.
   const openPalette = () => {
     restoreFocusRef.current = document.activeElement

@@ -96,7 +96,7 @@ async def test_close_session_degrades_on_budget_exceeded(monkeypatch):
     monkeypatch.setattr(session, "upsert_fact", fail)
     monkeypatch.setattr(session, "save_session", fail)
 
-    # Must not raise — shutdown should never crash on a budget cap.
+    # Must not raise; shutdown should never crash on a budget cap.
     await session.close_session(
         [
             {"role": "user", "content": "hi"},

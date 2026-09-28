@@ -3,7 +3,7 @@
 
 :func:`run_flow` walks the graph from its single trigger along the edges, executing
 one node at a time and threading each node's output to the next ("receive
-information" along the wire). It NEVER raises — a node that errors becomes a failed
+information" along the wire). It NEVER raises; a node that errors becomes a failed
 step in the run record, and the path stops there.
 
 Execution order
@@ -14,42 +14,42 @@ pairs; ``data`` is the output of the upstream node. Each node executes at most o
 
 Per-kind behaviour
 ------------------
-  * ``trigger`` — records the inputs and passes them downstream unchanged.
-  * ``task``    — resolves a brain by **HYBRID** routing (a pinned ``config.brain``
+  * ``trigger``: records the inputs and passes them downstream unchanged.
+  * ``task``   : resolves a brain by **HYBRID** routing (a pinned ``config.brain``
     wins; otherwise the node's ``skill``/domain auto-routes through the org
     topology), then runs the work through the INJECTABLE ``executor`` (default
     :func:`lhassa.org.executor.brain_executor`, offline unless ``LHASSA_ORG_LIVE``).
     The upstream ``data`` is passed in as the task's input; the executor's result
     becomes the data that flows downstream. A ``task`` node may declare
     ``config.retry`` (``max_attempts``/``backoff``/``base_seconds``/``max_seconds``/
-    ``retry_on``, all optional — the default is a single attempt) and
+    ``retry_on``, all optional; the default is a single attempt) and
     ``config.timeout_seconds``: a timeout counts as ``retry_on: "timeout"``. In a
     DURABLE run a retryable failure PARKS the run (``WAITING_RETRY``, releasing the
     lease exactly like a completed run) until ``next_wakeup_at``; in an in-memory
     run it retries inline with no real sleep (the deterministic $0 plane never
     blocks on wall-clock time).
-  * ``gate``    — ``verify`` runs :func:`lhassa.agents.verify.verify`; ``approval``
+  * ``gate``   : ``verify`` runs :func:`lhassa.agents.verify.verify`; ``approval``
     parks a request via :mod:`lhassa.security.approval`. The step records the
     verdict (``passed`` / ``needs_approval``). On a non-pass the path STOPS unless an
     outgoing edge's ``when`` explicitly handles the failure.
-  * ``output``  — records the output (notify/doc/log); best-effort, never raises. The
+  * ``output`` : records the output (notify/doc/log); best-effort, never raises. The
     ``tex`` type additionally EXPORTS a tailored ``.tex`` file (``lhassa.cv.export``)
     to ``~/.lhassa/cv/out/{id}_{company}.tex`` and records its path.
-  * ``branch``  — evaluates the outgoing edges' ``when`` and follows the FIRST match
+  * ``branch`` : evaluates the outgoing edges' ``when`` and follows the FIRST match
     (an unconditional edge is the ``else``).
-  * ``loop``    — runs its declared ``body`` chain up to ``max_iterations`` times
+  * ``loop``   : runs its declared ``body`` chain up to ``max_iterations`` times
     (bounded), stopping early the moment an optional ``verify`` spec passes
     (verifier-terminated, NEVER an LLM). See :func:`_run_loop_body`.
-  * ``wait``    — parks for an external event and resumes exactly like an
-    ``approval`` gate — the SAME park/resume seam, generalised, not a new one.
-  * ``subflow`` — composes another flow inline (:func:`_run_subflow`), bounded by
+  * ``wait``   : parks for an external event and resumes exactly like an
+    ``approval`` gate; the SAME park/resume seam, generalised, not a new one.
+  * ``subflow``: composes another flow inline (:func:`_run_subflow`), bounded by
     a recursion-depth guard.
 
 Branch / edge semantics
 -----------------------
 After a node runs, its outgoing edges are filtered by :func:`eval_when` against a
 context (the node's result + the data). A ``branch`` follows a single edge; other
-nodes follow every matching edge (usually one — a linear flow). A ``gate`` that did
+nodes follow every matching edge (usually one; a linear flow). A ``gate`` that did
 not pass drops its unconditional edges, so a non-pass naturally halts the path.
 
 Return value
@@ -113,7 +113,7 @@ def eval_when(when: Optional[dict], ctx: dict) -> bool:
 
     ``field`` is looked up in ``ctx`` (e.g. ``"passed"``, ``"summary"``, ``"status"``,
     or anything in the upstream result). An unknown/oversized spec degrades to
-    ``False`` (the edge is simply not taken) — evaluation never raises.
+    ``False`` (the edge is simply not taken); evaluation never raises.
     """
     if when is None:
         return True
@@ -149,7 +149,7 @@ def eval_when(when: Optional[dict], ctx: dict) -> bool:
 def resolve_brain(node: FlowNode, data: Any, config: Config) -> tuple[str, bool]:
     """Resolve which brain a ``task`` node runs on. Returns ``(department, pinned)``.
 
-    A thin, backward-compatible wrapper over :mod:`lhassa.flows.registries` —
+    A thin, backward-compatible wrapper over :mod:`lhassa.flows.registries`;
     ``TASK_ROUTERS`` (default ``org_topology``, selectable per node via
     ``config.router``). Kept as a public function/import path for existing
     callers and tests.
@@ -166,7 +166,7 @@ def _retry_config(node: FlowNode) -> dict:
     ``{"max_attempts": int>=1, "backoff": "fixed"|"exponential", "base_seconds":
     float, "max_seconds": float, "retry_on": ["error", "timeout", ...]}``. Every
     key is optional and a missing/malformed value falls back to a single
-    attempt on ``"error"`` only — a node with no ``retry`` config behaves
+    attempt on ``"error"`` only; a node with no ``retry`` config behaves
     exactly as before this feature existed.
     """
     cfg = node.config or {}
@@ -219,13 +219,13 @@ def _backoff_seconds(retry_cfg: dict, attempt: int) -> float:
 async def _default_executor(
     goal: str, *, department: str, config: Config, max_tokens: Optional[int] = None, **_: Any
 ) -> dict:
-    """The default task executor — the org department brain (offline + $0 by default)."""
+    """The default task executor; the org department brain (offline + $0 by default)."""
     if not _live_enabled():
         return {
             "ok": True,
             "summary": (
-                f"[offline] {department} department handled (live thinking disabled "
-                f"— set LHASSA_ORG_LIVE=1 to think): {goal}"
+                f"[offline] {department} department handled (live thinking disabled; "
+                f"set LHASSA_ORG_LIVE=1 to think): {goal}"
             ),
             "department": department,
             "cost_usd": 0.0,
@@ -348,9 +348,9 @@ def _format_goal(
     Placeholders (each substituted only if present, so behaviour for a prompt that
     uses none is unchanged):
 
-      * ``{input}``   — the upstream node's output (a dict's ``summary``/``output``).
-      * ``{base_cv}`` — the fixed base CV text (``cv.load_base()`` at run start).
-      * ``{company}`` — the resolved company (override → context → ``"untitled"``).
+      * ``{input}``  : the upstream node's output (a dict's ``summary``/``output``).
+      * ``{base_cv}``: the fixed base CV text (``cv.load_base()`` at run start).
+      * ``{company}``: the resolved company (override → context → ``"untitled"``).
     """
     prompt = str(prompt or "").strip()
     if not prompt:
@@ -388,7 +388,7 @@ async def _run_gate(
     ``base_cv`` is passed to the verifier via ``context`` so an objective check (e.g.
     contact-detail preservation) can compare the artifact against the fixed base CV.
 
-    ``default_type`` is the gate type used when ``config.type`` is absent — a
+    ``default_type`` is the gate type used when ``config.type`` is absent; a
     ``gate`` node defaults to ``"verify"``; a ``wait`` node (see
     :func:`run_flow`) reuses this SAME function with ``default_type="approval"``,
     since a wait is a generalisation of the approval park/resume seam, not a
@@ -438,7 +438,7 @@ async def _run_gate(
                 )
             except Exception as exc:  # legacy parking remains best-effort
                 logger.debug("flows: approval gate could not park ({}): {}", node.id, exc)
-        # A parked approval is NOT a pass — the path waits (records needs_approval).
+        # A parked approval is NOT a pass; the path waits (records needs_approval).
         return (
             {
                 "gate": "approval",
@@ -482,15 +482,15 @@ def resolve_company(override: Optional[str], context: Optional[dict]) -> str:
 def _run_output(
     node: FlowNode, data: Any, *, company: str = "untitled", run_id: Optional[str] = None
 ) -> dict:
-    """Record an output node — best-effort, never raises.
+    """Record an output node; best-effort, never raises.
 
     ``notify`` / ``doc`` / ``log`` (and any other unregistered type) record the
     payload as a plain log entry. A type registered in
-    :mod:`lhassa.flows.registries` (``OUTPUT_HANDLERS`` — ``tex`` by default,
+    :mod:`lhassa.flows.registries` (``OUTPUT_HANDLERS``: ``tex`` by default,
     which EXPORTS a tailored ``.tex`` file for the CV work-flow via
     :func:`lhassa.cv.export`) additionally runs that handler and merges its
     record fields (e.g. ``{"output": "tex", "path": "…/out/{id}_{company}.tex"}``).
-    An unregistered type degrades to the plain log record — never a ``KeyError``.
+    An unregistered type degrades to the plain log record; never a ``KeyError``.
     """
     cfg = node.config or {}
     out_type = str(cfg.get("type") or "log").lower()
@@ -532,11 +532,11 @@ async def _run_loop_body(
     """Walk ONE iteration of a ``loop`` node's body, from ``config.body`` to the
     edge that closes back into ``loop_node`` (the declared back-edge validated by
     :meth:`Flow.validate`). Returns ``(body_steps, data_out)``; raises on any
-    body problem — the caller (the LOOP dispatch) turns that into a failed step,
+    body problem; the caller (the LOOP dispatch) turns that into a failed step,
     exactly like any other node error.
 
     Deliberately scoped to ``task`` / ``branch`` / ``output`` / verify-``gate``
-    nodes: a loop body is meant to be a small, deterministic, bounded unit —
+    nodes: a loop body is meant to be a small, deterministic, bounded unit;
     an ``approval`` gate (a human in the loop) or nested ``loop``/``wait``/
     ``subflow`` would turn "bounded, verifier-terminated" into something this
     simple walker cannot account for, so those are refused rather than silently
@@ -605,7 +605,7 @@ async def _run_loop_body(
             next_edge = candidates[0]
 
         if next_edge.to_node == loop_node.id:
-            return body_steps, current  # the declared back-edge — one iteration done
+            return body_steps, current  # the declared back-edge; one iteration done
         node_id = next_edge.to_node
 
     raise RuntimeError(f"loop node {loop_node.id!r} body exceeded {_MAX_LOOP_BODY_STEPS} internal steps")
@@ -626,7 +626,7 @@ async def _run_subflow(
     """Compose another flow inline; returns ``(step_extra, data_out)``.
 
     Runs the child flow with :func:`run_flow` IN-MEMORY (not a separate durable
-    run row — whether a subflow's episode/delegation should be its own or
+    run row; whether a subflow's episode/delegation should be its own or
     absorbed into the parent's is an open governance question, tracked as a
     real design risk, not decided here). ``depth`` is the bounded recursion
     guard: a subflow that (directly or transitively) tries to compose itself
@@ -771,7 +771,7 @@ async def run_flow(
     load-from-disk behaviour, so existing callers are unchanged.
 
     ``context`` selects the :mod:`lhassa.flows.registries` context provider that
-    resolves ``{base_cv}``/``{company}`` (default ``"cv"`` — today's behaviour,
+    resolves ``{base_cv}``/``{company}`` (default ``"cv"``: today's behaviour,
     unchanged). A flow may instead set ``config.context`` on the trigger node
     (checked first); an unknown provider degrades to the default, never raises.
 
@@ -783,7 +783,7 @@ async def run_flow(
 
     ``subflow_loader`` overrides how a ``subflow`` node resolves ``config.flow_id``
     into a :class:`Flow` (the test seam; defaults to :class:`lhassa.flows.store.FlowStore`).
-    ``_subflow_depth`` is INTERNAL (a subflow's own recursive call bumps it) — never
+    ``_subflow_depth`` is INTERNAL (a subflow's own recursive call bumps it); never
     set it directly; it is the bounded recursion-depth guard.
     """
     if config is None:
@@ -796,7 +796,7 @@ async def run_flow(
 
     # Resolve the fixed base CV (for {base_cv} interpolation + the contact gate)
     # and the company (override → context → "untitled") through the registered
-    # context provider (default "cv" — today's behaviour, unchanged). Degrades
+    # context provider (default "cv": today's behaviour, unchanged). Degrades
     # gracefully on any failure so a broken CV seam never crashes a run.
     provider_name = context
     if provider_name is None:
@@ -828,7 +828,7 @@ async def run_flow(
     run_started = _iso_now()
     run_started_perf = time.perf_counter()
 
-    # Validate up front — an invalid graph is a single failed run record, not a crash.
+    # Validate up front; an invalid graph is a single failed run record, not a crash.
     try:
         flow.validate()
         start = flow.trigger()
@@ -1003,7 +1003,7 @@ async def run_flow(
                             step["error"] = str(exc)
                             step["retry_reason"] = reason
                             break
-                        # Non-durable (in-memory) run: retry inline, no real sleep —
+                        # Non-durable (in-memory) run: retry inline, no real sleep;
                         # the deterministic $0 plane never blocks on wall-clock time.
                         logger.debug(
                             "flows: node {} attempt {} failed ({}), retrying inline",
@@ -1164,7 +1164,7 @@ async def run_flow(
         out_edges = flow.edges_from(node.id)
         if node.kind == NodeKind.LOOP:
             # The edge into config.body was already run internally, N times, by
-            # the LOOP dispatch above — only its EXIT edges are a normal,
+            # the LOOP dispatch above; only its EXIT edges are a normal,
             # top-level "downstream" hop.
             loop_body_start = str((node.config or {}).get("body") or "").strip()
             out_edges = [e for e in out_edges if e.to_node != loop_body_start]

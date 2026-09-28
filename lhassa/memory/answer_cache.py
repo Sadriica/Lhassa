@@ -1,22 +1,22 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""The answer cache — a $0 semantic cache over past chat answers.
+"""The answer cache; a $0 semantic cache over past chat answers.
 
 The Telegram chat think (``notify.telegram_inbound._brain_reply``) spends a real
 model call on every non-command message, even when it has effectively answered the
 exact same STABLE question before ("what's the capital of France", "how do I undo
 a git commit"). This module is the store/lookup half of that cache: it never
 decides WHETHER a question is cacheable (that is ``notify.intent.classify``'s job,
-the deterministic gate) — it only remembers and recalls, embedding-similarity-first,
+the deterministic gate); it only remembers and recalls, embedding-similarity-first,
 using the same offline-capable :func:`lhassa.memory.embeddings.get_embedder` /
 :func:`lhassa.memory.embeddings.cosine` pair memory layer 4 already uses.
 
 Both :func:`store` and :func:`lookup` are best-effort and NEVER raise: any failure
-(a DB error, an embedder hiccup) degrades to a no-op store / a cache MISS — the
+(a DB error, an embedder hiccup) degrades to a no-op store / a cache MISS; the
 calling chat turn always falls through to a normal think, it never breaks.
 
 TTL matters even for a "cacheable" (rot-resistant) question: an entry older than
 ``config.answer_cache_ttl`` is ignored on lookup, so a stale answer never wins
-just because it is a close embedding match — cacheable means "usually stable",
+just because it is a close embedding match; cacheable means "usually stable",
 not "eternal".
 """
 
@@ -31,7 +31,7 @@ from loguru import logger
 
 from lhassa.config import Config
 
-# How many of the most recent cached rows a lookup scans (a linear cosine scan —
+# How many of the most recent cached rows a lookup scans (a linear cosine scan;
 # fine at this scale; a real ANN index would be overkill for a personal cache).
 _LOOKUP_LIMIT = 500
 
@@ -62,7 +62,7 @@ async def store(
 
     Embeds ``question`` with the configured embedder (offline hashing embedder
     by default, so this always works with $0 and no network) and inserts a new
-    row. Best-effort: any failure is logged at DEBUG and swallowed — a cache
+    row. Best-effort: any failure is logged at DEBUG and swallowed; a cache
     write can never break the chat turn that just produced the answer.
     Returns the new row's id, or ``None`` on a no-op / failure.
     """
@@ -105,8 +105,8 @@ async def lookup(
     Loads the ``_LOOKUP_LIMIT`` most recent (non-expired) cached rows for
     ``instance_id``, embeds ``question`` with the same embedder, and returns the
     highest-cosine match at or above ``threshold``. A row stamped with a
-    DIFFERENT embedder than the one currently configured is skipped entirely —
-    mirroring ``memory.load._semantic_layer``'s same guard — since cosine
+    DIFFERENT embedder than the one currently configured is skipped entirely;
+    mirroring ``memory.load._semantic_layer``'s same guard; since cosine
     similarity across two embedders' vector spaces is not a comparable number,
     never a near-miss worth surfacing. A row older than ``config.answer_cache_ttl``
     seconds is ignored (TTL is applied here, at read time, so entries age out
@@ -114,7 +114,7 @@ async def lookup(
     (best-effort). Never raises: any failure degrades to a MISS (``None``), so a
     broken cache never breaks a chat reply.
 
-    ``stats`` is an optional, keyword-only diagnostics out-param — pass an empty
+    ``stats`` is an optional, keyword-only diagnostics out-param; pass an empty
     dict and this fills it with ``{"best_similarity": float, "scanned": int,
     "hit": bool}`` regardless of hit/miss, so a caller can tell WHY a lookup
     missed (a near-miss under threshold vs. nothing to scan at all vs. an
@@ -149,7 +149,7 @@ async def lookup(
         best_row = None
         best_sim = -1.0
         for row in fresh:
-            # Only compare against rows stamped with the same embedder — vectors
+            # Only compare against rows stamped with the same embedder; vectors
             # from a different embedder/model must never be cosine-compared
             # (a mismatch is a MISS, not a garbage similarity score).
             if (row.get("embedder") or "") != embedder_name:

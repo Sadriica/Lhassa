@@ -52,7 +52,7 @@ def test_no_candidates_is_nothing_to_derive(_db, monkeypatch):
 
 def test_new_candidates_are_persisted(_db, monkeypatch):
     candidates = [
-        _candidate("Has a recurring weekly commitment 'Algorithms 201' (Tue 15:00) — likely a course or class this term."),
+        _candidate("Has a recurring weekly commitment 'Algorithms 201' (Tue 15:00); likely a course or class this term."),
         _candidate("Your calendar is busiest on Tue mornings.", tags=("calendar", "rhythm")),
     ]
 
@@ -74,7 +74,7 @@ def test_new_candidates_are_persisted(_db, monkeypatch):
 
 
 def test_second_run_dedupes_against_existing_facts(_db, monkeypatch):
-    candidates = [_candidate("Has a recurring weekly commitment 'Algorithms 201' (Tue 15:00) — likely a course or class this term.")]
+    candidates = [_candidate("Has a recurring weekly commitment 'Algorithms 201' (Tue 15:00); likely a course or class this term.")]
 
     async def fake_derive(instance_id, *, config=None, days=45):
         return candidates

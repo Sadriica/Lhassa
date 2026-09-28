@@ -95,7 +95,7 @@ async def list_kg_entities(instance_id: str, limit: int = 200) -> "list[dict]":
             return [dict(row) for row in await cur.fetchall()]
 
 
-# ── loops (bounded verifier-terminated iteration — loop engineering) ─────────
+# ── loops (bounded verifier-terminated iteration; loop engineering) ─────────
 
 
 async def merge_kg_entities(instance_id: str, keep_id: str, drop_id: str) -> int:
@@ -117,7 +117,7 @@ async def merge_kg_entities(instance_id: str, keep_id: str, drop_id: str) -> int
             new_from = keep_id if edge["from_id"] == drop_id else edge["from_id"]
             new_to = keep_id if edge["to_id"] == drop_id else edge["to_id"]
             if new_from == new_to:
-                # A self-edge born from the merge is meaningless — drop it.
+                # A self-edge born from the merge is meaningless; drop it.
                 await db.execute(
                     "DELETE FROM kg_edges WHERE instance_id = ? AND from_id = ? AND to_id = ? AND kind = ?",
                     (instance_id, edge["from_id"], edge["to_id"], edge["kind"]),

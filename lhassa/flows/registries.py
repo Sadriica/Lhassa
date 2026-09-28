@@ -4,15 +4,15 @@
 The engine used to hard-wire three Lhassa-specific behaviours: org-topology task
 routing, the CV's ``{base_cv}``/``{company}`` interpolation, and a ``tex`` output
 type that shells out to :mod:`lhassa.cv`. None of that is intrinsic to a work-flow
-graph — a deployment without the CV package should still be able to run flows.
+graph; a deployment without the CV package should still be able to run flows.
 
 This module turns each seam into a small :class:`lhassa.registry.Registry` whose
 **default entry reproduces today's behaviour exactly**, so existing on-disk flows
 (the CV pipeline, the research corpus) keep running byte-for-byte unchanged. A
 flow opts into a non-default entry via ``config.router`` (task nodes) or
 ``config.context``/``run_flow(..., context=...)`` or ``config.type`` (output
-nodes, already the existing key). An unregistered name degrades to the default —
-or, for output handlers, to a plain log record — never a ``KeyError``.
+nodes, already the existing key). An unregistered name degrades to the default;
+or, for output handlers, to a plain log record; never a ``KeyError``.
 """
 
 from __future__ import annotations
@@ -43,7 +43,7 @@ DEFAULT_CONTEXT_PROVIDER = "cv"
 
 
 def _org_topology_router(node: Any, data: Any, config: Any) -> "tuple[str, bool]":
-    """The org-topology task router — today's ``resolve_brain`` behaviour verbatim.
+    """The org-topology task router; today's ``resolve_brain`` behaviour verbatim.
 
     HYBRID: a pinned ``config.brain`` wins (``pinned=True``). Otherwise the node's
     ``skill``/``domain`` (falling back to the prompt or the upstream data) auto-routes
@@ -64,7 +64,7 @@ def _org_topology_router(node: Any, data: Any, config: Any) -> "tuple[str, bool]
 
         topology = topo_mod.load_topology(config)
         node_id = topology.root().id
-        # Walk down one level at a time until a leaf — route_in_topology is single-hop.
+        # Walk down one level at a time until a leaf; route_in_topology is single-hop.
         for _ in range(64):
             if topology.is_leaf(node_id):
                 break
@@ -82,7 +82,7 @@ TASK_ROUTERS.register(DEFAULT_TASK_ROUTER, _org_topology_router)
 def resolve_router(node: Any) -> TaskRouter:
     """Pick the task router for ``node``: ``config.router`` else the default.
 
-    An unknown router name degrades to the default rather than raising — a
+    An unknown router name degrades to the default rather than raising; a
     misconfigured node still routes, it just doesn't get the custom behaviour.
     """
     name = ((node.config or {}).get("router") or DEFAULT_TASK_ROUTER).strip()
@@ -101,7 +101,7 @@ async def _cv_context_provider(
     base_cv_override: Optional[str],
     config: Any,
 ) -> dict:
-    """The CV context provider — today's base-CV-load + company-resolution verbatim.
+    """The CV context provider; today's base-CV-load + company-resolution verbatim.
 
     Supplies exactly the ``{base_cv}``/``{company}`` placeholders. ``base_cv_override``
     (non-``None``) wins verbatim (e.g. a CV a caller extracted from an uploaded
@@ -137,7 +137,7 @@ async def resolve_context(
     """Resolve ``{base_cv}``/``{company}`` (and any provider-added placeholders).
 
     An unknown provider name, or a provider that raises, degrades to the default
-    CV provider's own degrade path (``base_cv=""``, best-effort company) — a run
+    CV provider's own degrade path (``base_cv=""``, best-effort company); a run
     never crashes on context resolution.
     """
     provider_name = (name or DEFAULT_CONTEXT_PROVIDER).strip() or DEFAULT_CONTEXT_PROVIDER
@@ -162,7 +162,7 @@ async def resolve_context(
 def _tex_output_handler(
     node: Any, payload: Any, *, company: str = "untitled", run_id: Optional[str] = None
 ) -> dict:
-    """The ``tex`` output handler — today's CV export behaviour verbatim.
+    """The ``tex`` output handler; today's CV export behaviour verbatim.
 
     Exports a tailored ``.tex`` file via :mod:`lhassa.cv` to
     ``~/.lhassa/cv/out/{id}_{company}.tex`` and records its path. Best-effort:
@@ -174,7 +174,7 @@ def _tex_output_handler(
     try:
         artifact = payload if isinstance(payload, str) else str(payload)
         artifact = cv.clean_latex(artifact)  # strip prose/fences → compile-ready .tex
-        # Deterministically restore the owner's contact block from the base CV —
+        # Deterministically restore the owner's contact block from the base CV;
         # the model never has to reproduce it, and the contact_preserved gate
         # downstream always passes ($0; best-effort, degrades to no-op).
         artifact = cv.restore_contact(artifact, cv.load_base())
@@ -193,7 +193,7 @@ OUTPUT_HANDLERS.register("tex", _tex_output_handler)
 def resolve_output_handler(out_type: str) -> Optional[OutputHandler]:
     """Look up an output handler by type; ``None`` for an unregistered type.
 
-    Callers degrade an unregistered type to a plain log record — never a
+    Callers degrade an unregistered type to a plain log record; never a
     ``KeyError``.
     """
     return OUTPUT_HANDLERS.get_or_none(out_type)

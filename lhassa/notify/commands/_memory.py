@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Memory + personal-agenda commands — /recall /memory /knowledge /checkin
+"""Memory + personal-agenda commands; /recall /memory /knowledge /checkin
 /today /tomorrow.
 
 Moved verbatim out of the former ``lhassa/notify/commands.py``.
@@ -15,15 +15,15 @@ from ._shared import _approval_age, _config, _oops
 
 @register_command("recall")
 async def _cmd_recall(args: str, *, config=None) -> str:
-    """``/recall <text>`` — full-text search over the episode log, LLM-free.
+    """``/recall <text>``: full-text search over the episode log, LLM-free.
 
     Shows up to 5 matches: relative age, ``despertar_por``, ``decision`` and a
-    short ``resultado`` snippet. $0 — a deterministic FTS5 query, never a model
+    short ``resultado`` snippet. $0; a deterministic FTS5 query, never a model
     call. No args → a usage hint.
     """
     text = (args or "").strip()
     if not text:
-        return "Usage: /recall <text> — searches past episodes for a match."
+        return "Usage: /recall <text>; searches past episodes for a match."
     try:
         cfg = _config(config)
         instance_id = getattr(cfg, "instance_id", None) or "inst_personal"
@@ -33,11 +33,11 @@ async def _cmd_recall(args: str, *, config=None) -> str:
         rows = await _db.search_episodes(instance_id, text, 5)
         if not rows:
             # "Nothing matches" and "the index is broken" must not read the
-            # same — search_episodes degrades to [] on any failure, which is
+            # same; search_episodes degrades to [] on any failure, which is
             # right for its machine callers but dishonest at the owner's door.
             if not await _db.recall_available(instance_id):
                 return (
-                    "I can't search my memory right now — the recall index is "
+                    "I can't search my memory right now; the recall index is "
                     "unavailable on this machine."
                 )
             return f"No episodes match {text!r}."
@@ -49,7 +49,7 @@ async def _cmd_recall(args: str, *, config=None) -> str:
             decision = row.get("decision") or "?"
             snippet = (row.get("resultado") or "").replace("\n", " ").strip()
             lines.append("")
-            lines.append(f"{i}. {despertar} — {decision}{f' — {age}' if age else ''}")
+            lines.append(f"{i}. {despertar} ({decision}{f') {age}' if age else ''}")
             if snippet:
                 lines.append(f"   {snippet}")
         return "\n".join(lines)
@@ -60,7 +60,7 @@ async def _cmd_recall(args: str, *, config=None) -> str:
 
 @register_command("memory")
 async def _cmd_memory(args: str, *, config=None) -> str:
-    """``/memory <query>`` — search durable facts (substring/tag), LLM-free.
+    """``/memory <query>``: search durable facts (substring/tag), LLM-free.
 
     Mirrors ``lhassa memory``'s search (:mod:`lhassa.memory.facts`): a query
     matches a fact's content or any of its tags. Shows up to 5 matches: tipo, a
@@ -68,7 +68,7 @@ async def _cmd_memory(args: str, *, config=None) -> str:
     """
     query = (args or "").strip()
     if not query:
-        return "Usage: /memory <query> — searches durable facts by text or tag."
+        return "Usage: /memory <query>; searches durable facts by text or tag."
     try:
         cfg = _config(config)
         instance_id = getattr(cfg, "instance_id", None) or "inst_personal"
@@ -99,16 +99,16 @@ async def _cmd_memory(args: str, *, config=None) -> str:
 
 @register_command("knowledge")
 async def _cmd_knowledge(args: str, *, config=None) -> str:
-    """``/knowledge <query>`` — search the owner's OWN indexed documents, LLM-free.
+    """``/knowledge <query>``: search the owner's OWN indexed documents, LLM-free.
 
     A $0 cosine search over :mod:`lhassa.memory.knowledge` (document perception
-    — the owner's opt-in ``LHASSA_KNOWLEDGE_ROOTS``). Shows up to 5 matches:
+   ; the owner's opt-in ``LHASSA_KNOWLEDGE_ROOTS``). Shows up to 5 matches:
     the source filename and a short snippet. No args → a usage hint. No roots
     configured / empty index → a plain "nothing indexed yet" message.
     """
     query = (args or "").strip()
     if not query:
-        return "Usage: /knowledge <query> — searches your indexed notes/papers."
+        return "Usage: /knowledge <query>; searches your indexed notes/papers."
     try:
         import os as _os
 
@@ -134,7 +134,7 @@ async def _cmd_knowledge(args: str, *, config=None) -> str:
 
 @register_command("checkin")
 async def _cmd_checkin(args: str, *, config=None) -> str:
-    """``/checkin <text>`` — persist an owner-authored daily check-in.
+    """``/checkin <text>``: persist an owner-authored daily check-in.
 
     This is the explicit capture path for the personal digest questions. It is
     deterministic and $0: append one tagged fact to the grande, then acknowledge.
@@ -173,7 +173,7 @@ async def _render_personal_agenda(config, *, slot: str) -> str:
 
 @register_command("today")
 async def _cmd_today(args: str, *, config=None) -> str:
-    """``/today`` — personal agenda for the current day, LLM-free."""
+    """``/today``: personal agenda for the current day, LLM-free."""
     try:
         return await _render_personal_agenda(config, slot="today")
     except Exception as exc:
@@ -183,7 +183,7 @@ async def _cmd_today(args: str, *, config=None) -> str:
 
 @register_command("tomorrow")
 async def _cmd_tomorrow(args: str, *, config=None) -> str:
-    """``/tomorrow`` — personal agenda for the next day, LLM-free."""
+    """``/tomorrow``: personal agenda for the next day, LLM-free."""
     try:
         return await _render_personal_agenda(config, slot="tomorrow")
     except Exception as exc:

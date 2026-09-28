@@ -1,7 +1,7 @@
 """Tests for the $0 semantic answer cache (lhassa/memory/answer_cache.py).
 
 Uses the real (tmp-redirected) core DB via the autouse ``_isolate_brain_db``
-conftest fixture and the deterministic offline HashingEmbedder — no network,
+conftest fixture and the deterministic offline HashingEmbedder; no network,
 no model, no mocking needed for the embedder itself.
 """
 
@@ -82,7 +82,7 @@ def test_ttl_expiry_ignores_stale_entries():
         hit = await answer_cache.lookup(
             INSTANCE, "What is the capital of France?", threshold=0.90, config=cfg
         )
-        assert hit is None  # expired — must not be served
+        assert hit is None  # expired; must not be served
 
     asyncio.run(_run())
 
@@ -239,7 +239,7 @@ def test_store_writes_the_embedder_stamp():
 
 def test_lookup_skips_a_row_stamped_with_a_different_embedder():
     """A row embedded by a different embedder must never be cosine-compared
-    against the current query vector — mismatch is a MISS, never a garbage
+    against the current query vector; mismatch is a MISS, never a garbage
     similarity score (mirrors memory.load._semantic_layer's own guard)."""
 
     async def _run():
@@ -291,7 +291,7 @@ def test_lookup_stats_report_a_scanned_row_that_mismatches_embedder():
         assert hit is None
         assert stats["hit"] is False
         assert stats["scanned"] == 1
-        assert stats["best_similarity"] == -1.0  # never updated — no comparable row
+        assert stats["best_similarity"] == -1.0  # never updated; no comparable row
 
     asyncio.run(_run())
 

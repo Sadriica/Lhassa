@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """
-Objective verification gates — the árbitro's *correctness* layer (§2.8).
+Objective verification gates; the árbitro's *correctness* layer (§2.8).
 
-A ``Verifier`` answers one question about an artifact: *is it good enough?* — and
+A ``Verifier`` answers one question about an artifact: *is it good enough?*; and
 it answers **objectively, NUNCA con un LLM**. Every built-in here is pure standard
 library + subprocess + the LLM-free :mod:`lhassa.health` module. None of them
 imports or calls a provider, gateway, or cloud model. That invariant is the whole
@@ -17,12 +17,12 @@ and ``MetricVerifier`` built-ins below.
 Async shape
 -----------
 ``Verifier.verify`` is **synchronous**. Verification is either pure CPU (regex,
-metric) or a blocking subprocess / health collection — none of it needs an event
+metric) or a blocking subprocess / health collection; none of it needs an event
 loop, and a sync method is what :func:`lhassa.llm.router.cascade` wants for its
 ``verify`` callable (it calls ``verify(completion)`` directly). Async callers
 (``core.step``) just call it inline; the subprocess built-ins block only for the
 duration of the command they run, with a timeout. There is deliberately no
-``averify`` — a single sync shape keeps the Protocol honest and the cascade wiring
+``averify``: a single sync shape keeps the Protocol honest and the cascade wiring
 trivial.
 
 Each built-in that shells out does so through a ``_run(cmd)`` seam so tests can
@@ -102,7 +102,7 @@ class CommandVerifier:
         self.timeout = timeout
 
     def _run(self, cmd) -> subprocess.CompletedProcess:
-        """The subprocess seam — mock this in tests."""
+        """The subprocess seam; mock this in tests."""
         return _shell(cmd, cwd=self.cwd, timeout=self.timeout)
 
     def verify(self, artifact=None, context=None) -> VerifyResult:
@@ -116,7 +116,7 @@ class CommandVerifier:
 
 
 class TestsVerifier(CommandVerifier):
-    """Correctness gate — the test suite must pass (exit 0)."""
+    """Correctness gate; the test suite must pass (exit 0)."""
 
     name = "tests"
 
@@ -130,7 +130,7 @@ class TestsVerifier(CommandVerifier):
 
 
 class LintVerifier(CommandVerifier):
-    """Style gate — the linter must be clean (exit 0)."""
+    """Style gate; the linter must be clean (exit 0)."""
 
     name = "lint"
 
@@ -156,7 +156,7 @@ class HealthVerifier:
         self.out_dir = out_dir
 
     def _run(self, cmd=None) -> dict:
-        """The collection seam — runs the LLM-free health checks."""
+        """The collection seam; runs the LLM-free health checks."""
         from lhassa.health import checks
 
         return checks.run_all(out_dir=self.out_dir, notify=self.notify)
@@ -175,7 +175,7 @@ class HealthVerifier:
 
 
 class RegexVerifier:
-    """The artifact (a string) must match ``pattern`` — or must NOT, if asked."""
+    """The artifact (a string) must match ``pattern``: or must NOT, if asked."""
 
     name = "regex"
 
@@ -192,7 +192,7 @@ class RegexVerifier:
         return VerifyResult(passed, detail)
 
 
-# ── metric (beats a baseline — the Phase-5 "mejor" gate) ─────────────────────
+# ── metric (beats a baseline; the Phase-5 "mejor" gate) ─────────────────────
 
 
 class MetricVerifier:
@@ -274,7 +274,7 @@ def _section(text: str, heading: str) -> str:
 class ResearchCorpusVerifier:
     """Objective shape/citation gate for a corpus draft.
 
-    It does **not** claim a source is true—that requires an experiment or human
+    It does **not** claim a source is true; that requires an experiment or human
     review.  It enforces what code can know without a model: all seven sections
     exist exactly once and in order, cited source ids are declared, evidence
     bullets carry citations or say UNVERIFIED, and the proposed experiment names
@@ -382,8 +382,8 @@ class IdeaAssessmentVerifier:
 # The single source of truth mapping a spec ``type`` to its Verifier class lives
 # in the shared keystone ``Registry`` (the same primitive that backs actions/
 # channels/commands). A plugin can drop in a new objective gate with
-# ``@register_verifier("x")`` WITHOUT editing this file — the elastic/modular
-# principle — and a duplicate type is rejected instead of silently clobbering.
+# ``@register_verifier("x")`` WITHOUT editing this file; the elastic/modular
+# principle; and a duplicate type is rejected instead of silently clobbering.
 VERIFIERS: Registry[Callable[..., Verifier]] = Registry("verifier")
 
 
@@ -391,7 +391,7 @@ def register_verifier(name: str, cls: Optional[Callable[..., Verifier]] = None, 
     """Register a Verifier class under the spec ``type`` ``name``.
 
     Usable as a **decorator** (``@register_verifier("x")`` on a Verifier class) or a
-    **direct call** (``register_verifier("x", cls)``) — a thin wrapper over
+    **direct call** (``register_verifier("x", cls)``); a thin wrapper over
     :data:`VERIFIERS`. A duplicate ``name`` raises unless ``override=True``. This is
     the drop-in seam for adding an objective gate without touching core.
     """
@@ -477,7 +477,7 @@ def verify(artifact, *, spec: dict, context=None) -> VerifyResult:
     """Build the verifier named by ``spec`` and run it over ``artifact``.
 
     Degrades gracefully: a bad spec or a verifier that raises becomes a failed
-    ``VerifyResult`` — this function never propagates an exception, so a caller
+    ``VerifyResult``: this function never propagates an exception, so a caller
     can treat "could not verify" as "did not pass" without a try/except.
     """
     try:

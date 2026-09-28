@@ -9,7 +9,7 @@ import { MarkerType } from '@xyflow/react'
 // reads as two-way (peer ↔ peer), never a one-way command.
 //
 // Colors are picked to stay on the Lhasa palette yet distinct from the gold spine and
-// the reserved sovereign red: a cool cyan (reads), gold (notifies — but dashed, so it
+// the reserved sovereign red: a cool cyan (reads), gold (notifies; but dashed, so it
 // won't be mistaken for the solid route), a muted brick (reviews), and a warm plum
 // (collaborates).
 export const KIND_STYLE = {

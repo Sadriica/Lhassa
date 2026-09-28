@@ -1,16 +1,16 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """
-Vision tools — screenshot capture and image analysis via a vision LLM.
+Vision tools; screenshot capture and image analysis via a vision LLM.
 
 Screenshot capture tries (in order): scrot → maim → ImageMagick import →
 gnome-screenshot → spectacle (KDE).
 
 Image analysis uses the provider selected by LHASSA_VISION_PROVIDER:
-  auto        — use the active LHASSA_LLM_PROVIDER if it supports vision;
+  auto       ; use the active LHASSA_LLM_PROVIDER if it supports vision;
                 otherwise fall back to ANTHROPIC_API_KEY → OPENAI_API_KEY
-  anthropic   — Claude Haiku (fast, cheap, excellent vision)
-  openai      — GPT-4o-mini
-  openrouter  — any OpenRouter vision-capable model
+  anthropic  . Claude Haiku (fast, cheap, excellent vision)
+  openai     . GPT-4o-mini
+  openrouter ; any OpenRouter vision-capable model
 
 Default models (override with LHASSA_VISION_MODEL):
   anthropic   → claude-haiku-4-5-20251001
@@ -27,7 +27,7 @@ from typing import Any
 
 from loguru import logger
 
-# Cached async clients — reuses HTTP connection pool across calls
+# Cached async clients; reuses HTTP connection pool across calls
 _clients: dict[tuple, Any] = {}
 
 # ── Screenshot ─────────────────────────────────────────────────────────────────
@@ -110,7 +110,7 @@ async def take_screenshot() -> bytes:
             pass
 
         _hints = {
-            "Darwin":  "On macOS: screencapture is built-in — check PATH.",
+            "Darwin":  "On macOS: screencapture is built-in; check PATH.",
             "Windows": "On Windows: run  pip install Pillow  to enable screenshots.",
             "Linux":   "On Linux: install scrot (apt/pacman/dnf), maim, or ImageMagick.",
         }

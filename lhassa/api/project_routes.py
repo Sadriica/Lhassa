@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Projects routes — the read/list surface over the project entity
+"""Projects routes; the read/list surface over the project entity
 (§core.projects: "a named, TYPED unit of the owner's work").
 
 A thin shell over :mod:`lhassa.core.projects` + the durable tables that already
 reference a project through the namespaced-string convention
-(:func:`lhassa.core.projects.entity_tag`) — no new columns, no new tables.
+(:func:`lhassa.core.projects.entity_tag`); no new columns, no new tables.
 
 Routes (all under ``/api/projects``)::
 
@@ -68,7 +68,7 @@ async def get_project_artifacts(
     project_id: str, limit: int = Query(default=200, ge=1, le=500)
 ) -> list[dict]:
     """Artifacts whose ``metadata.project_id`` matches, filtered in Python over a
-    bounded recent window (no schema change — ``metadata`` is opaque JSON)."""
+    bounded recent window (no schema change; ``metadata`` is opaque JSON)."""
     await _get_or_404(project_id)
     await db.init_db()
     recent = await db.list_artifacts(Config.instance_id, limit=limit)

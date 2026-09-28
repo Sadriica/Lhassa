@@ -1,4 +1,4 @@
-"""Tests for lhassa.security.quarantine — the gate-1 sandbox (no red/datos).
+"""Tests for lhassa.security.quarantine; the gate-1 sandbox (no red/datos).
 
 All offline: candidates are harmless ``bash -c`` snippets run in a throwaway temp
 dir with a scrubbed env. No real network is ever touched.
@@ -80,7 +80,7 @@ async def test_reports_isolation_level():
 async def test_fallback_when_no_namespacing_tool(monkeypatch):
     # Force the best-effort path: no unshare/firejail/bwrap available.
     # conftest.py pins LHASSA_QUARANTINE_ISOLATION=none suite-wide, which is the
-    # "deliberate operator opt-out" that bypasses the new default refusal — see
+    # "deliberate operator opt-out" that bypasses the new default refusal; see
     # test_quarantine_platform.py for the refusal itself and its escape hatch.
     monkeypatch.setattr(quarantine.shutil, "which", lambda _name: None)
     res = await run_in_quarantine("echo plain")
@@ -106,7 +106,7 @@ async def test_bwrap_preferred_over_unshare_when_both_available(monkeypatch, tmp
 
 @pytest.mark.asyncio
 async def test_unshare_only_reports_env_net_only_not_fs_isolated(monkeypatch, tmp_path):
-    # unshare alone never hides the real filesystem — the label must say so.
+    # unshare alone never hides the real filesystem; the label must say so.
     monkeypatch.delenv("LHASSA_QUARANTINE_ISOLATION", raising=False)
     monkeypatch.setattr(
         quarantine.shutil, "which",

@@ -6,12 +6,12 @@ home-grown ``skill.json``) plus any bundled resource files. The store is the
 admin surface's persistence layer: list, get, create/save, delete, import an
 external skill folder/file, and export one for sharing.
 
-Two thin bridges connect skills to the org layer (read-only imports — this
+Two thin bridges connect skills to the org layer (read-only imports; this
 module never edits :mod:`lhassa.org.management`):
 
-* :func:`brains_with_skill` — which brains in the topology HAVE a skill (their
+* :func:`brains_with_skill`: which brains in the topology HAVE a skill (their
   :attr:`BrainNode.skills` contains it).
-* :func:`assign_to_brain` — ADD a skill to a brain, reusing
+* :func:`assign_to_brain`: ADD a skill to a brain, reusing
   :func:`lhassa.org.management.set_skills` (so all topology validation/persistence
   is unchanged).
 
@@ -109,7 +109,7 @@ def _read_skill_folder(folder: Path) -> Skill:
     if md.exists():
         try:
             skill = parse_skill_md(md.read_text(encoding="utf-8"))
-        except Exception as exc:  # extremely defensive — parse_skill_md is safe
+        except Exception as exc:  # extremely defensive; parse_skill_md is safe
             skill = Skill(error=f"unreadable SKILL.md: {exc}")
     elif js.exists():
         try:
@@ -141,7 +141,7 @@ class SkillStore:
         """The folder for ``name``, ALWAYS inside the store.
 
         ``slugify`` returns "" for all-punctuation input (".." among them), and
-        the old fallback to the raw name then produced ``root/".."`` — the
+        the old fallback to the raw name then produced ``root/".."``: the
         store's PARENT. Since ``delete`` rmtree's whatever this returns, a skill
         named ".." removed ``~/.lhassa`` and the brain DB with it. The name is
         now flattened to a single path component and the result is re-checked
@@ -205,7 +205,7 @@ class SkillStore:
 
         This is the read path used at think time to load a skill's instructions
         into a brain's prompt (see ``org/executor.py``), so every successful read
-        bumps the curator's usage telemetry (best-effort — see
+        bumps the curator's usage telemetry (best-effort; see
         :mod:`lhassa.skills.curator`; never breaks a caller on failure).
         """
         try:
@@ -227,7 +227,7 @@ class SkillStore:
 
             _curator.record_use(skill.name or name, config=self._config)
         except Exception as exc:  # telemetry must never break a caller
-            logger.warning("skills: usage telemetry failed for {} — {}", name, exc)
+            logger.warning("skills: usage telemetry failed for {}; {}", name, exc)
         return skill
 
     def exists(self, name: str) -> bool:
@@ -236,7 +236,7 @@ class SkillStore:
     def index(self) -> Registry[Skill]:
         """A keystone :class:`Registry` view of the store (name → Skill).
 
-        A fresh snapshot built from disk each call — handy for the API/dashboard
+        A fresh snapshot built from disk each call; handy for the API/dashboard
         and consistent with every other Lhassa swap point being registry-backed.
         """
         reg: Registry[Skill] = Registry("skill")
@@ -313,7 +313,7 @@ class SkillStore:
                 try:
                     shutil.copy2(src / res, dest / res)
                 except Exception as exc:  # pragma: no cover - best effort
-                    logger.warning("skills: could not copy resource {} — {}", res, exc)
+                    logger.warning("skills: could not copy resource {}; {}", res, exc)
         return replace(self.get(skill.name) or skill, error=None)
 
     def export(self, name: str, dest_dir: Union[str, Path, None] = None) -> Path:
@@ -345,7 +345,7 @@ class SkillStore:
 def is_installed(name: str, config: "Optional[Config]" = None) -> bool:
     """Whether a skill named ``name`` is present in the store. Never raises.
 
-    "Installed" means its folder + SKILL.md exist on disk — the precondition for the
+    "Installed" means its folder + SKILL.md exist on disk; the precondition for the
     executor to load its instructions into a brain's prompt. An assigned skill NAME
     that is not installed does nothing until it is.
     """
@@ -354,7 +354,7 @@ def is_installed(name: str, config: "Optional[Config]" = None) -> bool:
     try:
         return SkillStore(config).exists(name)
     except Exception as exc:  # pragma: no cover - store reads are defensive already
-        logger.warning("skills: is_installed could not read the store — {}", exc)
+        logger.warning("skills: is_installed could not read the store; {}", exc)
         return False
 
 
@@ -363,7 +363,7 @@ def installed_names(config: "Optional[Config]" = None) -> set[str]:
     try:
         return {s.name for s in SkillStore(config).list_skills() if s.name}
     except Exception as exc:  # pragma: no cover - store reads are defensive already
-        logger.warning("skills: installed_names could not read the store — {}", exc)
+        logger.warning("skills: installed_names could not read the store; {}", exc)
         return set()
 
 

@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""``lhassa capabilities`` (alias ``doctor``) — surface Lhassa's elasticity.
+"""``lhassa capabilities`` (alias ``doctor``); surface Lhassa's elasticity.
 
 Lhassa is built to be **fully elastic and highly modular**: every swap point sits
 behind an interface + a uniform :class:`~lhassa.registry.Registry`, and
-capabilities drop in without editing core. This command makes that visible — it
+capabilities drop in without editing core. This command makes that visible; it
 reports, in one place, **what is wired** (every registry's registered names) and
 **what is on/off** (the active configuration + which adapters/channels are actually
 available/configured) plus the drop-in plugins discovered.
@@ -11,7 +11,7 @@ available/configured) plus the drop-in plugins discovered.
 It is **LLM-free and offline**: it never constructs a provider, never calls a
 model, and touches the network only insofar as plugin discovery / health already
 might. :func:`collect_capabilities` is a pure gather (no printing) that is
-**defensive end to end** — a missing or degraded subsystem is *reported*, never
+**defensive end to end**: a missing or degraded subsystem is *reported*, never
 fatal. :func:`render` turns that mapping into a clean, sectioned report.
 
 Lives under ``lhassa/cli/`` (a shell layer) so the architecture guard stays green.
@@ -49,7 +49,7 @@ def _safe(errors: dict, label: str, fn: Callable[[], Any], default: Any = None) 
     ``default`` (so one degraded subsystem is reported, never fatal)."""
     try:
         return fn()
-    except Exception as exc:  # never raise — a limited subsystem is reported
+    except Exception as exc:  # never raise; a limited subsystem is reported
         errors[label] = f"{type(exc).__name__}: {exc}"
         return default
 
@@ -140,7 +140,7 @@ def _collect_registries(errors: dict, config: Any) -> dict:
 
 
 def _collect_active_config(errors: dict, config: Any) -> dict:
-    """What is on/off right now — mirrored off plain config, no model call."""
+    """What is on/off right now; mirrored off plain config, no model call."""
     out: dict[str, Any] = {}
 
     def _routine() -> dict:
@@ -234,7 +234,7 @@ def _collect_plugins(errors: dict, config: Any) -> dict:
 def collect_capabilities(config: Optional[Any] = None) -> dict:
     """Gather Lhassa's capability picture: wired registries + on/off config + plugins.
 
-    Pure (no printing) and **defensive end to end** — never raises. A missing or
+    Pure (no printing) and **defensive end to end**: never raises. A missing or
     degraded subsystem is reported under ``errors`` and replaced with a safe
     placeholder, so the report is always complete. LLM-free: no provider is
     constructed and no model is called.
@@ -303,11 +303,11 @@ def render(data: dict) -> str:
     if blocked:
         console.print()
         console.print(
-            "[dim]Blocked — registered, skipped while they cannot act "
+            "[dim]Blocked; registered, skipped while they cannot act "
             "(no episode is logged):[/dim]"
         )
         for name, reason in sorted(blocked.items()):
-            console.print(f"  [dim]{name} — {reason}[/dim]")
+            console.print(f"  [dim]{name}; {reason}[/dim]")
 
     # Channels: also show the configured subset (distinct from active order).
     chan = reg.get("channels", {}) or {}

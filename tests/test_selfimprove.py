@@ -1,4 +1,4 @@
-"""Tests for lhassa.actionpack._selfimprove — detect_repetition, review_tools.
+"""Tests for lhassa.actionpack._selfimprove; detect_repetition, review_tools.
 
 Offline: real tmp brain DB, notify mocked (no network/desktop), approvals go
 through the real security.approval queue against the tmp DB.
@@ -75,7 +75,7 @@ async def test_detect_repetition_does_not_reprose_same_pattern(brain):
     with patch("lhassa.actionpack._selfimprove._notify", AsyncMock(return_value=True)):
         await detect_repetition({"instance_id": "inst_test"})
         # A second run over the SAME (still-repeating) pattern must not park
-        # a second approval — watch_state dedup.
+        # a second approval; watch_state dedup.
         result2 = await detect_repetition({"instance_id": "inst_test"})
 
     assert "0 newly proposed" in result2

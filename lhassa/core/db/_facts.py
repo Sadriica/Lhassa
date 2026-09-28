@@ -20,7 +20,7 @@ async def insert_fact(row: dict) -> str:
     (id, instance_id, tipo, contenido, pinned, tags, procedencia, confianza,
     creado_en, actualizado_en); ``tags`` may be a list (serialized here) or a
     pre-encoded JSON string. Append-only: this never overwrites an existing fact.
-    ``actor_id`` (optional) is WHO authored the fact — defaults to
+    ``actor_id`` (optional) is WHO authored the fact; defaults to
     ``Config.root_admin_id`` (the owner) when absent, so every row always has a
     WHO (Stream 6 Phase A). Returns the fact id.
     """
@@ -154,10 +154,10 @@ async def insert_answer_cache(row: dict) -> str:
 
     ``row`` needs ``instance_id``, ``question``, ``answer``, ``embedding`` (a list
     of floats) and optionally ``tags`` (a list), ``embedder`` (the name of the
-    embedder that produced ``embedding`` — see migration 12; empty string if
+    embedder that produced ``embedding``: see migration 12; empty string if
     omitted, never NULL, so a lookup's embedder filter never has to special-case
     a missing stamp on a freshly-inserted row). Append-only, like ``facts``: a
-    later store for the same question is a NEW row, not an overwrite — the
+    later store for the same question is a NEW row, not an overwrite; the
     lookup's cosine scan picks the best (and freshest-on-tie) match regardless.
     """
     cache_id = row.get("id") or _pkg()._new_id("ac")
@@ -214,7 +214,7 @@ async def bump_answer_cache_hit(instance_id: str, cache_id: str) -> None:
         await db.commit()
 
 
-# ── knowledge (document perception — § memory.knowledge) ────────────────────
+# ── knowledge (document perception; § memory.knowledge) ────────────────────
 
 async def insert_knowledge_chunk(row: dict) -> str:
     """Insert one indexed chunk. Returns its id.
@@ -222,7 +222,7 @@ async def insert_knowledge_chunk(row: dict) -> str:
     ``row`` needs ``instance_id``, ``source_path``, ``chunk_index``, ``text``,
     ``embedding`` (a list of floats), ``mtime`` (a float, the source file's
     mtime at ingestion time) and ``size`` (the file's byte size; together with
-    ``mtime`` it's how incremental re-ingest detects a change — ``-1`` = unknown).
+    ``mtime`` it's how incremental re-ingest detects a change; ``-1`` = unknown).
     """
     chunk_id = row.get("id") or _pkg()._new_id("kn")
     size = row.get("size")
@@ -254,7 +254,7 @@ async def list_knowledge_files(instance_id: str) -> dict[str, tuple[float, int]]
     """Return ``{source_path: (mtime, size)}`` for every file currently indexed.
 
     One row per distinct ``source_path`` (its chunks all share the same
-    ``mtime``/``size``, stamped at ingestion) — used by
+    ``mtime``/``size``, stamped at ingestion); used by
     :func:`lhassa.memory.knowledge.ingest` to decide, per file, whether it's
     unchanged (skip), new (index) or touched (delete old chunks, re-index).
     ``size`` is ``-1`` for rows ingested before the size column existed.
@@ -317,7 +317,7 @@ async def clear_knowledge(instance_id: str) -> int:
         return cur.rowcount if cur.rowcount is not None else 0
 
 
-# ── shared resources (cross-instance sharing — Stream 6 Phase A) ──────────────
+# ── shared resources (cross-instance sharing. Stream 6 Phase A) ──────────────
 # Skills/flows/templates/knowledge can be published/subscribed across instances;
 # facts/episodes never appear here (see lhassa.org.sharing, the deny-by-default
 # gate over these rows). Every row is scoped to instance_id like everything else.

@@ -138,7 +138,7 @@ export default function RecentEpisodesPanel() {
         <div className="lh-row mb-3" style={{ background: 'var(--lh-surface-2)' }}>
           <div className="flex items-center justify-between gap-2 mb-1">
             <span className="lh-label" style={{ margin: 0 }}>
-              recall “{recall.query}” — {recall.count} match{recall.count === 1 ? '' : 'es'}
+              recall “{recall.query}”; {recall.count} match{recall.count === 1 ? '' : 'es'}
             </span>
             <button type="button" className="lh-btn" onClick={() => setRecall(null)}>close</button>
           </div>

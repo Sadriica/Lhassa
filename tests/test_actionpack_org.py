@@ -1,7 +1,7 @@
-"""Tests for lhassa/actionpack/_org.py — org_run (Etapa 3 real delegation).
+"""Tests for lhassa/actionpack/_org.py; org_run (Etapa 3 real delegation).
 
 Fully offline: ``org.coordinator.run_goal`` is monkeypatched so no real topology/
-DB/model is touched — these tests only verify org_run's own plumbing (required
+DB/model is touched; these tests only verify org_run's own plumbing (required
 param, param pass-through, never-raise on failure).
 """
 

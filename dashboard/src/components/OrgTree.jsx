@@ -1,5 +1,5 @@
 // The org hierarchy view: root at top, children beneath, connector lines so the
-// owner SEES who commands whom. Pure presentation — it takes the topology nodes
+// owner SEES who commands whom. Pure presentation; it takes the topology nodes
 // and renders them recursively; selection + the route-preview highlight are
 // driven from BrainsPanel. The root is marked ("commands everyone").
 
@@ -119,7 +119,7 @@ export default function OrgTree({ topology, selectedId, routePath = [], onSelect
   const byId = {}
   nodes.forEach((n) => { byId[n.id] = n })
   // The display root: prefer the permanent administrator (Lhassa), else the
-  // declared root, else the first genuinely parentless node — so the sovereign
+  // declared root, else the first genuinely parentless node; so the sovereign
   // is rendered AS the root (★) and never demoted to "standalone".
   const parentless = nodes.find((n) => !n.parent || !byId[n.parent])
   const root = (topology.admin && byId[topology.admin] ? topology.admin : null)

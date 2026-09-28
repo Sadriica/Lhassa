@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Lhassa — Linux install / replication script.
+# Lhassa. Linux install / replication script.
 #
 # One command makes Lhassa an always-on Linux tool:
 #   - resolves the Python venv and (if needed) builds the dashboard,
@@ -73,33 +73,33 @@ done
 
 # ── Preflight ─────────────────────────────────────────────────────────────────
 preflight() {
-    log "Preflight — checking tools and the repo"
+    log "Preflight; checking tools and the repo"
     [ -f "$REPO_ROOT/main.py" ] || die "repo not found at $REPO_ROOT (run from the lhassa checkout)"
     ok "repo: $REPO_ROOT"
 
     local missing=0
     if command -v python3 >/dev/null 2>&1; then ok "python3: $(python3 --version 2>&1)"; else err "python3 not found"; missing=1; fi
-    if command -v uv >/dev/null 2>&1; then ok "uv: $(uv --version 2>&1)"; else err "uv not found — https://docs.astral.sh/uv/"; missing=1; fi
+    if command -v uv >/dev/null 2>&1; then ok "uv: $(uv --version 2>&1)"; else err "uv not found; https://docs.astral.sh/uv/"; missing=1; fi
     if [ "$DO_DOCKER" -eq 1 ]; then
         if command -v docker >/dev/null 2>&1; then ok "docker: $(docker --version 2>&1)"; else err "docker not found (or use --no-docker)"; missing=1; fi
     fi
-    [ "$missing" -eq 0 ] || die "missing prerequisites — run 'sudo bash scripts/bootstrap.sh' (per-distro: apt/pacman/dnf/zypper) and re-run"
+    [ "$missing" -eq 0 ] || die "missing prerequisites; run 'sudo bash scripts/bootstrap.sh' (per-distro: apt/pacman/dnf/zypper) and re-run"
 }
 
 # ── Sync: venv + dashboard ────────────────────────────────────────────────────
 sync_project() {
-    log "Sync — resolving the Python venv (uv sync --extra voice)"
+    log "Sync; resolving the Python venv (uv sync --extra voice)"
     # This script sets up the laptop dev/voice workflow (main.py, the voice
     # pipeline), so it installs the `voice` extra (pipecat/torch). Headless
-    # deploys (Docker/VPS) intentionally skip it — see doc/portability.md.
+    # deploys (Docker/VPS) intentionally skip it; see doc/portability.md.
     ( cd "$REPO_ROOT" && uv sync --extra voice )
     ok "venv ready at $REPO_ROOT/.venv"
 
     if [ -d "$REPO_ROOT/dashboard/dist" ] && [ -n "$(ls -A "$REPO_ROOT/dashboard/dist" 2>/dev/null)" ]; then
         ok "dashboard already built (dashboard/dist present)"
     else
-        log "Sync — building the dashboard (npm ci && npm run build)"
-        command -v npm >/dev/null 2>&1 || die "npm not found — needed to build dashboard/dist"
+        log "Sync; building the dashboard (npm ci && npm run build)"
+        command -v npm >/dev/null 2>&1 || die "npm not found; needed to build dashboard/dist"
         ( cd "$REPO_ROOT/dashboard" && npm ci && npm run build )
         ok "dashboard built"
     fi
@@ -107,18 +107,18 @@ sync_project() {
 
 # ── Docker build + smoke test ─────────────────────────────────────────────────
 docker_build_test() {
-    log "Docker — building image $IMAGE"
+    log "Docker; building image $IMAGE"
     ( cd "$REPO_ROOT" && docker build -t "$IMAGE" . )
     ok "image built: $IMAGE"
 
-    log "Docker — smoke test: import lhassa + main"
+    log "Docker; smoke test: import lhassa + main"
     if docker run --rm "$IMAGE" python -c "import lhassa, main; print('import ok')"; then
         ok "smoke: import PASS"
     else
         die "smoke: import FAIL"
     fi
 
-    log "Docker — smoke test: start the API and curl the healthcheck"
+    log "Docker; smoke test: start the API and curl the healthcheck"
     local cid
     cid="$(docker run -d --rm -p 127.0.0.1:7766:7766 "$IMAGE")" \
         || die "smoke: could not start API container"
@@ -146,8 +146,8 @@ telegram_configured() {
 }
 
 install_services() {
-    log "Services — installing systemd USER units into $SYSTEMD_DST"
-    command -v systemctl >/dev/null 2>&1 || die "systemctl not found — this step needs a systemd user session"
+    log "Services; installing systemd USER units into $SYSTEMD_DST"
+    command -v systemctl >/dev/null 2>&1 || die "systemctl not found; this step needs a systemd user session"
     mkdir -p "$SYSTEMD_DST"
 
     local units=("$APP_UNIT" "$HEARTBEAT_SERVICE" "$HEARTBEAT_TIMER" "$TELEGRAM_UNIT" \
@@ -167,7 +167,7 @@ install_services() {
     systemctl --user daemon-reload
     ok "daemon-reload"
 
-    log "Services — enabling the always-on app + heartbeat timer + health timer + monitor"
+    log "Services; enabling the always-on app + heartbeat timer + health timer + monitor"
     systemctl --user enable --now "$APP_UNIT"
     ok "enabled --now $APP_UNIT"
     systemctl --user enable --now "$HEARTBEAT_TIMER"
@@ -180,31 +180,31 @@ install_services() {
     ok "enabled --now $MONITOR_UNIT"
 
     # Real semantic embeddings (optional): only when the ollama binary exists.
-    # Best-effort — a host without Ollama still installs fine (memory degrades
+    # Best-effort; a host without Ollama still installs fine (memory degrades
     # to the offline hashing embedder by design).
     if command -v ollama >/dev/null 2>&1; then
-        log "Services — ollama binary detected, enabling the local model server"
+        log "Services; ollama binary detected, enabling the local model server"
         systemctl --user enable --now "$OLLAMA_UNIT" && ok "enabled --now $OLLAMA_UNIT" \
             || warn "could not enable $OLLAMA_UNIT (continuing)"
         echo "  → pull the embedding model once: ollama pull nomic-embed-text"
         echo "  → then re-embed stored memory:   uv run lhassa memory reindex"
     else
-        warn "ollama not installed — semantic memory will use the offline hashing embedder"
+        warn "ollama not installed; semantic memory will use the offline hashing embedder"
     fi
 
     if telegram_configured; then
-        log "Services — Telegram token detected, enabling the poller"
+        log "Services. Telegram token detected, enabling the poller"
         systemctl --user enable --now "$TELEGRAM_UNIT"
         ok "enabled --now $TELEGRAM_UNIT"
     else
-        warn "no LHASSA_TELEGRAM_BOT_TOKEN in .env — leaving $TELEGRAM_UNIT installed but disabled"
+        warn "no LHASSA_TELEGRAM_BOT_TOKEN in .env; leaving $TELEGRAM_UNIT installed but disabled"
         warn "  enable later with: systemctl --user enable --now $TELEGRAM_UNIT"
     fi
 }
 
 # ── Run on boot (user lingering) ──────────────────────────────────────────────
 enable_boot() {
-    log "Boot — enabling user lingering so services run at boot before login"
+    log "Boot; enabling user lingering so services run at boot before login"
     if loginctl enable-linger "$USER" >/dev/null 2>&1; then
         ok "lingering enabled for $USER"
     else
@@ -216,7 +216,7 @@ enable_boot() {
 
 # ── Summary ───────────────────────────────────────────────────────────────────
 summary() {
-    log "Summary — what is running"
+    log "Summary; what is running"
     local u
     for u in "$APP_UNIT" "$HEARTBEAT_TIMER" "$HEALTH_TIMER" "$MONITOR_UNIT" "$TELEGRAM_UNIT"; do
         if systemctl --user list-unit-files "$u" >/dev/null 2>&1 && \
@@ -234,14 +234,14 @@ summary() {
     ok "Status:     systemctl --user status lhassa-app"
     ok "Uninstall:  bash scripts/uninstall.sh"
     printf '\n'
-    warn "Optional system dep: 'tectonic' (LaTeX engine) — install it so the CV"
+    warn "Optional system dep: 'tectonic' (LaTeX engine); install it so the CV"
     warn "  bridge compiles the tailored CV to PDF; without it, it sends raw .tex."
     warn "  Bootstrap the CV pipeline on a fresh env with: lhassa seed apply cv"
 }
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 main() {
-    log "Lhassa installer — repo: $REPO_ROOT"
+    log "Lhassa installer; repo: $REPO_ROOT"
     preflight
 
     if [ "$DO_INSTALL" -eq 1 ]; then
@@ -264,7 +264,7 @@ main() {
     if [ "$DO_BOOT" -eq 1 ]; then
         enable_boot
     else
-        warn "skipping boot linger (--no-boot) — services stop when the user session ends"
+        warn "skipping boot linger (--no-boot); services stop when the user session ends"
     fi
 
     summary

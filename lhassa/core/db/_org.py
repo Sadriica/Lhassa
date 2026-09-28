@@ -120,10 +120,10 @@ async def set_org_message_status(instance_id: str, msg_id: str, status: str) -> 
         await db.commit()
 
 
-# ── org_commons (the read-only cross-cutting source of truth — Fase 7) ───────────
+# ── org_commons (the read-only cross-cutting source of truth. Fase 7) ───────────
 #
 # ONE shared row per (instance_id, clave). Reads are open to all brains; the WRITE
-# gate (curator-only) lives in lhassa.org.commons + lhassa.org.rbac, not here — db
+# gate (curator-only) lives in lhassa.org.commons + lhassa.org.rbac, not here; db
 # stays a dumb store. Values are JSON-encoded to preserve dict/list/str/number.
 
 
@@ -183,7 +183,7 @@ async def get_all_commons(instance_id: str) -> dict[str, Any]:
     return {row["clave"]: _pkg()._loads(row["valor"], None) for row in rows}
 
 
-# ── watch_state (watchlist dedup key/value store — Phase 4) ──────────────────────
+# ── watch_state (watchlist dedup key/value store. Phase 4) ──────────────────────
 #
 # A generic, lightweight key/value store for watchlist transition dedup. Each
 # sense writes its last-seen state here so a persistent condition fires ONCE per
@@ -200,7 +200,7 @@ async def publish_resource(
 ) -> str:
     """Publish (or re-publish, clearing any prior revocation) one shared resource.
 
-    Idempotent on ``(instance_id, resource_type, resource_name)`` — republishing
+    Idempotent on ``(instance_id, resource_type, resource_name)``: republishing
     an existing offer updates its ``actor_id``/``published_at`` and clears
     ``revoked_at`` rather than duplicating a row.
     """
@@ -277,7 +277,7 @@ async def add_resource_subscription(
     *,
     actor_id: str,
 ) -> str:
-    """Record a (permitted) subscription. Idempotent — re-subscribing clears any
+    """Record a (permitted) subscription. Idempotent; re-subscribing clears any
     prior ``unsubscribed_at`` instead of duplicating a row."""
     row_id = _pkg()._new_id("sub")
     now = _pkg()._now()
@@ -325,6 +325,6 @@ async def list_resource_subscriptions(instance_id: str) -> list[dict]:
             return [dict(row) for row in await cur.fetchall()]
 
 
-# ── projects (the first-class workspace entity — § core.projects) ─────────────
+# ── projects (the first-class workspace entity; § core.projects) ─────────────
 
 

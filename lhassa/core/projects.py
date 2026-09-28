@@ -1,16 +1,16 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Projects — the first-class workspace entity Lhassa works ON.
+"""Projects; the first-class workspace entity Lhassa works ON.
 
 A project is a named, TYPED unit of the owner's work: a code repo, a research
 effort, an ops surface. ``kind`` is an open string (``code`` / ``research`` /
-``ops`` / ``generic`` — matching the house style of ``dominio``), because
+``ops`` / ``generic``: matching the house style of ``dominio``), because
 project-type POLICY keys off it: the standing-brains reflex maps
 ``kind → org template`` so a ``code`` project gets its reviewer brains attached
 without being asked (see core/policy.py, Wave 1).
 
 Scoping convention (no schema sprawl): existing tables reference a project
 through the namespaced string ``project:<id>`` in ``runs.entity_id`` and a
-``project_id`` key in ``artifacts.metadata`` — promoted to real columns only if
+``project_id`` key in ``artifacts.metadata``: promoted to real columns only if
 that ever proves insufficient. :func:`entity_tag` is the ONE place the
 convention is spelled.
 
@@ -32,7 +32,7 @@ SUGGESTED_KINDS = ("code", "research", "ops", "personal", "generic")
 
 
 def entity_tag(project_id: str) -> str:
-    """The ``runs.entity_id`` namespacing for a project — the one spelling."""
+    """The ``runs.entity_id`` namespacing for a project; the one spelling."""
     return f"project:{project_id}"
 
 
@@ -52,7 +52,7 @@ async def create_project(
     """Create one project and return its row. ``path`` is expanded + resolved.
 
     Raises ``ValueError`` on an empty name or a duplicate active project with
-    the same name — creation is an explicit owner act (CLI/chat/approval), so a
+    the same name; creation is an explicit owner act (CLI/chat/approval), so a
     loud refusal beats a silent duplicate.
     """
     clean = (name or "").strip()
@@ -105,8 +105,8 @@ async def list_projects(
 
 
 async def resolve_project(instance_id: str, ref: str) -> Optional[dict]:
-    """Resolve ``ref`` — a project id, exact name, or a filesystem path that
-    lives INSIDE a project's ``path`` — to its row. ``None`` when nothing
+    """Resolve ``ref``: a project id, exact name, or a filesystem path that
+    lives INSIDE a project's ``path``: to its row. ``None`` when nothing
     matches. Deterministic: id beats name beats path; among path matches the
     DEEPEST root wins (a nested project shadows its parent). Never raises.
     """

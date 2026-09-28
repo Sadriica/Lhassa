@@ -1,4 +1,4 @@
-"""Tests for the approval frontier (§2.6, §2.9-(1), §3-Fase 3 DoD) — fully offline.
+"""Tests for the approval frontier (§2.6, §2.9-(1), §3-Fase 3 DoD); fully offline.
 
 Covers:
   - HITL per flow: a `mundo`-origin OR a `requires_approval` action → needs_approval
@@ -58,7 +58,7 @@ def _task(*, accion="sync_repo", objetivo="proyecto_X", trust=TrustLevel.HUMANO,
     )
 
 
-# ── needs_approval — HITL per flow ───────────────────────────────────────────────
+# ── needs_approval. HITL per flow ───────────────────────────────────────────────
 
 def test_mundo_origin_needs_approval(knob_config):
     # A world-derived origin must wait for a human OK ("origen mundo espera tu OK").
@@ -293,7 +293,7 @@ async def test_knob_never_promotes_trust(tmp_path, monkeypatch, knob_config):
         )
     assert await autonomy.should_auto_approve("inst_personal", "sync_repo", "duenio") is True
 
-    # A MUNDO-origin task by the same actor still has MUNDO trust — the knob did not
+    # A MUNDO-origin task by the same actor still has MUNDO trust; the knob did not
     # promote it. needs_approval WITHOUT the knob still demands approval (trust low);
     # only passing the knob's verdict explicitly lowers the friction.
     task = _task(trust=TrustLevel.MUNDO, actor="duenio")

@@ -146,7 +146,7 @@ def test_get_model_provider_resolves_cli_subscriptions():
     assert isinstance(get_model_provider(FakeConfig(), name="codex"), CodexProvider)
 
 
-# ── CLI-subscription providers (Claude Code / Codex) — runner seam mocked ─────
+# ── CLI-subscription providers (Claude Code / Codex); runner seam mocked ─────
 #
 # These mock the injected subprocess ``runner`` so no real CLI is ever spawned.
 
@@ -187,7 +187,7 @@ async def test_claude_code_provider_parses_json():
     c = await prov.complete([{"role": "user", "content": "hi"}])
     assert c.text == "hello there"
     # The CLI's total_cost_usd is an API-equivalent ESTIMATE; the subscription's
-    # marginal cash cost is $0 BY DESIGN — it must never enter the ledger.
+    # marginal cash cost is $0 BY DESIGN; it must never enter the ledger.
     assert c.cost_usd == 0.0
     assert c.input_tokens == 12 and c.output_tokens == 5
 
@@ -317,7 +317,7 @@ async def test_claude_provider_reports_cli_marker_when_model_absent():
     out = json.dumps({"type": "result", "result": "hi"}).encode()
     prov = ClaudeCodeProvider(FakeConfig(), runner=_runner(0, out))
     c = await prov.complete([{"role": "user", "content": "hi"}])
-    # No API model name is invented — a truthful "claude-cli" marker instead.
+    # No API model name is invented; a truthful "claude-cli" marker instead.
     assert c.model == "claude-cli"
 
 
@@ -560,7 +560,7 @@ def test_decide_force_justdo_uses_cheap():
 
 @pytest.fixture
 def budget_cache_guard():
-    """``_budget_pct_used`` caches per UTC day in a module dict — reset it so
+    """``_budget_pct_used`` caches per UTC day in a module dict; reset it so
     one test's cached read never leaks into the next."""
     router._budget_cache.clear()
     yield
@@ -571,7 +571,7 @@ async def test_budget_pct_used_reads_persisted_ledger_new_process(
     tmp_path, monkeypatch, metrics_guard, budget_cache_guard,
 ):
     """A brand-new process (empty in-memory mirror) must still see spend that
-    was persisted to the gateway ledger by a *previous* process — this is
+    was persisted to the gateway ledger by a *previous* process; this is
     exactly the do-and-sleep gap: each heartbeat beat is a new ``systemd``
     process, so the in-memory mirror alone can never trip the soft brake.
     """
@@ -595,7 +595,7 @@ async def test_decide_downgrades_hard_when_persisted_spend_crosses_soft_pct(
     tmp_path, monkeypatch, metrics_guard, budget_cache_guard,
 ):
     """The soft brake (default 80%) must fire off the persisted ledger alone,
-    with no help from ``state.metrics`` — reproducing "new process, ledger
+    with no help from ``state.metrics``: reproducing "new process, ledger
     already past soft pct" end to end through ``decide``.
     """
     from lhassa.llm import gateway as gw

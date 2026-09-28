@@ -28,7 +28,7 @@ class FakeConfig:
 
 
 def _failing_payload(name: str) -> str:
-    # A test file that always fails — used to fail gate 1 (segura), a retryable
+    # A test file that always fails; used to fail gate 1 (segura), a retryable
     # gate, on the first turn.
     tool_py = "def double(n):\n    return n * 2\n"
     test_py = f"from {name} import double\n\n\ndef test_double():\n    assert False\n"
@@ -143,7 +143,7 @@ async def test_iterate_caps_when_always_failing(brain):
 
 @pytest.mark.asyncio
 async def test_mejor_no_baseline_stops_early_not_retried(brain):
-    """A missing baseline/metric_fn cannot be fixed by feedback — stop at turn 1."""
+    """A missing baseline/metric_fn cannot be fixed by feedback; stop at turn 1."""
     provider = ScriptedProvider([_passing_payload("solo")])
     outcome = await propose_tool(
         "solo",

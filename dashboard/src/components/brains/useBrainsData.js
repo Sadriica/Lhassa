@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { toast } from '../../lib/toast'
 import { reparentTopology, removeNodeLocal, setNodeSkills } from './topology'
 
-// The Brains data layer — drives the slice-J org API:
+// The Brains data layer; drives the slice-J org API:
 //   GET    /api/org/topology              read the chart
 //   GET    /api/org/skills                populate the skills picker
 //   GET    /api/org/route?goal=…          preview a goal's root→leaf path
@@ -58,7 +58,7 @@ export function useBrainsData() {
     }
   }, [])
 
-  // The relationship overlay (typed edges) — same fetch/adopt pattern as topology.
+  // The relationship overlay (typed edges); same fetch/adopt pattern as topology.
   const loadOverlay = useCallback(async () => {
     try {
       const r = await fetch('/api/org/relationships')
@@ -84,7 +84,7 @@ export function useBrainsData() {
       .catch(() => setRelKinds([]))
   }, [loadTopology, loadInstalled, loadOverlay])
 
-  // #6 — the canvas can go stale when the topology/overlay changes elsewhere (another
+  // #6; the canvas can go stale when the topology/overlay changes elsewhere (another
   // tab, the CLI, a heartbeat). Real-time WS push is out of scope here; a lightweight
   // focus-refetch is enough: re-pull the chart + overlay when the tab/window regains
   // focus, debounced so a focus+visibilitychange burst fires only one fetch. The
@@ -106,7 +106,7 @@ export function useBrainsData() {
     }
   }, [loadTopology, loadOverlay])
 
-  // The set a carried skill is matched against — installed skill names AND their
+  // The set a carried skill is matched against; installed skill names AND their
   // domains (the org picker keys by domain, SKILL.md by name; accept either).
   const installedSet = useMemo(() => {
     const s = new Set()
@@ -123,7 +123,7 @@ export function useBrainsData() {
     try {
       const r = await fetch(`/api/skills/${encodeURIComponent(name)}/install`, { method: 'POST' })
       if (r.status === 404) {
-        setSkillNotice(`"${name}" isn't in the catalog — open Skills to create it with AI.`)
+        setSkillNotice(`"${name}" isn't in the catalog; open Skills to create it with AI.`)
         return
       }
       if (!r.ok) throw new Error('install failed')
@@ -134,7 +134,7 @@ export function useBrainsData() {
     }
   }, [loadInstalled])
 
-  // A mutating call returns the updated chart — adopt it (optimistic refresh).
+  // A mutating call returns the updated chart; adopt it (optimistic refresh).
   const mutate = useCallback(async (label, doFetch) => {
     setBusy(true)
     setError('')
@@ -176,7 +176,7 @@ export function useBrainsData() {
       fetch(`/api/org/brains/${encodeURIComponent(id)}`, {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
       }))
-  // #10 — Undo a move: put the brain back under its PREVIOUS parent (promote if it was
+  // #10; Undo a move: put the brain back under its PREVIOUS parent (promote if it was
   // a root). Non-optimistic (adopts the canonical chart), so the restore is exact.
   const undoMove = useCallback(async (id, prevParent) => {
     if (prevParent) {
@@ -194,7 +194,7 @@ export function useBrainsData() {
     }
   }, [mutate])
 
-  // #10 — recreate a just-deleted LEAF from its cached data (Undo). Reuses the create
+  // #10; recreate a just-deleted LEAF from its cached data (Undo). Reuses the create
   // path; on success the restored brain is re-selected so it's visible again.
   const recreateBrain = useCallback(async (cached) => {
     if (!cached) return
@@ -214,7 +214,7 @@ export function useBrainsData() {
     else toast.error(`Could not restore "${cached.id}"`)
   }, [mutate])
 
-  // #10 — Undo a skill removal: restore the EXACT prior skill set via PATCH.
+  // #10; Undo a skill removal: restore the EXACT prior skill set via PATCH.
   const reAddSkill = useCallback(async (brainId, skill, prevSkills) => {
     const ok = await mutate('Assign', () =>
       fetch(`/api/org/brains/${encodeURIComponent(brainId)}`, {
@@ -224,7 +224,7 @@ export function useBrainsData() {
     else toast.error(`Could not re-add "${skill}"`)
   }, [mutate])
 
-  // #10 — remove a skill from a brain (the ✕): optimistic removal from the canvas, then
+  // #10; remove a skill from a brain (the ✕): optimistic removal from the canvas, then
   // persist via PATCH (the update path replaces the skill set). The success toast offers
   // Undo → restore the prior set. On failure the optimistic topology change is reverted.
   const removeSkillFromBrain = useCallback(async (brainId, skill) => {
@@ -260,7 +260,7 @@ export function useBrainsData() {
     }
   }, [topology, reAddSkill])
 
-  // #10 — MOVE is optimistic + undoable. Re-parent locally the instant the drag/menu/
+  // #10; MOVE is optimistic + undoable. Re-parent locally the instant the drag/menu/
   // dropdown fires, then commit to the backend: adopt the canonical chart on success,
   // roll back to the exact pre-move topology on failure. The success toast carries an
   // Undo that moves the brain back under its PREVIOUS parent.
@@ -301,7 +301,7 @@ export function useBrainsData() {
     mutate('Promote', () =>
       fetch(`/api/org/brains/${encodeURIComponent(id)}/promote`, { method: 'POST' }))
   // Add a recommended skill to a brain: install it from the catalog if needed
-  // (ignore 404 — a recommendation may not be a catalog skill), then assign it.
+  // (ignore 404; a recommendation may not be a catalog skill), then assign it.
   // The assign endpoint returns {ok}, not a chart, so we refetch the topology (and
   // the installed set) to refresh the carried-skills section.
   const addSkillToBrain = useCallback(async (brainId, name) => {
@@ -327,10 +327,10 @@ export function useBrainsData() {
     }
   }, [loadTopology, loadInstalled])
 
-  // #10 — DELETE. A LEAF (no children) is optimistic + undoable: it disappears from the
+  // #10; DELETE. A LEAF (no children) is optimistic + undoable: it disappears from the
   // canvas immediately and the success toast offers Undo, which RECREATES it from the
   // cached (id, role, parent, department, skills, limits) via the create path. A brain
-  // WITH children is a force/subtree delete — effectively irreversible, so it keeps the
+  // WITH children is a force/subtree delete; effectively irreversible, so it keeps the
   // (caller's) two-step confirm and gets a plain, non-undoable success toast that says so.
   const deleteBrain = useCallback(async (id, force) => {
     const node = (topology?.nodes || []).find((n) => n.id === id)
@@ -340,13 +340,13 @@ export function useBrainsData() {
       if (ok) {
         if (selectedId === id) setSelectedId(null)
         loadOverlay() // a removed subtree may have left dangling overlay edges
-        toast.success(`Deleted "${id}" and its sub-brains — the whole subtree was removed.`)
+        toast.success(`Deleted "${id}" and its sub-brains; the whole subtree was removed.`)
       } else {
         toast.error(`Could not delete "${id}"`)
       }
       return
     }
-    // Leaf — optimistic + undoable.
+    // Leaf; optimistic + undoable.
     const prevTopology = topology
     const cached = node
       ? {
@@ -386,7 +386,7 @@ export function useBrainsData() {
   }, [topology, selectedId, loadOverlay, mutate, recreateBrain])
 
   // Relationship overlay mutations. POST/DELETE return the updated overlay (describe),
-  // so we adopt the response directly — the canvas (OrgFlow) and the inspector both
+  // so we adopt the response directly; the canvas (OrgFlow) and the inspector both
   // read `overlay`, so they refresh together. Returns {ok, detail} so the inspector
   // can surface the backend's 400/404 message inline.
   const addRelationship = useCallback(async (from, to, kind) => {

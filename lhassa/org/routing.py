@@ -1,18 +1,18 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Deterministic department routing — how the general picks a department (Fase 7).
+"""Deterministic department routing; how the general picks a department (Fase 7).
 
 The general COORDINATES: given a goal, it must choose which department gets the
-typed ``TASK_ASSIGN``. That choice is **deterministic and table-driven — NO LLM**.
+typed ``TASK_ASSIGN``. That choice is **deterministic and table-driven. NO LLM**.
 Each :class:`Department` declares the capability keywords/domains it owns; routing
 scores a goal against those keyword tables and picks the best match, falling back
 to a documented default department when nothing matches. The whole policy is a
-lookup, so it is transparent, free, and testable — the same spirit as
+lookup, so it is transparent, free, and testable; the same spirit as
 :mod:`lhassa.org.rbac` (a closed table, auditable at a glance).
 
 The registry starts with at least two departments (``optimization`` and
 ``documentation``, plus ``finance``) and is open for ``register``. ``route`` never
 calls a model; the general's :meth:`GeneralBrain.assign_auto` uses it to choose the
-target and then assigns as usual — the general routes, it never executes.
+target and then assigns as usual; the general routes, it never executes.
 """
 
 from __future__ import annotations
@@ -125,12 +125,12 @@ def _score(goal_lower: str, dept: Department) -> int:
 
 
 def route(goal: str) -> str:
-    """Pick the best department for ``goal`` by keyword match — deterministic, no LLM.
+    """Pick the best department for ``goal`` by keyword match; deterministic, no LLM.
 
     Scores the goal against each registered department's keyword table and returns
     the highest-scoring department's name. Ties break by registration order (the
     first-registered department wins). A goal that matches nothing falls back to
-    :data:`FALLBACK_DEPARTMENT`. Pure and free — never calls a model.
+    :data:`FALLBACK_DEPARTMENT`. Pure and free; never calls a model.
     """
     goal_lower = (goal or "").lower()
     best_name = FALLBACK_DEPARTMENT

@@ -1,4 +1,4 @@
-# Lhassa — Brief de implementación
+# Lhassa. Brief de implementación
 
 > **Núcleo con identidad propia (un JARVIS)** que orquesta modelos y herramientas
 > sin depender de ninguno. Lo durable es *quién es*; los modelos, harnesses y
@@ -52,16 +52,16 @@ ejecuta sus propias herramientas dentro de una cuarentena. Alcanza tus máquinas
 **Diferenciador** (nadie lo centra): identidad desacoplada del modelo + autonomía
 nativa segura (cuarentena + allowlist) + privacidad por pseudonimización. El
 cuerpo (orquestación de harnesses, contabilidad) ya está poblado por terceros
-maduros — **se usan, no se compite** (ccusage para contabilidad; OpenRig/ECC y
+maduros; **se usan, no se compite** (ccusage para contabilidad; OpenRig/ECC y
 fleet-views nativos para orquestación).
 
 **Validación de mercado** `[CONFIRMADO]`: la arquitectura jerárquica de Fase 7
 (supervisor + workers) **es el patrón estándar de despliegue empresarial**, y las
-piezas de "governance" que la industria cobra caro — audit plane, model gateway,
-memoria con permisos, HITL por flujo — **ya están en este diseño** con otros
+piezas de "governance" que la industria cobra caro; audit plane, model gateway,
+memoria con permisos, HITL por flujo; **ya están en este diseño** con otros
 nombres (el episodio, el `gateway.py`, la memoria privada+común, la frontera de
 aprobación). **Decisión:** núcleo **propio**, NO adoptar un framework (LangGraph/
-CrewAI/AutoGen) — adoptarlo rompería el invariante de "cerebro con identidad
+CrewAI/AutoGen); adoptarlo rompería el invariante de "cerebro con identidad
 desacoplada"; sirven solo como referencia de patrones para la Fase 7.
 
 **Contexto económico** `[CONFIRMADO]`: Anthropic cerró el arbitraje de
@@ -72,7 +72,7 @@ el modelo solo despierta para el criterio difícil.
 
 ---
 
-## 1. Principios rectores (invariantes — no cambian)
+## 1. Principios rectores (invariantes; no cambian)
 
 1. **Construye el cerebro, alquila el cuerpo.** Solo desde cero: identidad,
    memoria, árbitro (router + verificación + frontera de aprobación), auto-mejora
@@ -99,14 +99,14 @@ el modelo solo despierta para el criterio difícil.
 
 ## 2. Arquitectura de referencia
 
-### 2.1 Modelo de ejecución — "hace y duerme"
+### 2.1 Modelo de ejecución; "hace y duerme"
 
 El cerebro es `estado + step()`. Despertadores: **systemd timer** (latido) y **API
 REST/WS** (por demanda; durante conversación activa se mantiene vivo hasta
 terminar, luego duerme).
 
 ```python
-# core/step.py — forma de referencia
+# core/step.py; forma de referencia
 def step(state: State) -> None:
     triggers = watchlist.check(state)          # determinista, CERO tokens
     if not triggers:
@@ -131,7 +131,7 @@ asíncrono vía disco. Nunca espera bloqueado.
 
 ### 2.2 Las dos interfaces de intercambio (costuras obligatorias)
 
-**Eje 1 — `ModelProvider`: piensa directo, SIN harness** (latido, clasificación,
+**Eje 1; `ModelProvider`: piensa directo, SIN harness** (latido, clasificación,
 decisiones, consolidación de memoria).
 
 ```python
@@ -143,7 +143,7 @@ class ModelProvider(Protocol):
 # Implementaciones: OpenCodeZenProvider (ahora) -> LocalProvider (después, zero_retention=True)
 ```
 
-**Eje 2 — `HarnessAdapter`: trabajo agéntico de código delegado.** Soporta los
+**Eje 2; `HarnessAdapter`: trabajo agéntico de código delegado.** Soporta los
 tres (opencode, Codex, Claude Code), músculos con capacidades distintas
 (Claude Code atado a Claude; Codex a OpenAI; opencode flexible). Es el prototipo
 ya construido (parseo `stream-json`).
@@ -201,11 +201,11 @@ class Fact:
 Contradicción: gana el **más reciente y de mayor confianza**.
 
 **Dos almacenes:**
-- **La grande** — SQLite **append-only / inmutable**, fuente de verdad. Todo
+- **La grande**: SQLite **append-only / inmutable**, fuente de verdad. Todo
   crudo. De aquí: reportes, proyecciones, auditoría, reconstrucción de la chica.
   Fila = campos consultables **+** `raw` (JSON completo) + `instance_id`.
   Artefactos pesados → archivo en disco + **puntero**.
-- **La chica** — caché viva que se carga al despertar. Derivada de la grande.
+- **La chica**: caché viva que se carga al despertar. Derivada de la grande.
 
 *Olvidar mal nunca es perder* (el crudo sigue abajo).
 
@@ -248,7 +248,7 @@ de "apuntador vivo" a "referencia archivada" (patrón del PID).
 - **Choke point** (`llm/gateway.py`): caché + presupuesto + ledger +
   **kill-switch**. Consume **ccusage** (JSON) para contabilidad cruzando harnesses.
 
-### 2.5 Multi-máquina — check-in, no push
+### 2.5 Multi-máquina; check-in, no push
 
 Cada equipo corre un **agente local delgado** (`remote/local_agent.py`) que se
 conecta hacia afuera.
@@ -278,13 +278,13 @@ El agente local puede exponer sus capacidades como **herramientas MCP**.
 **Tareas tipadas planificadas:** `sync_repo` (primera) → de tu uso real:
 `calendar_event` ↔ crea task asociada · `agendar_fechas` (fechas de examen →
 agenda) · `generar_documentacion` · `tracking_postulaciones` (hojas de vida /
-internships). *(Segunda tarea a elegir — define la primera integración MCP de Fase 4.)*
+internships). *(Segunda tarea a elegir; define la primera integración MCP de Fase 4.)*
 
 ### 2.6 Seguridad
 
 **Tres muros (fallan distinto):**
-1. **Cuarentena** — código auto-escrito (§2.8).
-2. **Allowlist en el equipo** (`security/allowlist.py`) — **deny-by-default**:
+1. **Cuarentena**: código auto-escrito (§2.8).
+2. **Allowlist en el equipo** (`security/allowlist.py`); **deny-by-default**:
    ```python
    def allow(task) -> bool:
        return (task.accion in ALLOWLIST
@@ -292,7 +292,7 @@ internships). *(Segunda tarea a elegir — define la primera integración MCP de
                and task.origen.trust >= ALLOWLIST[task.accion].min_trust
                and signing.verify(task))
    ```
-3. **Conciencia de amenazas** — filtro probabilístico, *encima*, nunca en lugar de.
+3. **Conciencia de amenazas**: filtro probabilístico, *encima*, nunca en lugar de.
 
 **Confianza por origen + QUIÉN** (`security/trust.py`):
 ```python
@@ -303,7 +303,7 @@ class TrustLevel(IntEnum):
 @dataclass
 class Origin:
     trust: TrustLevel
-    actor_id: str | None     # QUIÉN (no solo qué tan confiable) — prepara roles de Fase 7
+    actor_id: str | None     # QUIÉN (no solo qué tan confiable); prepara roles de Fase 7
 # La confianza se degrada por contagio, nunca se promueve.
 ```
 
@@ -322,7 +322,7 @@ remota.
 latido por la nube. **Pseudonimización** = gancho obligatorio mientras el latido
 use modelos gratis; se activa plena al migrar a local.
 
-### 2.7 Concurrencia — trabajo paralelo, bookkeeping serial
+### 2.7 Concurrencia; trabajo paralelo, bookkeeping serial
 
 - **Trabajo** (deploy, análisis) = **paralelo**, en procesos (PID); no toca el
   estado mientras corre.
@@ -331,13 +331,13 @@ use modelos gratis; se activa plena al migrar a local.
 **Mecanismo:** SQLite **WAL** (lecturas libres sobre la grande inmutable + un
 escritor). El latido que quiera escribir mientras tú escribes: **se salta el ciclo
 y reintenta**. **Controlador / doble buffer:** si el estado está ocupado, la
-escritura va a un **buffer de staging** y se **reconcilia** al liberarse — mismo
+escritura va a un **buffer de staging** y se **reconcilia** al liberarse; mismo
 patrón estado-deseado/reconciliación de §2.5, aplicado a la memoria.
 
-### 2.8 Auto-mejora 2b — cuarentena + compuertas
+### 2.8 Auto-mejora 2b; cuarentena + compuertas
 
 ```python
-# agents/verify.py — objetivo, NUNCA LLM
+# agents/verify.py; objetivo, NUNCA LLM
 class Verifier(Protocol):
     name: str
     def verify(self, artifact, context) -> VerifyResult: ...  # passed, detail, metric
@@ -345,10 +345,10 @@ class Verifier(Protocol):
 ```
 
 **Compuertas en orden (gradúa solo si pasa todas):**
-1. **Segura** — cuarentena: sandbox sin red/datos.
-2. **Correcta** — funciona (test/check, exit 0).
-3. **Mejor** — supera una **línea base en métrica concreta** (tokens/tiempo/pasos).
-4. **(continua) Retiro** — si una graduada deja de usarse o falla en producción,
+1. **Segura**: cuarentena: sandbox sin red/datos.
+2. **Correcta**: funciona (test/check, exit 0).
+3. **Mejor**: supera una **línea base en métrica concreta** (tokens/tiempo/pasos).
+4. **(continua) Retiro**: si una graduada deja de usarse o falla en producción,
    se desgradúa (vuelve a cuarentena).
 
 **Especialistas por dominio = skills, NO fine-tuning** (mismo modelo base +
@@ -360,7 +360,7 @@ optimización** (métrica limpia) sobre calendario/tasks; los difusos después.
 **repos/PRs**; aprobación = merge de PR. Candidato a sandbox ya hecho: *Managed
 Agent Harness* de Anthropic.
 
-### 2.9 Interfaces de usuario — clientes delgados sobre una API
+### 2.9 Interfaces de usuario; clientes delgados sobre una API
 
 El cerebro expone **API REST + WS** (`api/server.py`); todo lo demás es cliente
 sin lógica.
@@ -421,7 +421,7 @@ lhassa/
   remote/      local_agent.py · checkin.py
   api/         server.py (REST+WS)
   cli/  ·  dashboard/  ·  persona.py (identidad parametrizada)  ·  voice/  ·  config.py
-  org/         (Fase 7 — NO construir aún) coordinator.py · messaging.py · commons.py
+  org/         (Fase 7. NO construir aún) coordinator.py · messaging.py · commons.py
 ```
 
 ---
@@ -432,7 +432,7 @@ Rebanada vertical por fase, con **Definición de terminado (DoD)** verificable.
 Esfuerzo aproximado para una persona (semanas orientativas). No avanzar sin cerrar
 la anterior.
 
-### Fase 0 — La columna (+ ganchos organizacionales) · ~2–3 sem
+### Fase 0. La columna (+ ganchos organizacionales) · ~2–3 sem
 **Objetivo:** circuito completo mínimo, observable, con la forma multi-tenant
 sembrada.
 **Construye/adapta:** `core/step.py`, `core/watchlist.py` (1 disparador: PC
@@ -453,7 +453,7 @@ corre `sync_repo` (gate de allowlist) y reporta; el episodio explica *por qué*;
 matas el VPS a media tarea y al revivir continúa; cada fila tiene `instance_id`.
 `pytest` verde con replay offline.
 
-### Fase 1 — Memoria ("si llego aquí, valió la pena") · ~2–3 sem
+### Fase 1. Memoria ("si llego aquí, valió la pena") · ~2–3 sem
 **Construye:** `memory/store.py` (grande append-only + chica), `memory/facts.py`
 (dato/directiva, procedencia/recencia, **aprobación pasando por ti**, pinned
 híbrido), las **3 capas de subir** con presupuesto, `memory/consolidate.py`
@@ -463,7 +463,7 @@ híbrido), las **3 capas de subir** con presupuesto, `memory/consolidate.py`
 consolida sin desbordar; matas la chica → se regenera de la grande; restauras un
 backup y funciona.
 
-### Fase 2 — Economía y router · ~1–2 sem
+### Fase 2. Economía y router · ~1–2 sem
 **Construye:** `gateway.py` (caché+presupuesto+ledger+kill-switch), `router.py`
 (dos ejes; provider por costo+sensibilidad; harness), latido por `ModelProvider`
 (opencode Zen), watchlist filtra antes de invocar, `$think`/`$justdo`, **ccusage**,
@@ -471,7 +471,7 @@ límites desde el dashboard, **+ compresión semántica de memoria** (LLM barato
 **DoD:** un día de latidos cuesta centavos; rutina en el modelo barato; ledger
 muestra el split; cruzar el tope detiene.
 
-### Fase 3 — El árbitro: verificación + aprobación · ~2 sem
+### Fase 3. El árbitro: verificación + aprobación · ~2 sem
 **Construye:** `agents/verify.py`, **cola de aprobaciones**, `security/trust.py`
 (niveles + `Origin` + **HITL por flujo**: umbral por acción según riesgo),
 perilla de autonomía que baja con aprobaciones repetidas.
@@ -479,14 +479,14 @@ perilla de autonomía que baja con aprobaciones repetidas.
 repetida se vuelve automática; mover-dinero exige aprobación aunque borrador no;
 el verificador nunca llama a un LLM.
 
-### Fase 4 — Manos: MCP + los tres harnesses · ~2–3 sem
+### Fase 4. Manos: MCP + los tres harnesses · ~2–3 sem
 **Construye:** cliente **MCP** (carga `mcp.json`, tools namespaced),
 `ClaudeCodeAdapter` + `CodexAdapter`, segunda tarea tipada + su integración MCP,
 reconciliación multi-equipo madura.
 **DoD:** una tool MCP invocable; el cerebro delega código a cualquiera de los tres
 y supervisa PID/costo en vivo; añadir una integración es enchufar, no programar.
 
-### Fase 5 — Auto-mejora 2b con cuarentena · ~3–4 sem
+### Fase 5. Auto-mejora 2b con cuarentena · ~3–4 sem
 **Construye:** `security/quarantine.py` (sandbox; evaluar Managed Agent Harness),
 las 4 compuertas, `agents/specialists/` (skills; **primero optimización**),
 herramientas auto-creadas como **repos/PRs GitHub**, sala de cuarentena.
@@ -494,20 +494,20 @@ herramientas auto-creadas como **repos/PRs GitHub**, sala de cuarentena.
 motivo), gradúa como PR; una que falla se retira sola; rollback con git; las
 graduadas son *medibles-mejores*, no solo "pasan tests".
 
-### Fase 6 — Madurez: interfaces ricas, voz, casa · continuo
+### Fase 6. Madurez: interfaces ricas, voz, casa · continuo
 **Construye:** dashboard completo (fleet/reportes/proyecciones), CLI power
 features, Telegram pulido, **voz** reutilizando el esqueleto existente,
 integraciones de **casa** (MCP), capa 4 de memoria (si se ganó), **migración del
 latido a modelo local** (nueva `ModelProvider`; la pseudonimización se relaja).
 
-### Fase 7 — Capa organizacional (JARVIS de empresa) · proyecto aparte
+### Fase 7. Capa organizacional (JARVIS de empresa) · proyecto aparte
 **Solo después de un cerebro probado solo.** Es la capa "30% nueva y difícil".
-**Construye:** `org/` — un **cerebro general** (orquestador: coordina y rutea, NO
+**Construye:** `org/`: un **cerebro general** (orquestador: coordina y rutea, NO
 ejecuta el trabajo de los departamentos) + **cerebros de departamento**
 (instancias con su identidad/memoria/permisos, simulando roles de gerencia);
-**mensajes tipados entre instancias** (`messaging.py` — NO prosa libre; previene
+**mensajes tipados entre instancias** (`messaging.py`: NO prosa libre; previene
 colusión/contradicción, es la cola de tareas entre cerebros); **común de
-solo-lectura** (`commons.py` — políticas, organigrama, datos compartidos; el
+solo-lectura** (`commons.py`: políticas, organigrama, datos compartidos; el
 general es único curador; memoria privada por departamento + común leído por
 todos, sin copias que diverjan); **roles/RBAC** (qué rol puede hacer qué sobre qué
 datos; `actor_id` ya sembrado); **aprobación multi-persona** (separar quién
@@ -517,7 +517,7 @@ propone de quién aprueba para acciones de alto riesgo); el **audit plane** lega
 botella y baja costo: la mayoría de decisiones se quedan en el departamento);
 comunicación por mensajes tipados; una sola fuente de verdad transversal (común de
 solo-lectura), no memorias que se sincronizan. **Empieza con DOS cerebros (un
-general + un departamento), nunca con seis** — dos es el caso mínimo donde
+general + un departamento), nunca con seis**: dos es el caso mínimo donde
 aparecen todos los problemas de jerarquía.
 **No adoptar un framework** (LangGraph/CrewAI/AutoGen) como cimiento; referencia
 de patrones sí.
@@ -552,7 +552,7 @@ cada fase, no antes.
 ## 5. Evaluación honesta y backlog
 
 **Fortalezas:** el modelo de seguridad (cuarentena + allowlist + confianza por
-origen + firma) es lo más fuerte y poco común — habilita el 2b sin temeridad;
+origen + firma) es lo más fuerte y poco común; habilita el 2b sin temeridad;
 identidad desacoplada del modelo (skills, no fine-tuning); "hace y duerme" +
 SQLite WAL resuelve ejecución/persistencia/observabilidad/concurrencia con piezas
 simples; la arquitectura jerárquica converge al patrón empresarial probado y ya
@@ -596,7 +596,7 @@ rompa reescriba este documento. La pendiente da fruto en cada escalón; medir el
 
 ---
 
-## Apéndice A — Esquema SQLite (boceto)
+## Apéndice A. Esquema SQLite (boceto)
 
 ```sql
 PRAGMA journal_mode=WAL;   -- lecturas libres, un escritor
@@ -638,7 +638,7 @@ CREATE TABLE approvals (
 -- Toda consulta filtra por instance_id (aislamiento desde el día uno).
 ```
 
-## Apéndice B — Ejemplos concretos
+## Apéndice B. Ejemplos concretos
 
 **Hechos semilla:**
 ```json

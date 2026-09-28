@@ -3,12 +3,12 @@ import { getIntegrity, getIntegrityFindings, runIntegrityCheck } from '../lib/ap
 import { shortWhen } from '../lib/format'
 import { EmptyState, ErrorState, MetricCard, SectionHeader } from './ui/common'
 
-// The "Integrity" section — the conformance manifest and what it found.
+// The "Integrity" section; the conformance manifest and what it found.
 // GET /api/integrity (manifest version + attestation + state + the declared
 // contracts), GET /api/integrity/findings, POST /api/integrity/check.
 //
 // The check is the one mutation here and it is explicitly the owner's act: a
-// button, never a poll. Findings are shown as they are recorded — this panel
+// button, never a poll. Findings are shown as they are recorded; this panel
 // never softens a severity or hides a contract that failed.
 
 const SEVERITY_ORDER = { critical: 0, high: 1, error: 1, medium: 2, warn: 3, warning: 3, low: 4, info: 5 }
@@ -87,7 +87,7 @@ export default function IntegrityPanel() {
     try {
       const result = await runIntegrityCheck()
       const failed = result && (result.failed ?? result.findings_count ?? 0)
-      setCheckResult(failed ? `${failed} finding(s) recorded.` : 'Checked — nothing new.')
+      setCheckResult(failed ? `${failed} finding(s) recorded.` : 'Checked; nothing new.')
       await load()
     } catch (e) {
       setCheckResult(e instanceof Error ? e.message : 'The check could not run.')

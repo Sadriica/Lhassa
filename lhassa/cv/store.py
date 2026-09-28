@@ -1,19 +1,19 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Reading the base CV and writing tailored exports — the CV file-I/O seam.
+"""Reading the base CV and writing tailored exports; the CV file-I/O seam.
 
 This is the one module that touches CV files on disk, so paths never scatter across
 the flow engine:
 
-  * :func:`load_base`    — read ``cv_largo.tex`` if present (never raises; ``None`` if
+  * :func:`load_base`   : read ``cv_largo.tex`` if present (never raises; ``None`` if
     absent/unreadable).
-  * :func:`slug_company` — the export filename slug rule (lowercase, non-alphanumerics
+  * :func:`slug_company`: the export filename slug rule (lowercase, non-alphanumerics
     → single hyphens, trimmed; empty/None → ``"untitled"``; accents folded to ASCII).
-  * :func:`short_id`     — a short (~6-char) id; deterministic when a ``seed`` is given
+  * :func:`short_id`    : a short (~6-char) id; deterministic when a ``seed`` is given
     (so a filename is stable per run), fresh & random otherwise.
-  * :func:`export`       — write ``content`` to ``out/{id}_{slug}.tex`` atomically and
+  * :func:`export`      : write ``content`` to ``out/{id}_{slug}.tex`` atomically and
     return the path.
-  * :func:`save_base`    — replace ``cv_largo.tex`` (backing up any existing file first).
-  * :func:`base_info`    — a small ``{exists, path, chars, first_line}`` view of the base.
+  * :func:`save_base`   : replace ``cv_largo.tex`` (backing up any existing file first).
+  * :func:`base_info`   : a small ``{exists, path, chars, first_line}`` view of the base.
 """
 
 from __future__ import annotations
@@ -41,7 +41,7 @@ _NON_ALNUM = re.compile(r"[^a-z0-9]+")
 def load_base() -> Optional[str]:
     """Return the base CV (``cv_largo.tex``) as text, or ``None`` if absent/unreadable.
 
-    Never raises — a missing or unreadable base file simply means "no base to build
+    Never raises; a missing or unreadable base file simply means "no base to build
     on", which the caller degrades gracefully.
     """
     path = base_path()
@@ -70,7 +70,7 @@ def slug_company(name: Optional[str]) -> str:
 def short_id(seed: Optional[str] = None) -> str:
     """A short (~6-char) id.
 
-    With a ``seed`` (e.g. a run id) it is DETERMINISTIC — the same seed always yields
+    With a ``seed`` (e.g. a run id) it is DETERMINISTIC; the same seed always yields
     the same id, so a per-run export filename is stable. Without one it is a fresh
     random id (a uuid4 hex slice).
     """
@@ -82,8 +82,8 @@ def short_id(seed: Optional[str] = None) -> str:
 def export(content: str, *, company: Optional[str], run_id: Optional[str] = None) -> Path:
     """Write ``content`` to ``out/{id}_{company}/{company}.tex`` and return the path.
 
-    Every run gets its OWN folder (``out/{id}_{slug}/``), so a run's artifacts —
-    the ``.tex`` and the PDF the compiler writes next to it — live together and
+    Every run gets its OWN folder (``out/{id}_{slug}/``), so a run's artifacts;
+    the ``.tex`` and the PDF the compiler writes next to it; live together and
     successive runs never shadow each other's files. The id is derived from
     ``run_id`` when given (stable per run), else fresh. The write is ATOMIC
     (temp file in the same directory + ``os.replace``), so an interrupted write
@@ -119,7 +119,7 @@ def save_base(text: str, *, timestamp: Optional[float] = None) -> Path:
 
     ``timestamp`` is supplied by the caller (or defaults to :func:`time.time`); the CV
     seam is leaf infrastructure, so a plain ``time`` read is fine here (unlike the
-    deterministic spine). On any failure it logs and returns the intended path — the
+    deterministic spine). On any failure it logs and returns the intended path; the
     caller re-checks with :func:`base_info` rather than catching.
     """
     dest = base_path()
@@ -142,7 +142,7 @@ def save_base(text: str, *, timestamp: Optional[float] = None) -> Path:
             with contextlib.suppress(OSError):
                 os.unlink(tmp_name)
             raise
-    except Exception as exc:  # never raise — a failed save degrades, it doesn't crash
+    except Exception as exc:  # never raise; a failed save degrades, it doesn't crash
         logger.warning(f"cv.store: save_base failed: {exc}")
     return dest
 
@@ -208,7 +208,7 @@ def _digits(s: str) -> str:
 
 
 def restore_contact(tailored: str, base: Optional[str]) -> str:
-    """Force the base CV's contact details back into the tailored output — $0.
+    """Force the base CV's contact details back into the tailored output; $0.
 
     The ``contact_preserved`` gate only checks PRESENCE: every email and phone in
     the base must appear in the tailored text. Rather than spend a model call
@@ -216,7 +216,7 @@ def restore_contact(tailored: str, base: Optional[str]) -> str:
     them deterministically: any contact-shaped token in the tailored output that
     is NOT one of the base's is treated as an alteration and swapped for the base's
     original, in order; base contacts still missing afterward are appended in a
-    LaTeX comment so the gate's presence check always passes. Never raises — on any
+    LaTeX comment so the gate's presence check always passes. Never raises; on any
     trouble it returns the tailored text unchanged (the gate remains the backstop).
     """
     try:
@@ -236,7 +236,7 @@ def restore_contact(tailored: str, base: Optional[str]) -> str:
             # The base contacts the tailored output is missing (altered/dropped).
             missing = [t for t in base_tokens if norm(t) not in present_keys]
             # The distinct altered tokens (contact-shaped, not in the base), in
-            # order of first appearance — each maps 1:1 to a missing base token and
+            # order of first appearance; each maps 1:1 to a missing base token and
             # ALL its occurrences (mailto + display) are swapped.
             altered, seen_alt = [], set()
             for t in pat.findall(tailored):

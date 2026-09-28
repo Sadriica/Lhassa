@@ -3,14 +3,14 @@ import { useEffect, useState, useRef, useCallback } from 'react'
 const WS_URL = `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}/ws`
 
 /**
- * useWebSocketEvents — the single `/ws` connection the dashboard lives on.
+ * useWebSocketEvents; the single `/ws` connection the dashboard lives on.
  *
  * Owns the live state the socket feeds (connection, voice, metrics, agents,
  * scheduled ticks, audit) and dispatches every inbound event into it. The
  * reconnect shape is deliberate: `handleEvent` is a stable useCallback so
  * `connect` only depends on it, and `connect` reaches the latest connect via a
  * `connectRef` (never itself) so the 3s reconnect loop never re-declares the
- * callback — that is what keeps this hook free of a use-before-declare / an
+ * callback; that is what keeps this hook free of a use-before-declare / an
  * exhaustive-deps lint error. Do not "simplify" the ref away.
  */
 export default function useWebSocketEvents() {

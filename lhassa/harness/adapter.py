@@ -1,18 +1,18 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """
-``HarnessAdapter`` — the Axis-2 interface (§2.2): delegated agentic code work.
+``HarnessAdapter``: the Axis-2 interface (§2.2): delegated agentic code work.
 
 Each adapter is a thin, *trivially editable* description of one coding CLI:
-  • ``build_command(prompt, **opts)`` — the argv to run it non-interactively.
-  • ``parse_line(raw)`` — map one stdout line to a ``RunEvent`` (the prototype is
-    already built — ``stream-json`` parsing; a plain line degrades to a text event).
-  • ``available()`` — is the CLI installed (``shutil.which``)?
+  • ``build_command(prompt, **opts)``: the argv to run it non-interactively.
+  • ``parse_line(raw)``: map one stdout line to a ``RunEvent`` (the prototype is
+    already built; ``stream-json`` parsing; a plain line degrades to a text event).
+  • ``available()``: is the CLI installed (``shutil.which``)?
 
 Plus three static facts the router reasons over: ``name``, ``model_locked`` (is the
 muscle tied to one model family?) and ``billing`` ("metered" | "subscription" |
 "free"). Keep the per-CLI argv/flags below easy to edit; each ``build_command``
 notes which flags were checked against the real installed CLI's ``--help`` output
-and which remain ``[SUPUESTO]`` (only the shape of a CLI's own JSON event stream —
+and which remain ``[SUPUESTO]`` (only the shape of a CLI's own JSON event stream;
 never smoke-tested with a live run, since this is a read-only flag audit; any
 mismatch degrades safely to a plain text event, never breaks streaming).
 """
@@ -35,9 +35,9 @@ _ANSI = re.compile(r"\x1b\[[0-9;]*[mGKHF]")
 class RunEvent:
     """One parsed unit of harness output.
 
-    ``kind``     — "text" | "tool" | "cost" | "done" | "error".
-    ``payload``  — the human-readable text for the event (may be empty).
-    ``cost_usd`` — set only when the line reports a cost (``stream-json`` result).
+    ``kind``    : "text" | "tool" | "cost" | "done" | "error".
+    ``payload`` : the human-readable text for the event (may be empty).
+    ``cost_usd``: set only when the line reports a cost (``stream-json`` result).
     """
 
     kind: str
@@ -147,10 +147,10 @@ class _BaseAdapter:
         raise NotImplementedError
 
 
-# ── the three adapters (per-CLI argv table — edit here) ──────────────────────────
+# ── the three adapters (per-CLI argv table; edit here) ──────────────────────────
 
 class OpenCodeAdapter(_BaseAdapter):
-    """opencode — flexible (any model); pay-as-you-go via opencode Zen credits."""
+    """opencode; flexible (any model); pay-as-you-go via opencode Zen credits."""
 
     name = "opencode"
     model_locked = False
@@ -163,14 +163,14 @@ class OpenCodeAdapter(_BaseAdapter):
         # --help) switches it from the default human-formatted output to JSONL
         # events on stdout, which `parse_line` already knows how to read.
         # [SUPUESTO] only on the exact field names inside opencode's JSON events
-        # (not smoke-tested with a live run, per this task's read-only scope) —
+        # (not smoke-tested with a live run, per this task's read-only scope);
         # an unrecognized shape still degrades safely to a plain text event via
         # `_event_from_json`'s fallback, so a mismatch never breaks streaming.
         return ["opencode", "run", "--format", "json", prompt]
 
 
 class ClaudeCodeAdapter(_BaseAdapter):
-    """Claude Code — locked to Claude; billed against the Claude subscription."""
+    """Claude Code; locked to Claude; billed against the Claude subscription."""
 
     name = "claude"
     model_locked = True
@@ -184,7 +184,7 @@ class ClaudeCodeAdapter(_BaseAdapter):
             # machine's installed `claude` CLI. Structured events let the runner
             # accumulate live cost. [SUPUESTO] only on the specific runtime
             # constraint that `--verbose` is required when `--print` is combined
-            # with `--output-format=stream-json` — that requirement is not
+            # with `--output-format=stream-json`: that requirement is not
             # stated in --help itself (it is a known runtime behavior of this
             # CLI), and this task never launches a real run to confirm it.
             return ["claude", "--print", "--output-format", "stream-json",
@@ -193,7 +193,7 @@ class ClaudeCodeAdapter(_BaseAdapter):
 
 
 class CodexAdapter(_BaseAdapter):
-    """Codex — locked to OpenAI; billed against the Codex/OpenAI subscription."""
+    """Codex; locked to OpenAI; billed against the Codex/OpenAI subscription."""
 
     name = "codex"
     model_locked = True
@@ -206,7 +206,7 @@ class CodexAdapter(_BaseAdapter):
         # prints events to stdout as JSONL instead of plain text, which
         # `parse_line` already knows how to read.
         # [SUPUESTO] only on the exact field names inside codex's JSON events
-        # (not smoke-tested with a live run, per this task's read-only scope) —
+        # (not smoke-tested with a live run, per this task's read-only scope);
         # an unrecognized shape still degrades safely to a plain text event via
         # `_event_from_json`'s fallback, so a mismatch never breaks streaming.
         return ["codex", "exec", "--json", prompt]
@@ -216,20 +216,20 @@ class CodexAdapter(_BaseAdapter):
 
 # The harness swap point lives in the shared keystone ``Registry`` (the same
 # primitive that backs actions/channels/commands), so a plugin can drop in a new
-# coding muscle with ``@register_adapter("x")`` WITHOUT editing this file — the
+# coding muscle with ``@register_adapter("x")`` WITHOUT editing this file; the
 # elastic/modular principle. Insertion order is the preference order when billing
 # rank ties (opencode first), preserved by the keystone's dict semantics.
 ADAPTERS: Registry[HarnessAdapter] = Registry("harness")
 
 
 def register_adapter(name: str, item: Optional[HarnessAdapter] = None, *, override: bool = False):
-    """Register a harness adapter under ``name`` — a wrapper over :data:`ADAPTERS`.
+    """Register a harness adapter under ``name``: a wrapper over :data:`ADAPTERS`.
 
-    Usable as a **decorator** on an adapter class (``@register_adapter("x")`` — the
+    Usable as a **decorator** on an adapter class (``@register_adapter("x")``: the
     class is instantiated with no arguments and the **instance** is registered, the
     class itself returned unchanged) or on a ready instance, and as a **direct call**
     (``register_adapter("x", instance)``). ``name`` is lower-cased so lookups stay
-    case-insensitive. A duplicate ``name`` raises unless ``override=True`` — so two
+    case-insensitive. A duplicate ``name`` raises unless ``override=True``: so two
     plugins can never silently clobber each other. This is the drop-in seam.
     """
 

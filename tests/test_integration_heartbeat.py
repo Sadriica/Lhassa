@@ -5,7 +5,7 @@ Real, end-to-end integration tests for the heartbeat/step loop.
 Why this file exists: the suite this ships alongside has thousands of unit
 tests, and every one of them mocks the provider, the DB, or both (see
 ``tests/test_step.py``'s ``FakeProvider``). That is deliberate and correct for
-unit coverage — but it means the actual wiring between ``core/heartbeat.py``,
+unit coverage; but it means the actual wiring between ``core/heartbeat.py``,
 ``core/step.py``, the signed-task allowlist gate (``security/signing.py`` +
 ``security/allowlist.py``) and a REAL provider subprocess has never been
 exercised together in CI. An Ed25519 signing incident (``doc/decisions.md``)
@@ -15,7 +15,7 @@ signature-adjacent unit test injects a already-signed task or a fake verifier.
 These tests close that gap. They are marked ``integration`` and excluded from
 the default run (see ``pyproject.toml``'s ``addopts``) because test #1 spends
 real tokens against a real, locally-installed CLI (``opencode`` / ``claude`` /
-``codex`` — whichever is first on ``PATH``) and can take tens of seconds. Run
+``codex``: whichever is first on ``PATH``) and can take tens of seconds. Run
 them explicitly with::
 
     make test-integration
@@ -33,16 +33,16 @@ Test #1 (``test_heartbeat_judgment_beat_with_live_cli``) mints one cheap,
 signed judgment task, runs exactly ONE real ``step()`` with that live CLI
 injected as the provider, and asserts the tick did not crash, wrote an
 episode with a non-empty ``resultado``, and recorded a cost (``costo_usd``,
-deliberately ``0.0`` for a subscription CLI by design — see
-``ClaudeCodeProvider.complete``'s docstring — but always a real float, never
+deliberately ``0.0`` for a subscription CLI by design; see
+``ClaudeCodeProvider.complete``'s docstring; but always a real float, never
 ``None``). Skips with an honest reason if no CLI is on ``PATH``.
 
 Test #2 (``test_heartbeat_empty_beat_fresh_db``) is the $0 counterpart: a
 brand-new process opening a brand-new tmp DB file, migrating it to the
 current schema, and completing a full ``beat()`` with nothing on the
-watchlist — the deterministic path every real heartbeat tick takes before
+watchlist; the deterministic path every real heartbeat tick takes before
 (and usually instead of) the judgment branch. No provider, no DB mock, no
-policy mock — just the real migration + real ``step()`` on an empty brain.
+policy mock; just the real migration + real ``step()`` on an empty brain.
 """
 
 import shutil
@@ -69,7 +69,7 @@ async def _isolated_db(tmp_path, monkeypatch):
     """Point the brain DB and the signing keypair at tmp_path, then init.
 
     Same isolation pattern as ``tests/test_step.py:_init`` (DB) and
-    ``tests/test_action_preconditions.py`` (signing key) — reused here rather
+    ``tests/test_action_preconditions.py`` (signing key); reused here rather
     than re-derived so this file drifts with the rest of the suite instead of
     against it.
     """
@@ -96,7 +96,7 @@ async def test_heartbeat_judgment_beat_with_live_cli(tmp_path, monkeypatch):
     cli_name = _detect_live_cli()
     if cli_name is None:
         pytest.skip(
-            "no live CLI (opencode/claude/codex) found on PATH — "
+            "no live CLI (opencode/claude/codex) found on PATH; "
             "integration test needs at least one installed to run"
         )
 
@@ -115,7 +115,7 @@ async def test_heartbeat_judgment_beat_with_live_cli(tmp_path, monkeypatch):
 
     instance_id = "inst_integration"
 
-    # A signed, judgment-flagged task — the exact envelope shape that broke in
+    # A signed, judgment-flagged task; the exact envelope shape that broke in
     # the real incident. ``db.add_task`` signs it for real (KEY_PATH above is
     # isolated but the sign/verify round trip is the real Ed25519 code path,
     # not a stub).
@@ -132,7 +132,7 @@ async def test_heartbeat_judgment_beat_with_live_cli(tmp_path, monkeypatch):
     summary = await step.step(instance_id, config=config, provider=provider)
 
     # The tick must not have crashed, and must have actually run the model
-    # (not deferred it — a deferral would mean the live CLI failed, which is
+    # (not deferred it; a deferral would mean the live CLI failed, which is
     # the scenario this test exists to catch, not silently tolerate).
     assert summary["triggers"] == 1
     assert summary["deferred"] == 0, (
@@ -146,7 +146,7 @@ async def test_heartbeat_judgment_beat_with_live_cli(tmp_path, monkeypatch):
     assert ep["resultado"], "judgment episode must record a real answer"
     assert ep["decision"] != step.DEFERRED_DECISION
     # A subscription CLI deliberately records $0 marginal cost (see
-    # ClaudeCodeProvider.complete) — the assertion is that cost is TRACKED
+    # ClaudeCodeProvider.complete); the assertion is that cost is TRACKED
     # (a real float, never left unset), not that it is nonzero.
     assert isinstance(ep["costo_usd"], (int, float))
     assert ep["costo_usd"] >= 0.0
@@ -162,7 +162,7 @@ async def test_heartbeat_judgment_beat_with_live_cli(tmp_path, monkeypatch):
 async def test_heartbeat_empty_beat_fresh_db(tmp_path, monkeypatch):
     """A brand-new process opens a brand-new DB, migrates it, completes a beat.
 
-    No provider, no mocked DB, no mocked policy — the deterministic $0 path
+    No provider, no mocked DB, no mocked policy; the deterministic $0 path
     every real heartbeat tick takes end to end, through ``core/heartbeat.py``
     (not a copy of it), against a real on-disk SQLite file.
     """
@@ -170,7 +170,7 @@ async def test_heartbeat_empty_beat_fresh_db(tmp_path, monkeypatch):
     from lhassa._vendor import aiosqlite
     from lhassa.core import heartbeat
 
-    # The migration actually ran and landed on the current schema — this is
+    # The migration actually ran and landed on the current schema; this is
     # the "fresh process, fresh DB" half of the incident gap: a heartbeat that
     # never even gets past opening the DB is just as silent a failure as a
     # broken signature check.

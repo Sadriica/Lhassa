@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Use-case ORG TEMPLATES — presets that recreate a whole working structure at once.
+"""Use-case ORG TEMPLATES; presets that recreate a whole working structure at once.
 
 A *template* is a named, multi-brain org preset the owner can apply in one move:
 "Code Review", "Bug Investigation", "Refactors & Migration", "Incident Response",
 and a richer multi-level "Software Factory". Applying one CREATES its brains under
-Lhassa — the permanent administrator root ("orbits everything") — via the validated
+Lhassa (the permanent administrator root ("orbits everything")) via the validated
 :mod:`lhassa.org.management` ops, so a bad template can never corrupt the chart.
 
 Design:
@@ -17,7 +17,7 @@ Design:
   - Instantiation NAMESPACES every brain id as ``"<template_id>:<local_id>"`` so
     applying a template twice (or two templates) never collides, and is idempotent:
     a brain whose namespaced id already exists is skipped.
-  - Skills are free-form names (they may not exist yet — that is fine, the org stays
+  - Skills are free-form names (they may not exist yet; that is fine, the org stays
     modular). :func:`ensure_template_skills` can best-effort seed the missing ones.
 
 This is a SHELL module (it composes management/topology/skills); it adds no new core.
@@ -40,7 +40,7 @@ ADMIN_REF = "__admin__"
 #: kind -> default org template id, applied by the standing-brains reflex
 #: (``actionpack/_standing.py``, Wave 1) when a project of that kind appears with no
 #: matching ``project_brains`` row yet. Overridable/extendable via the
-#: ``LHASSA_KIND_TEMPLATES`` env var (CSV ``"kind:template,kind:template"``) — see
+#: ``LHASSA_KIND_TEMPLATES`` env var (CSV ``"kind:template,kind:template"``); see
 #: :func:`kind_template_map`.
 DEFAULT_KIND_TEMPLATES: dict[str, str] = {
     "code": "code-review",
@@ -182,7 +182,7 @@ TEMPLATES: list[dict] = [
         "name": "Software Factory",
         "description": (
             "A full delivery org: a delivery coordinator over frontend, backend, "
-            "QA and devops department brains — recreate a whole software factory."
+            "QA and devops department brains; recreate a whole software factory."
         ),
         "category": "delivery",
         "brains": [
@@ -278,10 +278,10 @@ def kind_template_map() -> dict[str, str]:
     overridden/extended by ``LHASSA_KIND_TEMPLATES`` (CSV ``"kind:template,..."``).
 
     Parsed defensively: a malformed entry (no ``:``, empty kind/template) is
-    skipped rather than raising — a typo in the env var degrades to "use the
+    skipped rather than raising; a typo in the env var degrades to "use the
     default for that kind", never crashes the reflex that reads this. Never
     validates the template id exists (``get_template``/``template_is_read_only``
-    do that at the point of use) — this stays pure string plumbing.
+    do that at the point of use); this stays pure string plumbing.
     """
     merged = dict(DEFAULT_KIND_TEMPLATES)
     raw = os.environ.get("LHASSA_KIND_TEMPLATES", "") or ""
@@ -301,12 +301,12 @@ def template_is_read_only(template_id: str) -> bool:
     """True only when EVERY brain in the template is provably read-only.
 
     A brain is read-only when its ``limits`` dict has ``read_only: True`` (the
-    field ``code-review``/``bug-investigation`` already set — see the catalog
+    field ``code-review``/``bug-investigation`` already set; see the catalog
     above; ``max_risk``/``require_approval`` are a coarser risk hint the template
     author may also set, but ``read_only`` is the one explicit, boolean signal we
     trust for this classification). Fail-CLOSED in every uncertain case: an
     unknown template id, a template with no brains, or any brain missing/not-True
-    ``read_only`` all return ``False`` — this is a RISK gate (see
+    ``read_only`` all return ``False``: this is a RISK gate (see
     ``security/approval.py``'s ``_attach_template_needs_gate``), so "can't tell"
     must mean "treat as write-capable", never the reverse.
     """
@@ -350,15 +350,15 @@ def instantiate(
 
     Idempotent: a namespaced brain id that already exists is skipped (so re-applying
     a template is safe). Each brain is created via :func:`management.add_brain`, which
-    validates the whole topology BEFORE persisting — so a bad brain raises and never
+    validates the whole topology BEFORE persisting; so a bad brain raises and never
     corrupts the saved chart. Brains are listed parent-first, so a coordinator exists
     before its children attach.
 
     ``namespace`` defaults to ``template_id`` (the plain ``"<template>:<local>"``
-    chart ids the CLI/API "apply a template" flows expect — unchanged). Pass a more
+    chart ids the CLI/API "apply a template" flows expect; unchanged). Pass a more
     specific namespace (e.g. ``"<template_id>:<project_id>"``, what the standing-
     brains reflex in ``actionpack/_standing.py`` does) to instantiate a SEPARATE set
-    of brains per caller instead of sharing one global set — this is the collision
+    of brains per caller instead of sharing one global set; this is the collision
     rule: two callers that pass the SAME namespace share/reuse brains (skip on
     re-apply, by design); callers that want isolated brains per instantiation must
     pass a namespace unique to them.
@@ -404,7 +404,7 @@ def ensure_template_skills(
     """Best-effort: seed any of the template's referenced skills that are missing.
 
     Creates a minimal SKILL.md for each unseen skill name via :mod:`lhassa.skills`.
-    Never hard-depends on the skills layer or raises — on any error it returns the
+    Never hard-depends on the skills layer or raises; on any error it returns the
     skills created so far. Returns the list of skill names newly seeded.
     """
     template = get_template(template_id)

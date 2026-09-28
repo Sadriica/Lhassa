@@ -1,33 +1,33 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Graph-augmented retrieval — the "LightRAG-lite" read seam over
+"""Graph-augmented retrieval; the "LightRAG-lite" read seam over
 ``memory/kg.py``'s persisted graph, layered on top of the EXISTING semantic
 (layer-4) retrieval :mod:`lhassa.memory.load` already does.
 
 :func:`retrieve` is vector-first, graph-augmented, exactly like the wider
 LightRAG-style pattern this wave is named after, but kept deliberately small:
 
-  1. **Seed** — the layer-4 semantic search over fact embeddings (reused as-is
+  1. **Seed**: the layer-4 semantic search over fact embeddings (reused as-is
      from ``memory/load.py``'s ``_semantic_layer``, so no second embedding
      index) PLUS a direct name match of the query's terms against stored
      ``kg_entities`` (the graph's own vocabulary).
-  2. **Expand 1-hop** — ``db.kg_neighbors`` over the seed entity ids, heaviest
+  2. **Expand 1-hop**: ``db.kg_neighbors`` over the seed entity ids, heaviest
      edge first.
-  3. **Map back to facts** — each neighbor entity is resolved to the facts
+  3. **Map back to facts**: each neighbor entity is resolved to the facts
      whose tags/content mention its name (a bounded scan over this instance's
-     resolved facts — there is no free-text index on ``kg_entities`` to query
+     resolved facts; there is no free-text index on ``kg_entities`` to query
      against, so this is a linear ``in`` check, not SQL LIKE).
-  4. **Merge + rank** — semantic-seed facts first (they already carry the
+  4. **Merge + rank**: semantic-seed facts first (they already carry the
      embedding's own similarity order), then direct entity-name-match facts,
      then hop-derived facts ordered by the ORIGINATING EDGE'S weight
-     (heaviest co-occurrence/mention first) — a stronger edge is a more
+     (heaviest co-occurrence/mention first); a stronger edge is a more
      reliable hop. Dedup by fact id keeps only the first (highest-ranked)
      citation of a given fact. Capped at ``limit``.
 
-Each result is ``{"text": str, "source": "fact:<id>", "via": str}`` — ``via``
+Each result is ``{"text": str, "source": "fact:<id>", "via": str}``: ``via``
 is ``"semantic"`` for an embedding hit, ``"entity:<name>"`` for a direct
 name-match seed, or ``"<seed> —<edge_kind>→ <neighbor> (<provenance>)"`` for a
 1-hop graph-derived fact (e.g.
-``"budget —co_occurs→ credit-card (fact:f_123)"``) — the trailing
+``"budget —co_occurs→ credit-card (fact:f_123)"``); the trailing
 ``(<provenance>)`` is the ORIGINATING EDGE's own ``source`` column (the
 fact/episode it was learned from; omitted when the edge carries none), so a
 caller can always show WHY a fact was pulled in AND what grounded that edge.
@@ -74,7 +74,7 @@ async def retrieve(
 ) -> list[dict]:
     """Vector-seeded, 1-hop graph-expanded fact retrieval. See module docstring.
 
-    An empty/blank query, or any internal failure, degrades to ``[]`` — never
+    An empty/blank query, or any internal failure, degrades to ``[]``: never
     raises, never calls a model beyond the embedder the semantic seed uses.
     """
     query = (query or "").strip()

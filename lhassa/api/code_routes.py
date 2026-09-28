@@ -1,13 +1,13 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """
-Code routes — launch an agentic coding task through a local AI CLI and stream it.
+Code routes; launch an agentic coding task through a local AI CLI and stream it.
 
 This is the backend behind a "run claude on a task and watch it work" dashboard
 panel. The heavy lifting lives in ``lhassa.agents.local_cli.LocalCliAgent``, which
 already streams each stdout line to every connected WebSocket via
 ``state.broadcast({"type": "agent_token", "run_id": …, "token": …})`` plus
 ``agent_started`` / ``agent_done`` / ``agent_error`` lifecycle events. So the
-dashboard's existing ``/ws`` fan-out already carries the stream — these routes only
+dashboard's existing ``/ws`` fan-out already carries the stream; these routes only
 need to LAUNCH a run and return its id so the panel can correlate the WS events.
 
 Endpoints (mounted by the integrator with ``app.include_router(code_routes.router)``):
@@ -21,7 +21,7 @@ Endpoints (mounted by the integrator with ``app.include_router(code_routes.route
 
 run_id handling: ``LocalCliAgent.run`` mints its own id internally and only returns
 the final output string, so it cannot hand us an id up front. To return an id that
-*matches* the WS stream, this module owns the run lifecycle itself — it generates the
+*matches* the WS stream, this module owns the run lifecycle itself; it generates the
 run_id, registers the ``AgentRun``, broadcasts ``agent_started``, and delegates the
 actual subprocess streaming to the agent's ``_invoke`` (which emits ``agent_token``
 events bound to that exact run_id). The frontend therefore consumes ``agent_token``
@@ -54,7 +54,7 @@ class CodeRequest(BaseModel):
 
 
 def _error(status: int, message: str) -> JSONResponse:
-    """A clear 4xx body — launches never surface as a 500."""
+    """A clear 4xx body; launches never surface as a 500."""
     return JSONResponse(status_code=status, content={"ok": False, "error": message})
 
 
@@ -89,7 +89,7 @@ async def stop_code(run_id: str) -> dict:
     Terminates the run's subprocess process group (graceful → kill, so child CLIs
     die too), marks the run ``stopped``, and emits ``agent_stopped`` + ``agent_done``
     so the panel updates. Idempotent: stopping an unknown or already-finished run is a
-    safe no-op. Never raises — a stop must never take down the server.
+    safe no-op. Never raises; a stop must never take down the server.
     """
     try:
         run = state.agent_runs.get(run_id)
@@ -116,7 +116,7 @@ async def launch_code(req: CodeRequest):
         return _error(400, "task must be a non-empty string")
 
     cli = (req.cli or local_cli.detect_ai_cli()).strip().lower()
-    # is_installed is False for both unknown and not-on-PATH CLIs — one clear 400.
+    # is_installed is False for both unknown and not-on-PATH CLIs; one clear 400.
     if not local_cli.is_installed(cli):
         installed = ", ".join(local_cli.available_clis()) or "none installed"
         return _error(
@@ -132,13 +132,13 @@ async def launch_code(req: CodeRequest):
             agent = local_cli.make_agent(cli, context_pack_dir=pack_dir)
         except TypeError:
             # A caller-supplied make_agent (e.g. a test double) may not accept
-            # context_pack_dir — context is a gift, not a gate, so fall back.
+            # context_pack_dir; context is a gift, not a gate, so fall back.
             agent = local_cli.make_agent(cli)
         run_id = uuid.uuid4().hex[:8]
         run = AgentRun(id=run_id, name=f"ai-cli ({cli})", status="running", task=task, cli=cli)
         state.register_agent(run)
         asyncio.ensure_future(_stream_run(agent, run_id, run, task))
-    except Exception as e:  # never 500 — surface a clear, actionable error
+    except Exception as e:  # never 500; surface a clear, actionable error
         logger.error(f"[code] launch failed for cli={cli!r}: {e}")
         return _error(400, f"Could not launch {cli!r}: {e}")
 
@@ -150,7 +150,7 @@ async def _stream_run(agent, run_id: str, run: AgentRun, task: str) -> None:
 
     Mirrors ``LocalCliAgent.run`` (started → tokens → done/error) but with our
     pre-chosen run_id, delegating the subprocess + per-line ``agent_token``
-    broadcasts to the agent's ``_invoke``. Never raises — a failure becomes an
+    broadcasts to the agent's ``_invoke``. Never raises; a failure becomes an
     ``agent_error`` event and a finished run, exactly like the CLI path.
     """
     await state.broadcast({
@@ -189,7 +189,7 @@ def _agent_cwd() -> Path:
 async def _resolve_context_pack(cwd: Path):
     """Resolve a project from the run's cwd and ensure its context pack.
 
-    Returns the pack dir, or ``None`` when no project matches — a launch never
+    Returns the pack dir, or ``None`` when no project matches; a launch never
     blocks on this: context is a gift, not a gate.
     """
     try:

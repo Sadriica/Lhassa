@@ -22,7 +22,7 @@ export default function MemoryPanel() {
   return (
     <div className="lh-card">
       <h2 className="lh-card-title mb-3">
-        Memory — Facts
+        Memory; Facts
       </h2>
 
       {loading ? (

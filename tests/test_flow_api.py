@@ -1,4 +1,4 @@
-"""Work-flow API tests — TestClient over a fresh app that mounts the router.
+"""Work-flow API tests. TestClient over a fresh app that mounts the router.
 
 The router is self-contained; mounting it on a minimal app (rather than the full
 server) keeps these tests independent of the integrator's wiring while exercising

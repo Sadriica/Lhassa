@@ -1,4 +1,4 @@
-"""Tests for lhassa.flows.templates — the flow-templates gallery.
+"""Tests for lhassa.flows.templates; the flow-templates gallery.
 
 Offline: every template builds a VALID Flow with no store touched; instantiation
 tests point ``config.flows_file`` at a tmp path (no real ``~/.lhassa`` touched). The

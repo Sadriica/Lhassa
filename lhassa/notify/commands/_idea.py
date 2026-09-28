@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""``/idea`` — hand an idea to the geshe's aide department.
+"""``/idea``: hand an idea to the geshe's aide department.
 
 Moved verbatim out of the former ``lhassa/notify/commands.py``.
 """
@@ -14,7 +14,7 @@ from ._shared import _config
 
 @register_command("idea")
 async def _cmd_idea(args: str, *, config=None) -> str:
-    """``/idea <text or link>`` — hand an idea to the geshe's aid department.
+    """``/idea <text or link>``: hand an idea to the geshe's aid department.
 
     Persists a signed ``research_intake`` task before acknowledging it.  The
     immediate runner is only an optimization; the heartbeat owns retries.
@@ -22,7 +22,7 @@ async def _cmd_idea(args: str, *, config=None) -> str:
     idea = (args or "").strip()
     if not idea:
         return (
-            "Usage: /idea <the idea, claim or link> — first I'll capture its "
+            "Usage: /idea <the idea, claim or link>; first I'll capture its "
             "sources and evaluate its theory, value, evidence and testability. "
             "Only ideas that earn applied/rigorous investment continue into a "
             "full corpus."

@@ -1,6 +1,6 @@
 // Right-click "Move under ▸" context menu for the org FLOW canvas. A floating panel
 // listing the VALID new parents for a right-clicked node (validity computed by the
-// caller via isValidConnection — no cycles, not itself, not its current parent, admin
+// caller via isValidConnection; no cycles, not itself, not its current parent, admin
 // anchored). Purely presentational: the menu/selection state, the valid-target
 // computation, and dismissal all live in the composition (OrgFlow.jsx); this just
 // renders it and calls back `onMove` / `onClose`.
@@ -42,7 +42,7 @@ export function ContextMenu({ menu, menuIsAdmin, menuTargets, onMove, onClose })
       </div>
       {menuIsAdmin ? (
         <div style={{ fontSize: 11, color: 'var(--lh-text-faint)', padding: '0.3rem 0.4rem' }}>
-          Lhassa is anchored at the root — it can&apos;t be moved.
+          Lhassa is anchored at the root; it can&apos;t be moved.
         </div>
       ) : menuTargets.length === 0 ? (
         <div style={{ fontSize: 11, color: 'var(--lh-text-faint)', padding: '0.3rem 0.4rem' }}>

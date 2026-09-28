@@ -111,7 +111,7 @@ def test_version_pretty():
     assert "Lhassa" in res.output
 
 
-# ── serve (arg parsing only — never binds a port) ─────────────────────────────────
+# ── serve (arg parsing only; never binds a port) ─────────────────────────────────
 
 def test_serve_parses_args_without_binding():
     with patch("lhassa.cli.extra_cmds._serve") as m:

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""The command palette provider — every screen and app action, one ``ctrl+p`` away.
+"""The command palette provider; every screen and app action, one ``ctrl+p`` away.
 
 Uses Textual's built-in palette machinery (:class:`textual.command.Provider` →
 :class:`~textual.command.Hits`), so the fuzzy matcher, the highlighting and the
@@ -7,7 +7,7 @@ Uses Textual's built-in palette machinery (:class:`textual.command.Provider` →
 
 The palette is a NAVIGATION + APP-ACTION surface only: it switches tabs, opens
 the help overlay, refreshes and quits. It deliberately does NOT expose mutations
-(approve/deny/run) — those stay on the screen that owns the selected row, where
+(approve/deny/run); those stay on the screen that owns the selected row, where
 the operator can see exactly what they are acting on.
 """
 

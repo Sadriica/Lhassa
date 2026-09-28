@@ -1,19 +1,19 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Document text extraction — bytes in, plain text out, for the CV work-flow bridge.
+"""Document text extraction; bytes in, plain text out, for the CV work-flow bridge.
 
 The Telegram → CV bridge receives a CV as an uploaded document (a ``.tex`` source or
 a ``.pdf`` export) and needs its text to feed the "Impossible-to-reject CV" work-flow
 as the base CV. This module is that one seam: it turns raw ``bytes`` (plus the
 original filename, used only to pick a decoder) into text.
 
-  * ``.tex`` / ``.txt`` / ``.md`` (or anything not recognised as a PDF) — decoded as
+  * ``.tex`` / ``.txt`` / ``.md`` (or anything not recognised as a PDF); decoded as
     UTF-8 with ``errors="replace"`` so a stray byte never blows up.
-  * ``.pdf`` — text extracted with :mod:`pypdf` (a lightweight, pure-Python dep),
+  * ``.pdf``: text extracted with :mod:`pypdf` (a lightweight, pure-Python dep),
     page by page.
 
 Like the rest of the CV seam it is **leaf infrastructure**: it depends only on the
 standard library plus ``pypdf`` and never imports an outer shell (see
-``tests/test_architecture.py``). It **never raises** — on any failure it logs a debug
+``tests/test_architecture.py``). It **never raises**: on any failure it logs a debug
 line and returns ``""`` so a bad upload degrades to "no base CV" instead of crashing
 the poller.
 """
@@ -40,7 +40,7 @@ def _extract_pdf(data: bytes) -> str:
     """Extract text from PDF ``bytes`` via pypdf. Returns ``""`` on any failure."""
     try:
         from pypdf import PdfReader
-    except Exception as exc:  # dependency missing / broken — degrade, never raise
+    except Exception as exc:  # dependency missing / broken; degrade, never raise
         logger.debug("cv.extract: pypdf unavailable ({})", exc)
         return ""
     try:
@@ -73,6 +73,6 @@ def extract_text(data: bytes, *, filename: str = "") -> str:
             return _extract_pdf(data)
         # Everything else (.tex/.txt/.md/unknown) is treated as UTF-8 text.
         return data.decode("utf-8", errors="replace")
-    except Exception as exc:  # belt-and-braces — extraction never raises
+    except Exception as exc:  # belt-and-braces; extraction never raises
         logger.debug("cv.extract: extract_text failed for {!r} ({})", name, exc)
         return ""

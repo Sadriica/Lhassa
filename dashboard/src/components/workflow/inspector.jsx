@@ -55,7 +55,7 @@ export function NodeInspector({ node, skills, brains, onChange, onLabel, onDelet
 
       {kind === 'task' && (
         <div className="space-y-2">
-          <span className="lh-label">routing — HYBRID (auto by skill, or pin a brain)</span>
+          <span className="lh-label">routing; HYBRID (auto by skill, or pin a brain)</span>
           <div className="flex gap-1" role="group" aria-label="routing mode">
             <button
               type="button"
@@ -77,9 +77,9 @@ export function NodeInspector({ node, skills, brains, onChange, onLabel, onDelet
 
           {routingMode === 'auto' ? (
             <label className="space-y-1 block">
-              <span className="lh-label">skill — auto-routes through the org</span>
+              <span className="lh-label">skill; auto-routes through the org</span>
               <select className="lh-select" value={config.skill || ''} onChange={(e) => setConfig({ skill: e.target.value || undefined })}>
-                <option value="">(any — route by prompt)</option>
+                <option value="">(any; route by prompt)</option>
                 {skills.map((s) => (
                   <option key={s.domain} value={s.domain}>{s.domain}{s.name ? ` · ${s.name}` : ''}</option>
                 ))}
@@ -87,7 +87,7 @@ export function NodeInspector({ node, skills, brains, onChange, onLabel, onDelet
             </label>
           ) : (
             <label className="space-y-1 block">
-              <span className="lh-label">brain — pinned target</span>
+              <span className="lh-label">brain; pinned target</span>
               <select className="lh-select" value={config.brain || ''} onChange={(e) => setConfig({ brain: e.target.value })}>
                 <option value="">choose a brain…</option>
                 {brains.map((b) => (
@@ -115,8 +115,8 @@ export function NodeInspector({ node, skills, brains, onChange, onLabel, onDelet
           <label className="space-y-1 block">
             <span className="lh-label">type</span>
             <select className="lh-select" value={config.type || 'verify'} onChange={(e) => setConfig({ type: e.target.value })}>
-              <option value="verify">verify — objective check (no LLM)</option>
-              <option value="approval">approval — park for a human</option>
+              <option value="verify">verify; objective check (no LLM)</option>
+              <option value="approval">approval; park for a human</option>
             </select>
           </label>
           {(config.type || 'verify') === 'verify' && (
@@ -154,7 +154,7 @@ export function NodeInspector({ node, skills, brains, onChange, onLabel, onDelet
 
       {kind === 'branch' && (
         <p className="text-[11px]" style={{ color: 'var(--lh-text-faint)' }}>
-          A branch has no config of its own — the condition lives on each OUTGOING edge&apos;s
+          A branch has no config of its own; the condition lives on each OUTGOING edge&apos;s
           <span className="lh-mono"> when</span>. Click an edge leaving this node to set its condition
           (the first matching edge is taken; an unconditional edge is the <span className="lh-mono">else</span>).
         </p>
@@ -182,7 +182,7 @@ function SpecEditor({ spec, onChange }) {
   const [err, setErr] = useState('')
   return (
     <label className="space-y-1 block">
-      <span className="lh-label">spec — verify rule (JSON, optional)</span>
+      <span className="lh-label">spec; verify rule (JSON, optional)</span>
       <textarea
         className="lh-input lh-mono"
         rows={3}
@@ -193,7 +193,7 @@ function SpecEditor({ spec, onChange }) {
           setText(v)
           if (!v.trim()) { setErr(''); onChange({}); return }
           try { onChange(JSON.parse(v)); setErr('') }
-          catch { setErr('not valid JSON yet — last good value kept') }
+          catch { setErr('not valid JSON yet; last good value kept') }
         }}
       />
       {err && <span className="text-[10px]" style={{ color: 'var(--lh-warn)' }}>{err}</span>}
@@ -220,12 +220,12 @@ export function EdgeInspector({ edge, onChange, onDelete }) {
           onChange={(e) => onChange(e.target.checked ? { field: when?.field || '', op: 'truthy' } : null)}
           style={{ accentColor: 'var(--lh-accent)' }}
         />
-        conditional (when) — otherwise unconditional / the else path
+        conditional (when); otherwise unconditional / the else path
       </label>
       {enabled && (
         <div className="space-y-2">
           <label className="space-y-1 block">
-            <span className="lh-label">field — a key in the upstream result (e.g. passed, status)</span>
+            <span className="lh-label">field; a key in the upstream result (e.g. passed, status)</span>
             <input className="lh-input lh-mono" value={when.field || ''} onChange={(e) => set({ field: e.target.value })} placeholder="passed" />
           </label>
           <label className="space-y-1 block">

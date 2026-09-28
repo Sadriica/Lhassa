@@ -1,4 +1,4 @@
-"""Tests for lhassa.org.delegate — the deterministic org delegation seam.
+"""Tests for lhassa.org.delegate; the deterministic org delegation seam.
 
 Offline + $0: the owning department is derived from the topology alone (no model),
 the flow runs through the OFFLINE org executor (LHASSA_ORG_LIVE left OFF), and the
@@ -10,7 +10,7 @@ delegation Episode is logged to a tmp brain DB. Covers:
   * ``command_path`` reads the root→…→dept chain off the topology tree;
   * ``delegate_flow`` logs an ``org-delegate`` Episode and returns the flow record
     annotated with ``record["delegation"].chain`` = the root→…→dept path;
-  * the degrade path — a broken topology still runs the flow and returns a record
+  * the degrade path; a broken topology still runs the flow and returns a record
     (with a minimal/empty chain), never raising.
 """
 
@@ -134,7 +134,7 @@ async def test_delegate_flow_logs_episode_and_annotates_chain(tmp_path, monkeypa
     assert record["delegation"]["department"] == "interns"
     assert record["delegation"]["chain"] == ["lhassa", "general", "interns"]
 
-    # One LLM-free ($0) delegation Episode was written to the audit plane — the same
+    # One LLM-free ($0) delegation Episode was written to the audit plane; the same
     # plane org/monitor.py reads, so the monitor sees the whole chain.
     from lhassa.org.monitor import gather_signals
 

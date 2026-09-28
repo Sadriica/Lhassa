@@ -1,14 +1,14 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Reports / projections routes — Phase-6 read-only dashboard surfaces.
+"""Reports / projections routes. Phase-6 read-only dashboard surfaces.
 
 Rich dashboard surfaces for "madurez": what the brain has been doing
-(``/api/reports`` — episodes summary) and where cost is trending
-(``/api/projections`` — a linear projection off the same ledger/ccusage as
+(``/api/reports``: episodes summary) and where cost is trending
+(``/api/projections``: a linear projection off the same ledger/ccusage as
 ``/api/llm/*``). Both read-only and instance-scoped.
 
 ``Config`` is read through the ``lhassa.config`` MODULE (``lhassa_config.Config``)
 rather than a bound name, so a config reload (some endpoint tests reload it) is
-picked up live — the same seam ``runtime_routes`` uses.
+picked up live; the same seam ``runtime_routes`` uses.
 
 Mounted by the integrator with ``app.include_router(reports_routes.router)``.
 """
@@ -107,7 +107,7 @@ async def search_episodes(
     q: str = Query(default=""),
     n: int = Query(default=20, ge=1, le=200),
 ):
-    """Full-text search over the episode log (Fase 1 "Recall") — $0, deterministic.
+    """Full-text search over the episode log (Fase 1 "Recall"); $0, deterministic.
 
     Thin wrapper over :func:`lhassa.core.db.search_episodes` (BM25-ranked FTS5,
     automation episodes demoted). An empty/blank ``q`` returns no results.
@@ -122,7 +122,7 @@ async def get_projections():
     """Cost projection from the gateway ledger (same data as /api/llm/*).
 
     Spend so far today + a simple linear projection to day/month end. Pricing is
-    NOT duplicated — the ledger already carries per-call ``cost_usd``. The
+    NOT duplicated; the ledger already carries per-call ``cost_usd``. The
     cross-harness ccusage read is included (defensive; never blocks)."""
     from lhassa.llm.ccusage import read_ccusage
     from lhassa.llm.gateway import gateway
@@ -162,6 +162,6 @@ async def get_projections():
             "projected_month_cost_usd": round(projected_today * 30, 6),
         },
         # Bounded budget on a dashboard auto-load: enough for the ~3-4s offline ccusage
-        # read (real data), but never the slow npx cold-start — degrade fast if absent.
+        # read (real data), but never the slow npx cold-start; degrade fast if absent.
         "ccusage": await read_ccusage(timeout=6.0, allow_npx=False),
     }

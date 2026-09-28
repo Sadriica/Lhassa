@@ -5,19 +5,19 @@ These extend the terminal surface beyond the read-only power subcommands
 (``tools``/``approvals``/``report``/...) with the things the owner actually
 *does* day to day:
 
-  - ``lhassa status`` (alias ``overview``) — the whole brain at a glance: brains,
+  - ``lhassa status`` (alias ``overview``); the whole brain at a glance: brains,
     skills, pending approvals, today's cost, health and recent activity. It renders
     the SAME aggregate the dashboard's ``/api/overview`` serves, built by calling
     the in-process :func:`lhassa.api.server.build_overview` directly (no HTTP).
-  - ``lhassa version`` — the package version + Python + a few key toggles.
-  - ``lhassa serve`` — run the dashboard + REST API (Ctrl-C stops it).
-  - ``lhassa beat`` — fire one heartbeat tick (what the systemd timer runs).
-  - ``lhassa watch`` — periodically re-render the latest activity (Ctrl-C stops).
+  - ``lhassa version``: the package version + Python + a few key toggles.
+  - ``lhassa serve``: run the dashboard + REST API (Ctrl-C stops it).
+  - ``lhassa beat``: fire one heartbeat tick (what the systemd timer runs).
+  - ``lhassa watch``: periodically re-render the latest activity (Ctrl-C stops).
 
 Everything is offline/LLM-free except ``serve`` (which boots the API process).
 Data goes to stdout (``--json`` where a command returns data); the themed chrome
 and diagnostics go to stderr, so piped output stays clean. They are attached to the
-main Typer ``app`` via :func:`register` — see ``lhassa.cli.app``.
+main Typer ``app`` via :func:`register`: see ``lhassa.cli.app``.
 """
 
 from __future__ import annotations
@@ -209,7 +209,7 @@ def version_cmd(
             f"[title]Version[/] [value]{info['version']}[/] [dim]· Python {info['python']}[/]\n"
             f"[dim]instance[/] [model]{escape(str(info['instance_id']))}[/]\n"
             f"[dim]toggles[/] {flags}\n"
-            # Appropriate Legal Notice — required by the AGPL-3.0 section 7(b)
+            # Appropriate Legal Notice; required by the AGPL-3.0 section 7(b)
             # term in LICENSE. Rendered from lhassa.legal, asserted by
             # tests/test_legal_notice.py; do not inline or remove it.
             f"[dim]{escape(_legal.NOTICE.splitlines()[0])}[/]\n"
@@ -259,7 +259,7 @@ def run_beat() -> dict:
 def beat_cmd(
     json_out: bool = typer.Option(False, "--json", help="Emit the beat summary as JSON."),
 ) -> None:
-    """Run one heartbeat tick — exactly what the systemd timer runs. Deterministic,
+    """Run one heartbeat tick; exactly what the systemd timer runs. Deterministic,
     $0; advances the brain one step and prints the summary."""
     summary = run_beat()
     if json_out:
@@ -314,7 +314,7 @@ def watch_cmd(
     interval: float = typer.Option(3.0, "--interval", help="Seconds between refreshes."),
     n: int = typer.Option(12, "--n", help="How many recent episodes to show."),
 ) -> None:
-    """Tail the brain's recent activity — a periodic re-render of the latest
+    """Tail the brain's recent activity; a periodic re-render of the latest
     episodes (Ctrl-C to stop). ``--once`` renders a single frame and exits."""
     out = _out()
     try:
@@ -333,12 +333,12 @@ def watch_cmd(
 # ── REPL helpers (used by app.py's _repl slash-commands) ──────────────────────────
 
 def overview_text() -> str:
-    """The overview summary as Rich markup — for the REPL's ``/status``."""
+    """The overview summary as Rich markup; for the REPL's ``/status``."""
     return render_overview(load_overview())
 
 
 def skills_text() -> str:
-    """A quick installed-skills list as Rich markup — for the REPL's ``/skills``."""
+    """A quick installed-skills list as Rich markup; for the REPL's ``/skills``."""
     from lhassa.config import Config
     from lhassa.skills.store import SkillStore
 
@@ -354,7 +354,7 @@ def skills_text() -> str:
 
 
 def tools_text() -> str:
-    """A quick self-written-tools list as Rich markup — for the REPL's ``/tools``."""
+    """A quick self-written-tools list as Rich markup; for the REPL's ``/tools``."""
     from lhassa.config import Config
     from lhassa.core import db
 
@@ -387,7 +387,7 @@ def code_cmd(
     """Run an AGENTIC coding task through a local AI CLI (claude / codex / opencode).
 
     Unlike ``lhassa "…"`` (a chat that just answers), this hands the task to the real
-    agentic CLI — it can read/edit files and run tools in the CURRENT directory — using
+    agentic CLI; it can read/edit files and run tools in the CURRENT directory; using
     the owner's subscription (no API key), and prints its output.
     """
     import os
@@ -424,7 +424,7 @@ def code_cmd(
     if streamed["any"]:
         sys.stdout.write("\n")  # tidy trailing newline after the live stream
         sys.stdout.flush()
-    elif result:  # nothing streamed (e.g. an error string came back) — show it
+    elif result:  # nothing streamed (e.g. an error string came back); show it
         _out().print(result)
 
 

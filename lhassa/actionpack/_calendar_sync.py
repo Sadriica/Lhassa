@@ -1,17 +1,17 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""``calendar_sync`` — the master-calendar reconcile action.
+"""``calendar_sync``: the master-calendar reconcile action.
 
-Runs :func:`lhassa.calendar.reconcile.find_unsynced` ($0, deterministic — a set
+Runs :func:`lhassa.calendar.reconcile.find_unsynced` ($0, deterministic; a set
 diff over cached feed reads, no model) and, for every candidate not already
-delivered (deduped via ``watch_state`` on the candidate's stable UID — see
+delivered (deduped via ``watch_state`` on the candidate's stable UID; see
 :mod:`lhassa.calendar.reconcile`'s ``to_ics``), writes a ``.ics``
 (:func:`lhassa.calendar.ics.write_ics`) and hands it to the owner via
-:func:`lhassa.org.deliver.deliver` — the ONE sender-of-record seam (never calls
+:func:`lhassa.org.deliver.deliver`: the ONE sender-of-record seam (never calls
 ``send_document`` directly; see ``tests/test_deliver.py``'s guard).
 
 Fits the actionpack calling convention: a plain ``(params) -> str`` callable,
 never raises, degrades to a clean "nothing to sync" when there's no primary
-calendar or no feeds configured at all — so it is safe to schedule
+calendar or no feeds configured at all; so it is safe to schedule
 unconditionally (see the ``maintenance`` seed).
 """
 
@@ -25,14 +25,14 @@ from lhassa.calendar.ics import write_ics as _write_ics
 from lhassa.config import Config
 from lhassa.core import db as _db
 
-# watch_state key prefix — one entry per delivered candidate UID, so a second
+# watch_state key prefix; one entry per delivered candidate UID, so a second
 # sync pass never re-delivers the same unsynced event (mirrors the
 # ``detect_repetition`` "seen" idiom in ``_selfimprove.py``).
 _DELIVERED_PREFIX = "calendar_sync:delivered:"
 
 
 def _stable_key(candidate: dict) -> str:
-    """A stable dedupe key for ``candidate`` — reuses the same UID
+    """A stable dedupe key for ``candidate``: reuses the same UID
     :func:`lhassa.calendar.reconcile.to_ics` embeds in the ``.ics`` file, so
     "delivered" and "the file's identity" never drift apart."""
     start = candidate.get("start")
@@ -42,7 +42,7 @@ def _stable_key(candidate: dict) -> str:
 
 
 def calendar_sync_possible(params: dict) -> str:
-    """Blocked while no calendar feed is configured — nothing to reconcile against."""
+    """Blocked while no calendar feed is configured; nothing to reconcile against."""
     try:
         config = (params or {}).get("config") or Config
         if _cal_store.get_primary(config):
@@ -57,9 +57,9 @@ async def calendar_sync(params: dict) -> str:
     tappable ``.ics``. Never raises.
 
     params:
-        hours        — the look-ahead window in hours (default 168 = 1 week).
-        instance_id  — defaults to Config.instance_id.
-        config       — an injectable Config (tests only); defaults to Config().
+        hours       ; the look-ahead window in hours (default 168 = 1 week).
+        instance_id ; defaults to Config.instance_id.
+        config      ; an injectable Config (tests only); defaults to Config().
     """
     try:
         params = params or {}
@@ -71,7 +71,7 @@ async def calendar_sync(params: dict) -> str:
 
         primary = _cal_store.get_primary(config)
         if not primary:
-            return "calendar_sync: no primary calendar configured — nothing to sync"
+            return "calendar_sync: no primary calendar configured; nothing to sync"
 
         candidates = await _reconcile.find_unsynced(instance_id, hours=hours, config=config)
         if not candidates:
@@ -98,8 +98,8 @@ async def calendar_sync(params: dict) -> str:
             ok, _artifact_id = await deliver(
                 document=ics_path,
                 caption=(
-                    f"📅 {candidate.get('summary') or 'Event'} "
-                    f"— on {candidate.get('source_calendar') or 'another calendar'}, "
+                    f"📅 {candidate.get('summary') or 'Event'}: "
+                    f"on {candidate.get('source_calendar') or 'another calendar'}, "
                     f"not on {primary}"
                 ),
                 kind="calendar_event",

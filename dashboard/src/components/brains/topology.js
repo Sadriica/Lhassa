@@ -1,5 +1,5 @@
 // ── tree helper ───────────────────────────────────────────────────────────────
-// Descendants of `rootId` (so the Move dropdown can exclude them — re-parenting a
+// Descendants of `rootId` (so the Move dropdown can exclude them; re-parenting a
 // node under its own descendant would create a cycle).
 export function descendantIds(rootId, byId) {
   const out = new Set()
@@ -17,7 +17,7 @@ export function descendantIds(rootId, byId) {
 function cloneNodes(topology) {
   return (topology?.nodes || []).map((n) => ({ ...n, children: [...(n.children || [])] }))
 }
-// is_leaf drives a small tag — recompute it so an optimistic frame stays coherent.
+// is_leaf drives a small tag; recompute it so an optimistic frame stays coherent.
 function withRecomputedLeaves(nodes) {
   return nodes.map((n) => ({ ...n, is_leaf: (n.children || []).length === 0 }))
 }

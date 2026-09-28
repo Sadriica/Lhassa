@@ -189,7 +189,7 @@ def test_overview_degraded_subsystem_is_reported_not_fatal(tmp_path, monkeypatch
     server, db, Config = _setup(tmp_path, monkeypatch)
     _seed(db, Config.instance_id)
 
-    # Force the health subsystem to blow up — it must be reported, not fatal.
+    # Force the health subsystem to blow up; it must be reported, not fatal.
     from lhassa.health import checks
 
     def _boom(*a, **k):

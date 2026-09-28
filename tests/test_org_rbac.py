@@ -1,4 +1,4 @@
-"""Tests for lhassa.org.rbac — the role→permission matrix (Fase 7)."""
+"""Tests for lhassa.org.rbac; the role→permission matrix (Fase 7)."""
 
 import pytest
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Lhassa — one-command bootstrap ("get-lhassa").
+# Lhassa; one-command bootstrap ("get-lhassa").
 #
 # The Hermes-style on-ramp: no Docker, no prior Python knowledge, no manual
 # cloning. Run this on a fresh Linux (or macOS) machine and it:
@@ -9,12 +9,12 @@
 #      leaving an already-installed uv untouched,
 #   3. clones the Lhassa repo (or updates it if it is already there),
 #   4. resolves the Python venv with `uv sync` (headless by default, no
-#      `voice` extra — pass --voice to include it),
+#      `voice` extra; pass --voice to include it),
 #   5. puts a `lhassa` command on PATH via a small shim in ~/.local/bin,
 #   6. prints the real next steps (.env, a model backend, `lhassa --help`,
-#      where the docs live) — nothing this script cannot actually deliver.
+#      where the docs live); nothing this script cannot actually deliver.
 #
-# This is NOT the always-on installer — that's scripts/install.sh (systemd
+# This is NOT the always-on installer; that's scripts/install.sh (systemd
 # user units + Docker + boot lingering). get-lhassa.sh only gets `lhassa`
 # itself onto the machine and runnable from the CLI. See doc/install.md for
 # the always-on path and doc/getting-started.md for the full walkthrough.
@@ -76,7 +76,7 @@ detect_platform() {
             ok "platform: Linux"
             ;;
         Darwin)
-            warn "platform: macOS — best-effort support (uv + git + the venv all"
+            warn "platform: macOS; best-effort support (uv + git + the venv all"
             warn "  work the same way there); the always-on systemd path in"
             warn "  scripts/install.sh is Linux-only and will not apply"
             ;;
@@ -86,7 +86,7 @@ detect_platform() {
             ;;
     esac
     if [ "$(id -u)" -eq 0 ]; then
-        warn "running as root — this script installs everything under your user"
+        warn "running as root; this script installs everything under your user"
         warn "  home (uv, the clone, the shim); running as an unprivileged user"
         warn "  is recommended but not required"
     fi
@@ -99,10 +99,10 @@ install_uv() {
         ok "uv already installed: $(uv --version 2>&1)"
         return
     fi
-    log "uv not found — installing via the official astral.sh installer"
-    command -v curl >/dev/null 2>&1 || die "curl not found — needed to install uv (install curl and re-run)"
+    log "uv not found; installing via the official astral.sh installer"
+    command -v curl >/dev/null 2>&1 || die "curl not found; needed to install uv (install curl and re-run)"
     if ! curl -LsSf https://astral.sh/uv/install.sh | sh; then
-        die "uv installer failed — see https://docs.astral.sh/uv/ for manual install steps"
+        die "uv installer failed; see https://docs.astral.sh/uv/ for manual install steps"
     fi
     # The official installer places uv in ~/.local/bin (or ~/.cargo/bin on
     # older versions) and updates shell rc files, but this process's PATH
@@ -111,26 +111,26 @@ install_uv() {
     if command -v uv >/dev/null 2>&1; then
         ok "uv installed: $(uv --version 2>&1)"
     else
-        die "uv installed but not found on PATH — open a new shell and re-run this script"
+        die "uv installed but not found on PATH; open a new shell and re-run this script"
     fi
 }
 
 # ── 3. Clone or update the repo ────────────────────────────────────────────────
 clone_or_update_repo() {
     log "Getting the Lhassa repo into $LHASSA_DIR"
-    command -v git >/dev/null 2>&1 || die "git not found — install git and re-run (Lhassa is distributed as a git repo, no git means no clone)"
+    command -v git >/dev/null 2>&1 || die "git not found; install git and re-run (Lhassa is distributed as a git repo, no git means no clone)"
 
     if [ -d "$LHASSA_DIR/.git" ]; then
-        ok "existing checkout found — updating"
+        ok "existing checkout found; updating"
         if ! git -C "$LHASSA_DIR" pull --ff-only; then
             warn "git pull --ff-only failed (local changes or diverged history?)"
-            warn "  leaving $LHASSA_DIR as is — resolve manually with:"
+            warn "  leaving $LHASSA_DIR as is; resolve manually with:"
             warn "    cd $LHASSA_DIR && git status"
             die "could not update the existing checkout"
         fi
         ok "updated: $(git -C "$LHASSA_DIR" rev-parse --short HEAD)"
     elif [ -d "$LHASSA_DIR" ] && [ -n "$(ls -A "$LHASSA_DIR" 2>/dev/null)" ]; then
-        die "$LHASSA_DIR exists, is non-empty, and is not a git checkout — remove it" \
+        die "$LHASSA_DIR exists, is non-empty, and is not a git checkout; remove it" \
             "or set LHASSA_DIR to a different path and re-run"
     else
         mkdir -p "$(dirname "$LHASSA_DIR")"
@@ -146,7 +146,7 @@ sync_project() {
         log "Resolving the Python venv (uv sync --extra voice)"
         ( cd "$LHASSA_DIR" && uv sync --extra voice ) || die "uv sync --extra voice failed"
     else
-        log "Resolving the Python venv (uv sync, headless — no voice extra)"
+        log "Resolving the Python venv (uv sync, headless; no voice extra)"
         ( cd "$LHASSA_DIR" && uv sync ) || die "uv sync failed"
     fi
     ok "venv ready at $LHASSA_DIR/.venv"
@@ -166,7 +166,7 @@ install_shim() {
 
     cat > "$shim" <<EOF
 #!/usr/bin/env bash
-# Auto-generated by get-lhassa.sh — do not edit by hand, re-run get-lhassa.sh instead.
+# Auto-generated by get-lhassa.sh; do not edit by hand, re-run get-lhassa.sh instead.
 exec "$LHASSA_DIR/.venv/bin/lhassa" "\$@"
 EOF
     chmod +x "$shim"
@@ -207,14 +207,14 @@ summary() {
     echo "     That is a separate, heavier step: bash $LHASSA_DIR/scripts/install.sh"
     printf '\n'
     if [ "$INCLUDE_VOICE" -eq 0 ]; then
-        warn "voice extra not installed (headless by default) — re-run with --voice" \
+        warn "voice extra not installed (headless by default); re-run with --voice" \
              "if you want the local mic/speaker pipeline (main.py)"
     fi
 }
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 main() {
-    log "get-lhassa — the one-command bootstrap"
+    log "get-lhassa; the one-command bootstrap"
     detect_platform
     install_uv
     clone_or_update_repo

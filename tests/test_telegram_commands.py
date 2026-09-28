@@ -111,7 +111,7 @@ def test_help_lists_registered_commands():
 
 
 def _no_llm(monkeypatch):
-    """Make any attempt to construct/call a provider blow up — proving /status is
+    """Make any attempt to construct/call a provider blow up; proving /status is
     LLM-free."""
     import lhassa.llm.provider as provider_mod
 
@@ -298,7 +298,7 @@ def test_approve_requires_id():
 
 
 def test_approve_mint_route_turns_on_the_route(tmp_path, monkeypatch):
-    """Approving a mint_route proposal from chat applies it — the approval->apply
+    """Approving a mint_route proposal from chat applies it; the approval->apply
     connection point (mirrors the code_run launch-on-approve pattern)."""
     from lhassa.notify import capabilities
 
@@ -517,7 +517,7 @@ def test_goal_no_verify_is_byte_identical_to_before(tmp_path, monkeypatch):
     assert asyncio.run(db.list_loops("inst_personal")) == []
 
 
-# ── /code — parks a code_run approval, never runs directly ───────────────────
+# ── /code; parks a code_run approval, never runs directly ───────────────────
 
 
 def test_code_requires_task():
@@ -917,7 +917,7 @@ def test_menu_entries_fallback_for_undescribed(monkeypatch):
         commands.COMMANDS._items.pop("zzmenutest", None)
 
 
-# ── /remind — deterministic timed reminders from plain words ──────────────────────
+# ── /remind; deterministic timed reminders from plain words ──────────────────────
 
 
 def test_parse_remind_handles_the_owner_phrases():
@@ -972,7 +972,7 @@ def test_remind_without_time_gives_usage_hint(tmp_path, monkeypatch):
     assert "what and when" in reply
 
 
-# ── /remind + /event — the additive .ics calendar delivery ────────────────────
+# ── /remind + /event; the additive .ics calendar delivery ────────────────────
 
 
 def _fake_deliver(calls):
@@ -1096,7 +1096,7 @@ def test_event_without_time_gives_usage_hint(tmp_path, monkeypatch):
     assert "what and when" in reply
 
 
-# ── /ai — search + model synthesis (a specific answer, not links) ──────────────────
+# ── /ai; search + model synthesis (a specific answer, not links) ──────────────────
 
 
 def test_ai_synthesizes_an_answer_from_search_results(tmp_path, monkeypatch):
@@ -1268,7 +1268,7 @@ def test_calendar_view_unparseable_when(tmp_path):
 
 def test_calendar_view_forces_a_deterministic_answer(tmp_path, monkeypatch):
     """``/calendar view friday`` answers even though a bare 'friday' has no
-    calendar keyword — the command itself is the intent signal."""
+    calendar keyword; the command itself is the intent signal."""
     cfg = _cal_cfg(tmp_path)
 
     from lhassa.calendar import feed as feed_mod
@@ -1293,7 +1293,7 @@ def test_calendars_shows_env_shortcut_masked(tmp_path):
     assert full_url not in reply  # the full secret url is never echoed back
 
 
-# ── /calendar primary + /calendar sync — master calendar reconcile ────────────
+# ── /calendar primary + /calendar sync; master calendar reconcile ────────────
 
 
 def test_calendar_primary_sets_master(tmp_path):

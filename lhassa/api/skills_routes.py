@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Skills routes — first-class SKILL.md CRUD + AI create/improve + recommend.
+"""Skills routes; first-class SKILL.md CRUD + AI create/improve + recommend.
 
 CRUD + AI create/improve + offline recommendations over the SkillStore
 (~/.lhassa/skills), plus which brains carry a skill. Defensive: bad body → 400,
@@ -33,7 +33,7 @@ async def list_skills_endpoint():
 
 @router.get("/api/skills/recommend")
 async def recommend_skills_endpoint(context: str = Query(default="")):
-    """Recommended skills — the offline catalog minus what's installed."""
+    """Recommended skills; the offline catalog minus what's installed."""
     from lhassa.skills.ai import recommend_skills
 
     return recommend_skills(context or None, config=Config)
@@ -165,6 +165,6 @@ async def install_skill_endpoint(name: str):
     if skill is None:
         raise HTTPException(
             status_code=404,
-            detail=f"{name!r} is not in the catalog — create it with AI or by hand.",
+            detail=f"{name!r} is not in the catalog; create it with AI or by hand.",
         )
     return {"ok": True, "skill": skill_to_dict(skill)}

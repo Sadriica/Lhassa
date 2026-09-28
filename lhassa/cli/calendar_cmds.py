@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""``lhassa calendar`` — manage named calendar feeds from the terminal.
+"""``lhassa calendar``: manage named calendar feeds from the terminal.
 
 Mirrors the ``lhassa flows``/``lhassa memory`` sub-app pattern: a small Typer
-group over :mod:`lhassa.calendar.store` (add/list/remove). No network, no LLM —
+group over :mod:`lhassa.calendar.store` (add/list/remove). No network, no LLM;
 just edits to the JSON store; the feed itself is fetched lazily by ``/today``.
 """
 
@@ -61,7 +61,7 @@ def add_cmd(
     ok = _cal_store.add_calendar(name, url, config=_config())
     if not ok:
         _err().print(
-            f"[error]✗[/] couldn't add {name!r} — check the url starts with "
+            f"[error]✗[/] couldn't add {name!r}; check the url starts with "
             "http:// or https://."
         )
         raise typer.Exit(code=1)

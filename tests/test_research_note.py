@@ -1,4 +1,4 @@
-"""draft_research_note — the evidence machine. Fully offline.
+"""draft_research_note; the evidence machine. Fully offline.
 
 Pins: the evidence pack carries per-datum provenance; a stubbed model draft is
 written with the pack as a verbatim appendix; no model → pack-only file (still

@@ -20,7 +20,7 @@ def _use_tmp(tmp_path, monkeypatch):
     """Point the topology file + brain DB at the temp dir.
 
     Patches the LIVE ``lhassa.config.Config`` class (resolved through the module at
-    call time) so the override survives ``test_config.py``'s ``importlib.reload`` —
+    call time) so the override survives ``test_config.py``'s ``importlib.reload``;
     ``org_cmds`` imports ``Config`` freshly on each invocation, so a stale top-level
     binding would point at the wrong class object after a reload.
     """

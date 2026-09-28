@@ -1,4 +1,4 @@
-"""Tests for lhassa.llm.ccusage — cross-harness accounting from the ccusage CLI.
+"""Tests for lhassa.llm.ccusage; cross-harness accounting from the ccusage CLI.
 
 Fully offline: ``parse_ccusage`` is exercised on inline sample fixtures, and
 ``read_ccusage`` is tested with the subprocess launcher monkeypatched to raise

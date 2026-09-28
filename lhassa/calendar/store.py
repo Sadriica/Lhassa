@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""A crash-safe JSON store for NAMED calendar feeds — ``~/.lhassa/calendars.json``.
+"""A crash-safe JSON store for NAMED calendar feeds; ``~/.lhassa/calendars.json``.
 
-An owner can have several calendars (institutional, personal, a project one) —
+An owner can have several calendars (institutional, personal, a project one);
 each subscribed with a *name* so ``/today`` can show which calendar an event
 came from (``📅 15:00 Algorithms 201 · Work``). This module is the small,
 self-contained store for that list, mirroring :mod:`lhassa.flows.store` /
@@ -13,12 +13,12 @@ an interrupted write can never corrupt the file.
 The pre-existing single-feed shortcut (``config.calendar_ics_url`` /
 ``LHASSA_CALENDAR_ICS_URL``) keeps working unchanged: :func:`all_feeds` merges it
 in as an implicit feed named ``"default"`` whenever it is set and its URL isn't
-already present under a stored name — so someone using only the env var sees no
+already present under a stored name; so someone using only the env var sees no
 difference, and someone who has ALSO added a store entry for that same URL never
 sees it duplicated.
 
 Leaf infrastructure: depends on nothing but the standard library (+ a lazy,
-local import of :mod:`lhassa.config`, itself leaf) — never imports a shell (see
+local import of :mod:`lhassa.config`, itself leaf); never imports a shell (see
 ``tests/test_architecture.py``'s ``calendar-infra-isolation`` rule). Every
 function here is defensive: a missing/corrupt file degrades to ``[]`` rather
 than raising.
@@ -105,7 +105,7 @@ def load_calendars(config=None) -> list[dict]:
 
 
 def list_calendars(config=None) -> list[dict]:
-    """Alias for :func:`load_calendars` — reads better at a call site that lists."""
+    """Alias for :func:`load_calendars`: reads better at a call site that lists."""
     return _read_list(config)
 
 
@@ -113,7 +113,7 @@ def add_calendar(name: str, url: str, config=None) -> bool:
     """Add (or replace, by name) a named calendar feed. ``False`` on any trouble.
 
     Validates ``name`` is non-empty and ``url`` starts with ``http`` (the only
-    sanity check this leaf layer owns — no network is touched). Dedupes by
+    sanity check this leaf layer owns; no network is touched). Dedupes by
     ``name``: adding an existing name REPLACES its url rather than duplicating.
     """
     name = (name or "").strip()
@@ -131,7 +131,7 @@ def add_calendar(name: str, url: str, config=None) -> bool:
             new_entry["primary"] = True
         items.append(new_entry)
         return _write_list(items, config)
-    except Exception as exc:  # pragma: no cover — defensive, mirrors flows.store
+    except Exception as exc:  # pragma: no cover; defensive, mirrors flows.store
         logger.warning("calendar: add_calendar({!r}) failed: {}", name, exc)
         return False
 
@@ -147,7 +147,7 @@ def remove_calendar(name: str, config=None) -> bool:
         if len(remaining) == len(items):
             return False
         return _write_list(remaining, config)
-    except Exception as exc:  # pragma: no cover — defensive
+    except Exception as exc:  # pragma: no cover; defensive
         logger.warning("calendar: remove_calendar({!r}) failed: {}", name, exc)
         return False
 
@@ -161,7 +161,7 @@ def all_feeds(config=None) -> list[dict]:
     """
     try:
         items = list(_read_list(config))
-    except Exception:  # pragma: no cover — defensive
+    except Exception:  # pragma: no cover; defensive
         items = []
 
     try:
@@ -188,7 +188,7 @@ def set_primary(name: str, config=None) -> bool:
     stored calendar so exactly one ``primary: true`` survives. ``False`` if
     ``name`` isn't a stored calendar, or on any I/O trouble. Never raises.
 
-    Only applies to STORED entries — the ``LHASSA_CALENDAR_ICS_URL`` shortcut
+    Only applies to STORED entries; the ``LHASSA_CALENDAR_ICS_URL`` shortcut
     (merged in by :func:`all_feeds` under the implicit ``"default"`` name) is
     never itself a candidate; an owner who wants that feed to be primary must
     ``/calendar add`` it under a real name first.
@@ -207,7 +207,7 @@ def set_primary(name: str, config=None) -> bool:
                 entry["primary"] = True
             out.append(entry)
         return _write_list(out, config)
-    except Exception as exc:  # pragma: no cover — defensive
+    except Exception as exc:  # pragma: no cover; defensive
         logger.warning("calendar: set_primary({!r}) failed: {}", name, exc)
         return False
 
@@ -218,7 +218,7 @@ def get_primary(config=None) -> "str | None":
         for it in _read_list(config):
             if it.get("primary"):
                 return it["name"]
-    except Exception as exc:  # pragma: no cover — defensive
+    except Exception as exc:  # pragma: no cover; defensive
         logger.warning("calendar: get_primary failed: {}", exc)
     return None
 

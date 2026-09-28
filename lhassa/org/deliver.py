@@ -1,15 +1,15 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Deliver seam — "Lhassa is the sender of record" (§org: the hierarchy is the
+"""Deliver seam; "Lhassa is the sender of record" (§org: the hierarchy is the
 philosophy, not a feature).
 
 :mod:`lhassa.org.delegate` is the DOWN-hop exemplar: work flows down the chart,
 one deterministic $0 Episode narrates the handoff, and a topology failure never
 blocks the work. This module is the mirror UP-hop: a leaf brain (a department)
-produces a work product — a tailored CV (``.tex`` + compiled ``.pdf``), a report,
-any file the owner ends up receiving — and that artifact travels back UP the
+produces a work product; a tailored CV (``.tex`` + compiled ``.pdf``), a report,
+any file the owner ends up receiving; and that artifact travels back UP the
 SAME command chain to the permanent root administrator (Lhassa), which is the
-one and only sender of record. Every brain on the chain — the department, any
-intermediate coordinator, and the root — logs its OWN hop, so the full audit
+one and only sender of record. Every brain on the chain; the department, any
+intermediate coordinator, and the root; logs its OWN hop, so the full audit
 trail (department → … → Lhassa → owner) is reconstructable from the episode log
 alone, exactly like the down direction.
 
@@ -20,8 +20,8 @@ Two design rules mirror :mod:`lhassa.org.delegate` exactly:
     :func:`~lhassa.org.delegate.command_path` the down-hop uses; no model call.
   * **Audit is best-effort, delivery is not.** Registering the artifact and
     logging the per-brain chain are wrapped so ANY failure (a broken topology, a
-    DB error) degrades gracefully — a broken/unknown department collapses to a
-    single root-attributed hop — but the actual SEND always happens. The only
+    DB error) degrades gracefully; a broken/unknown department collapses to a
+    single root-attributed hop; but the actual SEND always happens. The only
     thing that can make :func:`deliver` report a failure is the send itself.
 
 :func:`deliver` never raises.
@@ -39,7 +39,7 @@ from lhassa.core import db
 from lhassa.core.episode import Episode
 from lhassa.org import delegate
 
-# The trigger label for a delivery-chain episode — greppable alongside
+# The trigger label for a delivery-chain episode; greppable alongside
 # ``org-delegate`` on the same audit plane the monitor reads.
 DESPERTAR_DELIVER = "org-deliver"
 
@@ -62,7 +62,7 @@ def _metadata_summary(metadata: Optional[dict]) -> str:
 
 
 def _send_name(document: Optional[Union[str, Path]], paths: list) -> str:
-    """The file name that best represents "what was delivered" — a compiled
+    """The file name that best represents "what was delivered": a compiled
     ``.pdf`` wins over the ``.tex`` source; falls back to the document itself,
     else ``"message"`` for a text-only delivery."""
     for p in paths or []:
@@ -86,7 +86,7 @@ def _channel_for(document: Optional[Union[str, Path]], config: Config) -> str:
     return "+".join(names) if names else "log"
 
 
-# ── artifact registration (best-effort — audit, never blocks the send) ───────
+# ── artifact registration (best-effort; audit, never blocks the send) ───────
 
 
 async def _register_artifact(
@@ -110,7 +110,7 @@ async def _register_artifact(
             metadata=metadata,
             origin_department=origin_department,
         )
-    except Exception as exc:  # audit is best-effort — never blocks the send
+    except Exception as exc:  # audit is best-effort; never blocks the send
         logger.debug("org-deliver: artifact registration failed: {}", exc)
         return None
 
@@ -189,7 +189,7 @@ async def _log_chain(
             ep.dominio = brain_id
             ep.finish(decision=decision, accion=accion, resultado=resultado, costo_usd=0.0)
             await ep.append()
-        except Exception as exc:  # audit is best-effort — never blocks the send
+        except Exception as exc:  # audit is best-effort; never blocks the send
             logger.debug("org-deliver: hop episode for {} failed: {}", brain_id, exc)
 
 
@@ -208,7 +208,7 @@ async def _log_final(
             costo_usd=0.0,
         )
         await ep.append()
-    except Exception as exc:  # audit is best-effort — never blocks the send
+    except Exception as exc:  # audit is best-effort; never blocks the send
         logger.debug("org-deliver: final episode failed: {}", exc)
 
 
@@ -230,11 +230,11 @@ async def deliver(
 
     Lhassa is the sender of record: whatever a department produces travels back
     up the SAME command chain :mod:`lhassa.org.delegate` used to hand work down,
-    and every brain on that chain — the department, any intermediate
-    coordinator, and the root (Lhassa) — logs its own ``org-deliver`` Episode
+    and every brain on that chain; the department, any intermediate
+    coordinator, and the root (Lhassa); logs its own ``org-deliver`` Episode
     narrating its hop, before the root actually sends. Order of operations:
 
-      1. **Register the artifact** (best-effort) when ``document`` is given —
+      1. **Register the artifact** (best-effort) when ``document`` is given;
          ``paths`` defaults to ``[document]`` when not supplied explicitly (e.g.
          a CV's ``.tex`` source travelling WITH its compiled ``.pdf``). Failure
          here is logged and swallowed; the rest of the flow proceeds with
@@ -245,21 +245,21 @@ async def deliver(
          coordinator narrates the same forward; the root's hop narrates
          receiving it and its INTENT to deliver. A topology failure (or an
          empty/unknown ``origin_department``) degrades to a single
-         root-attributed hop — it never blocks the send.
+         root-attributed hop; it never blocks the send.
       3. **Send**: a ``document`` goes out via
          :func:`lhassa.notify.telegram_api.send_document`, its ``caption``
          routed through :func:`lhassa.notify.voice.revoice` first (the
-         document path used to bypass the voice layer entirely — closed); a
+         document path used to bypass the voice layer entirely; closed); a
          plain ``text`` (no document) fans out via
          :func:`lhassa.notify.dispatch.notify`, which already revoices.  Both
-         are the existing config-gated seams — an unconfigured channel simply
+         are the existing config-gated seams; an unconfigured channel simply
          doesn't deliver.
-      4. **Final root episode** recording the actual send OUTCOME — honest on
+      4. **Final root episode** recording the actual send OUTCOME; honest on
          failure (``"...({channel}, failed)"``), never spun as a success.
 
     THE GOLDEN RULE: audit is best-effort, delivery is not. Any failure in step
     1 or 2 (the artifact write, the topology walk, an episode write) is logged
-    and swallowed — the send in step 3 still happens. :func:`deliver` itself
+    and swallowed; the send in step 3 still happens. :func:`deliver` itself
     NEVER raises; it returns ``(False, artifact_id)`` only when the SEND
     (step 3) failed, and ``(True, artifact_id)`` otherwise. ``artifact_id`` is
     ``None`` whenever no document was given, or artifact registration failed.
@@ -303,7 +303,7 @@ async def deliver(
             from lhassa.notify import voice as _voice
 
             # Close the voice bypass: a document's caption used to reach the
-            # owner raw, skipping revoice entirely — the ONE surface where
+            # owner raw, skipping revoice entirely; the ONE surface where
             # machine text could still get through. Route it through the same
             # $0 voice layer text-only deliveries already get.
             voice_kind = kind if kind in _voice.KINDS else None

@@ -42,7 +42,7 @@ from lhassa.voice.mute_strategy import WAKE_PHRASES_CORE, WAKE_PHRASES_ES, WakeW
 
 
 class WakeDebug(FrameProcessor):
-    """Prints live STT transcriptions to the terminal — useful during development."""
+    """Prints live STT transcriptions to the terminal; useful during development."""
 
     async def process_frame(self, frame: Frame, direction: FrameDirection):
         await super().process_frame(frame, direction)
@@ -112,7 +112,7 @@ async def _play_greeting(task, lang: str = "en"):
     try:
         await task.queue_frame(TTSSpeakFrame(text=greeting))
     except Exception:
-        pass  # Pipeline not ready yet — skip greeting silently
+        pass  # Pipeline not ready yet; skip greeting silently
 
 
 def find_device(name: str) -> int:
@@ -136,7 +136,7 @@ async def run():
     if memory_context:
         logger.info("Memory loaded.")
     else:
-        logger.info("No prior memory — first session.")
+        logger.info("No prior memory; first session.")
 
     pw = None
     if config.mic_name:
@@ -144,7 +144,7 @@ async def run():
             pw = find_device(config.mic_name)
             logger.info(f"Using audio device [{pw}] '{config.mic_name}'")
         except RuntimeError:
-            logger.warning(f"Audio device '{config.mic_name}' not found — using system default")
+            logger.warning(f"Audio device '{config.mic_name}' not found; using system default")
 
     transport = LocalAudioTransport(
         LocalAudioTransportParams(
@@ -188,7 +188,7 @@ async def run():
         tools=TOOLS,
     )
 
-    # Wake phrases — language-aware; Spanish variants only added for es-* languages
+    # Wake phrases; language-aware; Spanish variants only added for es-* languages
     lang_extras = WAKE_PHRASES_ES if config.stt_language.lower().startswith("es") else set()
     wake_phrases = sorted(WAKE_PHRASES_CORE | lang_extras)
 
@@ -207,7 +207,7 @@ async def run():
     async def on_sleep(strategy):
         await state.set_voice_active(False)
         asyncio.create_task(play_beep(freq=440, duration_ms=80))
-        print("\033[2m[Lhassa sleeping — say 'Lhassa' to wake]\033[0m", flush=True)
+        print("\033[2m[Lhassa sleeping; say 'Lhassa' to wake]\033[0m", flush=True)
 
     aggregators = LLMContextAggregatorPair(
         context,
@@ -245,9 +245,9 @@ async def run():
     await state.set_voice_active(False)
 
     logger.info("Lhassa ready. Say 'Lhassa' to activate.\n")
-    print("\033[2m[Lhassa sleeping — say 'Lhassa' to wake]\033[0m\n")
+    print("\033[2m[Lhassa sleeping; say 'Lhassa' to wake]\033[0m\n")
 
-    # Startup greeting — injected after pipeline is running
+    # Startup greeting; injected after pipeline is running
     asyncio.create_task(_play_greeting(task, lang=config.stt_language))
 
     runner = PipelineRunner()

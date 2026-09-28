@@ -1,4 +1,4 @@
-"""ICS feed reader — parsing, timezones, RRULE, caching. Offline; fake ICS only."""
+"""ICS feed reader; parsing, timezones, RRULE, caching. Offline; fake ICS only."""
 
 from datetime import datetime, timedelta, timezone
 
@@ -54,7 +54,7 @@ def test_weekly_rrule_expands_in_window():
     we = datetime(2026, 7, 20, tzinfo=timezone.utc)
     out = feed.parse_events(_cal(ev), window_start=ws, window_end=we)
     days = sorted(e["start"].astimezone(timezone(timedelta(hours=-5))).strftime("%a %d") for e in out)
-    # Tue 07, Thu 09, Tue 14, Thu 16 — but COUNT=4 caps it at those four
+    # Tue 07, Thu 09, Tue 14, Thu 16; but COUNT=4 caps it at those four
     assert len(out) == 4
     assert "Tue 07" in days and "Thu 09" in days and "Tue 14" in days
 
@@ -213,7 +213,7 @@ def _ev(summary: str, start: str) -> str:
 
 
 def _soon(hours_ahead: int) -> str:
-    """A UTC ``YYYYMMDDTHHMMSS`` stamp ``hours_ahead`` from real now — keeps the
+    """A UTC ``YYYYMMDDTHHMMSS`` stamp ``hours_ahead`` from real now; keeps the
     ``upcoming()`` window tests (which fetch [now, now+hours]) from rotting as
     the calendar's hardcoded dates slide into the past."""
     return (datetime.now(timezone.utc) + timedelta(hours=hours_ahead)).strftime(
@@ -293,7 +293,7 @@ async def test_upcoming_no_feeds_configured_is_empty(tmp_path):
 @pytest.mark.asyncio
 async def test_upcoming_per_feed_caches_dont_collide(tmp_path, monkeypatch):
     """Two feeds fetched for real (through fetch_feed, not stubbed) must write to
-    DIFFERENT cache files — proving the hash-keyed cache path actually varies."""
+    DIFFERENT cache files; proving the hash-keyed cache path actually varies."""
     from lhassa.calendar import paths as _paths
 
     monkeypatch.setattr(_paths, "calendar_dir", lambda: tmp_path)

@@ -1,15 +1,15 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Quarantine-room routes — the self-written tools and their gate state (§2.9-(2)).
+"""Quarantine-room routes; the self-written tools and their gate state (§2.9-(2)).
 
 GET lists the tools table (the quarantine-room data: name/domain/estado/metrics/
-usage). POST graduates a candidate: "aprobación = merge" — it routes a
+usage). POST graduates a candidate: "aprobación = merge": it routes a
 tool_graduation approval through the approval queue and merges the candidate
 branch into main via the local-git versioning layer. Offline; no GitHub token.
 
 Graduation is gated: a tool may only be graduated after it has PASSED the four
-gates (:mod:`lhassa.agents.gates` — segura/correcta/mejor recorded via
+gates (:mod:`lhassa.agents.gates`: segura/correcta/mejor recorded via
 ``estado="graduada"`` on the tools row). This endpoint refuses (409) a tool whose
-row is missing or not yet ``graduada`` — it must never be the thing that grants
+row is missing or not yet ``graduada``: it must never be the thing that grants
 trust; :func:`lhassa.agents.gates.promote` (or :func:`lhassa.agents.author.propose_tool`)
 is. This is what stood BETWEEN "approve" and "merge" being the same click as
 "skip the gates entirely".
@@ -52,11 +52,11 @@ async def graduate_tool(nombre: str, request: Request, payload: dict | None = No
 
     Body (all optional): ``{branch?, approval_id?, by_actor?}``. REFUSES (409) a
     tool that has not already passed the four gates (its ``tools`` row must show
-    ``estado="graduada"`` — see :func:`lhassa.agents.gates.promote`); this
+    ``estado="graduada"``: see :func:`lhassa.agents.gates.promote`); this
     endpoint is the human-approval + merge step, never a way to skip the gates.
     On approve, routes a ``tool_graduation`` approval through the approval queue
     and merges the candidate branch into main. Returns the merge commit (empty
-    when git is unavailable — the approval still resolves).
+    when git is unavailable; the approval still resolves).
     """
     from lhassa.agents import versioning
 

@@ -7,7 +7,7 @@ import { loadOrgLayout, saveOrgLayout } from './layout'
 // that live-move a box + its member brains together and commit the absolute offset on
 // drop, the persistence, and the Reset control. `refitTick` is bumped by Reset so the
 // composition can re-fit the graph after offsets clear (a manual drag deliberately
-// does NOT re-fit — it would fight the drag).
+// does NOT re-fit; it would fight the drag).
 export function useDeptDrag({ groupNodes, layout, nodeDept, setRfNodes }) {
   const [orgLayout, setOrgLayout] = useState(loadOrgLayout)
   const deptLayouts = useMemo(() => orgLayout.departments || {}, [orgLayout.departments])

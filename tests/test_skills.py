@@ -2,7 +2,7 @@
 
 Offline + hermetic: the skill store and org topology are redirected to a tmp dir
 via a lightweight stub config (``types.SimpleNamespace``), and the AI ops are
-driven through an injected fake provider — no real model is ever called.
+driven through an injected fake provider; no real model is ever called.
 """
 
 from __future__ import annotations
@@ -66,7 +66,7 @@ def _seed_topology(cfg):
 
 
 class FakeProvider:
-    """A ModelProvider whose ``complete`` returns a fixed text — no network."""
+    """A ModelProvider whose ``complete`` returns a fixed text; no network."""
 
     name = "fake"
     zero_retention = True
@@ -84,7 +84,7 @@ class FakeProvider:
 
 
 class BrokenProvider:
-    """A ModelProvider that always fails — exercises the degrade path."""
+    """A ModelProvider that always fails; exercises the degrade path."""
 
     name = "broken"
     zero_retention = False
@@ -142,7 +142,7 @@ def test_json_form_round_trips():
 
 
 def test_parse_malformed_never_raises():
-    # Broken YAML frontmatter — must degrade with an error, not raise.
+    # Broken YAML frontmatter; must degrade with an error, not raise.
     bad = "---\nname: x\n  description: : [unclosed\n---\n\nbody"
     skill = parse_skill_md(bad)
     assert isinstance(skill, Skill)
@@ -405,7 +405,7 @@ async def test_create_skill_with_ai_degrades(tmp_path):
     skill = await ai_mod.create_skill_with_ai(
         "a budget helper", config=cfg, provider=BrokenProvider()
     )
-    # Degrades to a usable template carrying a clear error — never raises.
+    # Degrades to a usable template carrying a clear error; never raises.
     assert skill.error is not None and skill.error.startswith("AI unavailable")
     assert "When to use" in skill.instructions
 

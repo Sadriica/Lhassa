@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """
-Web search — tries Brave Search API first, falls back to DuckDuckGo.
+Web search; tries Brave Search API first, falls back to DuckDuckGo.
 
 Brave Search is more stable (official REST API), DuckDuckGo is the fallback
 when no BRAVE_API_KEY is configured or when Brave fails.
@@ -15,7 +15,7 @@ import httpx
 
 from lhassa.config import Config
 
-# Cached client — reuses TCP connections across calls
+# Cached client; reuses TCP connections across calls
 _http: httpx.AsyncClient | None = None
 
 
@@ -81,7 +81,7 @@ async def news_search(
     """Search the NEWS vertical. Returns ``{title, body, url, source, date}`` dicts.
 
     A general engine answers "noticias de hoy" because it routes the intent to
-    its news index — the text endpoint alone returns junk for that phrase. This
+    its news index; the text endpoint alone returns junk for that phrase. This
     is that routing seam: DDG's news vertical via ``ddgs`` (a Brave news backend
     can slot in here later the same way :func:`web_search` prefers Brave).
     """

@@ -1,12 +1,12 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """
-The host platform layer — where Lhassa asks the machine about itself.
+The host platform layer; where Lhassa asks the machine about itself.
 
 Lhassa reads a handful of facts from the operating system: how long it has been
 up, whether memory is under pressure, whether any managed service failed, how to
 pop a desktop toast, and which sandbox is available. Each of those is a
 different command on a different platform, and until now each call site answered
-the question its own way — some guarded with ``shutil.which``, some with a bare
+the question its own way; some guarded with ``shutil.which``, some with a bare
 ``open("/proc/...")``, some with a module-level ``platform.system()`` branch.
 
 This module is the one place that knows. It is **leaf infra**: it imports the
@@ -18,7 +18,7 @@ Two rules it keeps, both inherited rather than invented:
 **Pure parser + injected input.** Every reading is split into a pure function
 over text (``parse_proc_uptime``, ``parse_vm_stat``) and a thin collector that
 supplies that text. The parsers are testable on every platform with no
-patching — the pattern ``health/checks.py`` already uses for ``meminfo_path``.
+patching; the pattern ``health/checks.py`` already uses for ``meminfo_path``.
 Tests parametrise by passing a different platform or a different reader, never
 by monkeypatching ``os.name``.
 
@@ -32,7 +32,7 @@ it stays where it is, and lives *inside* the default implementation here.
 **Honesty over completeness.** A reading that cannot be taken returns ``None``,
 never a plausible zero. This is deliberate: these values feed the judgment path
 through ``health/`` and ``system_snapshot``, so a wrong number is far worse than
-a missing one — a missing reading is reported as unavailable, a wrong one
+a missing one; a missing reading is reported as unavailable, a wrong one
 silently corrupts a decision.
 """
 
@@ -105,7 +105,7 @@ class Platform(Protocol):
     def sandbox_prefix(self, workdir: str) -> Optional[tuple[list[str], str]]:
         """``(argv_prefix, level)`` for the strongest available sandbox.
 
-        ``None`` means this platform offers none — the caller must fail closed,
+        ``None`` means this platform offers none; the caller must fail closed,
         never fall back to running the payload unconfined.
         """
 
@@ -151,7 +151,7 @@ def parse_vm_stat(text: str, *, page_size: int = 4096) -> Optional[float]:
     """Percent of physical pages NOT free, from ``vm_stat`` output.
 
     Counts free + speculative as available and everything else (active, wired,
-    compressed) as in use. This is a coarse figure by nature — see
+    compressed) as in use. This is a coarse figure by nature; see
     :class:`MemoryReading` on why it is reported as not comparable to Linux's.
     Returns ``None`` when the output cannot be parsed.
     """
@@ -194,7 +194,7 @@ def _run(argv: list[str]) -> Optional[str]:
 
 
 def _sandbox_works(prefix: list[str], workdir: str) -> bool:
-    """Smoke-test a sandbox prefix — a tool on PATH may still be unusable."""
+    """Smoke-test a sandbox prefix; a tool on PATH may still be unusable."""
     try:
         proc = subprocess.run(
             [*prefix, "true"], cwd=workdir, capture_output=True, timeout=_TIMEOUT
@@ -209,7 +209,7 @@ def _sandbox_works(prefix: list[str], workdir: str) -> bool:
 
 @register_platform("linux")
 class LinuxPlatform:
-    """Tier 1 — the platform Lhassa is developed and deployed on."""
+    """Tier 1; the platform Lhassa is developed and deployed on."""
 
     name = "linux"
 
@@ -264,7 +264,7 @@ class LinuxPlatform:
 
 @register_platform("darwin")
 class DarwinPlatform:
-    """Tier 2 — Apple Silicon. Best-effort on anything touching hardware."""
+    """Tier 2. Apple Silicon. Best-effort on anything touching hardware."""
 
     name = "darwin"
 
@@ -338,7 +338,7 @@ class DarwinPlatform:
         """macOS ``sandbox-exec`` with a deny-by-default profile.
 
         The profile denies everything, then allows only process execution and
-        reads — notably NOT ``network*``, which is the property the Linux
+        reads; notably NOT ``network*``, which is the property the Linux
         sandboxes are chosen for. ``sandbox-exec`` is formally deprecated by
         Apple but present on every current macOS and is the only sandbox
         available without shipping a signed helper; when it is missing this
@@ -380,7 +380,7 @@ def current_platform_name(system: Optional[str] = None) -> str:
 def get_platform(name: Optional[str] = None) -> Optional[Platform]:
     """The registered implementation for ``name`` (default: this host).
 
-    Returns ``None`` for an unregistered platform — the caller then degrades on
+    Returns ``None`` for an unregistered platform; the caller then degrades on
     its own terms rather than receiving a silently wrong stub.
     """
     impl = PLATFORMS.get_or_none(name or current_platform_name())

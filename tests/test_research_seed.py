@@ -1,4 +1,4 @@
-"""The research seed + the /idea door — the geshe's aid department. Offline."""
+"""The research seed + the /idea door; the geshe's aid department. Offline."""
 
 import asyncio
 
@@ -190,11 +190,11 @@ def test_idea_persists_versioned_custody_and_uses_durable_idempotent_run(
                     "kind": "output",
                     "payload": (
                         "## The idea in one sentence\nA claim [S1].\n"
-                        "## Mechanics — down to the base\nM [S1].\n"
+                        "## Mechanics - down to the base\nM [S1].\n"
                         "## Evidence the authors present\n- E [S1].\n"
                         "## Sources\n- S1: https://example.test\n"
                         "## Mapping to Lhassa\nUnknown.\n"
-                        "## Not yet verified by us — and the experiment that would\n"
+                        "## Not yet verified by us - and the experiment that would\n"
                         "Baseline: x\nInstrument: bench\nMetric: pass\nStop rule: 5\n"
                         "## Open questions\n- Q"
                     ),

@@ -1,5 +1,5 @@
 """
-Tests for lhassa.memory.chica — the persistent working-memory cache.
+Tests for lhassa.memory.chica; the persistent working-memory cache.
 
 Phase 1 is mechanical: LRU consolidation by threshold (NO tokens, NO LLM, NO
 semantics) + regeneration from the grande. Offline; tmp paths via monkeypatch.
@@ -149,7 +149,7 @@ async def test_regenerate_rebuilds_pinned_and_directivas(tmp_path, monkeypatch):
     await chica.clear("inst_personal")
     assert await chica.size("inst_personal") == 0
 
-    # Regenerate from the grande — identity is back.
+    # Regenerate from the grande; identity is back.
     n = await chica.regenerate("inst_personal", token_budget=10_000)
     assert n > 0
     items = await chica.items("inst_personal")

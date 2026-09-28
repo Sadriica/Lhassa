@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Local-git tool versioning — "versionado/rollback gratis" (§2.8).
+"""Local-git tool versioning; "versionado/rollback gratis" (§2.8).
 
 The brief gets versioning and rollback for free by treating each self-written tool
 as a repo/PR: a candidate lives on its own branch, **aprobación = merge de PR**, and
-rollback is a git revert. We implement the *local-first* half of that here — a plain
-git repo at ``config.tools_repo_dir`` — so the whole pipeline is offline-testable and
+rollback is a git revert. We implement the *local-first* half of that here; a plain
+git repo at ``config.tools_repo_dir``: so the whole pipeline is offline-testable and
 needs no GitHub token. The remote half (push the branch + open a real PR) is a
 clearly-marked, token-gated hook that is **never** reached without ``github_token``.
 
@@ -15,7 +15,7 @@ Lifecycle of one tool, mirroring the four gates' graduation:
                                      **merge** the branch into ``main`` (= the merge)
     rollback(name, to=…)           → ``git revert`` to undo a graduated tool
 
-Every git call goes through :func:`_git`, which **never raises** — a single failed
+Every git call goes through :func:`_git`, which **never raises**: a single failed
 command is logged and surfaced as a non-zero result, so one bad invocation can't take
 down the brain. When git itself is missing, the module degrades gracefully (each
 entry point returns an empty/sentinel value instead of throwing).
@@ -59,7 +59,7 @@ def _repo_dir() -> Path:
 
 
 def _run_git(args: list[str], cwd: Path) -> GitResult:
-    """Run one git command in ``cwd``. Never raises — failures come back as a result."""
+    """Run one git command in ``cwd``. Never raises; failures come back as a result."""
     if not git_available():
         return GitResult(False, 127, "", "git not found on PATH")
     import subprocess
@@ -137,7 +137,7 @@ async def create_candidate(
 
     GitHub-remote hook (token-gated, NOT reached offline): when ``Config.github_token``
     is set this is where we would ALSO push ``branch`` and open a real PR via
-    :mod:`lhassa.tools.github` — the "herramienta auto-creada como repo/PR" path.
+    :mod:`lhassa.tools.github`: the "herramienta auto-creada como repo/PR" path.
     """
     repo = await init()
     if repo is None or not git_available():
@@ -176,7 +176,7 @@ async def approve(
 
     The decision is routed through the approval queue (:mod:`lhassa.security.approval`):
     a ``tipo="tool_graduation"`` approval is created (unless ``approval_id`` names an
-    existing pending one) and resolved as approved — that resolution IS the merge
+    existing pending one) and resolved as approved; that resolution IS the merge
     trigger. On approve we ``git merge --no-ff`` the candidate branch into ``main`` and
     return the merge commit sha (``""`` if git is unavailable or the merge failed).
 
@@ -221,9 +221,9 @@ async def approve(
 async def rollback(name: str, *, to: Optional[str] = None) -> None:
     """Undo a graduated tool with ``git revert`` ("rollback con git").
 
-    ``to`` is the commit to revert (default ``HEAD`` — the most recent graduation
+    ``to`` is the commit to revert (default ``HEAD``: the most recent graduation
     merge). Merge commits need ``-m 1``; if that does not apply (a plain commit) we
-    fall back to a straight revert. Never raises — a failed revert is logged only.
+    fall back to a straight revert. Never raises; a failed revert is logged only.
     """
     repo = await init()
     if repo is None or not git_available():
@@ -240,7 +240,7 @@ async def rollback(name: str, *, to: Optional[str] = None) -> None:
 
 # ── GitHub-remote hooks (token-gated; NEVER called without a token) ───────────
 # These are the single plug-in points for the future remote path. They are no-ops
-# unless ``Config.github_token`` is set, and even then they only LOG today — wiring
+# unless ``Config.github_token`` is set, and even then they only LOG today; wiring
 # them to real network calls in lhassa.tools.github is deliberately deferred so this
 # module stays offline and never requires a token.
 
@@ -248,13 +248,13 @@ def _maybe_open_remote_pr(name: str, branch: str) -> None:
     if not _config.Config.github_token:
         return
     # FUTURE (token present): push ``branch`` and open a PR via lhassa.tools.github
-    # — "herramienta auto-creada como repo/PR". Not wired yet (offline-first).
+    #; "herramienta auto-creada como repo/PR". Not wired yet (offline-first).
     logger.info("github_token set: remote PR for tool {} (branch {}) deferred", name, branch)
 
 
 def _maybe_merge_remote_pr(name: str, branch: str) -> None:
     if not _config.Config.github_token:
         return
-    # FUTURE (token present): merge the open PR via lhassa.tools.github — the remote
+    # FUTURE (token present): merge the open PR via lhassa.tools.github; the remote
     # face of "aprobación = merge". Not wired yet (offline-first).
     logger.info("github_token set: remote merge for tool {} (branch {}) deferred", name, branch)

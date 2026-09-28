@@ -18,7 +18,7 @@ from lhassa.state import state
 
 
 class _FakeAgent:
-    """Stand-in for LocalCliAgent — never spawns a subprocess."""
+    """Stand-in for LocalCliAgent; never spawns a subprocess."""
 
     def __init__(self, cli: str = "claude"):
         self.cli = cli
@@ -119,7 +119,7 @@ def test_runs_endpoint_shape(client, monkeypatch):
 # ── stop endpoint ───────────────────────────────────────────────────────────────
 
 def test_stop_unknown_run_is_idempotent_noop(client):
-    """Stopping a run that was never registered is a safe 200 no-op — never a 500."""
+    """Stopping a run that was never registered is a safe 200 no-op; never a 500."""
     resp = client.post("/api/code/does-not-exist/stop")
     assert resp.status_code == 200
     body = resp.json()

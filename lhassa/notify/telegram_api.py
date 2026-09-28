@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Telegram Bot API file helpers — send a local file, fetch an uploaded one.
+"""Telegram Bot API file helpers; send a local file, fetch an uploaded one.
 
 The text notifier (:mod:`lhassa.notify.telegram`) only sends ``sendMessage``. The
 Telegram → CV work-flow bridge additionally needs to (a) DOWNLOAD an uploaded CV
@@ -8,12 +8,12 @@ here so the text path stays untouched.
 
 Same discipline as the rest of :mod:`lhassa.notify`: **credential-gated** (no token
 or chat id → no network, returns falsy) and **fully defensive** (any HTTP/transport
-error is logged and yields a falsy result — these helpers never raise into the
+error is logged and yields a falsy result; these helpers never raise into the
 poller).
 
-  * :func:`get_file`       — ``getFile`` → ``file_path`` → GET the CDN URL → ``bytes``.
-  * :func:`send_document`  — multipart ``sendDocument`` of a local path to the owner chat.
-  * :func:`set_my_commands`— ``setMyCommands`` (register the bot's command menu).
+  * :func:`get_file`      : ``getFile`` → ``file_path`` → GET the CDN URL → ``bytes``.
+  * :func:`send_document` : multipart ``sendDocument`` of a local path to the owner chat.
+  * :func:`set_my_commands`: ``setMyCommands`` (register the bot's command menu).
 """
 
 from __future__ import annotations
@@ -102,7 +102,7 @@ async def get_file(file_id: str, *, config=None) -> Optional[bytes]:
                 logger.warning(f"Telegram file download failed: HTTP {dl.status_code}")
                 return None
             return dl.content
-    except Exception as exc:  # transport/JSON error — never propagate
+    except Exception as exc:  # transport/JSON error; never propagate
         logger.warning(f"Telegram getFile failed (transport): {exc}")
         return None
 
@@ -142,7 +142,7 @@ async def send_document(path, *, caption: str = "", config=None) -> bool:
     try:
         async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
             response = await client.post(url, data=payload, files=files)
-    except Exception as exc:  # transport error — never propagate
+    except Exception as exc:  # transport error; never propagate
         logger.warning(f"Telegram sendDocument failed (transport): {exc}")
         return False
 
@@ -212,7 +212,7 @@ async def set_my_commands(commands, *, config=None) -> bool:
             response = await client.post(
                 _SET_COMMANDS_URL.format(token=token), json=payload
             )
-    except Exception as exc:  # transport error — never propagate
+    except Exception as exc:  # transport error; never propagate
         logger.warning(f"Telegram setMyCommands failed (transport): {exc}")
         return False
 
@@ -248,7 +248,7 @@ async def answer_callback_query(
             response = await client.post(
                 _ANSWER_CALLBACK_URL.format(token=token), json=payload
             )
-    except Exception as exc:  # transport error — never propagate
+    except Exception as exc:  # transport error; never propagate
         logger.warning(f"Telegram answerCallbackQuery failed (transport): {exc}")
         return False
 

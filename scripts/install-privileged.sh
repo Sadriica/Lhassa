@@ -25,7 +25,7 @@ fi
 
 DST="/etc/sudoers.d/lhassa"
 
-# Curated allowlist — built PER HOST: universal admin tools + THIS distro's
+# Curated allowlist; built PER HOST: universal admin tools + THIS distro's
 # package manager + optional laptop tools, each included only when the binary
 # actually exists (sudoers requires absolute paths; a missing binary is skipped,
 # never guessed). Keep the candidate set in sync with lhassa/tools/privileged.py.
@@ -34,13 +34,13 @@ CANDIDATES=(
     systemctl journalctl dmesg sensors
     # One of these is this distro's package manager (Arch/Debian+Ubuntu/Fedora/openSUSE).
     pacman apt-get apt dnf zypper
-    # Laptop/power tools — present on the reference laptop, absent on servers.
+    # Laptop/power tools; present on the reference laptop, absent on servers.
     tlp tlp-stat power-mode
 )
 ALLOW=""
 for cmd in "${CANDIDATES[@]}"; do
     path="$(command -v "${cmd}" 2>/dev/null || true)"
-    # Only absolute system paths — refuse anything odd a user PATH could inject.
+    # Only absolute system paths; refuse anything odd a user PATH could inject.
     case "${path}" in
         /usr/bin/*|/usr/sbin/*|/bin/*|/sbin/*|/usr/local/bin/*|/usr/local/sbin/*)
             ALLOW="${ALLOW:+${ALLOW}, }${path}"
@@ -55,12 +55,12 @@ fi
 TMP="$(mktemp)"
 trap 'rm -f "${TMP}"' EXIT
 {
-    echo "# /etc/sudoers.d/lhassa — scoped passwordless admin for the lhassa assistant."
+    echo "# /etc/sudoers.d/lhassa; scoped passwordless admin for the lhassa assistant."
     echo "# Managed by lhassa scripts/install-privileged.sh. Keep in sync with lhassa/tools/privileged.py."
     echo "${USER_NAME} ALL=(root) NOPASSWD: ${ALLOW}"
 } > "${TMP}"
 
-# Validate before installing — a syntax error here must not touch /etc.
+# Validate before installing; a syntax error here must not touch /etc.
 if ! visudo -cf "${TMP}"; then
     echo "Generated sudoers file failed validation; nothing was installed." >&2
     exit 1

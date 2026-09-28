@@ -83,7 +83,7 @@ def metrics_guard():
 
 
 def test_kill_switch_is_a_budget_subclass():
-    # Existing degrade paths catch BudgetExceeded — the kill-switch must too.
+    # Existing degrade paths catch BudgetExceeded; the kill-switch must too.
     assert issubclass(KillSwitchActive, BudgetExceeded)
 
 

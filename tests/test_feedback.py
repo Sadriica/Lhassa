@@ -1,7 +1,7 @@
 """Tests for the $0 feedback signal (lhassa.core.feedback).
 
-Seeds a tmp brain.db with episode sequences that exercise each heuristic —
-re-ask, correction, silence-after, acted-on — plus the summary aggregation and
+Seeds a tmp brain.db with episode sequences that exercise each heuristic;
+re-ask, correction, silence-after, acted-on; plus the summary aggregation and
 the API read surface. No LLM, no network; everything is direct SQLite.
 """
 
@@ -19,7 +19,7 @@ from lhassa.core import feedback
 
 @dataclass
 class _FakeEpisode:
-    """Minimal Episode double — just enough for db.append_episode."""
+    """Minimal Episode double; just enough for db.append_episode."""
 
     id: str
     instance_id: str
@@ -157,10 +157,10 @@ async def test_silence_after_signal_is_weak_positive(brain):
         brain,
         instance_id=inst,
         decision="think: provider=opencode model=x",
-        resultado="Done — meeting moved to 3pm.",
+        resultado="Done: meeting moved to 3pm.",
         when=_t(0),
     )
-    # A later, UNRELATED answer far past the silence window — no re-ask, no
+    # A later, UNRELATED answer far past the silence window; no re-ask, no
     # correction, no action: the gap alone should read as weak positive.
     await _seed_episode(
         brain,
@@ -255,7 +255,7 @@ async def test_derive_signals_never_raises_on_bad_db_path(monkeypatch, tmp_path)
     import lhassa.core.db as db
 
     # Point at a path whose parent doesn't exist and can't be created implicitly
-    # by a plain connect with no init_db() call — exercise the try/except.
+    # by a plain connect with no init_db() call; exercise the try/except.
     monkeypatch.setattr(db, "DB_PATH", tmp_path / "nested" / "missing" / "brain.db")
     signals = await feedback.derive_signals("inst_x", days=7)
     assert signals == []

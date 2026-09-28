@@ -1,4 +1,4 @@
-// The Appropriate Legal Notice — the dashboard's copy of lhassa/legal.py.
+// The Appropriate Legal Notice; the dashboard's copy of lhassa/legal.py.
 //
 // Lhassa is AGPL-3.0-or-later with an additional term under section 7(b) of
 // that license (see LICENSE at the repo root): this notice must be preserved
@@ -15,5 +15,5 @@ export const VENDOR = 'Witara'
 export const LICENSE_ID = 'AGPL-3.0-or-later'
 export const SOURCE_URL = 'https://github.com/Sadriica/Lhassa'
 
-export const ATTRIBUTION = `${PROJECT} — a ${VENDOR} project`
+export const ATTRIBUTION = `${PROJECT}; a ${VENDOR} project`
 export const NOTICE = `${ATTRIBUTION}. Licensed under ${LICENSE_ID}.`

@@ -1,16 +1,16 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """
-Voice ↔ brain bridge (§3-Fase 6 — "voz reutilizando el esqueleto existente").
+Voice ↔ brain bridge (§3-Fase 6; "voz reutilizando el esqueleto existente").
 
 The existing pipecat pipeline (``voice/pipeline.py``) answers a spoken turn with a
 generic LLM context. This module routes that turn through THE BRAIN's think path
-instead, so a voice answer carries the brain's memory, identity, and episode log —
+instead, so a voice answer carries the brain's memory, identity, and episode log;
 exactly like ``core/step``'s judgment branch and ``cli/agent``'s one-turn loop,
 but for a spoken turn.
 
 Two pieces:
 
-  * :func:`answer` — ONE spoken turn → brain reply. It loads the persona identity
+  * :func:`answer`: ONE spoken turn → brain reply. It loads the persona identity
     and the layered memory context (``memory.load.load(query=text)``), lets the
     router pick a provider+model (the routine/heartbeat path, so the local/opencode
     provider is preferred), calls ``provider.complete(...)``, records an ``Episode``
@@ -18,7 +18,7 @@ Two pieces:
     audio pipeline: on a missing provider / spent budget (or any error) it returns a
     short spoken fallback and still logs the episode.
 
-  * :func:`make_brain_processor` — a thin pipecat ``FrameProcessor`` adapter that
+  * :func:`make_brain_processor`: a thin pipecat ``FrameProcessor`` adapter that
     drops into the pipeline in place of the LLM service when ``config.voice_enabled``
     is true, calling :func:`answer` for the assistant turn. pipecat is imported
     LAZILY inside the factory so importing this module for tests needs no audio
@@ -44,9 +44,9 @@ from lhassa.persona import load_identity
 if TYPE_CHECKING:
     from lhassa.memory.load import Context
 
-# A short, spoken fallback when the brain can't reach a model. No markdown — this
+# A short, spoken fallback when the brain can't reach a model. No markdown; this
 # is read aloud by TTS.
-FALLBACK_REPLY = "I can't reach my model right now — give it a moment and ask me again."
+FALLBACK_REPLY = "I can't reach my model right now; give it a moment and ask me again."
 
 # A wake-for-a-spoken-turn is a short answer, not a long job.
 _VOICE_MAX_TOKENS = 512
@@ -58,7 +58,7 @@ _DEFERRED_DECISION = "deferred: voz needs judgment"
 VOICE_INSTRUCTION = (
     "You are answering out loud through a voice interface. Reply in short, "
     "natural spoken sentences. No markdown, no bullet points, no code blocks, "
-    "no emoji — it is read aloud. Lead with the answer and keep it brief."
+    "no emoji; it is read aloud. Lead with the answer and keep it brief."
 )
 
 
@@ -81,12 +81,12 @@ async def answer(
     Loads identity + layered memory (with ``text`` as the semantic query), routes
     through the router's routine path (provider+model), thinks, and records a
     ``voz`` episode. Degrades to :data:`FALLBACK_REPLY` on a missing provider, a
-    spent budget, or any unexpected error — it never raises into the pipeline.
+    spent budget, or any unexpected error; it never raises into the pipeline.
     """
     config = config or Config()
     instance_id = instance_id or getattr(config, "instance_id", None) or Config.instance_id
 
-    # Idempotent — production callers (heartbeat/main) usually init the DB, but a
+    # Idempotent; production callers (heartbeat/main) usually init the DB, but a
     # voice turn must work even if it wakes the brain first.
     await db.init_db()
 
@@ -133,7 +133,7 @@ async def answer(
         return reply
 
     except (ProviderNotConfigured, BudgetExceeded) as exc:
-        # Known degradation — defer, speak the fallback, keep the episode.
+        # Known degradation; defer, speak the fallback, keep the episode.
         ep.finish(
             decision=_DEFERRED_DECISION,
             accion="responder",
@@ -162,7 +162,7 @@ def _extract_user_text(frame: Any) -> str:
 
     Handles both shapes the pipeline can hand us, by duck typing so this module
     never has to import pipecat:
-      * a context-aggregation frame (``frame.context.get_messages()``) — what
+      * a context-aggregation frame (``frame.context.get_messages()``); what
         ``LLMContextAggregatorPair.user()`` pushes at the end of a turn;
       * a raw ``TranscriptionFrame`` (``frame.text``) as a fallback.
     Returns "" for any other frame (which the caller passes through untouched).

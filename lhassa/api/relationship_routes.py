@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Typed org RELATIONSHIPS API — the dashboard backend for the overlay graph.
+"""Typed org RELATIONSHIPS API; the dashboard backend for the overlay graph.
 
 A self-contained :class:`fastapi.APIRouter` (``router``) the integrator mounts with
 ``app.include_router(relationship_routes.router)``. It exposes the overlay graph
-(:mod:`lhassa.org.relationships`) — the typed edges (reads / notifies / reviews /
-collaborates) that sit ON TOP of the command tree — so the dashboard canvas can read
+(:mod:`lhassa.org.relationships`); the typed edges (reads / notifies / reviews /
+collaborates) that sit ON TOP of the command tree; so the dashboard canvas can read
 and draw them and the owner can add/remove edges.
 
 DEFENSIVE: a bad body / invalid op returns a clear 4xx (400 for a bad kind / id /
@@ -88,7 +88,7 @@ async def delete_relationship(
 ):
     """Remove a typed edge. Body ``{from, to, kind}`` OR the same query params.
 
-    Idempotent — removing an absent edge still returns the (unchanged) overlay.
+    Idempotent; removing an absent edge still returns the (unchanged) overlay.
     Returns the updated overlay (``describe``).
     """
     body = payload if isinstance(payload, dict) else {}

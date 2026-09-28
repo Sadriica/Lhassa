@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Memory routes — the dashboard's read view of the grande (facts + sessions).
+"""Memory routes; the dashboard's read view of the grande (facts + sessions).
 
 Thin read-only wrappers over the memory store: the typed facts and the recent
 voice-session summaries the dashboard's memory surface renders.
@@ -26,7 +26,7 @@ async def get_sessions():
 
 @router.get("/api/memory/graph")
 async def get_memory_graph(q: str = ""):
-    """The knowledge graph's flagship query — ``what_do_i_know(q)``, $0, no model."""
+    """The knowledge graph's flagship query; ``what_do_i_know(q)``, $0, no model."""
     from lhassa.memory import graph
 
     return await graph.what_do_i_know(None, q)
@@ -34,7 +34,7 @@ async def get_memory_graph(q: str = ""):
 
 @router.get("/api/memory/entities")
 async def get_memory_entities():
-    """The distinct entities the brain tracks — a map of what it knows about."""
+    """The distinct entities the brain tracks; a map of what it knows about."""
     from lhassa.memory import graph
 
     return {"entities": await graph.entities(None)}

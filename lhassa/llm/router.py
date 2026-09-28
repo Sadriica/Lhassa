@@ -1,14 +1,14 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """
-The router — decides, in code, *how* the brain should think (§2.4).
+The router; decides, in code, *how* the brain should think (§2.4).
 
 Two axes:
-  1. ``pick_provider`` — by cost and **data sensitivity**. Sensitive data must go
+  1. ``pick_provider``: by cost and **data sensitivity**. Sensitive data must go
      to a ``zero_retention`` provider; otherwise the cheapest usable one.
-  2. ``pick_model`` — a cheap model for routine judgment, a smart model for hard
+  2. ``pick_model``: a cheap model for routine judgment, a smart model for hard
      judgment.
 
-``decide(trigger, ctx)`` turns a watchlist trigger into a ``Decision`` —
+``decide(trigger, ctx)`` turns a watchlist trigger into a ``Decision``;
 ``kind="think"`` (run a ModelProvider directly) or ``kind="delegate"`` (hand
 agentic code work to a harness via ``pick_harness``; ``core/step.py:_delegate``
 launches it fire-and-forget).
@@ -18,7 +18,7 @@ caller-supplied ``verify`` rejects the answer. The outcome is logged so the rout
 can learn later.
 
 Manual overrides (``$think`` / ``$justdo``) are exposed as ``force_think`` /
-``force_justdo`` flags the CLI/REPL can pass for the next turn — they do NOT
+``force_justdo`` flags the CLI/REPL can pass for the next turn; they do NOT
 replace the autonomous watchlist.
 
 Nothing here is a token cost in itself: the decisions are rules-based and free.
@@ -51,11 +51,11 @@ if TYPE_CHECKING:
 class Decision:
     """The router's verdict for one trigger.
 
-    ``kind``     — "think" (run a ModelProvider) or "delegate" (a harness, Phase 4).
-    ``provider`` — the chosen ModelProvider (None for a delegate).
-    ``model``    — the chosen model id (None for a delegate).
-    ``reason``   — a human-readable trace, stored on the episode's ``decision``.
-    ``harness``  — the chosen harness name (set only when ``kind=="delegate"``).
+    ``kind``    : "think" (run a ModelProvider) or "delegate" (a harness, Phase 4).
+    ``provider``: the chosen ModelProvider (None for a delegate).
+    ``model``   : the chosen model id (None for a delegate).
+    ``reason``  : a human-readable trace, stored on the episode's ``decision``.
+    ``harness`` : the chosen harness name (set only when ``kind=="delegate"``).
     """
 
     kind: str
@@ -85,7 +85,7 @@ def pick_provider(*, sensitive: bool, config: "Config", hard: bool = False) -> M
     """Pick a provider by data sensitivity and routine-vs-hard signal (§2.4, §3-Fase 6).
 
     Routine/heartbeat thinking (``hard=False``) prefers the LOCAL model when it is
-    configured — its ``is_local`` keeps the data on the box, so pseudonymization is
+    configured; its ``is_local`` keeps the data on the box, so pseudonymization is
     not applied. ``config.heartbeat_provider`` steers this: ``cloud`` never uses
     local/opencode; ``local`` forces local for the routine path (falling back to
     cloud with a warning if unconfigured); ``opencode`` forces the opencode CLI;
@@ -94,7 +94,7 @@ def pick_provider(*, sensitive: bool, config: "Config", hard: bool = False) -> M
 
     The HARD path always goes to the cloud smart model. Sensitive data still
     routes to a zero-retention provider (and warns if none is configured). The
-    cloud path — including opencode, which is a cloud subscription — is wrapped in
+    cloud path (including opencode, which is a cloud subscription) is wrapped in
     the pseudonymization hook when ``pseudonymize_remote`` is on; the local path is
     never wrapped.
     """
@@ -120,7 +120,7 @@ def pick_provider(*, sensitive: bool, config: "Config", hard: bool = False) -> M
             if heartbeat == "local":
                 logger.warning(
                     "router: heartbeat_provider='local' but local_model_url is "
-                    "unset — falling back to the cloud provider."
+                    "unset; falling back to the cloud provider."
                 )
 
         # auto + no local backend → prefer the cheap opencode CLI when present.
@@ -147,7 +147,7 @@ def pick_provider(*, sensitive: bool, config: "Config", hard: bool = False) -> M
 
 
 # Lower rank = preferred. Free and metered beat subscription when equivalent
-# (avoid the paths the subscription policy made expensive — §2.4).
+# (avoid the paths the subscription policy made expensive; §2.4).
 _BILLING_RANK = {"free": 0, "metered": 1, "subscription": 2}
 
 
@@ -157,7 +157,7 @@ def pick_harness(
     """Choose a coding muscle among the available adapters (§2.4).
 
     Order of selection:
-      1. ``LHASSA_HARNESS`` / ``config.harness`` override — honored if it names a
+      1. ``LHASSA_HARNESS`` / ``config.harness`` override; honored if it names a
          known adapter (availability is enforced later by the runner, which records
          an error job for a missing CLI; this keeps the override predictable).
       2. otherwise the cheapest available adapter by billing rank (free < metered <
@@ -173,7 +173,7 @@ def pick_harness(
             logger.info(f"router: harness override → {chosen.name}")
             return chosen
         except ValueError:
-            logger.warning(f"router: LHASSA_HARNESS={override!r} is unknown — ignoring")
+            logger.warning(f"router: LHASSA_HARNESS={override!r} is unknown; ignoring")
 
     avail = available_adapters() if available is None else list(available)
     if not avail:
@@ -195,7 +195,7 @@ def pick_model(provider: ModelProvider, *, hard: bool, config: "Config") -> str:
         return (getattr(config, "local_model", "") or "") or config.model
     # CLI-SUBSCRIPTION providers run their OWN subscription model, NOT the API
     # ``model_cheap``/``model_smart`` (which are Groq/OpenAI ids the CLI never uses
-    # — the source of the "provider=claude model=llama-…" ledger lie). Report the
+    #; the source of the "provider=claude model=llama-…" ledger lie). Report the
     # configured model for that CLI, else a truthful ``<cli>-cli`` marker meaning
     # "the CLI picks its own model". These names also proxy through the
     # pseudonymizing wrapper, so a wrapped provider is caught too.
@@ -220,7 +220,7 @@ def pick_model(provider: ModelProvider, *, hard: bool, config: "Config") -> str:
 # (core/) can reach it. ``notify/telegram_inbound.py`` keeps a thin re-export so
 # existing imports/tests are unaffected.
 
-# Provider names that are backed by a local CLI binary — skipped from the chain
+# Provider names that are backed by a local CLI binary; skipped from the chain
 # when that binary is not installed (``shutil.which``), so the chain degrades
 # cleanly on a machine that lacks a given subscription CLI. The binary name can be
 # overridden per-provider via a ``<name>_bin`` config attr (e.g. ``opencode_bin``).
@@ -248,13 +248,13 @@ def fallback_chain(config: "Config", primary: Optional[ModelProvider]) -> list[t
     CLI subscriptions (``opencode → claude → codex``) before paying for the cloud
     gateway (``default``). Each entry is:
 
-    - **skipped if it is the same kind as the primary** (``name == primary.name``) —
+    - **skipped if it is the same kind as the primary** (``name == primary.name``);
       don't retry e.g. opencode→opencode;
     - **skipped if it is a CLI provider whose binary is not installed**
       (``shutil.which``), so the chain degrades cleanly on a machine missing that CLI;
     - **skipped if it cannot be resolved** (unknown/raising factory).
 
-    Never raises — a bad config or a failed resolve yields a shorter chain. This is
+    Never raises; a bad config or a failed resolve yields a shorter chain. This is
     the seam tests patch to assert the chain order / skipping behaviour.
     """
     chain: list[tuple] = []
@@ -269,7 +269,7 @@ def fallback_chain(config: "Config", primary: Optional[ModelProvider]) -> list[t
 
     # Local (not module-level) import so a caller/test that monkeypatches
     # ``lhassa.llm.provider.get_model_provider`` is picked up fresh on every
-    # call — mirrors the original telegram_inbound._fallback_chain behaviour.
+    # call; mirrors the original telegram_inbound._fallback_chain behaviour.
     from lhassa.llm.provider import get_model_provider
 
     primary_name = getattr(primary, "name", "")
@@ -291,7 +291,7 @@ def fallback_chain(config: "Config", primary: Optional[ModelProvider]) -> list[t
         if provider is not None:
             # Same privacy treatment as pick_provider: a REMOTE fallback seat
             # must be pseudonymized too. Without this, the one turn that
-            # happened to fail over carried raw sensitive text to the cloud —
+            # happened to fail over carried raw sensitive text to the cloud;
             # the primary being wrapped is no protection for its substitutes.
             chain.append(
                 (_maybe_pseudonymize(provider, config), _fallback_model_for(name, config))
@@ -302,7 +302,7 @@ def fallback_chain(config: "Config", primary: Optional[ModelProvider]) -> list[t
 # ── Budget soft-limit (a brake before BudgetExceeded hits outright) ──────────
 
 
-# Process-local cache for the persisted-ledger read below — the router's
+# Process-local cache for the persisted-ledger read below; the router's
 # ``decide`` is on the hot path (called once per judgment) and the do-and-sleep
 # execution model means most callers ARE the process (a heartbeat beat lives
 # seconds), so a short TTL still protects against a hot loop of ``decide``
@@ -317,12 +317,12 @@ def _budget_pct_used(config: "Config") -> float:
     The soft brake must trip even though each heartbeat beat is a brand-new
     ``systemd`` process (do-and-sleep, per the architecture): a per-process
     in-memory mirror (``lhassa.state.state.metrics``) resets to zero on every
-    such process, so it would never see yesterday's — or even this run's
-    earlier — spend and the 80% brake could simply never fire. The source of
+    such process, so it would never see yesterday's; or even this run's
+    earlier; spend and the 80% brake could simply never fire. The source of
     truth here is instead the **persisted gateway ledger**
     (``lhassa.llm.gateway``'s ``daily_spend`` table, the same one
     ``spend_summary()`` reports from) via
-    :meth:`LedgerGateway.daily_output_tokens_sync` — a plain, synchronous,
+    :meth:`LedgerGateway.daily_output_tokens_sync`: a plain, synchronous,
     read-only SQLite read (``decide`` is sync and is called both with and
     without a running event loop, so the async ``spend_summary`` can't just be
     awaited here). The read is cheap but not free, so it is cached per-process
@@ -398,8 +398,8 @@ def decide(
 ) -> Decision:
     """Turn a trigger into a Decision (rules-based, free).
 
-    ``force_think`` (``$think``) forces the smart model — deliberate this turn.
-    ``force_justdo`` (``$justdo``) forces the cheap model — act without
+    ``force_think`` (``$think``) forces the smart model; deliberate this turn.
+    ``force_justdo`` (``$justdo``) forces the cheap model; act without
     deliberation this turn. Both override the routine/hard heuristic.
     """
     # Axis 2 (delegate): agentic code work goes to a harness, not the provider.
@@ -415,7 +415,7 @@ def decide(
                 kind="delegate", provider=None, model=None,
                 reason=reason, harness=harness.name,
             )
-        logger.info("router: delegation requested but no harness available — thinking")
+        logger.info("router: delegation requested but no harness available; thinking")
 
     sensitive = _is_sensitive(trigger, ctx)
 
@@ -427,7 +427,7 @@ def decide(
         hard = _is_hard(trigger, ctx)
 
     # Budget soft-limit: once today's spend crosses ``budget_soft_pct`` of the
-    # daily token budget, never pick the smart model — downgrading ``hard`` to
+    # daily token budget, never pick the smart model; downgrading ``hard`` to
     # False both picks the cheap model AND re-enters the routine provider
     # preference (local/opencode before cloud), so this is also how spend
     # pressure steers the brain toward $0 providers.
@@ -471,7 +471,7 @@ async def cascade(
 ) -> Completion:
     """Run the cheap model first; escalate to the smart model once if ``verify`` fails.
 
-    ``verify`` defaults to None — no verification, so the cheap answer is returned
+    ``verify`` defaults to None; no verification, so the cheap answer is returned
     as-is (no escalation). The cascade outcome is logged so the router can learn.
     """
     provider = provider or get_model_provider(config)

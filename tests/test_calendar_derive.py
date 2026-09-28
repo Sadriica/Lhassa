@@ -1,4 +1,4 @@
-"""Tests for lhassa.calendar.derive — the calendar-derived world model (leaf).
+"""Tests for lhassa.calendar.derive; the calendar-derived world model (leaf).
 
 Offline, no network: :func:`lhassa.calendar.feed.upcoming` is monkeypatched to
 return fake, already-tagged events (no real feed fetch). Covers the heuristics

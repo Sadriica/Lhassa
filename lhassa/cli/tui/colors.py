@@ -5,13 +5,13 @@ GOLD/RED/WHITE/GREEN/STONE, fed into Textual as CSS variables.
 No new brand colors are introduced. The dark ramp mirrors the dashboard's
 "Matte Obsidian" (``dashboard/src/index.css``): a near-black surface with gold
 reserved for *text*, never a fill. The light ramp keeps the same hues and
-inverts luminance — it is derived from the same constants (a numeric blend
+inverts luminance; it is derived from the same constants (a numeric blend
 toward the dark palette's own ``bg``, or the dashboard's documented
 ``--lh-gold-deep``), not invented.
 
 :func:`detect_theme` picks dark/light in this order: ``LHASSA_TUI_THEME``
 (``dark``/``light``/``auto``) → ``COLORFGBG`` → a short-timeout OSC 11
-terminal probe → dark, on ANY ambiguity or error. Nothing here may raise —
+terminal probe → dark, on ANY ambiguity or error. Nothing here may raise;
 a palette-detection failure degrades silently to dark.
 """
 
@@ -103,7 +103,7 @@ def _from_colorfgbg() -> "str | None":
 
 def _probe_osc11(timeout: float = 0.15) -> "str | None":
     """Query the terminal's background color via OSC 11. ``None`` on ANY
-    ambiguity — not a tty, no termios, no reply in time, a garbled reply."""
+    ambiguity; not a tty, no termios, no reply in time, a garbled reply."""
     try:
         import sys
 

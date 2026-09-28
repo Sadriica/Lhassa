@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Overview routes — one defensive aggregate for the dashboard home.
+"""Overview routes; one defensive aggregate for the dashboard home.
 
 A single read-only digest for the dashboard's "home" surface and ``lhassa
 status``: brains, skills, pending approvals, today's cost, health, recent
-activity, and tool states — everything the owner needs to see (and approve) at a
+activity, and tool states; everything the owner needs to see (and approve) at a
 glance. Each sub-section is gathered INDEPENDENTLY and DEFENSIVELY: a failing
 subsystem is reported under ``errors`` and replaced with a safe default, so the
 response is always complete and NEVER 500s. LLM-free (no provider is constructed,
@@ -12,7 +12,7 @@ no model is called). ``build_overview`` is the in-process function the CLI's
 
 ``Config`` is read through the ``lhassa.config`` MODULE (``lhassa_config.Config``)
 rather than a bound name, so a config reload (some endpoint tests reload it) is
-picked up live — the same seam ``runtime_routes`` uses.
+picked up live; the same seam ``runtime_routes`` uses.
 
 Mounted by the integrator with ``app.include_router(overview_routes.router)``.
 """
@@ -122,7 +122,7 @@ async def _overview_integrity() -> dict:
 
 
 async def _overview_activity() -> dict:
-    """The last few episodes — what the brain has been doing, newest first."""
+    """The last few episodes; what the brain has been doing, newest first."""
     await db.init_db()
     rows = await db.load_recent_episodes(lhassa_config.Config.instance_id, 8)
     total = await db.count_episodes(lhassa_config.Config.instance_id)
@@ -166,12 +166,12 @@ async def _overview_tools() -> dict:
 # falls back to its default. LLM-free.
 
 async def _overview_now_running() -> list[dict]:
-    """Agentic runs in flight RIGHT NOW (status ``running``) — an in-memory O(n) read.
+    """Agentic runs in flight RIGHT NOW (status ``running``); an in-memory O(n) read.
 
     Returns the newest-first list the panel's "Now running" strip renders (each row
     gets an inline Stop → ``POST /api/code/{id}/stop``). Flows are intentionally NOT
     here: flow runs are currently SYNCHRONOUS with no long-lived "running" state, so
-    there is no running-flow signal to surface — see ``_overview_flows``.
+    there is no running-flow signal to surface; see ``_overview_flows``.
     """
     runs = [
         {
@@ -194,7 +194,7 @@ async def _overview_pulse() -> dict:
 
     ``next_tick`` is deliberately OMITTED: the heartbeat cadence lives in the systemd
     timer's ``OnCalendar`` (not in ``Config``), so there is nothing to derive it from
-    here and we never fabricate a time — the panel simply hides that field.
+    here and we never fabricate a time; the panel simply hides that field.
     """
     import os
 
@@ -315,14 +315,14 @@ async def build_overview() -> dict:
 
     Returns one mapping with a key per section plus ``errors`` (a section→message
     map of whatever degraded) and a little envelope (``instance_id``,
-    ``generated_at``). A single failing subsystem is reported, never fatal — the
+    ``generated_at``). A single failing subsystem is reported, never fatal; the
     response is always complete. LLM-free; reused in-process by ``lhassa status``.
     """
     sections: dict = {}
     errors: dict[str, str] = {}
     # The sections are fully independent (each is defensive and never raises on
     # its own subsystem's failure), so gather them CONCURRENTLY instead of
-    # serially — under the API server this yields the DB/health latency of the
+    # serially; under the API server this yields the DB/health latency of the
     # slowest section rather than their sum. gather preserves input order, so
     # the ``errors``/default mapping below stays aligned by name.
     results = await asyncio.gather(

@@ -1,50 +1,50 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Slash commands for the inbound Telegram chat — a modular command registry.
+"""Slash commands for the inbound Telegram chat; a modular command registry.
 
 The owner's standing principle is that Lhassa must be **fully elastic and highly
 modular**: every swap point sits behind an interface + a registry, and new
 capabilities are **drop-in** (add a module, never edit core). Chat commands are
 one such swap point: today ``/start`` + ``/help`` + ``/status``, tomorrow whatever
-a plugin registers — each is just another entry in :data:`COMMANDS`.
+a plugin registers; each is just another entry in :data:`COMMANDS`.
 
 This package (formerly one ~2200-line module) is split by domain, one submodule
-per group of related commands — importing each submodule is what runs its
+per group of related commands; importing each submodule is what runs its
 ``@register_command`` decorators, exactly as importing the old flat module did:
 
-* ``_registry`` — :data:`COMMANDS`, :func:`register_command`, :func:`parse`,
-  :func:`dispatch` — the registry + dispatch mechanism itself, no handlers;
-* ``_shared`` — small LLM-free helpers used by several command modules
+* ``_registry``: :data:`COMMANDS`, :func:`register_command`, :func:`parse`,
+  :func:`dispatch`: the registry + dispatch mechanism itself, no handlers;
+* ``_shared``: small LLM-free helpers used by several command modules
   (``_oops``, ``_config``, ``_routine_provider_model``, ``_health_line``,
   ``_today_spend``, ``_approval_age``);
-* ``_core`` — ``/start`` ``/help`` ``/status`` ``/version`` ``/config`` ``/report``;
-* ``_cv`` — ``/cvnewbase`` ``/cvbase``;
-* ``_code`` — ``/code`` (an agentic coding run, gated behind approval);
-* ``_approvals`` — ``/approvals`` ``/approve`` ``/deny``;
-* ``_watch`` — ``/watch`` ``/watches`` ``/unwatch`` ``/goal``;
-* ``_org`` — ``/org`` ``/fleet`` ``/temple``;
-* ``_capabilities`` — ``/capabilities`` ``/tools`` ``/skills``;
-* ``_memory`` — ``/recall`` ``/memory`` ``/knowledge`` ``/checkin`` ``/today``
+* ``_core``: ``/start`` ``/help`` ``/status`` ``/version`` ``/config`` ``/report``;
+* ``_cv``: ``/cvnewbase`` ``/cvbase``;
+* ``_code``: ``/code`` (an agentic coding run, gated behind approval);
+* ``_approvals``: ``/approvals`` ``/approve`` ``/deny``;
+* ``_watch``: ``/watch`` ``/watches`` ``/unwatch`` ``/goal``;
+* ``_org``: ``/org`` ``/fleet`` ``/temple``;
+* ``_capabilities``: ``/capabilities`` ``/tools`` ``/skills``;
+* ``_memory``: ``/recall`` ``/memory`` ``/knowledge`` ``/checkin`` ``/today``
   ``/tomorrow``;
-* ``_ai`` — ``/ai`` ``/moa`` (the paid direct doors);
-* ``_remind`` — :func:`parse_remind`, ``/remind`` ``/event``;
-* ``_calendar`` — ``/calendar`` ``/calendars``;
-* ``_idea`` — ``/idea``.
+* ``_ai``: ``/ai`` ``/moa`` (the paid direct doors);
+* ``_remind``: :func:`parse_remind`, ``/remind`` ``/event``;
+* ``_calendar``: ``/calendar`` ``/calendars``;
+* ``_idea``: ``/idea``.
 
 This module defines (via re-export from the submodules above):
 
-* :data:`COMMANDS` — the module-level :class:`~lhassa.registry.Registry` of command
+* :data:`COMMANDS`: the module-level :class:`~lhassa.registry.Registry` of command
   handlers, plus :func:`register_command`, a thin decorator/direct-call wrapper so a
   plugin can drop in a new command **without editing core**;
-* :func:`parse` — split a raw message into ``(command | None, args)``. A message is
+* :func:`parse`: split a raw message into ``(command | None, args)``. A message is
   a command iff it starts with ``/``; the leading ``/`` is stripped, the first token
   is the command name (Telegram's ``/cmd@BotName`` form is normalised to ``cmd``),
   and the remainder is ``args``. A non-slash message yields ``(None, text)``;
-* :func:`dispatch` — run a known command and return its reply text; return a short
+* :func:`dispatch`: run a known command and return its reply text; return a short
   "unknown command" hint for an unrecognised ``/command``; return ``None`` for a
   plain-language message so the caller can let the **brain** answer it.
 
 A command handler is an ``async (args: str, *, config=None) -> str`` callable. Like
-the rest of :mod:`lhassa.notify`, every handler is **fully defensive** — it wraps
+the rest of :mod:`lhassa.notify`, every handler is **fully defensive**: it wraps
 its work and returns a friendly fallback rather than raising, so a command can never
 crash the inbound poll loop. Nothing here calls an LLM: commands are answered
 locally and cheaply.
@@ -74,7 +74,7 @@ from ._shared import (  # noqa: E402,F401
     _today_spend,
 )
 
-# Import every command submodule so its @register_command decorators run —
+# Import every command submodule so its @register_command decorators run;
 # this is what actually populates COMMANDS, exactly as importing the old flat
 # module did. Order doesn't matter (Registry rejects duplicate names).
 from . import (  # noqa: E402,F401

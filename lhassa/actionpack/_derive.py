@@ -1,19 +1,19 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""``derive_world_facts`` — persist the calendar-derived world model.
+"""``derive_world_facts``: persist the calendar-derived world model.
 
 Shell-side half of the calendar-derived world model: calls
-:func:`lhassa.calendar.derive.derive_world` (leaf, $0, deterministic — read
+:func:`lhassa.calendar.derive.derive_world` (leaf, $0, deterministic; read
 + analysis only, never writes) then persists each NEW candidate to the
 grande via :mod:`lhassa.memory.facts`. Dedup reuses the SAME idiom the
 Telegram ``[[remember: …]]`` marker uses
 (:func:`lhassa.notify.telegram_inbound._apply_remember_marker`): a
 case-insensitive substring overlap with an existing fact, either direction,
-skips the write — so re-running this action as the calendar reshuffles week
+skips the write; so re-running this action as the calendar reshuffles week
 to week never piles up near-duplicate facts.
 
 Fits the actionpack calling convention: a plain ``(params) -> str`` callable,
 never raises, degrades to "nothing to derive" when there's no calendar/no
-events at all — so it's safe to schedule unconditionally (see the
+events at all; so it's safe to schedule unconditionally (see the
 ``maintenance`` seed).
 """
 
@@ -35,9 +35,9 @@ async def derive_world_facts(params: dict) -> str:
     """Derive the owner's world model from their calendar and persist new facts.
 
     params:
-        instance_id  — defaults to Config.instance_id.
-        days         — look-ahead window in days (default 45).
-        config       — an injectable Config (tests only); defaults to Config().
+        instance_id ; defaults to Config.instance_id.
+        days        ; look-ahead window in days (default 45).
+        config      ; an injectable Config (tests only); defaults to Config().
 
     Returns ``"derive_world_facts: derived N world facts, M new"`` (M <= N
     after dedup), or ``"nothing to derive"`` when the calendar has no events

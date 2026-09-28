@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Runs screen — a DataTable of recent durable runs across all entities.
+"""Runs screen; a DataTable of recent durable runs across all entities.
 
 Now a :class:`~lhassa.cli.tui.screens.base.TableScreen`: it gains the ``/``
 substring filter and the live re-poll for free, and keeps its direct

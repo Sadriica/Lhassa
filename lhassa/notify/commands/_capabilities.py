@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""What's wired and installed — /capabilities /tools /skills.
+"""What's wired and installed; /capabilities /tools /skills.
 
 Moved verbatim out of the former ``lhassa/notify/commands.py``.
 """
@@ -18,11 +18,11 @@ def _flag(value: bool) -> str:
 
 @register_command("capabilities")
 async def _cmd_capabilities(args: str, *, config=None) -> str:
-    """``/capabilities`` — a compact, LLM-free wired/on-off summary.
+    """``/capabilities``: a compact, LLM-free wired/on-off summary.
 
     A phone-sized subset of ``lhassa capabilities`` (:mod:`lhassa.cli.capabilities`):
     providers wired, channels active, org shape, and the monitor/voice/org-live
-    toggles. Reads config + registries only — never constructs a provider.
+    toggles. Reads config + registries only; never constructs a provider.
     """
     try:
         cfg = _config(config)
@@ -76,7 +76,7 @@ async def _cmd_capabilities(args: str, *, config=None) -> str:
 
 @register_command("tools")
 async def _cmd_tools(args: str, *, config=None) -> str:
-    """``/tools`` — the self-written tools and their gate/usage state, LLM-free.
+    """``/tools``: the self-written tools and their gate/usage state, LLM-free.
 
     Reads the same ``tools`` table :func:`lhassa.cli.commands.tools_cmd` renders
     (:func:`lhassa.core.db.list_tools`): name, dominio, estado, and usos/fallos.
@@ -108,7 +108,7 @@ async def _cmd_tools(args: str, *, config=None) -> str:
 
 @register_command("skills")
 async def _cmd_skills(args: str, *, config=None) -> str:
-    """``/skills`` — installed skills, LLM-free.
+    """``/skills``: installed skills, LLM-free.
 
     Reads :class:`lhassa.skills.store.SkillStore` (list) and, where cheap,
     :func:`lhassa.skills.curator.get_usage` for the pinned/state flag per skill.
@@ -138,7 +138,7 @@ async def _cmd_skills(args: str, *, config=None) -> str:
             pinned = " (pinned)" if entry.get("pinned") else ""
             state = entry.get("state")
             state_str = f" [{state}]" if state and state != "active" else ""
-            lines.append(f"- {name}{pinned}{state_str}{f' — {desc}' if desc else ''}")
+            lines.append(f"- {name}{pinned}{state_str}{f': {desc}' if desc else ''}")
         if len(skills) > 10:
             lines.append(f"…+{len(skills) - 10} more")
         return "\n".join(lines)

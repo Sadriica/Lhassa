@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Read an institutional calendar's ICS feed — the READ half of the calendar seam.
+"""Read an institutional calendar's ICS feed; the READ half of the calendar seam.
 
 Leaf infrastructure (pure stdlib + httpx, imports NO shell): fetch a published
 ``.ics`` feed, cache it, and parse its VEVENTs into a window of aware-UTC events
@@ -7,14 +7,14 @@ the personal agenda can merge with tasks. $0, deterministic, no model, never
 raises (degrades to ``[]`` / the last cached copy).
 
 The feed URL is a SECRET (read access to the owner's calendar): it comes ONLY
-from ``config.calendar_ics_url`` / ``LHASSA_CALENDAR_ICS_URL`` — never hardcoded.
+from ``config.calendar_ics_url`` / ``LHASSA_CALENDAR_ICS_URL``: never hardcoded.
 The fetched body is cached under ``~/.lhassa/calendar/`` (private, gitignored).
 
 Institutional reality this is built for (measured against a live Outlook feed):
 Windows TZID names like ``SA Pacific Standard Time`` (= America/Bogota, UTC-5,
 no DST), a VTIMEZONE block, all-day ``VALUE=DATE`` events, and weekly ``RRULE``
 classes. MONTHLY/YEARLY/complex recurrences are best-effort (the base occurrence
-only) — a human reads this, and approximate-but-mostly-right beats a heavy dep.
+only); a human reads this, and approximate-but-mostly-right beats a heavy dep.
 """
 
 from __future__ import annotations
@@ -31,7 +31,7 @@ from lhassa.calendar.paths import feed_cache_path
 
 # Windows timezone names → fixed UTC offset in hours. Extend as needed; an
 # unknown TZID degrades to UTC (logged). Only fixed-offset zones are safe to
-# hardcode — all the ones here observe NO DST, so a constant offset is exact.
+# hardcode; all the ones here observe NO DST, so a constant offset is exact.
 _WINDOWS_TZ_OFFSETS: dict[str, int] = {
     "SA Pacific Standard Time": -5,      # Bogotá, Lima, Quito (no DST)
     "US Eastern Standard Time": -5,
@@ -47,7 +47,7 @@ _WINDOWS_TZ_OFFSETS: dict[str, int] = {
     "Romance Standard Time": 1,          # Madrid, Paris
 }
 
-_DEFAULT_FEED_TTL = 3600.0  # seconds — /today shouldn't re-download 1MB each call.
+_DEFAULT_FEED_TTL = 3600.0  # seconds; /today shouldn't re-download 1MB each call.
 _MAX_FEED_REDIRECTS = 10
 
 # ICS BYDAY codes → Python weekday() (Mon=0).
@@ -63,8 +63,8 @@ async def fetch_feed(
     A network error degrades to the cached copy (stale-but-useful) rather than
     nothing. Never raises.
 
-    The cache is PER-FEED — keyed by a hash of ``url`` (:func:`feed_cache_path`)
-    — so two calendars fetched in the same window never clobber each other.
+    The cache is PER-FEED; keyed by a hash of ``url`` (:func:`feed_cache_path`)
+   ; so two calendars fetched in the same window never clobber each other.
     """
     url = (url or "").strip()
     if not url:
@@ -85,13 +85,13 @@ async def fetch_feed(
 
     # A calendar URL is owner-supplied and fetched on a SCHEDULE, so an
     # unguarded feed turns the heartbeat into a repeating probe of whatever it
-    # names — loopback, link-local, cloud metadata. The same guard the research
+    # names; loopback, link-local, cloud metadata. The same guard the research
     # and web_fetch paths already cross applies here.
     from lhassa.tools.net_safety import resolve_public_url
 
     _address, unsafe = resolve_public_url(url)
     if unsafe:
-        logger.warning("calendar: refusing unsafe feed URL — {}", unsafe)
+        logger.warning("calendar: refusing unsafe feed URL; {}", unsafe)
         # A DNS outage and an address that became unsafe both forbid a new
         # request, but neither makes the already-cached bytes dangerous. Keep
         # the documented stale-cache degradation without touching the network.
@@ -110,7 +110,7 @@ async def fetch_feed(
             for redirect_count in range(_MAX_FEED_REDIRECTS + 1):
                 address, unsafe = resolve_public_url(current_url)
                 if unsafe:
-                    logger.warning("calendar: refusing unsafe feed redirect — {}", unsafe)
+                    logger.warning("calendar: refusing unsafe feed redirect; {}", unsafe)
                     return None
                 parsed = urlparse(current_url)
                 assert address is not None  # resolve_public_url's success contract
@@ -140,7 +140,7 @@ async def fetch_feed(
                 cache.parent.mkdir(parents=True, exist_ok=True)
                 cache.write_text(resp.text, encoding="utf-8")
             except OSError as exc:
-                logger.debug("calendar: could not cache feed — {}", exc)
+                logger.debug("calendar: could not cache feed; {}", exc)
             return resp.text
         logger.debug("calendar: feed HTTP {}", resp.status_code)
     except Exception as exc:  # a fetch failure falls back to the cache
@@ -195,7 +195,7 @@ def _parse_dt(value: str, params: dict) -> Optional[datetime]:
     offset = _WINDOWS_TZ_OFFSETS.get(tzid)
     if offset is None:
         if tzid:
-            logger.debug("calendar: unknown TZID {!r} — treating as UTC", tzid)
+            logger.debug("calendar: unknown TZID {!r}; treating as UTC", tzid)
         offset = 0
     # local (naive) in tz(offset) → UTC
     return naive.replace(tzinfo=timezone(timedelta(hours=offset))).astimezone(timezone.utc)
@@ -292,7 +292,7 @@ def parse_events(ics_text: str, *, window_start: datetime, window_end: datetime)
 
     ``{summary, start, end, location, all_day}``. Hand-rolled RFC5545 (unfold,
     KEY;params:value); Windows TZID + Z + all-day; WEEKLY/DAILY RRULE expanded in
-    the window (EXDATE honored). Never raises — a malformed feed degrades to ``[]``.
+    the window (EXDATE honored). Never raises; a malformed feed degrades to ``[]``.
     """
     if not ics_text:
         return []
@@ -339,7 +339,7 @@ def parse_events(ics_text: str, *, window_start: datetime, window_end: datetime)
         events.sort(key=lambda e: e["start"])
         return events
     except Exception as exc:  # a parse failure must never break the agenda
-        logger.debug("calendar: parse_events failed — {}", exc)
+        logger.debug("calendar: parse_events failed; {}", exc)
         return []
 
 
@@ -356,11 +356,11 @@ async def upcoming(
     ``LHASSA_CALENDAR_ICS_URL`` shortcut merged in as ``"default"``), fetching +
     parsing each with its own PER-FEED cache (see :func:`fetch_feed`) and tagging
     every event with ``"calendar": <name>``. Events from every feed are merged and
-    sorted by start. A single failing/unreachable feed is SKIPPED — the others
+    sorted by start. A single failing/unreachable feed is SKIPPED; the others
     still show. $0, never raises; no feeds configured → ``[]``.
 
     The window STARTS at ``now`` by default (an agenda only cares about what's
-    still ahead), but a caller may pass ``since`` to reach back — a "what do I
+    still ahead), but a caller may pass ``since`` to reach back; a "what do I
     have today?" query asked mid-morning must still surface the 08:00 class it
     already sat through, so :func:`lhassa.calendar.query.answer_window` passes
     ``since=min(window_start, now)``. ``since`` in the future is clamped to
@@ -394,13 +394,13 @@ async def upcoming(
                     ev["calendar"] = name
                     events.append(ev)
             except Exception as exc:  # a single bad feed must not sink the rest
-                logger.debug("calendar: feed {!r} failed — {}", name, exc)
+                logger.debug("calendar: feed {!r} failed; {}", name, exc)
                 continue
 
         events.sort(key=lambda e: e["start"])
         return events
     except Exception as exc:
-        logger.debug("calendar: upcoming failed — {}", exc)
+        logger.debug("calendar: upcoming failed; {}", exc)
         return []
 
 

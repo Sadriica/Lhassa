@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Watch rules + goals from chat — /watch /watches /unwatch /goal.
+"""Watch rules + goals from chat; /watch /watches /unwatch /goal.
 
 Moved verbatim out of the former ``lhassa/notify/commands.py``.
 """
@@ -14,19 +14,19 @@ from loguru import logger
 from ._registry import register_command
 from ._shared import _config, _oops
 
-# "<pattern> -> <accion>" — the arrow-syntax watch rule.
+# "<pattern> -> <accion>": the arrow-syntax watch rule.
 _WATCH_ARROW_RE = re.compile(r"^\s*(.+?)\s*->\s*(.+?)\s*$")
 
 # "--every daily|hourly" flag on /goal (defaults to daily when absent).
 _GOAL_EVERY_RE = re.compile(r"--every\s+(daily|hourly)\b", re.IGNORECASE)
 _GOAL_CADENCE_SECONDS = {"hourly": 3600, "daily": 86400}
 
-# "--turns N" (only meaningful alongside --verify — the loop's max_turns cap).
+# "--turns N" (only meaningful alongside --verify; the loop's max_turns cap).
 _GOAL_TURNS_RE = re.compile(r"--turns\s+(\d+)\b", re.IGNORECASE)
 
-# "--verify command:<cmd>" / "--verify regex:<pattern>" — a compact shorthand onto
+# "--verify command:<cmd>" / "--verify regex:<pattern>": a compact shorthand onto
 # agents.verify's spec machinery (make_verifier). Applied AFTER --every/--turns are
-# stripped so its body can simply run to the end of the (remaining) text — a shell
+# stripped so its body can simply run to the end of the (remaining) text; a shell
 # command or a regex may itself contain "--", so no lookahead heuristics.
 _GOAL_VERIFY_RE = re.compile(r"--verify\s+(command|regex):(.+)$", re.IGNORECASE)
 
@@ -53,7 +53,7 @@ async def _known_actions(config) -> set:
 
 @register_command("watch")
 async def _cmd_watch(args: str, *, config=None) -> str:
-    """``/watch <pattern> -> <accion>`` — add a message-pattern watch rule.
+    """``/watch <pattern> -> <accion>``: add a message-pattern watch rule.
 
     ``accion`` must be a registered fixed action or the literal ``"judgment"``
     (any action, the brain thinks about it later). ``pattern`` must compile as a
@@ -97,7 +97,7 @@ async def _cmd_watch(args: str, *, config=None) -> str:
 
 @register_command("watches")
 async def _cmd_watches(args: str, *, config=None) -> str:
-    """``/watches`` — list configured watch rules with their index."""
+    """``/watches``: list configured watch rules with their index."""
     try:
         cfg = _config(config)
         from lhassa.notify import telegram_inbound as _ti
@@ -116,10 +116,10 @@ async def _cmd_watches(args: str, *, config=None) -> str:
 
 @register_command("unwatch")
 async def _cmd_unwatch(args: str, *, config=None) -> str:
-    """``/unwatch <index>`` — remove a watch rule by its ``/watches`` index."""
+    """``/unwatch <index>``: remove a watch rule by its ``/watches`` index."""
     idx_raw = (args or "").strip()
     if not idx_raw.lstrip("-").isdigit():
-        return "Usage: /unwatch <index> — see /watches for indices."
+        return "Usage: /unwatch <index>; see /watches for indices."
     idx = int(idx_raw)
 
     try:
@@ -149,18 +149,18 @@ _GOAL_USAGE = (
 
 @register_command("goal")
 async def _cmd_goal(args: str, *, config=None) -> str:
-    """``/goal <text> [--every ...] [--verify <spec>] [--turns N]`` — schedule a goal.
+    """``/goal <text> [--every ...] [--verify <spec>] [--turns N]``: schedule a goal.
 
     Mints a recurring ``judgment=True`` task (``core.dispatch.mint_task``) with
     HUMANO-origin trust and actor ``"telegram"``. The task is picked up and REASONED
-    about by the brain on its own schedule (a real, later token spend) — minting it
+    about by the brain on its own schedule (a real, later token spend); minting it
     here is $0; only that later think costs anything.
 
     With ``--verify`` (a compact shorthand onto :mod:`lhassa.agents.verify`'s spec
-    machinery — ``command:<shell cmd>`` or ``regex:<pattern>``), this ALSO creates a
+    machinery; ``command:<shell cmd>`` or ``regex:<pattern>``), this ALSO creates a
     bounded ``loops`` row (kind="closed", origin="telegram-goal", max_turns from
     ``--turns`` or :data:`_GOAL_DEFAULT_MAX_TURNS`) and stamps its id into the
-    minted task's ``params["_loop_id"]`` — ``core.step._judge`` reads that seam each
+    minted task's ``params["_loop_id"]``: ``core.step._judge`` reads that seam each
     turn to verify-and-terminate (see there for the feedback-threading detail).
     A bad ``--verify`` spec parses defensively: nothing is minted, an honest usage
     reply is returned. Without ``--verify`` this is byte-identical to before.

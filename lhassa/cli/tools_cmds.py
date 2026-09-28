@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""``lhassa tools`` — the self-written-tools surface (authoring + the quarantine room).
+"""``lhassa tools``: the self-written-tools surface (authoring + the quarantine room).
 
 Commands::
 
@@ -9,12 +9,12 @@ Commands::
 ``propose`` is the human/approval-driven door onto the missing first mile of
 self-improvement 2b (:mod:`lhassa.agents.author`): it asks the routine model to
 WRITE a small candidate tool, runs it through the quarantine + gates pipeline,
-and — only if every gate passes — parks a ``tool_graduation`` approval. Nothing
+and (only if every gate passes) parks a ``tool_graduation`` approval. Nothing
 here auto-graduates a tool; ``lhassa`` never fires this on its own.
 
 ``tools`` used to be a flat command (``lhassa.cli.commands.tools_cmd``); it is now
 this Typer GROUP so ``propose`` can live alongside it. The bare/``--json`` form is
-preserved byte-for-byte via ``invoke_without_command`` — reuses the exact same
+preserved byte-for-byte via ``invoke_without_command``: reuses the exact same
 loader (:func:`lhassa.cli.commands._load_tools`) so existing scripts/tests keep
 working. Registered as a sub-app in ``lhassa.cli.app`` via::
 
@@ -57,8 +57,8 @@ def tools_default(
 ) -> None:
     """List the self-written tools and their gate/usage state (bare ``lhassa tools``).
 
-    Delegates to :func:`lhassa.cli.commands.tools_cmd` — the exact same rendering
-    the flat command used before ``tools`` became a group — so this is a no-op
+    Delegates to :func:`lhassa.cli.commands.tools_cmd`: the exact same rendering
+    the flat command used before ``tools`` became a group; so this is a no-op
     change for existing callers. Does nothing when a subcommand (``propose``) was
     invoked instead.
     """
@@ -95,10 +95,10 @@ def tools_propose(
 
     Asks the routine (cheap) model to write ``<name>.py`` + its test, commits
     the candidate on a local git branch, and runs the segura/correcta/mejor
-    gates in order — ITERATING (``--max-turns``) on a retryable gate failure
+    gates in order. ITERATING (``--max-turns``) on a retryable gate failure
     before giving up. If every gate passes, a ``tool_graduation`` approval is
     parked (resolve it via ``POST /api/tools/<name>/graduate`` or the
-    dashboard) — this command NEVER auto-graduates a tool.
+    dashboard); this command NEVER auto-graduates a tool.
     """
 
     async def _run() -> dict:
@@ -128,7 +128,7 @@ def tools_propose(
 
     if result.get("graduated"):
         out.print(
-            f"[green]✓[/green] {name} passed all gates{turns_note} — "
+            f"[green]✓[/green] {name} passed all gates{turns_note}; "
             "[bold]approval parked[/bold]"
         )
         out.print(f"  [dim]approval_id: {result.get('approval_id')}[/dim]")
@@ -136,7 +136,7 @@ def tools_propose(
     else:
         capped_note = " [red](capped)[/red]" if result.get("capped") else ""
         out.print(
-            f"[yellow]✗[/yellow] {name} did not graduate{turns_note}{capped_note} — "
+            f"[yellow]✗[/yellow] {name} did not graduate{turns_note}{capped_note}; "
             f"{result.get('reason', '')}"
         )
         for gate in result.get("gates") or []:

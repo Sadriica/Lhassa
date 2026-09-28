@@ -1,11 +1,11 @@
-"""Calendar API tests — TestClient over a fresh app mounting only calendar_routes.
+"""Calendar API tests. TestClient over a fresh app mounting only calendar_routes.
 
 Mirrors ``tests/test_flow_api.py``'s pattern: mount the router alone (not the full
 server) so these tests exercise exactly the routes the integrator includes via
 ``app.include_router(calendar_routes.router)``, independent of its wiring.
 
 SECURITY invariant asserted throughout: no response body from any route ever
-contains a real feed url — only ``url_masked`` (a short non-reversible tail).
+contains a real feed url; only ``url_masked`` (a short non-reversible tail).
 """
 
 from datetime import datetime, timedelta, timezone

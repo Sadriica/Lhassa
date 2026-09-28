@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""The skills curator (Fase 2) — usage telemetry + a deterministic $0 lifecycle.
+"""The skills curator (Fase 2); usage telemetry + a deterministic $0 lifecycle.
 
 A Hermes-style curator: every skill read for use is tallied in a sidecar
 ``<skills_dir>/.usage.json`` file (name -> ``{use_count, last_used_at, pinned,
@@ -13,7 +13,7 @@ a run. No LLM is involved anywhere in this module.
 
 Every public helper degrades rather than raises: a missing or corrupt
 ``.usage.json`` reads back as ``{}``, and a failed write is logged and
-swallowed — telemetry must never break a think.
+swallowed; telemetry must never break a think.
 """
 
 from __future__ import annotations
@@ -66,7 +66,7 @@ def _resolve_config(config: "Optional[Config]") -> "Config":
 
 
 def _skills_dir(config: "Optional[Config]" = None) -> Path:
-    """The same skills directory :class:`SkillStore` uses — never hardcoded."""
+    """The same skills directory :class:`SkillStore` uses; never hardcoded."""
     cfg = _resolve_config(config)
     return Path(getattr(cfg, "skills_dir", "") or "")
 
@@ -90,7 +90,7 @@ def _now_iso(now: Optional[datetime] = None) -> str:
 
 
 def _load_usage(config: "Optional[Config]" = None) -> dict:
-    """The whole usage map. Missing/corrupt file degrades to ``{}`` — never raises."""
+    """The whole usage map. Missing/corrupt file degrades to ``{}``: never raises."""
     path = _usage_path(config)
     if not path.exists():
         return {}
@@ -98,7 +98,7 @@ def _load_usage(config: "Optional[Config]" = None) -> dict:
         data = json.loads(path.read_text(encoding="utf-8"))
         return data if isinstance(data, dict) else {}
     except Exception as exc:
-        logger.warning("skills.curator: corrupt usage file {} — {}", path, exc)
+        logger.warning("skills.curator: corrupt usage file {}; {}", path, exc)
         return {}
 
 
@@ -117,7 +117,7 @@ def _save_usage(usage: dict, config: "Optional[Config]" = None) -> None:
             os.fsync(fh.fileno())
         os.replace(tmp_name, path)
     except Exception as exc:
-        logger.warning("skills.curator: could not save usage file {} — {}", path, exc)
+        logger.warning("skills.curator: could not save usage file {}; {}", path, exc)
         if tmp_name:
             try:
                 os.unlink(tmp_name)
@@ -146,7 +146,7 @@ def record_use(
 ) -> None:
     """Bump the use counter for skill ``name`` and stamp ``last_used_at``.
 
-    Best-effort: any failure is logged and swallowed, never raised — this is
+    Best-effort: any failure is logged and swallowed, never raised; this is
     called from the hot think-time load path and must never break a think.
     """
     name = (name or "").strip()
@@ -159,11 +159,11 @@ def record_use(
         entry["last_used_at"] = _now_iso(now)
         _save_usage(usage, config)
     except Exception as exc:  # pragma: no cover - defensive, telemetry never breaks a think
-        logger.warning("skills.curator: record_use failed for {} — {}", name, exc)
+        logger.warning("skills.curator: record_use failed for {}; {}", name, exc)
 
 
 def pin(name: str, value: bool = True, config: "Optional[Config]" = None) -> None:
-    """Mark (or unmark) skill ``name`` as pinned — exempt from every transition."""
+    """Mark (or unmark) skill ``name`` as pinned; exempt from every transition."""
     name = (name or "").strip()
     if not name:
         return
@@ -173,7 +173,7 @@ def pin(name: str, value: bool = True, config: "Optional[Config]" = None) -> Non
         entry["pinned"] = bool(value)
         _save_usage(usage, config)
     except Exception as exc:  # pragma: no cover - defensive
-        logger.warning("skills.curator: pin failed for {} — {}", name, exc)
+        logger.warning("skills.curator: pin failed for {}; {}", name, exc)
 
 
 def get_usage(config: "Optional[Config]" = None) -> dict:
@@ -195,7 +195,7 @@ def set_state(name: str, state: str, config: "Optional[Config]" = None) -> None:
         entry["state"] = state
         _save_usage(usage, config)
     except Exception as exc:  # pragma: no cover - defensive
-        logger.warning("skills.curator: set_state failed for {} — {}", name, exc)
+        logger.warning("skills.curator: set_state failed for {}; {}", name, exc)
 
 
 # ── lifecycle sweep ─────────────────────────────────────────────────────────
@@ -204,7 +204,7 @@ def set_state(name: str, state: str, config: "Optional[Config]" = None) -> None:
 def _backup_skills_dir(skills_dir: Path, now: datetime) -> Path:
     """Tar the whole skills dir (minus curator plumbing) into ``.backups/``.
 
-    Timestamped from the already-resolved ``now`` — callers must not call
+    Timestamped from the already-resolved ``now``: callers must not call
     ``datetime.now`` again so a single run produces one consistent stamp.
     """
     backups_dir = skills_dir / BACKUPS_DIR
@@ -237,13 +237,13 @@ def run_transitions(
 
     A skill with no use for ``config.skill_stale_days`` (default 30) becomes
     "stale"; stale AND unused for ``config.skill_archive_days`` (default 90)
-    is archived — first a tar.gz backup of the whole skills dir is written
+    is archived; first a tar.gz backup of the whole skills dir is written
     under ``.backups/`` (once per run, only if something is actually
     archived), then the skill's folder is MOVED (never removed) into
     ``.archive/``. Pinned skills are exempt from every transition. A skill
     with no recorded usage falls back to its folder's mtime as the baseline.
 
-    ``now`` is accepted for testability — resolved exactly once so a run is
+    ``now`` is accepted for testability; resolved exactly once so a run is
     internally consistent (the backup stamp and every age comparison agree).
 
     Returns ``{"checked", "stale", "archived", "skipped_pinned"}``. Never raises.
@@ -267,7 +267,7 @@ def run_transitions(
                 try:
                     backup_path[0] = _backup_skills_dir(skills_dir, now_dt)
                 except Exception as exc:
-                    logger.warning("skills.curator: backup failed — {}", exc)
+                    logger.warning("skills.curator: backup failed; {}", exc)
 
         for folder in _iter_skill_dirs(skills_dir):
             name = folder.name
@@ -308,7 +308,7 @@ def run_transitions(
                     entry["state"] = STATE_ARCHIVED
                     summary["archived"] += 1
                 except Exception as exc:
-                    logger.warning("skills.curator: could not archive {} — {}", name, exc)
+                    logger.warning("skills.curator: could not archive {}; {}", name, exc)
             elif age_days >= stale_days:
                 entry["state"] = STATE_STALE
                 summary["stale"] += 1
@@ -318,7 +318,7 @@ def run_transitions(
         _save_usage(usage, cfg)
         return summary
     except Exception as exc:  # pragma: no cover - the sweep must never crash a caller
-        logger.warning("skills.curator: run_transitions failed — {}", exc)
+        logger.warning("skills.curator: run_transitions failed; {}", exc)
         return summary
 
 
@@ -341,7 +341,7 @@ def restore(name: str, config: "Optional[Config]" = None) -> bool:
         src = (skills_dir / ARCHIVE_DIR / name).resolve()
         if archive not in src.parents:
             logger.warning(
-                "skills.curator: refusing restore of {} — outside archive", name
+                "skills.curator: refusing restore of {}; outside archive", name
             )
             return False
         if not src.exists():
@@ -358,5 +358,5 @@ def restore(name: str, config: "Optional[Config]" = None) -> bool:
         _save_usage(usage, cfg)
         return True
     except Exception as exc:  # pragma: no cover - defensive
-        logger.warning("skills.curator: restore failed for {} — {}", name, exc)
+        logger.warning("skills.curator: restore failed for {}; {}", name, exc)
         return False

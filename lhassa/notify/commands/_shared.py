@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """Small LLM-free helpers shared across several command modules.
 
-Moved verbatim out of the former ``lhassa/notify/commands.py`` — see the
+Moved verbatim out of the former ``lhassa/notify/commands.py``: see the
 package ``__init__.py`` for where each command handler now lives.
 """
 
@@ -13,7 +13,7 @@ from loguru import logger
 
 
 def _oops(what: str) -> str:
-    """A degraded-path reply in Lhassa's voice — calm, owned, with a next step.
+    """A degraded-path reply in Lhassa's voice; calm, owned, with a next step.
 
     Every LLM-free command that fails says it the same way: first person, no
     alarm, no blame, and an invitation to retry. One voice, one place.
@@ -31,7 +31,7 @@ def _config(config):
 
 
 def _routine_provider_model(config) -> Tuple[str, str]:
-    """Derive the active *routine* provider label + model — LLM-free, no model call.
+    """Derive the active *routine* provider label + model. LLM-free, no model call.
 
     Mirrors :func:`lhassa.llm.router.pick_provider` / ``pick_model`` for the routine
     (heartbeat) path off plain config, **without** constructing a provider or making
@@ -84,7 +84,7 @@ def _health_line() -> Optional[str]:
 
 
 async def _today_spend(config) -> Optional[float]:
-    """Today's LLM spend (USD) from the cost ledger — the same data /api/llm/limits
+    """Today's LLM spend (USD) from the cost ledger; the same data /api/llm/limits
     reads. Defensive: returns ``None`` (omit the line) when the ledger is absent or
     unreadable. Reads the ledger DB directly so no model call is made.
     """

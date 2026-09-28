@@ -1,4 +1,4 @@
-"""CV file-I/O seam + engine export — offline, isolated under a temp LHASSA_CV_DIR."""
+"""CV file-I/O seam + engine export; offline, isolated under a temp LHASSA_CV_DIR."""
 
 import pytest
 
@@ -44,7 +44,7 @@ def test_load_base_reads_the_file(cv_dir):
 # ── export ──────────────────────────────────────────────────────────────────────
 def test_export_writes_to_a_per_run_folder(cv_dir):
     path = cv.export("hello tex", company="Acme Backend", run_id="run-123")
-    # out/{id}_{company}/{company}.tex — every run's artifacts live together
+    # out/{id}_{company}/{company}.tex; every run's artifacts live together
     assert path.parent.parent == paths.out_dir()
     assert path.parent.name.endswith("_acme-backend")
     assert path.name == "acme-backend.tex"
@@ -197,7 +197,7 @@ def test_contact_gate_passes_when_details_preserved(cv_dir):
     from lhassa.agents.verify import verify
 
     base = r"\href{mailto:owner@example.edu}{owner@example.edu} +57 300 111 2222"
-    out = "Email owner@example.edu, phone +57 300 111 2222 — tailored CV body."
+    out = "Email owner@example.edu, phone +57 300 111 2222; tailored CV body."
     v = verify(out, spec={"type": "contact_preserved"}, context={"base_cv": base})
     assert v.passed
 
@@ -219,7 +219,7 @@ def test_contact_gate_passes_with_no_base(cv_dir):
     assert v.passed  # nothing to enforce
 
 
-# ── restore_contact — deterministic contact preservation ──────────────────────────
+# ── restore_contact; deterministic contact preservation ──────────────────────────
 
 
 def test_restore_contact_swaps_all_altered_occurrences(cv_dir):

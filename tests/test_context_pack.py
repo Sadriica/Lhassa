@@ -1,4 +1,4 @@
-"""Context packs (Wave B — "Inteligencia" plan). Fully offline, $0, no model calls.
+"""Context packs (Wave B; "Inteligencia" plan). Fully offline, $0, no model calls.
 
 Covers: pack generation (4 files + digest headers), VISION pulling a seeded
 fact, MEMORY's TRIED/OPEN sections, freshness skip on unchanged inputs, staleness
@@ -26,7 +26,7 @@ def brain(tmp_path, monkeypatch):
 
 
 class _Cfg:
-    """Minimal config stand-in — only the attrs context_pack reads defensively."""
+    """Minimal config stand-in; only the attrs context_pack reads defensively."""
 
     def __init__(self, projects_dir, instance_id="inst_personal"):
         self.projects_dir = str(projects_dir)

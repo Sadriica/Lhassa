@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""``lhassa share`` — cross-instance resource sharing (Stream 6 Phase A).
+"""``lhassa share``: cross-instance resource sharing (Stream 6 Phase A).
 
 An OFFLINE, $0 management surface over :mod:`lhassa.org.sharing`: publish or
 revoke one of this instance's own skills/flows/templates/knowledge, grant or
 revoke another instance's discovery permission, and list offerings/
-subscriptions. Memory (facts/episodes) and identity are never reachable here —
+subscriptions. Memory (facts/episodes) and identity are never reachable here;
 the closed shareable-type vocabulary lives in
 :data:`lhassa.org.sharing.SHAREABLE_TYPES` and this CLI is a thin wrapper over
 it, so it inherits the same deny-by-default guarantees.
@@ -118,7 +118,7 @@ def offerings_cmd(
     """List a (possibly remote) instance's published offerings.
 
     Refused with a clear reason if this instance was never granted a SHARES
-    permit (deny-by-default) — asking for your own instance's offerings never
+    permit (deny-by-default); asking for your own instance's offerings never
     needs a grant.
     """
     from lhassa.org import sharing

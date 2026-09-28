@@ -1,16 +1,16 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""kg_sync / kg_resolve — the deterministic actions fronting the persisted
+"""kg_sync / kg_resolve; the deterministic actions fronting the persisted
 knowledge graph.
 
 ``kg_sync`` runs :func:`lhassa.memory.kg.sync` and renders a one-line summary.
 Read-only scan of facts/episodes since the last sync + a local write to the
-grande's ``kg_entities``/``kg_edges`` tables — no external send, no
+grande's ``kg_entities``/``kg_edges`` tables; no external send, no
 HITL-worthy surface (mirrors ``ingest_knowledge``/``distill_memory``, both
 also ``requires_approval=False``). A clean no-op when
 ``config.memory_graph_enabled`` is off (the default), so it is safe to
 schedule unconditionally. Never raises.
 
-``kg_resolve`` runs :func:`lhassa.memory.kg.resolve` (entity deduplication —
+``kg_resolve`` runs :func:`lhassa.memory.kg.resolve` (entity deduplication;
 see its docstring for the deterministic prefilter + optional-model merge
 rule) and renders a one-line summary. Same profile as ``kg_sync``: a local
 write only (merges entities/repoints edges within this instance's own
@@ -22,7 +22,7 @@ from __future__ import annotations
 
 
 def kg_possible(params: dict) -> str:
-    """Blocked while the persisted knowledge graph is off — both kg actions no-op."""
+    """Blocked while the persisted knowledge graph is off; both kg actions no-op."""
     try:
         from lhassa.config import Config
 
@@ -37,7 +37,7 @@ async def kg_sync(params: dict) -> str:
     """Feed the persisted knowledge graph from facts+episodes. Never raises.
 
     params:
-        config — optional Config override (tests).
+        config; optional Config override (tests).
     """
     try:
         if not isinstance(params, dict):
@@ -66,8 +66,8 @@ async def kg_resolve(params: dict) -> str:
     """Merge duplicate knowledge-graph entities. Never raises.
 
     params:
-        config    — optional Config override (tests).
-        max_pairs — optional cap on candidate pairs judged this pass
+        config   ; optional Config override (tests).
+        max_pairs; optional cap on candidate pairs judged this pass
                     (defaults to ``kg.resolve``'s own default, 20).
     """
     try:

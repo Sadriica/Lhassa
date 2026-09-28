@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""``lhassa bench`` — LhassaBench, the deterministic $0-scoring eval harness.
+"""``lhassa bench``: LhassaBench, the deterministic $0-scoring eval harness.
 
 Commands::
 
@@ -7,13 +7,13 @@ Commands::
     lhassa bench history [--fixture F] [--subject S] [--limit N]
 
 ``run`` walks the bundled fixture set (:mod:`lhassa.bench.loader`) against one
-or more subjects (:mod:`lhassa.llm.provider` names — ``claude``/``codex``/
+or more subjects (:mod:`lhassa.llm.provider` names; ``claude``/``codex``/
 ``opencode``/``default``/``local``) via :func:`lhassa.bench.runner.run_bench`,
 scores every completion with the LLM-free árbitro
 (:mod:`lhassa.agents.verify`), persists every row to ``bench_runs``, and prints
 the compact per-subject table. With no ``--subject`` given it defaults to
 whichever of ``claude``/``codex``/``default`` the box can actually run right
-now (mirrors the fallback chain's own install-check — never assumes a
+now (mirrors the fallback chain's own install-check; never assumes a
 subscription CLI is present). ``history`` reads back past runs without
 executing anything.
 """
@@ -34,9 +34,9 @@ bench_app = typer.Typer(
     help="LhassaBench: deterministic, $0-scoring eval harness over fixtures x subjects.",
 )
 
-# Candidate default subjects, in preference order — mirrors the routine
+# Candidate default subjects, in preference order; mirrors the routine
 # fallback chain's own CLI-first bias (subscription CLIs before the metered
-# cloud gateway, which defaults to the cheap/"deepseek"-class routine model —
+# cloud gateway, which defaults to the cheap/"deepseek"-class routine model;
 # see ``Config.model_cheap``). Whichever of these actually resolves gets used.
 _DEFAULT_SUBJECT_CANDIDATES = ("claude", "codex", "default")
 
@@ -104,7 +104,7 @@ def bench_run(
 
     failed = [r for r in rows if not r.get("passed")]
     if failed:
-        out.print(f"[dim]{len(failed)}/{len(rows)} rows failed — see `lhassa bench history` for detail.[/dim]")
+        out.print(f"[dim]{len(failed)}/{len(rows)} rows failed; see `lhassa bench history` for detail.[/dim]")
 
 
 @bench_app.command("history")
@@ -125,7 +125,7 @@ def bench_history(
     rows = asyncio.run(_load())
     out = _out()
     if not rows:
-        out.print("[dim]no bench runs recorded yet — run `lhassa bench run` first.[/dim]")
+        out.print("[dim]no bench runs recorded yet; run `lhassa bench run` first.[/dim]")
         return
 
     table = Table(title="LhassaBench history", **TABLE_KWARGS)

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Preconditions — an action that cannot act is skipped, not run to a no-op.
+"""Preconditions; an action that cannot act is skipped, not run to a no-op.
 
 Three scheduled actions were running daily against a disabled knowledge graph
 and unset knowledge roots. None of them failed; none of them COULD succeed, and
@@ -139,4 +139,4 @@ def test_a_blocked_action_leaves_no_episode_but_keeps_its_schedule(brain, monkey
 
     assert episodes == 0, "a skipped action must not describe a non-event"
     assert done == 1, "the task completes, or the beat re-fires it forever"
-    assert queued == 1, "the next occurrence is minted — the schedule survives"
+    assert queued == 1, "the next occurrence is minted; the schedule survives"

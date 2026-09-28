@@ -1,15 +1,15 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Overview screen — the brain at a glance, as four titled sections.
+"""Overview screen; the brain at a glance, as four titled sections.
 
 **State** (instance, last episode) · **Today** (thinks, cost, episodes) ·
 **Pending** (approvals, tasks, active projects) · **Health** (integrity
 attestation, failed system checks). All four read straight off the local DB /
-the health digest snapshot — no API server, no model, $0.
+the health digest snapshot; no API server, no model, $0.
 
 Re-polled on a timer like every other screen (``r`` forces it now). The redraw
 is skipped when the whole snapshot is unchanged, so an idle brain never
 flickers. Rows are real widgets (a label ``Static`` + a right-aligned value
-``Static``), not one bespoke markup string — labels in stone, values in white,
+``Static``), not one bespoke markup string; labels in stone, values in white,
 cost in green, a failing health check in red.
 """
 
@@ -33,7 +33,7 @@ def _today_utc() -> str:
 def _health_dir() -> Path:
     """Where the health digest snapshot lives (config override → default home).
 
-    Mirrors ``lhassa.org.monitor._health_dir`` (a read-only, $0 duplication —
+    Mirrors ``lhassa.org.monitor._health_dir`` (a read-only, $0 duplication;
     this screen must keep working even if that private helper's shape moves;
     the location itself is documented, not incidental).
     """
@@ -87,7 +87,7 @@ async def _integrity_status(instance_id: str) -> str:
 
 
 async def _gather(instance_id: str) -> dict:
-    """Collect the overview snapshot. Never raises — degrades field by field."""
+    """Collect the overview snapshot. Never raises; degrades field by field."""
     from lhassa.core import db
 
     snapshot = {
@@ -211,7 +211,7 @@ class OverviewScreen(Vertical):
     async def action_refresh(self) -> None:
         snapshot = await _gather(self._instance_id)
         if snapshot == self._snapshot:
-            return  # nothing changed — do not redraw (no flicker)
+            return  # nothing changed; do not redraw (no flicker)
         self._snapshot = snapshot
         self._paint(snapshot)
 

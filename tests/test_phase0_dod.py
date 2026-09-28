@@ -1,4 +1,4 @@
-"""Phase-0 Definition-of-Terminado — the end-to-end column, offline (§3-Fase 0).
+"""Phase-0 Definition-of-Terminado; the end-to-end column, offline (§3-Fase 0).
 
 This is the DoD test for Phase 0: "lanzas el timer → el PC arranca, hace check-in,
 el cerebro reconcilia, corre sync_repo (gate de allowlist) y reporta; el episodio
@@ -100,7 +100,7 @@ async def test_phase0_dod_end_to_end(tmp_path, monkeypatch):
     assert rep["outcome"] == "hecha"          # gate passed AND action ran
     assert "sync_repo ok" in rep["detail"]    # the (mocked) git pull succeeded
 
-    # /report marked the task done — nothing left pending.
+    # /report marked the task done; nothing left pending.
     assert await db.load_pending_tasks(INSTANCE) == []
     done = [t for t in await _all_rows(db, "tasks") if t["estado"] == "hecha"]
     assert len(done) == 1
@@ -160,7 +160,7 @@ async def test_beat_advances_pending_task_deterministically(tmp_path, monkeypatc
         params={"repo_dir": str(repo)}, origen_actor="duenio",
     )
 
-    # One beat advances the brain exactly one tick — runs the fixed action, no LLM.
+    # One beat advances the brain exactly one tick; runs the fixed action, no LLM.
     summary = await heartbeat.beat(INSTANCE)
     assert summary["triggers"] == 1
     assert summary["actions"] == 1
@@ -174,7 +174,7 @@ async def test_beat_advances_pending_task_deterministically(tmp_path, monkeypatc
     assert eps[0]["accion"] == "sync_repo"
     assert eps[0]["instance_id"] == INSTANCE
 
-    # A second beat finds nothing — the brain sleeps (idempotent, zero new episodes).
+    # A second beat finds nothing; the brain sleeps (idempotent, zero new episodes).
     summary2 = await heartbeat.beat(INSTANCE)
     assert summary2 == {"triggers": 0}
     assert len(await db.load_recent_episodes(INSTANCE)) == 1

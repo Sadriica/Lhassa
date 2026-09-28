@@ -150,7 +150,7 @@ async def test_retryable_failure_parks_waiting_retry_and_resume_completes(
 
     row = await repo.get_run("inst", parked["id"])
     assert row["status"] == RunStatus.WAITING_RETRY.value
-    # The lease is released exactly like a completed run — CAS/lease/fencing intact.
+    # The lease is released exactly like a completed run. CAS/lease/fencing intact.
     assert row["lease_token"] is None
     assert row["lease_owner"] is None
     assert row["next_wakeup_at"] is not None

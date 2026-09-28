@@ -1,17 +1,17 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""``TableScreen`` — the one pattern every DataTable-driven TUI screen shares.
+"""``TableScreen``: the one pattern every DataTable-driven TUI screen shares.
 
 Three things every screen in ``lhassa tui`` gets for free by subclassing it:
 
-* **Search / filter** — ``/`` focuses a one-line ``Input``; the rows are filtered
+* **Search / filter**: ``/`` focuses a one-line ``Input``; the rows are filtered
   by a case-insensitive SUBSTRING match over the joined cells (deliberately not
   fuzzy: a filter you can predict beats a filter that guesses). ``escape`` clears.
-* **Live refresh** — a ``set_interval`` re-polls the source every
+* **Live refresh**: a ``set_interval`` re-polls the source every
   :attr:`REFRESH_SECONDS` (default 4s: fresh enough to feel live, slow enough not
   to hammer SQLite). The redraw is SKIPPED when the rendered rows are unchanged,
   so an idle screen never flickers, and the cursor/scroll position is restored
   across a redraw that does happen.
-* **Degradation** — :meth:`load_rows` failures render an empty table rather than
+* **Degradation**: :meth:`load_rows` failures render an empty table rather than
   crashing the app; the TUI must keep working with the API server (and half the
   brain) down.
 
@@ -19,7 +19,7 @@ Subclasses declare ``COLUMNS`` / ``TABLE_ID`` and implement :meth:`load_rows`,
 which returns ``[(row_key, (cell, cell, …)), …]``. All data access stays DIRECT
 (``core/db.py``, ``flows/store.py``, ``skills/store.py``, ``org/topology.py``);
 mutations still cross the real seams (``security/approval.py:resolve``,
-``org/delegate.py:delegate_flow``) — never raw SQL.
+``org/delegate.py:delegate_flow``); never raw SQL.
 """
 
 from __future__ import annotations
@@ -116,7 +116,7 @@ class TableScreen(Vertical):
         return self._filter in " ".join(str(c) for c in cells).lower()
 
     def _empty_reason(self) -> str:
-        """Why the table is showing no rows — an honest empty state, not a
+        """Why the table is showing no rows; an honest empty state, not a
         blank grid. A filter that matched nothing says so by name."""
         if self._filter:
             return f"no rows match '{self._filter}'"

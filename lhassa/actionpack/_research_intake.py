@@ -76,7 +76,7 @@ async def research_intake(params: dict | None = None) -> str:
         if flow is None or assessment_flow is None:
             missing = flow_id if flow is None else assessment_flow_id
             message = (
-                "I can't investigate that yet — the research flow isn't seeded "
+                "I can't investigate that yet; the research flow isn't seeded "
                 "(run: lhassa seed apply research)."
             )
             await deliver(
@@ -297,7 +297,7 @@ async def research_intake(params: dict | None = None) -> str:
                 error=last[:1000] or "full research produced no gated draft",
             )
             message = (
-                "The idea intake didn't pass its research gate — the team said:\n\n"
+                "The idea intake didn't pass its research gate; the team said:\n\n"
                 + (last[:500] or "(no output recorded)")
                 + f"\n\nEvidence custody: {evidence_path}"
             )
@@ -338,7 +338,7 @@ async def research_intake(params: dict | None = None) -> str:
             origin_department="research",
         )
         await deliver(
-            f"Idea investigated — versioned corpus draft at {path}; evidence "
+            f"Idea investigated; versioned corpus draft at {path}; evidence "
             f"custody at {evidence_path}; assessment {assessment_id} earned "
             f"{assessment.get('investment_level')} investment "
             f"({assessment.get('decision')}). Review before publishing.",

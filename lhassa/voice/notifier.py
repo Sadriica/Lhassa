@@ -1,12 +1,12 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """
-Notification router — speaks via TTS when the voice pipeline is active,
+Notification router; speaks via TTS when the voice pipeline is active,
 falls back to a desktop notification when idle.
 
 Platform support:
-  Linux   — notify-send (libnotify)
-  macOS   — osascript (built-in)
-  Windows — PowerShell New-BurntToastNotification or a msg-box fallback
+  Linux  ; notify-send (libnotify)
+  macOS  ; osascript (built-in)
+  Windows. PowerShell New-BurntToastNotification or a msg-box fallback
 """
 
 import platform
@@ -26,15 +26,15 @@ async def notify(message: str, title: str = "Lhassa"):
             # Lazy import: the `voice` extra (pipecat) is only installed when the
             # voice pipeline itself is running, which is the only place
             # `state.is_voice_active` can ever be true. Guarding it here means
-            # this module — and everything that imports it (the scheduler, the
-            # proactive-monitoring tools) — loads cleanly on a headless install
+            # this module; and everything that imports it (the scheduler, the
+            # proactive-monitoring tools); loads cleanly on a headless install
             # with no voice extra.
             from pipecat.frames.frames import TTSSpeakFrame
 
             await state.pipeline_task.queue_frame(TTSSpeakFrame(text=message))
             return
         except ImportError:
-            logger.warning("voice extra not installed — falling back to desktop notify")
+            logger.warning("voice extra not installed; falling back to desktop notify")
         except Exception as e:
             logger.warning(f"TTS notify failed, falling back to desktop: {e}")
 

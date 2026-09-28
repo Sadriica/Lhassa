@@ -1,12 +1,12 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""LhassaBench — run fixtures against subjects, score with the real árbitro.
+"""LhassaBench; run fixtures against subjects, score with the real árbitro.
 
 The whole point of a benchmark for a brain that routes between providers/
 harnesses is closing the loop with hard numbers: this module runs each
 fixture's prompt through each named *subject* (today: a
 :class:`~lhassa.llm.provider.ModelProvider`; the same shape would fit a route
 or a loop config later) and scores the completion with the SAME objective
-verifier the rest of Lhassa trusts (:mod:`lhassa.agents.verify` — never an
+verifier the rest of Lhassa trusts (:mod:`lhassa.agents.verify`: never an
 LLM judge, per the standing invariant). Every scored row is appended to
 ``bench_runs`` (:mod:`lhassa.core.db`) so the CLI/dashboard/digest can read
 history without re-running anything.
@@ -14,7 +14,7 @@ history without re-running anything.
 Degrades, never raises: an unresolvable/not-installed subject yields an
 honest failed row (mirrors :func:`lhassa.llm.router.fallback_chain`'s skip
 discipline); a provider call that raises, times out, or a verifier that
-raises all become a failed row with the exception text in ``detail`` — never
+raises all become a failed row with the exception text in ``detail``: never
 propagate out of :func:`run_bench`. This is a bench, not a critical path, but
 the same "never crash the loop" discipline applies.
 """
@@ -31,7 +31,7 @@ from lhassa.agents import verify as verify_agent
 from lhassa.bench.loader import load_fixtures, resolve_verify_spec
 from lhassa.llm.router import CLI_PROVIDERS
 
-# Bound on how much a bench completion is allowed to cost in tokens — fixtures
+# Bound on how much a bench completion is allowed to cost in tokens; fixtures
 # are short-answer by design, so this stays small on purpose.
 DEFAULT_MAX_TOKENS = 256
 
@@ -46,7 +46,7 @@ def subject_available(subject: str, config: Any) -> bool:
     """Mirror ``fallback_chain``'s skip discipline: a CLI subject needs its
     binary on PATH; anything else is assumed reachable (resolved lazily).
 
-    Public (no leading underscore) — the CLI's default-subject picker
+    Public (no leading underscore); the CLI's default-subject picker
     (:mod:`lhassa.cli.bench_cmds`) reuses this exact check.
     """
     if subject in CLI_PROVIDERS:
@@ -102,7 +102,7 @@ async def run_bench(
 ) -> list[dict]:
     """Run every fixture x subject pair; return the scored rows (also persisted).
 
-    ``fixtures`` — a list of fixture ids to restrict to (default: every
+    ``fixtures``: a list of fixture ids to restrict to (default: every
     bundled fixture). ``complete_fn(provider, prompt, *, max_tokens) ->
     Completion-like`` is the injectable seam offline tests use to avoid any
     real provider/network call; it defaults to calling ``provider.complete``
@@ -111,7 +111,7 @@ async def run_bench(
 
     A subject that cannot be resolved (unknown name, or a CLI subject whose
     binary is not on PATH) produces ONE failed row per fixture explaining why,
-    instead of raising or silently dropping the subject — the caller always
+    instead of raising or silently dropping the subject; the caller always
     gets a complete, honest picture.
     """
     if config is None:
@@ -196,7 +196,7 @@ async def _run_one(
             duration_ms=duration_ms,
         )
 
-    # ``verify_agent.verify`` is THE scoring seam — LOCKED, no bypass: this is
+    # ``verify_agent.verify`` is THE scoring seam. LOCKED, no bypass: this is
     # the one and only place a completion is judged, and it is always the real
     # LLM-free árbitro (never an LLM judge). It normally never raises (it
     # degrades to a failed VerifyResult itself), but the call is still guarded
@@ -221,7 +221,7 @@ async def _run_one(
 def summarize(rows: list[dict]) -> str:
     """A compact per-subject table: subject, n, pass-rate, avg metric, cost.
 
-    Deterministic, $0, plain text — usable from the CLI (wrapped in a Rich
+    Deterministic, $0, plain text; usable from the CLI (wrapped in a Rich
     table) or dropped straight into a digest. Rows with no metric are simply
     excluded from the metric average; a subject with zero rows never appears.
     """

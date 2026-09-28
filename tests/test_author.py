@@ -1,4 +1,4 @@
-"""Tests for lhassa.agents.author — the missing first mile of self-improvement 2b.
+"""Tests for lhassa.agents.author; the missing first mile of self-improvement 2b.
 
 Fully offline: a fake CHEAP provider stands in for the routine model, a real
 local git repo (tmp dir) backs versioning, quarantine runs for real but only

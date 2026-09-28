@@ -26,7 +26,7 @@ import { RunRecord } from './workflow/runPanel'
 // The n8n-style WORK-FLOW canvas: a flow wires trigger → task → gate → output (with
 // branches), left-to-right. A small palette drops kinds onto the canvas (click or
 // drag); dragging between handles wires an edge; a side inspector edits the selected
-// node's `config` by kind (task uses HYBRID routing — auto by skill OR pin a brain).
+// node's `config` by kind (task uses HYBRID routing; auto by skill OR pin a brain).
 // Save POSTs/PUTs the full flow; Run executes the stored flow and renders the step
 // list. The canvas owns the React Flow state; the parent owns the API calls.
 //
@@ -41,7 +41,7 @@ import { RunRecord } from './workflow/runPanel'
 const nodeTypes = { flowNode: FlowCanvasNode }
 
 // Build the initial React Flow node/edge arrays from a flow dict (with a computed
-// layout). Done once at mount — EditorInner is keyed by flow.id so a different flow
+// layout). Done once at mount; EditorInner is keyed by flow.id so a different flow
 // remounts fresh; no synchronous setState-in-effect hydration needed.
 function initialGraph(flow, nodeStats = {}) {
   const pos = computeLayout(flow.nodes || [], flow.edges || [])
@@ -166,11 +166,11 @@ function EditorInner({ flow, skills, brains, flowStats, flowRuns = [], isNew, on
     setRfNodes((nds) => nds.map((n) => ({ ...n, data: { ...n.data, stats: nodeStats[n.id] } })))
   }, [nodeStats, setRfNodes])
 
-  // Nodes that can't be reached from the trigger — surfaced as a non-blocking
+  // Nodes that can't be reached from the trigger; surfaced as a non-blocking
   // warning so a visually-"connected" flow can't be saved silently disconnected.
   const disconnected = useMemo(() => computeDisconnected(rfNodes, rfEdges), [rfNodes, rfEdges])
 
-  // ── add a node (palette click or drop) — AUTO-WIRES it from a sensible source ──
+  // ── add a node (palette click or drop); AUTO-WIRES it from a sensible source ──
   const addNode = useCallback((kind, position) => {
     const meta = KINDS[kind]
     const used = new Set(rfNodes.map((n) => n.id))
@@ -359,7 +359,7 @@ function EditorInner({ flow, skills, brains, flowStats, flowRuns = [], isNew, on
       {/* validation (save/run feedback is delivered via global toasts) */}
       {triggerCount !== 1 && (
         <div className="lh-row" style={{ borderColor: 'rgba(217,165,33,0.45)', color: 'var(--lh-warn)' }}>
-          A flow needs exactly one trigger — found {triggerCount}. {triggerCount === 0 ? 'Add a Trigger.' : 'Remove the extras.'}
+          A flow needs exactly one trigger; found {triggerCount}. {triggerCount === 0 ? 'Add a Trigger.' : 'Remove the extras.'}
         </div>
       )}
       {disconnected.length > 0 && (
@@ -497,7 +497,7 @@ function EditorInner({ flow, skills, brains, flowStats, flowRuns = [], isNew, on
 
 export default function WorkflowEditor(props) {
   // Key the inner editor by flow id so opening a different flow remounts it fresh
-  // (state initialised straight from props — no hydration effect). A save adopts the
+  // (state initialised straight from props; no hydration effect). A save adopts the
   // returned flow with the SAME id, so the canvas is preserved.
   return (
     <ReactFlowProvider>

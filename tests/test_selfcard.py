@@ -1,4 +1,4 @@
-"""The self-card — live config + execution-modality taxonomy for the chat think.
+"""The self-card; live config + execution-modality taxonomy for the chat think.
 
 All offline: the card is built from Config/registries alone ($0, no model, no
 network); these tests pin what it must contain, what it must NEVER contain

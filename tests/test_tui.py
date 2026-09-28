@@ -1,9 +1,9 @@
-"""``lhassa tui`` — the Textual dashboard. Fully offline: a tmp DB, direct
+"""``lhassa tui``: the Textual dashboard. Fully offline: a tmp DB, direct
 ``lhassa.core.db`` reads (mirroring the CLI seam), and approve/deny resolved
 through the SAME ``lhassa.security.approval.resolve`` seam the CLI/API use.
 
 Uses Textual's official test harness (``app.run_test()``/pilot). Each screen
-must mount cleanly against an EMPTY DB (no crash on no data) — that's the
+must mount cleanly against an EMPTY DB (no crash on no data); that's the
 main risk surface for a read-model UI.
 """
 
@@ -121,7 +121,7 @@ async def test_approvals_screen_renders_via_describe(brain):
 @pytest.mark.asyncio
 async def test_no_loguru_sink_targets_stderr_while_mounted(brain):
     """Regression for the log-leak bug: while the TUI owns the screen, nothing
-    may write to stderr — a live stderr sink paints warnings over the running
+    may write to stderr; a live stderr sink paints warnings over the running
     UI. ``on_mount`` must swap every sink for one that writes to the app's own
     (off-screen) log, and ``on_unmount`` must restore a stderr sink afterward
     so a plain CLI session behaves normally again."""
@@ -139,12 +139,12 @@ async def test_no_loguru_sink_targets_stderr_while_mounted(brain):
     app = LhassaTui(instance_id=INSTANCE)
     async with app.run_test() as pilot:
         await pilot.pause()
-        # Mounted: no handler is bound to a live stream object at all — every
+        # Mounted: no handler is bound to a live stream object at all; every
         # sink is either the app's own log or nothing.
         handlers = getattr(_loguru._core, "handlers", {})
         assert not any(_targets_real_stream(h) for h in handlers.values())
 
-    # After the app tears down, a sink is restored (normal CLI behavior) —
+    # After the app tears down, a sink is restored (normal CLI behavior);
     # there is at least one handler again where there was none live before.
     assert _handler_ids() != set()
 
@@ -185,7 +185,7 @@ async def test_overview_rows_actually_have_height():
     Textual subtracts padding from a declared height, so `height: 1` plus
     `padding-bottom: 1` left zero rows of content: the Overview cards showed
     their titles and nothing else. Spacing there must be margin. Automated
-    tests passed while the screen was visibly empty — this is the assertion
+    tests passed while the screen was visibly empty; this is the assertion
     that would have caught it.
     """
     from lhassa.cli.tui.app import LhassaTui

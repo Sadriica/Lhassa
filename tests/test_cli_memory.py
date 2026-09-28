@@ -71,7 +71,7 @@ def test_memory_add_rejects_bad_tipo(tmp_path, monkeypatch):
     res = runner.invoke(app, ["memory", "add", "Some fact.", "--tipo", "bogus"])
     assert res.exit_code != 0
     assert res.exit_code == 2
-    # Never crashed with a raw traceback — a clean CLI usage error.
+    # Never crashed with a raw traceback; a clean CLI usage error.
     assert res.exception is None or isinstance(res.exception, SystemExit)
 
 
@@ -175,7 +175,7 @@ def test_onboard_dedupes_against_existing_facts(tmp_path, monkeypatch, capsys):
     from lhassa.cli.memory_cmds import onboard_cmd
 
     answers = [
-        "Owner is a solo developer building Lhassa.",  # duplicate — should be skipped
+        "Owner is a solo developer building Lhassa.",  # duplicate; should be skipped
         "",
         "",
         "",
@@ -188,7 +188,7 @@ def test_onboard_dedupes_against_existing_facts(tmp_path, monkeypatch, capsys):
     assert "already carry" in out
 
     rows = asyncio.run(facts.load_facts(INST))
-    # Still just the one original fact — no duplicate written.
+    # Still just the one original fact; no duplicate written.
     assert len(rows) == 1
 
 

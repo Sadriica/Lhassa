@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Flows screen — stored flow definitions on top, their durable runs below.
+"""Flows screen; stored flow definitions on top, their durable runs below.
 
 Reads go straight to :class:`~lhassa.flows.store.FlowStore` (the flows file) and
 the durable kernel (:class:`~lhassa.flows.runtime.FlowRuntimeRepository`), so the
 screen works with the API server down.
 
-The one MUTATION here — ``x`` runs the selected flow — goes through
+The one MUTATION here (``x`` runs the selected flow) goes through
 :func:`lhassa.org.delegate.delegate_flow`, exactly like ``lhassa flow run`` and
 ``POST /api/flows/{id}/run``. A flow is never run bare from any surface.
 """
@@ -55,7 +55,7 @@ class FlowsScreen(TableScreen):
 
     def compose(self) -> ComposeResult:
         yield from super().compose()
-        yield Static("Runs — select a flow above", id="flows-runs-label")
+        yield Static("Runs; select a flow above", id="flows-runs-label")
         runs = DataTable(id="flows-runs-table", cursor_type="row")
         runs.add_columns("run", "status", "checkpoint", "updated")
         yield runs
@@ -108,7 +108,7 @@ class FlowsScreen(TableScreen):
             return
         self._selected_flow = str(event.row_key.value or "")
         label = self.query_one("#flows-runs-label", Static)
-        label.update(f"Runs — [accent]{self._selected_flow}[/]")
+        label.update(f"Runs; [accent]{self._selected_flow}[/]")
         await self._refresh_runs()
 
     async def action_run_selected(self) -> None:
@@ -130,7 +130,7 @@ class FlowsScreen(TableScreen):
             self.set_status(f"[error]✗[/] {flow_id}: {exc}")
             return
         self.set_status(
-            f"[success]✓[/] run [model]{record.get('id')}[/] — {record.get('status')}"
+            f"[success]✓[/] run [model]{record.get('id')}[/]; {record.get('status')}"
         )
         self._selected_flow = flow_id
         await self._refresh_runs()

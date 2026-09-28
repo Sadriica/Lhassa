@@ -5,19 +5,19 @@ same unit suite `make test` runs (pytest respects `pyproject.toml`'s
 `addopts = -m "not integration"`, so this is over the unit suite, not the
 live-CLI integration test) instrumented with `pytest-cov`, writing a terminal
 report and an HTML one to `htmlcov/index.html`. Coverage is a separate target
-on purpose — instrumentation slows the run, so `make test` never pays for it.
+on purpose; instrumentation slows the run, so `make test` never pays for it.
 
 `[tool.coverage.run]`/`[tool.coverage.report]` in `pyproject.toml` scope
 `source` to `lhassa` and omit `lhassa/_vendor/*` (vendored third-party code)
-and `lhassa/voice/*` (the pipecat/torch audio pipeline — needs a mic/speaker,
+and `lhassa/voice/*` (the pipecat/torch audio pipeline; needs a mic/speaker,
 never exercised by the unit suite).
 
-## Baseline — 2026-08-04
+## Baseline. 2026-08-04
 
 **78% total** (29,088 statements, 6,336 missed), 2651 passed / 2 deselected,
 run time ~4m20s.
 
-10 worst-covered modules (all 0% — never imported by the unit suite):
+10 worst-covered modules (all 0%; never imported by the unit suite):
 
 | Module | Statements missed |
 |---|---|
@@ -36,7 +36,7 @@ These are mostly the voice-tool `handle_<name>` bodies (registered in
 `tools/registry.py` but reachable only through the live voice pipeline, which
 `tests/` never drives directly) and a couple of dead-looking entry points
 (`core/heartbeat_loop.py`, `org/__main__.py`, `org/integrity_architecture.py`)
-worth a follow-up look — either add direct unit tests for the handlers, or
+worth a follow-up look; either add direct unit tests for the handlers, or
 confirm the entry points are exercised some other way and mark them
 `# pragma: no cover` deliberately.
 

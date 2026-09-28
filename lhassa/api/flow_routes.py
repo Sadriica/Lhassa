@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""FastAPI routes for work-flows — the backend for the (later) canvas frontend.
+"""FastAPI routes for work-flows; the backend for the (later) canvas frontend.
 
 A thin shell over :mod:`lhassa.flows`: it validates request bodies and turns store /
 model errors into 4xx (never a 500), so a malformed flow from the canvas is a clean
@@ -62,7 +62,7 @@ async def list_flows() -> list[dict]:
     return [f.to_dict() for f in _store().list_flows()]
 
 
-# ── flow-templates gallery (declared BEFORE /{flow_id} — see module docstring) ─────
+# ── flow-templates gallery (declared BEFORE /{flow_id}; see module docstring) ─────
 
 
 @router.get("/templates")
@@ -141,7 +141,7 @@ async def run_flow_endpoint(flow_id: str, body: dict | None = Body(default=None)
     The optional body may carry ``{"inputs": {...}}`` to seed the trigger (a bare
     ``{"input": "<text>"}`` is accepted as a convenience and wrapped as
     ``{"summary": "<text>"}``) and an optional ``"company"`` string (the CV-export
-    override — override → context → ``"untitled"``). Returns the structured run
+    override; override → context → ``"untitled"``). Returns the structured run
     record from :func:`lhassa.flows.engine.run_flow`.
 
     The run goes through the deterministic org DELEGATION seam

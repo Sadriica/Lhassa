@@ -1,25 +1,25 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""The ``cv`` seed — recreate the "Impossible-to-reject CV" pipeline from code.
+"""The ``cv`` seed; recreate the "Impossible-to-reject CV" pipeline from code.
 
 This is the FIRST registered seed (see :mod:`lhassa.seeds`); future seeds drop in the
 same way. Applying it reproduces, on a fresh machine, everything we hand-built for the
 CV pipeline EXCEPT the owner's real base CV (which stays user-provided):
 
   * the ``interns`` department under ``general`` (created if missing),
-  * its 6 pinned worker brains — ``jd-analyst``, ``researcher``, ``cv-writer``,
-    ``ats-evaluator``, ``critic``, ``finalizer`` — each a leaf under ``interns``,
+  * its 6 pinned worker brains; ``jd-analyst``, ``researcher``, ``cv-writer``,
+    ``ats-evaluator``, ``critic``, ``finalizer``: each a leaf under ``interns``,
   * the ``interns`` brain wired as the environment MONITOR/supervisor
     (:func:`lhassa.org.monitor.make_brain_monitor`),
   * the canonical ``flow-zvzpry`` work-flow (trigger → analyze → research → draft →
     ATS score → verify gate → critique → finalize → contact-preserved gate → tex
     output), captured VERBATIM below from the live definition as the source of truth,
-  * a PLACEHOLDER ``cv_largo.tex`` — written ONLY when none exists, so a real base CV
+  * a PLACEHOLDER ``cv_largo.tex``: written ONLY when none exists, so a real base CV
     is never overwritten.
 
 Guarantees (matching the rest of Lhassa): idempotent (existing brains are skipped, no
 duplicates), non-destructive (an existing base CV is kept; overwriting the flow
-DEFINITION is fine — it is code-owned config and drops no brains), and it never raises
-destructively — a partial failure is reported in the returned summary, not fatal.
+DEFINITION is fine; it is code-owned config and drops no brains), and it never raises
+destructively; a partial failure is reported in the returned summary, not fatal.
 
 The org scaffold + monitor wiring go through the validated org management API
 (:mod:`lhassa.org.management`), the flow through :class:`lhassa.flows.store.FlowStore`,
@@ -99,8 +99,8 @@ List your real skills, tools and technologies here.
 """
 
 # ── the canonical CV work-flow, captured VERBATIM from the live ``flow-zvzpry`` ────
-# This is the SOURCE OF TRUTH: the exact JSON of the flow we built (all task prompts —
-# incl. the <=2-page / never-invent / contact-verbatim / LaTeX-only rules — and their
+# This is the SOURCE OF TRUTH: the exact JSON of the flow we built (all task prompts;
+# incl. the <=2-page / never-invent / contact-verbatim / LaTeX-only rules; and their
 # max_tokens budgets, the two gates: gate-1 verify + gate-2 {type: contact_preserved},
 # and the output {type: tex}). Embedded as a raw string and parsed at build time so it
 # round-trips exactly. The ``id`` is overridden with the resolved flow id when built.
@@ -142,7 +142,7 @@ _CV_FLOW_JSON = r'''{
             "kind": "task",
             "config": {
                 "brain": "cv-writer",
-                "prompt": "Build on the candidate's base CV below, tailoring it for {company}. Do NOT invent experience: tighten, strengthen and reorder what is already there so it maps to the brief's must-have keywords and ATS terms. PRESERVE the base CV's structure, sections and LaTeX formatting; keep it to a MAX of 2 pages per role. Output valid LaTeX.\n\n--- BASE CV (cv_largo.tex) ---\n{base_cv}\n--- END BASE CV ---\n\nUsing the brief and research, produce 3 tailored LaTeX CV alternatives, each optimizing the base above. Output ONLY the complete LaTeX document, starting with \\documentclass and ending with \\end{document} — no prose, no explanations, no markdown fences. HARD RULES: copy ALL contact details (name, email, phone, links, location) EXACTLY and verbatim from the base CV — never alter, reformat, or invent them. Do NOT invent or add tools, technologies, employers, dates, metrics or experience that are not already in the base CV — only rephrase, reorder and emphasize what genuinely exists there. Length: target ~1.5 pages and NEVER exceed 2 pages (2 is a hard maximum, aim a little under) -- if it does not fit, tighten wording and cut the LEAST relevant bullets and the oldest/least-relevant roles FIRST (never touch contact details or the most relevant experience).",
+                "prompt": "Build on the candidate's base CV below, tailoring it for {company}. Do NOT invent experience: tighten, strengthen and reorder what is already there so it maps to the brief's must-have keywords and ATS terms. PRESERVE the base CV's structure, sections and LaTeX formatting; keep it to a MAX of 2 pages per role. Output valid LaTeX.\n\n--- BASE CV (cv_largo.tex) ---\n{base_cv}\n--- END BASE CV ---\n\nUsing the brief and research, produce 3 tailored LaTeX CV alternatives, each optimizing the base above. Output ONLY the complete LaTeX document, starting with \\documentclass and ending with \\end{document}; no prose, no explanations, no markdown fences. HARD RULES: copy ALL contact details (name, email, phone, links, location) EXACTLY and verbatim from the base CV; never alter, reformat, or invent them. Do NOT invent or add tools, technologies, employers, dates, metrics or experience that are not already in the base CV; only rephrase, reorder and emphasize what genuinely exists there. Length: target ~1.5 pages and NEVER exceed 2 pages (2 is a hard maximum, aim a little under) -- if it does not fit, tighten wording and cut the LEAST relevant bullets and the oldest/least-relevant roles FIRST (never touch contact details or the most relevant experience).",
                 "max_tokens": 6000
             },
             "label": "Draft CV alternatives (on base CV)"
@@ -184,7 +184,7 @@ _CV_FLOW_JSON = r'''{
             "kind": "task",
             "config": {
                 "brain": "finalizer",
-                "prompt": "Merge the strongest alternative with the critique fixes into one final, impossible-to-reject CV for {company}. Stay grounded in the base CV below (do not invent experience): optimize and strengthen it. PRESERVE its structure, sections and LaTeX formatting, target ~1.5 pages and NEVER exceed 2 pages (2 is a hard maximum, aim a little under) -- if it does not fit, tighten wording and cut the LEAST relevant bullets and the oldest/least-relevant roles FIRST (never touch contact details or the most relevant experience). Output the complete final CV as valid, compilable LaTeX only.\n\n--- BASE CV (cv_largo.tex) ---\n{base_cv}\n--- END BASE CV --- Output ONLY the complete LaTeX document, starting with \\documentclass and ending with \\end{document} — no prose, no explanations, no markdown fences. HARD RULES: copy ALL contact details (name, email, phone, links, location) EXACTLY and verbatim from the base CV — never alter, reformat, or invent them. Do NOT invent or add tools, technologies, employers, dates, metrics or experience that are not already in the base CV — only rephrase, reorder and emphasize what genuinely exists there.",
+                "prompt": "Merge the strongest alternative with the critique fixes into one final, impossible-to-reject CV for {company}. Stay grounded in the base CV below (do not invent experience): optimize and strengthen it. PRESERVE its structure, sections and LaTeX formatting, target ~1.5 pages and NEVER exceed 2 pages (2 is a hard maximum, aim a little under) -- if it does not fit, tighten wording and cut the LEAST relevant bullets and the oldest/least-relevant roles FIRST (never touch contact details or the most relevant experience). Output the complete final CV as valid, compilable LaTeX only.\n\n--- BASE CV (cv_largo.tex) ---\n{base_cv}\n--- END BASE CV --- Output ONLY the complete LaTeX document, starting with \\documentclass and ending with \\end{document}; no prose, no explanations, no markdown fences. HARD RULES: copy ALL contact details (name, email, phone, links, location) EXACTLY and verbatim from the base CV; never alter, reformat, or invent them. Do NOT invent or add tools, technologies, employers, dates, metrics or experience that are not already in the base CV; only rephrase, reorder and emphasize what genuinely exists there.",
                 "max_tokens": 8000
             },
             "label": "Synthesize the final CV (LaTeX)"
@@ -322,7 +322,7 @@ def seed_cv_pipeline(
     only when none exists.
 
     ``flow_id`` (or ``config.cv_flow_id``) overrides the work-flow id; it defaults to
-    :data:`DEFAULT_CV_FLOW_ID`. Never raises destructively — each stage is isolated and
+    :data:`DEFAULT_CV_FLOW_ID`. Never raises destructively; each stage is isolated and
     a failure is recorded under ``errors`` in the returned summary::
 
         {brains_created, brains_existing, flow_id, monitor, base_cv, errors}
@@ -399,5 +399,5 @@ def seed_cv_pipeline(
     "base CV (never overwriting a real one).",
 )
 def apply(config: "Optional[Config]" = None) -> dict:
-    """The ``cv`` seed entry point — see :func:`seed_cv_pipeline`."""
+    """The ``cv`` seed entry point; see :func:`seed_cv_pipeline`."""
     return seed_cv_pipeline(config)

@@ -1,36 +1,36 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """
-Cuarentena — wall #1 of the three walls (§2.6) and gate #1 "Segura" of the
+Cuarentena; wall #1 of the three walls (§2.6) and gate #1 "Segura" of the
 self-improvement 2b pipeline (§2.8).
 
 This is a LOCAL sandbox for running self-written *candidate* code under the rule
 that it gets **no network and, where the tool allows it, no access to real
 data**. The brain may write a tool, but before that tool earns any trust it
 runs here first: a fresh temporary directory as its cwd, a scrubbed environment
-(so it cannot read a single secret/token from the process env), and — where the
-chosen tool offers it — a real filesystem jail and a network namespace with no
+(so it cannot read a single secret/token from the process env), and; where the
+chosen tool offers it; a real filesystem jail and a network namespace with no
 interfaces (so it cannot phone home or read the real disk).
 
 Isolation, strongest **filesystem** guarantee first (detected at runtime via
 :func:`shutil.which`, each probed before being trusted):
 
-  * ``bwrap --unshare-net`` — a bubblewrap sandbox that only bind-mounts
+  * ``bwrap --unshare-net``: a bubblewrap sandbox that only bind-mounts
     ``/usr``/``/etc``/the workdir; the real ``$HOME`` (and everything else,
     including ``~/.lhassa/keys/ed25519`` and any ``.env``) is simply not present
     inside the mount namespace. **Preferred**: real FS isolation, not just env
     scrubbing.
-  * ``firejail --net=none --private=<workdir>`` — ``--private`` rebinds the
+  * ``firejail --net=none --private=<workdir>``: ``--private`` rebinds the
     candidate's ``$HOME`` to the empty workdir, so it likewise cannot read the
     real one. Second choice.
-  * ``unshare -rnm`` — a rootless user + network + **mount** namespace. This
+  * ``unshare -rnm``: a rootless user + network + **mount** namespace. This
     is deliberately last, and reported as ``"env+net only"`` rather than a
     filesystem-isolating level: a bare mount namespace changes nothing about
-    *which* files are visible (there is no pivot/chroot here, on purpose — a
+    *which* files are visible (there is no pivot/chroot here, on purpose; a
     hand-rolled bind-mount jail over guessed "sensitive" paths would be
     fragile and could silently miss one), so a candidate that knows an
     absolute path can still read ``~/.lhassa/keys/ed25519`` or a project
     ``.env`` through it. The ``-m`` only stops the candidate's *own* mount
-    operations from leaking back to the host — real, but narrow, containment.
+    operations from leaking back to the host; real, but narrow, containment.
     Prefer bwrap/firejail whenever either is present; this is what remains
     when neither is.
 
@@ -39,7 +39,7 @@ If none of those tools exist, Linux now behaves like every other platform:
 or the pre-existing ``LHASSA_QUARANTINE_ISOLATION=none`` opt out of the refusal
 explicitly, for a host whose operator has consciously accepted the risk). If one
 of those escape hatches is set, the run proceeds as a plain subprocess with the
-scrubbed env, the temp cwd, and a hard timeout — but ``[SUPUESTO]``: in that mode
+scrubbed env, the temp cwd, and a hard timeout; but ``[SUPUESTO]``: in that mode
 the network block is **best-effort only**, there is no namespace, so a determined
 candidate could still open a socket or read the real filesystem; only the
 env-scrub + timeout still hold. ``QuarantineResult.isolation`` always reports
@@ -48,7 +48,7 @@ which level was actually achieved (``"bwrap"``/``"firejail"`` = FS-isolated,
 anything that didn't get real filesystem isolation.
 
 ``[SUPUESTO]``: a stronger future sandbox is Anthropic's Managed Agent Harness
-(§2.8) — when wired in it would slot under :func:`run_in_quarantine` as another,
+(§2.8); when wired in it would slot under :func:`run_in_quarantine` as another,
 higher, isolation level without changing this contract.
 
 The function **never raises** and always kills the child on timeout.
@@ -84,10 +84,10 @@ class QuarantineResult:
     """The verdict of one quarantined run.
 
     ``ok`` is the gate-1 signal: the candidate ran cleanly (exit 0) without timing
-    out or escaping. ``isolation`` names the level actually achieved — one of
+    out or escaping. ``isolation`` names the level actually achieved; one of
     ``"bwrap"``/``"firejail"`` (real filesystem isolation + no network),
     ``"env+net only"`` (``unshare -rnm``: network + user + mount namespace, but
-    the real filesystem is still readable by absolute path — no FS isolation),
+    the real filesystem is still readable by absolute path; no FS isolation),
     or ``"none"`` (no namespace at all; only reached via an explicit opt-out, see
     ``run_in_quarantine``). A caller/gate that needs a real data guarantee should
     check for ``"bwrap"``/``"firejail"`` specifically, not merely ``!= "none"``.
@@ -166,12 +166,12 @@ def _select_isolation(workdir: Path) -> tuple[list[str], str]:
     if shutil.which("unshare"):
         # -r: map the caller to root inside a new user namespace (no real privilege).
         # -n: a fresh network namespace with no configured interfaces → no route out.
-        # -m: a fresh mount namespace — contains the candidate's OWN mount/unmount
+        # -m: a fresh mount namespace; contains the candidate's OWN mount/unmount
         #     calls so they cannot leak back to the host. It does NOT hide any
         #     existing file: with no pivot/chroot, the real filesystem (including
         #     ~/.lhassa/keys/ed25519 and any project .env) is still visible by
         #     absolute path. That is why this level is reported as "env+net
-        #     only", never as a filesystem-isolating one — see the module
+        #     only", never as a filesystem-isolating one; see the module
         #     docstring for why a hand-rolled bind-mount jail here would be
         #     fragile rather than robust.
         prefix = ["unshare", "-rnm", "--"]
@@ -179,7 +179,7 @@ def _select_isolation(workdir: Path) -> tuple[list[str], str]:
             return (prefix, "env+net only")
     # Non-Linux hosts: ask the platform layer for its own sandbox (macOS
     # ``sandbox-exec``). Deliberately consulted ONLY off Linux, so the tier-1
-    # path above stays byte-identical — on Linux the three tools already ARE
+    # path above stays byte-identical; on Linux the three tools already ARE
     # the whole chain, and re-probing them through the layer would change
     # nothing but the cost.
     if current_platform_name() != "linux":
@@ -265,23 +265,23 @@ async def run_in_quarantine(
     cmd = [*prefix, *_build_inner(argv_or_code)]
 
     if isolation == "none":
-        # An unsandboxed run is REFUSED by default, on EVERY platform — no
+        # An unsandboxed run is REFUSED by default, on EVERY platform; no
         # namespacing tool means no filesystem isolation and no network
         # isolation, which would quietly turn "authored code never executes
         # outside quarantine" into a run of model-written code directly on the
         # owner's machine. This used to warn-and-proceed on Linux specifically
         # (treating "no sandbox tool" as a rare misconfiguration rather than
         # the same risk it is everywhere else); that inconsistency is the bug
-        # — Linux now refuses too, unless one of the two explicit escape
+        #; Linux now refuses too, unless one of the two explicit escape
         # hatches below is set.
         forced_off = (
             os.getenv("LHASSA_QUARANTINE_ISOLATION") or ""
         ).strip().lower() in {"none", "off", "0"}
         # Two distinct, deliberate operator opt-outs, both honoured on every
         # platform (never auto-applied):
-        #   * LHASSA_QUARANTINE_ISOLATION=none — "don't even try a sandbox
+        #   * LHASSA_QUARANTINE_ISOLATION=none; "don't even try a sandbox
         #     tool" (also short-circuits _select_isolation itself, above).
-        #   * LHASSA_QUARANTINE_ALLOW_UNSANDBOXED=1 — "no sandbox tool was
+        #   * LHASSA_QUARANTINE_ALLOW_UNSANDBOXED=1; "no sandbox tool was
         #     found; run anyway." The new, narrower hatch this refusal needs:
         #     a host that consciously accepts running self-written candidates
         #     with only env-scrub + temp-dir + timeout containment.
@@ -296,7 +296,7 @@ async def run_in_quarantine(
                 stdout="",
                 stderr=(
                     "quarantine: refusing to run unsandboxed on platform "
-                    f"{current_platform_name()!r} — no sandbox tool available "
+                    f"{current_platform_name()!r}; no sandbox tool available "
                     "(install unshare/bwrap/firejail, or set "
                     "LHASSA_QUARANTINE_ALLOW_UNSANDBOXED=1 to accept an "
                     "unsandboxed run)"
@@ -308,7 +308,7 @@ async def run_in_quarantine(
             )
         logger.warning(
             "quarantine: no namespacing tool (unshare/firejail/bwrap) and no "
-            "platform sandbox; proceeding UNSANDBOXED because {} was set — "
+            "platform sandbox; proceeding UNSANDBOXED because {} was set; "
             "network AND filesystem containment are best-effort only "
             "[SUPUESTO]",
             "LHASSA_QUARANTINE_ISOLATION=none" if forced_off
@@ -318,7 +318,7 @@ async def run_in_quarantine(
     try:
         stdout, stderr, exit_code, timed_out = _run_process(cmd, base, env, timeout)
     except (OSError, ValueError) as exc:
-        # Wrapper or interpreter could not be launched at all — caged failure.
+        # Wrapper or interpreter could not be launched at all; caged failure.
         return QuarantineResult(
             ok=False,
             stdout="",
@@ -338,7 +338,7 @@ async def run_in_quarantine(
     # diagnostic format (``unshare:`` / ``bwrap:`` / ``firejail:``). It cannot
     # detect a candidate that successfully escapes the namespace *after* setup
     # (e.g. a kernel exploit) or one that simply reads real data through a level
-    # that never hid it in the first place (see ``"env+net only"`` above) — that
+    # that never hid it in the first place (see ``"env+net only"`` above); that
     # class of gap is surfaced via ``isolation``, not ``escaped``, so a caller
     # that cares about real filesystem containment must check the level, not
     # just this flag.

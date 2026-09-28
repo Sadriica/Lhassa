@@ -1,4 +1,4 @@
-"""Tests for lhassa.agents.gates — the four gates of self-improvement 2b.
+"""Tests for lhassa.agents.gates; the four gates of self-improvement 2b.
 
 Offline: the candidate is a harmless ``bash -c`` snippet; correctness gates use
 ``true``/``false`` (or a mocked subprocess seam); the metric is a plain Python

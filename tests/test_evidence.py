@@ -1,4 +1,4 @@
-"""Tests for the evidence vocabulary (lhassa/memory/evidence.py) — the pure,
+"""Tests for the evidence vocabulary (lhassa/memory/evidence.py); the pure,
 derived "prepared / observed / verified" claim ladder. Offline, no I/O.
 """
 

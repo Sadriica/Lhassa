@@ -1,4 +1,4 @@
-"""Tests for lhassa.org.commons — the read-only cross-cutting source of truth."""
+"""Tests for lhassa.org.commons; the read-only cross-cutting source of truth."""
 
 import pytest
 import pytest_asyncio  # noqa: F401
@@ -32,7 +32,7 @@ async def test_general_writes_and_all_read(tmp_path, monkeypatch):
         "policy.refunds", {"max_usd": 100}, by_role="general", by_actor="owner",
         instance_id="inst_personal",
     )
-    # readable by anyone — no role gate on reads
+    # readable by anyone; no role gate on reads
     val = await commons.get("policy.refunds", instance_id="inst_personal")
     assert val == {"max_usd": 100}
 
@@ -61,7 +61,7 @@ async def test_single_shared_row_no_per_department_copy(tmp_path, monkeypatch):
     await commons.set("orgchart", ["general", "dept:sales", "dept:eng"],
                       by_role="general", by_actor="owner", instance_id="inst_personal")
 
-    # one curator overwrote the same shared row — exactly one row exists
+    # one curator overwrote the same shared row; exactly one row exists
     from lhassa._vendor import aiosqlite
     async with aiosqlite.connect(db.DB_PATH) as conn:
         async with conn.execute(

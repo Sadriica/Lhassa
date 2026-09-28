@@ -10,7 +10,7 @@ import { shortWhen } from '../lib/format'
 import { EmptyState, ErrorState, SectionHeader } from './ui/common'
 
 // The "Projects" section: the first-class workspace entity (§core.projects).
-// Lists projects (GET /api/projects) and opens a detail view for one — its
+// Lists projects (GET /api/projects) and opens a detail view for one; its
 // scoped runs, delivered artifacts, and recent episodes
 // (GET /api/projects/{id}/{runs,artifacts,episodes}). Read-only; creation is a
 // CLI/chat act (`lhassa project create`), not a dashboard form.
@@ -232,7 +232,7 @@ export default function ProjectsPanel() {
       ) : error ? (
         <ErrorState>{error}</ErrorState>
       ) : projects.length === 0 ? (
-        <EmptyState>No projects yet — create one with `lhassa project create &lt;name&gt;`.</EmptyState>
+        <EmptyState>No projects yet; create one with `lhassa project create &lt;name&gt;`.</EmptyState>
       ) : (
         <div className="space-y-1.5">
           {projects.map((p) => (

@@ -76,7 +76,7 @@ def _short_due(raw: str) -> str:
 
 
 async def _today_spend(config) -> Optional[float]:
-    """Today's cost from the gateway's own spend signal (interface layer — the
+    """Today's cost from the gateway's own spend signal (interface layer; the
     personal package must never import a shell like notify)."""
     try:
         from lhassa.llm.gateway import spend_summary
@@ -118,7 +118,7 @@ async def build(config, *, slot: str | None = None, horizon_hours: int = 36) -> 
 
     latest = await checkins.latest(instance_id, within_hours=48.0)
 
-    # Real calendar events from the ICS feed (if configured) — additive, $0,
+    # Real calendar events from the ICS feed (if configured); additive, $0,
     # never breaks the agenda if the feed is absent or unreachable.
     events: list[str] = []
     try:
@@ -126,7 +126,7 @@ async def build(config, *, slot: str | None = None, horizon_hours: int = 36) -> 
 
         raw_events = await upcoming(instance_id, hours=horizon_hours, config=config)
         # Show the calendar name (e.g. "· Work") only when the owner has MORE
-        # than one calendar configured — with a single calendar it's redundant
+        # than one calendar configured; with a single calendar it's redundant
         # noise, so keep that line clean.
         calendar_names = {e.get("calendar") for e in raw_events if e.get("calendar")}
         multi = len(calendar_names) > 1

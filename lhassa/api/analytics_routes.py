@@ -238,10 +238,10 @@ async def analytics_runs(
 
 @router.get("/feedback")
 async def analytics_feedback(range: str = Query(default="7d")) -> dict:
-    """The $0 feedback signal — is Lhassa landing? (see lhassa.core.feedback).
+    """The $0 feedback signal; is Lhassa landing? (see lhassa.core.feedback).
 
     Inferred from behavior already in the episode log (re-ask/correction/
-    silence-after/acted-on) — never asks the owner to rate anything, never
+    silence-after/acted-on); never asks the owner to rate anything, never
     calls a model. Folded into this router (rather than a new ``*_routes``
     module) per the feature's own read-surface note.
     """

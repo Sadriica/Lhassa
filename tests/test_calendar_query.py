@@ -12,7 +12,7 @@ from lhassa.calendar import query
 
 
 # A fixed "now": Wednesday 2026-07-08 10:00 UTC. (Today's real date happens to
-# also be 2026-07-08, but the tests never rely on that — ``now`` is always
+# also be 2026-07-08, but the tests never rely on that; ``now`` is always
 # passed explicitly to parse_window, or monkeypatched for answer().)
 _NOW = datetime(2026, 7, 8, 10, 0, tzinfo=timezone.utc)  # a Wednesday
 
@@ -166,7 +166,7 @@ def test_is_calendar_query_near_misses(text):
 
 def _fake_events(start_utc):
     # ``start_utc`` is the parsed window's UTC start, which corresponds to LOCAL
-    # midnight — adding a plain timedelta lands on the intended LOCAL clock time
+    # midnight; adding a plain timedelta lands on the intended LOCAL clock time
     # regardless of the test machine's timezone (no .replace(hour=...), which
     # would set the UTC hour instead and drift under a non-UTC local offset).
     return [
@@ -270,7 +270,7 @@ async def test_answer_window_today_reaches_back_past_now(monkeypatch):
     start, _end, _label = window
     early = {
         "summary": "Algorithms 201",
-        "start": start + timedelta(hours=6),   # 06:00 local — before a mid-morning "now"
+        "start": start + timedelta(hours=6),   # 06:00 local; before a mid-morning "now"
         "end": start + timedelta(hours=8),
         "location": "Room 204",
         "all_day": False,

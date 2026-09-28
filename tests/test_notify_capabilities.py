@@ -1,4 +1,4 @@
-"""Tests for lhassa.notify.capabilities — the self-routing consciousness's
+"""Tests for lhassa.notify.capabilities; the self-routing consciousness's
 shell half: the capability catalog, the [[routable:...]] marker, and the
 route table (DATA, not code). Fully offline: no LLM, no network.
 """
@@ -115,7 +115,7 @@ async def test_apply_route_returns_none_when_recognised_but_not_routed(tmp_path)
 @pytest.mark.asyncio
 async def test_apply_route_serves_a_routed_capability(tmp_path, monkeypatch):
     """Once routed, apply_route calls the capability's own handler and serves
-    its answer — $0, no model. The handler is monkeypatched so this test stays
+    its answer; $0, no model. The handler is monkeypatched so this test stays
     a pure unit test of the routing mechanism, not the calendar seam itself."""
     cfg = _cfg(tmp_path)
     capabilities.add_route("calendar_view", config=cfg)
@@ -149,7 +149,7 @@ async def test_apply_route_degrades_to_none_when_handler_raises(tmp_path, monkey
 async def test_apply_route_degrades_to_none_when_handler_cannot_resolve(tmp_path):
     """A recognised-and-routed capability whose handler still can't answer
     (e.g. the calendar seam has no parseable time reference) degrades to None
-    — the caller falls through to its normal path, exactly as before routing."""
+   ; the caller falls through to its normal path, exactly as before routing."""
     cfg = _cfg(tmp_path)
     capabilities.add_route("calendar_view", config=cfg)
 
@@ -157,7 +157,7 @@ async def test_apply_route_degrades_to_none_when_handler_cannot_resolve(tmp_path
     assert result is None
 
 
-# ── is_followup() — the connector / elliptical-fragment detector ────────────
+# ── is_followup(); the connector / elliptical-fragment detector ────────────
 
 
 @pytest.mark.parametrize(
@@ -197,7 +197,7 @@ def test_is_followup_never_raises_on_malformed_input():
 
 
 def test_is_followup_true_even_for_a_connector_message_with_no_date():
-    """is_followup is a SIGNAL, not a semantic guarantee — a connector-led
+    """is_followup is a SIGNAL, not a semantic guarantee; a connector-led
     message that isn't really about the sticky topic still reads as a
     follow-up; it's the capability's own continue_followup that declines."""
     assert capabilities.is_followup("y además necesito comprar leche") is True
@@ -208,8 +208,8 @@ def test_is_followup_true_even_for_a_connector_message_with_no_date():
 
 @pytest.mark.asyncio
 async def test_calendar_continue_followup_parses_and_answers(monkeypatch):
-    """The calendar continuation bypasses is_calendar_query's keyword gate —
-    "Y el sabado?" has no calendar keyword and no have/tengo/hay word — and
+    """The calendar continuation bypasses is_calendar_query's keyword gate;
+    "Y el sabado?" has no calendar keyword and no have/tengo/hay word; and
     answers straight from the feed via answer_window."""
     from lhassa.calendar import feed as feed_mod
     from lhassa.calendar import query as query_mod
@@ -234,7 +234,7 @@ async def test_calendar_continue_followup_parses_and_answers(monkeypatch):
 
     cap = capabilities.get_capability("calendar_view")
     assert cap.continue_followup is not None
-    # "Y el sabado?" has no calendar keyword and no have/tengo/hay word — the
+    # "Y el sabado?" has no calendar keyword and no have/tengo/hay word; the
     # plain recognizer/handler would refuse it; the continuation must not.
     assert query_mod.is_calendar_query("Y el sabado?") is False
 
@@ -253,7 +253,7 @@ async def test_calendar_continue_followup_declines_with_no_time_reference():
 @pytest.mark.asyncio
 async def test_calendar_continue_followup_bare_time_uses_sticky_day(monkeypatch):
     """A bare-time follow-up ("¿y a las 6am?") has no DAY reference, so
-    answer_window declines — the continuation must fall back to
+    answer_window declines; the continuation must fall back to
     answer_time_of_day, resolved against the sticky day in context, and find
     the morning event instead of falling through to a think."""
     from datetime import datetime, timezone

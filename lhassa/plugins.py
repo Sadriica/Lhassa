@@ -1,28 +1,28 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """
-Drop-in plugin discovery — capabilities self-register WITHOUT editing core.
+Drop-in plugin discovery; capabilities self-register WITHOUT editing core.
 
 The elastic/modular principle (every swap point behind a registry, capabilities
 **drop-in**) needs a loader: something that *imports* third-party / local plugin
 modules so their top-level ``@some_registry.register(...)`` calls actually run.
-Importing the module is the whole mechanism — there is no plugin API to call.
+Importing the module is the whole mechanism; there is no plugin API to call.
 
 Two discovery sources, both optional and both fully defensive:
 
-1. **A directory** (``config.plugins_dir``) — every ``*.py`` file and every
+1. **A directory** (``config.plugins_dir``); every ``*.py`` file and every
    package (a sub-directory with ``__init__.py``) directly inside it is imported.
-2. **Entry points** in the group ``"lhassa.plugins"`` — any installed
+2. **Entry points** in the group ``"lhassa.plugins"``: any installed
    distribution can advertise a plugin module here; we import each one.
 
 Contract:
 
 * :func:`load_plugins` **never raises**. A broken or missing plugin is logged at
-  warning level and skipped — a bad plugin must never crash startup.
+  warning level and skipped; a bad plugin must never crash startup.
 * It is **idempotent**: already-loaded plugins are tracked and never re-imported,
   so calling it twice is safe and the second call is a no-op for those.
 * It returns the list of plugin names successfully loaded **this call**.
 
-Nothing here is auto-invoked at import time — wiring :func:`load_plugins` into
+Nothing here is auto-invoked at import time; wiring :func:`load_plugins` into
 startup is a deliberate, separate step. Importing this module has no side effects.
 """
 
@@ -41,7 +41,7 @@ __all__ = ["load_plugins", "ENTRY_POINT_GROUP"]
 # Installed distributions advertise plugin modules under this entry-point group.
 ENTRY_POINT_GROUP = "lhassa.plugins"
 
-# Names of plugins already imported in this process — makes load_plugins idempotent
+# Names of plugins already imported in this process; makes load_plugins idempotent
 # across repeated calls (each unique source name is imported at most once).
 _LOADED: set[str] = set()
 

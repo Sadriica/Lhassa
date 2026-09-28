@@ -3,7 +3,7 @@
 Offline: the skill store + org topology are redirected to a tmp dir by patching
 the LIVE ``lhassa.config.Config`` class attrs (resolved through the module at call
 time, so the override survives ``test_config.py``'s ``importlib.reload``). The AI
-commands are tested only on their OFFLINE/degrade paths — no real model is called.
+commands are tested only on their OFFLINE/degrade paths; no real model is called.
 The sub-app is invoked directly (the integrator wires it onto the main app).
 """
 

@@ -70,7 +70,7 @@ def resolve_public_url(url: str) -> tuple[str | None, str | None]:
         if _is_blocked_addr(addr):
             return None, (
                 f"host {host!r} resolves to a private/loopback/link-local "
-                f"address ({addr!r}) — blocked by SSRF guard"
+                f"address ({addr!r}); blocked by SSRF guard"
             )
         if addr not in addresses:
             addresses.append(addr)

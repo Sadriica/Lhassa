@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """
-The utility tribunal — the $0 sense that asks whether a capability still serves.
+The utility tribunal; the $0 sense that asks whether a capability still serves.
 
 Lhassa's invariants are all invariants of RESTRAINT: deny-by-default, signed
 tasks, quarantine, provenance, integrity contracts. Every one of them asks "is
-this safe / is this honest?". None of them asks **"is this used?"** — so the
+this safe / is this honest?". None of them asks **"is this used?"**: so the
 system optimises the thing it measures and accretes capability it never
 exercises. This module is the missing counterweight, and it is deliberately
 built as the mirror image of :mod:`lhassa.skills.curator`: the curator gives
@@ -14,20 +14,20 @@ SKILLS a lifecycle driven by usage telemetry; this gives CAPABILITIES
 **No new storage.** The curator needs a sidecar because a skill read leaves no
 trace. A capability does: every run of an action writes an Episode whose
 ``accion`` names it. So this module is a pure derived read over the append-only
-episode log — the same choice :mod:`lhassa.memory.evidence` makes. Nothing here
+episode log; the same choice :mod:`lhassa.memory.evidence` makes. Nothing here
 writes, nothing here calls an LLM.
 
 **Owner-driven vs self-driven use is the whole point.** Counting bare uses would
-call a capability "active" because Lhassa's own maintenance seed schedules it —
+call a capability "active" because Lhassa's own maintenance seed schedules it;
 precisely the self-referential trap this module exists to expose. So each use is
 classified by the episode's ``despertar_por`` into ``owner`` (a human reached for
 it), ``self`` (Lhassa scheduled or delegated it to itself) or ``unknown``, and a
 capability that only ever fires because Lhassa asked itself to is reported as
-``self_driven`` — running, but not earning its place. The wake vocabulary is a
+``self_driven``: running, but not earning its place. The wake vocabulary is a
 closed, documented HEURISTIC (see :data:`OWNER_WAKES` / :data:`SELF_WAKES`), not
 NLP, in the same spirit as the knowledge graph's entity extraction.
 
-**It proposes; it never retires.** A registered action lives in code — this
+**It proposes; it never retires.** A registered action lives in code; this
 module cannot and must not delete it. :func:`find_dormant` returns candidates
 and the ``review_capabilities`` action parks ONE approval each, once ever. The
 owner's tap is the actual act, exactly as with the project-detection sense.
@@ -84,7 +84,7 @@ OWNER_WAKES = (
     "dashboard",
 )
 
-#: Wake sources that mean LHASSA drove itself — a scheduled task, an org hop, a
+#: Wake sources that mean LHASSA drove itself; a scheduled task, an org hop, a
 #: monitor tick, a health alert. A capability seen only under these is running
 #: because Lhassa asked itself to, which is exactly what this module surfaces.
 SELF_WAKES = (
@@ -116,7 +116,7 @@ def classify_wake(despertar_por: Optional[str]) -> str:
     Matching is exact-or-``prefix:`` against the two closed vocabularies above
     (``task:send_digest`` -> ``self``, ``telegram`` -> ``owner``). Owner is
     checked FIRST so an owner-originated wake is never mistaken for plumbing.
-    Anything unrecognised is ``unknown`` — reported, never guessed at.
+    Anything unrecognised is ``unknown``: reported, never guessed at.
     """
     raw = (despertar_por or "").strip().lower()
     if not raw:
@@ -136,7 +136,7 @@ def _resolve_config(config: "Optional[Config]") -> "Config":
 
 
 def pinned_capabilities(config: "Optional[Config]" = None) -> set:
-    """Capabilities the owner declared deliberately dormant — never proposed.
+    """Capabilities the owner declared deliberately dormant; never proposed.
 
     Read from ``Config.utility_pinned`` (``LHASSA_UTILITY_PINNED``), a
     comma-separated list. The curator's ``pinned`` flag, for capabilities.
@@ -168,7 +168,7 @@ def _parse_ts(raw: Any) -> Optional[datetime]:
 def _registered_capabilities() -> list:
     """Every action name currently in the ACTIONS registry (plugins included).
 
-    Imported lazily so this module never forces the registry to populate — the
+    Imported lazily so this module never forces the registry to populate; the
     caller's process has already run ``actionpack.register_all()`` if it cares.
     """
     try:
@@ -176,7 +176,7 @@ def _registered_capabilities() -> list:
 
         return sorted(str(name) for name in ACTIONS)
     except Exception as exc:  # pragma: no cover - defensive
-        logger.warning("agents.utility: could not read ACTIONS — {}", exc)
+        logger.warning("agents.utility: could not read ACTIONS; {}", exc)
         return []
 
 
@@ -188,7 +188,7 @@ async def survey(
 ) -> list:
     """One row per registered capability: how much it is used, and by whom.
 
-    A pure read — SQL aggregation over the episode log plus the live ACTIONS
+    A pure read. SQL aggregation over the episode log plus the live ACTIONS
     registry. Returns a list of dicts sorted by ``owner_uses`` ascending then
     name (least-earned first, so the head of the list is the tribunal's
     docket)::
@@ -240,7 +240,7 @@ async def survey(
                     slot[1] = ts
 
         # Second pass: the TASK ledger. An episode's wake source misses the case
-        # that matters most — the owner asks for something whose execution is
+        # that matters most; the owner asks for something whose execution is
         # DEFERRED (``/remind`` mints a send_reminder that fires days later from
         # ``task:send_reminder``, which reads as self-driven). The task row keeps
         # the real provenance in ``origen_actor``, so a capability the owner
@@ -261,8 +261,8 @@ async def survey(
             ) as cur:
                 task_rows = await cur.fetchall()
         #
-        # The two ledgers OVERLAP — a ``/remind`` both mints a task and later
-        # writes an episode — so they are combined with max(), never summed:
+        # The two ledgers OVERLAP; a ``/remind`` both mints a task and later
+        # writes an episode; so they are combined with max(), never summed:
         # they are two lenses on the same acts, and neither is complete. An
         # inflated count in the module whose whole job is honest measurement
         # would be the worst possible bug.
@@ -336,7 +336,7 @@ async def survey(
         return out
 
     except Exception as exc:  # a $0 sense must never raise
-        logger.warning("agents.utility: survey failed — {}", exc)
+        logger.warning("agents.utility: survey failed; {}", exc)
         return []
 
 
@@ -366,7 +366,7 @@ async def history_days(
             return 0.0
         return max(0.0, (_now_utc(now) - oldest).total_seconds() / 86400.0)
     except Exception as exc:  # pragma: no cover - defensive
-        logger.warning("agents.utility: history_days failed — {}", exc)
+        logger.warning("agents.utility: history_days failed; {}", exc)
         return 0.0
 
 
@@ -380,7 +380,7 @@ async def find_dormant(
 
     A capability qualifies when it is ``unused`` or ``self_driven`` AND not
     pinned. Nothing qualifies at all until the instance has more than
-    ``config.utility_grace_days`` of episode history — a young brain is not
+    ``config.utility_grace_days`` of episode history; a young brain is not
     put on trial. Returns the same row shape as :func:`survey`. Never raises.
     """
     try:
@@ -395,5 +395,5 @@ async def find_dormant(
             if not r["pinned"] and r["state"] in (STATE_UNUSED, STATE_SELF_DRIVEN)
         ]
     except Exception as exc:  # pragma: no cover - defensive
-        logger.warning("agents.utility: find_dormant failed — {}", exc)
+        logger.warning("agents.utility: find_dormant failed; {}", exc)
         return []

@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""``lhassa utility`` — the tribunal that asks whether a capability still serves.
+"""``lhassa utility``: the tribunal that asks whether a capability still serves.
 
 The read surface over :mod:`lhassa.agents.utility`. Where ``lhassa capabilities``
-answers "what is wired?", this answers "what is EARNING its place?" — the
+answers "what is wired?", this answers "what is EARNING its place?": the
 counterweight question. Everything here is a pure read: $0, no LLM, no writes.
 """
 
@@ -73,7 +73,7 @@ def survey_cmd(
 
     ``owner`` counts uses a human reached for; ``self`` counts uses Lhassa
     scheduled or delegated to itself. A capability with only ``self`` uses runs
-    — but does not earn its place.
+   ; but does not earn its place.
     """
     from lhassa.actionpack import register_all
     from lhassa.agents import utility
@@ -85,7 +85,7 @@ def survey_cmd(
     if json_out:
         typer.echo(json.dumps(rows, indent=2, ensure_ascii=False))
         return
-    _render(rows, title="capabilities — least earned first")
+    _render(rows, title="capabilities; least earned first")
 
 
 @utility_app.command("docket")
@@ -108,7 +108,7 @@ def docket_cmd(
         grace = int(getattr(Config, "utility_grace_days", 14) or 14)
         if days < grace:
             _console.print(
-                f"[stone]only {days:.0f}d of history — nothing is put on trial "
+                f"[stone]only {days:.0f}d of history; nothing is put on trial "
                 f"before {grace}d.[/stone]"
             )
         else:

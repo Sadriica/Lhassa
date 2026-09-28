@@ -4,21 +4,21 @@
 Three capabilities power the admin surface's "create/improve WITH AI" and
 "recommend skills" requests:
 
-* :func:`create_skill_with_ai` — draft a SKILL.md from a short brief.
-* :func:`improve_skill_with_ai` — load an existing skill and return a clearer,
+* :func:`create_skill_with_ai`: draft a SKILL.md from a short brief.
+* :func:`improve_skill_with_ai`: load an existing skill and return a clearer,
   better-described version (the caller decides whether to save it).
-* :func:`recommend_skills` — recommend skills from a built-in CATALOG combined
+* :func:`recommend_skills`: recommend skills from a built-in CATALOG combined
   with what is NOT yet installed. This one is **deterministic / offline** (no
   model), so it always works.
 
 The two model-driven ops use a :class:`~lhassa.llm.provider.ModelProvider` behind
 an **injectable** ``provider`` seam (tests pass a fake; nothing real is called).
-They NEVER raise: with no provider/creds they degrade to a clear result — a
-template/unchanged skill whose ``error`` reads ``"AI unavailable: …"`` — so the
+They NEVER raise: with no provider/creds they degrade to a clear result; a
+template/unchanged skill whose ``error`` reads ``"AI unavailable: …"``: so the
 caller can always show something useful.
 
 :func:`ensure_seed` writes a couple of real starter skills into a store on
-demand (explicit call, tested against a temp dir — never the real ``~/.lhassa``
+demand (explicit call, tested against a temp dir; never the real ``~/.lhassa``
 at import time).
 """
 
@@ -70,8 +70,8 @@ CATALOG: list[dict] = [
         "instructions": (
             "# optimization\n\n"
             "Operate as the OPTIMIZATION specialist: make an existing routine cheaper "
-            "on ONE clean, lower-is-better metric — tokens, wall-clock time, or number "
-            "of steps — without changing what it produces.\n\n"
+            "on ONE clean, lower-is-better metric; tokens, wall-clock time, or number "
+            "of steps; without changing what it produces.\n\n"
             "## When to use\n\n"
             "Something works but is slow, expensive, or wasteful and there is a "
             "measurable baseline to beat.\n\n"
@@ -94,7 +94,7 @@ CATALOG: list[dict] = [
         "instructions": (
             "# documentation\n\n"
             "Produce clear, accurate documentation grounded in the actual code or "
-            "process — never invent behaviour.\n\n"
+            "process; never invent behaviour.\n\n"
             "## When to use\n\n"
             "A change ships undocumented, or existing docs drifted from reality.\n\n"
             "## How to apply\n\n"
@@ -161,7 +161,7 @@ CATALOG: list[dict] = [
             "## How to apply\n\n"
             "- Cover the happy path, the edges, and the failure modes.\n"
             "- One behaviour per test; make the assertion meaningful.\n"
-            "- Make the test fail first, then pass — never assert nothing.\n"
+            "- Make the test fail first, then pass; never assert nothing.\n"
         ),
     },
     {
@@ -360,7 +360,7 @@ def _catalog_body(entry: dict) -> str:
     focus = domain or name
     when = f"the task calls for {focus} work"
     if desc:
-        when += f" — {desc[0].lower() + desc[1:]}"
+        when += f": {desc[0].lower() + desc[1:]}"
     goal = desc or f"do the {focus} work well"
     return (
         f"# {name}\n\n"
@@ -371,7 +371,7 @@ def _catalog_body(entry: dict) -> str:
         f"- Keep the goal in view: {goal}.\n"
         "- Work in the smallest correct steps; check each against reality.\n"
         "- Never trade correctness for speed; a fast wrong answer still fails.\n"
-        "- Report what you did, what you found, and what is left — plainly.\n"
+        "- Report what you did, what you found, and what is left; plainly.\n"
     )
 
 
@@ -401,7 +401,7 @@ def catalog_skill(entry: dict) -> Skill:
 
 
 def _catalog_by_name() -> dict[str, dict]:
-    """The CATALOG indexed by slugified name (built fresh — the catalog is small)."""
+    """The CATALOG indexed by slugified name (built fresh; the catalog is small)."""
     return {slugify(entry["name"]): entry for entry in CATALOG}
 
 
@@ -424,7 +424,7 @@ def install_from_catalog(
     store = SkillStore(config)
     existing = store.get(slug)
     if existing is not None:
-        return existing  # already installed — skip (idempotent)
+        return existing  # already installed; skip (idempotent)
     skill = catalog_skill(entry)
     store.save(skill)
     return store.get(slug) or skill
@@ -447,7 +447,7 @@ def recommend_skills(
     try:
         installed = {s.name for s in SkillStore(config).list_skills() if s.name}
     except Exception as exc:  # pragma: no cover - store reads are defensive already
-        logger.warning("skills: recommend could not read the store — {}", exc)
+        logger.warning("skills: recommend could not read the store; {}", exc)
         installed = set()
 
     words = {w for w in (context or "").lower().replace(",", " ").split() if w}
@@ -583,7 +583,7 @@ async def create_skill_with_ai(
     if not (skill.description or "").strip():
         skill = replace(skill, description=brief.strip()[:160])
     if not (skill.instructions or "").strip():
-        # Model gave nothing usable — fall back to the template body but keep going.
+        # Model gave nothing usable; fall back to the template body but keep going.
         return replace(fallback, error="AI returned no usable instructions")
     return skill
 

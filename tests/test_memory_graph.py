@@ -1,4 +1,4 @@
-"""Tests for lhassa.memory.graph — the deterministic $0 knowledge graph.
+"""Tests for lhassa.memory.graph; the deterministic $0 knowledge graph.
 
 Fully offline: the brain DB is redirected to a tmp file per test, seeded with a
 few tagged facts and episodes mentioning "Sezzle" and "Ana", then queried
@@ -115,7 +115,7 @@ async def test_what_do_i_know_never_raises_on_bad_db(tmp_path, monkeypatch):
     monkeypatch.setattr(db, "DB_PATH", tmp_path / "does_not_exist" / "brain.db")
     from lhassa.memory import graph
 
-    # No init_db() called — the parent dir doesn't even exist. Must degrade, not raise.
+    # No init_db() called; the parent dir doesn't even exist. Must degrade, not raise.
     result = await graph.what_do_i_know(INST, "sezzle")
     assert result["facts"] == []
     assert result["episodes"] == []

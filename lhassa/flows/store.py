@@ -5,7 +5,7 @@ The file is a single JSON object mapping ``flow_id`` → flow dict. The store ke
 the whole map in the file (small, human-readable, diff-friendly) and writes it
 ATOMICALLY: it serialises to a sibling temp file and ``os.replace``\\ s it over the
 target, so an interrupted or failing write can never leave a half-written, corrupt
-flows file — the previous good file stays intact.
+flows file; the previous good file stays intact.
 
 Reads tolerate a missing file (fresh install → no flows) and degrade a malformed
 file to "no flows" rather than crashing the caller.
@@ -33,7 +33,7 @@ class FlowStore:
         if config is None:
             # Import locally so a test that reloads ``lhassa.config`` still gets the
             # live class (a stale module-level binding would read the real default
-            # path) — the same pattern as ``org.topology._resolve_config``.
+            # path); the same pattern as ``org.topology._resolve_config``.
             from lhassa.config import Config as _Config
 
             config = _Config()

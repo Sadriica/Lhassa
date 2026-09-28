@@ -1,4 +1,4 @@
-"""CLI tests for ``lhassa calendar`` (add/list/remove) — Typer CliRunner against
+"""CLI tests for ``lhassa calendar`` (add/list/remove); Typer CliRunner against
 the real app, same pattern as ``tests/test_flow_templates.py``. Offline: every
 test points ``config.calendars_file`` at a tmp path (no real ``~/.lhassa`` touched).
 """

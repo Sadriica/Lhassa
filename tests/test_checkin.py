@@ -1,4 +1,4 @@
-"""Tests for Phase-0 slice 0.3 — the multi-machine "check-in, not push" loop.
+"""Tests for Phase-0 slice 0.3; the multi-machine "check-in, not push" loop.
 
 Fully offline: the brain DB and signing key are redirected to tmp dirs via
 monkeypatch (the 0.1/0.4 seams), git is mocked at ``actions._run``, and the local

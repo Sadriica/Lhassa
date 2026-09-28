@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Path resolution for the calendar seam — the single place ``.ics`` files live.
+"""Path resolution for the calendar seam; the single place ``.ics`` files live.
 
 Mirrors :mod:`lhassa.cv.paths`: one directory (``LHASSA_CALENDAR_DIR``, default
 ``~/.lhassa/calendar``), re-read at CALL time so a test or a freshly-set env var
@@ -34,7 +34,7 @@ def feed_cache_path(url: str) -> Path:
 
     Multiple named calendars share ``calendar_dir()`` but must never clobber
     each other's cache, so the filename is keyed by a short hash of the url
-    (never the url itself — it's a secret) rather than a single shared name.
+    (never the url itself; it's a secret) rather than a single shared name.
     """
     digest = hashlib.sha256((url or "").strip().encode("utf-8")).hexdigest()[:16]
     return calendar_dir() / f"feed_cache_{digest}.ics"

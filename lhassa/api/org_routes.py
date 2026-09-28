@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Org MANAGEMENT routes — create brains, skills, limits, hierarchy (additive).
+"""Org MANAGEMENT routes; create brains, skills, limits, hierarchy (additive).
 
 The backend the dashboard org panel drives: read the chart + available skills,
 create/update/remove brains, re-parent ("who commands whom"), and promote to root
 ("who commands everyone"), plus the use-case templates catalog. All instance-scoped
-and DEFENSIVE — a bad body / invalid op returns a clear 4xx, never a 500, and never
+and DEFENSIVE; a bad body / invalid op returns a clear 4xx, never a 500, and never
 corrupts the topology file (management validates BEFORE it persists).
 
 The typed RELATIONSHIPS overlay (``/api/org/relationships*``) lives in its own
@@ -35,7 +35,7 @@ async def get_org_topology():
 
 @router.get("/api/org/skills")
 async def get_org_skills():
-    """The skills that CAN be assigned — the specialist registry's domains."""
+    """The skills that CAN be assigned; the specialist registry's domains."""
     from lhassa.org import management
 
     return management.available_skills()
@@ -174,7 +174,7 @@ async def get_org_templates():
 
 @router.post("/api/org/templates/{template_id}/apply")
 async def apply_org_template(template_id: str):
-    """Apply a template — create its brains under Lhassa. Returns the updated chart."""
+    """Apply a template; create its brains under Lhassa. Returns the updated chart."""
     from lhassa.org import templates
 
     try:

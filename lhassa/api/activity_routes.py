@@ -1,15 +1,15 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Activity routes — agents, scheduled tasks, and the audit log (read-only).
+"""Activity routes; agents, scheduled tasks, and the audit log (read-only).
 
 The dashboard's "what has the brain been doing" reads:
 
-  * ``/api/agents`` — the in-memory agent-run state.
-  * ``/api/scheduled`` — ``send_reminder`` tasks from the ``tasks`` table
+  * ``/api/agents``: the in-memory agent-run state.
+  * ``/api/scheduled``: ``send_reminder`` tasks from the ``tasks`` table
     (``core/db.py``), reshaped into the legacy ``scheduled_tasks`` response
     keys the dashboard's ``ScheduledPanel``/``WatchlistPanel`` already expect
     (``id``/``name``/``run_at``/``message``/``status``/``created_at``). See
     ``doc/scheduler.md``.
-  * ``/api/audit`` — the audit-log read.
+  * ``/api/audit``: the audit-log read.
 
 All read-only. Mounted by the integrator with
 ``app.include_router(activity_routes.router)``.

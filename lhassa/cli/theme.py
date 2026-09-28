@@ -2,7 +2,7 @@
 """The Lhasa color palette + Rich theme for the terminal CLI.
 
 Inspired by the city of Lhasa: temple **gold** (the brand), monk-robe deep **red**
-(an accent, used sparingly — never a harsh bright red), snow-white **walls** for the
+(an accent, used sparingly; never a harsh bright red), snow-white **walls** for the
 body, and a little sage **green** for "good / cheap / done". A muted stone grey carries
 the secondary text. Truecolor hex so it reads the same across terminals; Rich/
 prompt-toolkit gracefully degrade on 256-color terminals.
@@ -13,11 +13,11 @@ from __future__ import annotations
 from rich.theme import Theme
 
 # ── Palette (truecolor) ───────────────────────────────────────────────────────
-GOLD = "#d9a521"   # temple gold — brand / primary
-RED = "#a23e34"    # monk-robe deep red — accent, sparingly
-WHITE = "#ece4d3"  # warm snow-white — body text
-GREEN = "#7c9a5b"  # sage — success / good cost
-STONE = "#8a8276"  # muted stone — secondary / dim
+GOLD = "#d9a521"   # temple gold; brand / primary
+RED = "#a23e34"    # monk-robe deep red; accent, sparingly
+WHITE = "#ece4d3"  # warm snow-white; body text
+GREEN = "#7c9a5b"  # sage; success / good cost
+STONE = "#8a8276"  # muted stone; secondary / dim
 
 # Named styles used across the CLI. Keep the body on the terminal default; we color
 # the CHROME (prompt, headers, cost, errors) so it stays readable on any terminal.

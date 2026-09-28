@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Artifacts routes — the read surface over the delivery chain's registry
+"""Artifacts routes; the read surface over the delivery chain's registry
 (§org: "Lhassa is the sender of record").
 
 A thin, read-only shell over :mod:`lhassa.core.artifacts`: every work product a
 department produces and delivers UP the chain (:mod:`lhassa.org.deliver`) lands
-one append-only row here — a CV's ``.tex``+``.pdf``, a report, any file the owner
+one append-only row here; a CV's ``.tex``+``.pdf``, a report, any file the owner
 ends up receiving. This router only reads; nothing here writes an artifact (that
 happens exclusively through ``deliver()``).
 

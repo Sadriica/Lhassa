@@ -2,7 +2,7 @@
 
 Offline: :func:`lhassa.calendar.reconcile.find_unsynced` is monkeypatched to
 return fixed candidates (no real feed fetch), and
-:func:`lhassa.org.deliver.deliver` is faked so no real Telegram send happens —
+:func:`lhassa.org.deliver.deliver` is faked so no real Telegram send happens;
 this test only asserts the CALL, matching the guard in ``tests/test_deliver.py``
 that ``send_document`` is reachable only through ``org/deliver.py``.
 """

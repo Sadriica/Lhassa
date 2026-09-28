@@ -1,7 +1,7 @@
 """
-Tests for Phase-4 slice 4.A — the HarnessAdapter seam, the PID/stream runner, and
+Tests for Phase-4 slice 4.A; the HarnessAdapter seam, the PID/stream runner, and
 the router's delegate axis. Fully offline: subprocess and shutil.which are mocked,
-the brain DB is a tmp file. NO real subprocess, network, or LLM — except the one
+the brain DB is a tmp file. NO real subprocess, network, or LLM; except the one
 stderr-drain deadlock test below, which needs a real OS pipe (a fake in-memory
 stream has no buffer limit and can never reproduce the deadlock).
 """
@@ -221,7 +221,7 @@ def test_register_adapter_override_protection():
         assert get_adapter("opencode").name == "opencode"
 
 
-# ── runner.launch — records a running job + streams, without blocking ────────────
+# ── runner.launch; records a running job + streams, without blocking ────────────
 
 @pytest.mark.asyncio
 async def test_launch_records_running_job_and_streams(tmp_path, monkeypatch):
@@ -262,13 +262,13 @@ async def test_launch_records_running_job_and_streams(tmp_path, monkeypatch):
     assert rows[0]["pid"] == 999
     assert rows[0]["harness"] == "claude"
 
-    # The streaming task is live (fire-and-forget) — let it finish, then supervise.
+    # The streaming task is live (fire-and-forget); let it finish, then supervise.
     await runner._JOBS[job_id].task
     assert any(e["type"] == "agent_started" for e in events)
     assert any(e["type"] == "agent_token" for e in events)
 
 
-# ── runner.supervise — reaps to done with accumulated cost ───────────────────────
+# ── runner.supervise; reaps to done with accumulated cost ───────────────────────
 
 @pytest.mark.asyncio
 async def test_supervise_reaps_done_with_cost(tmp_path, monkeypatch):
@@ -305,7 +305,7 @@ async def test_supervise_reaps_done_with_cost(tmp_path, monkeypatch):
     assert rows[0]["costo_usd"] == pytest.approx(0.25)
     assert rows[0]["terminado_en"]
 
-    # Reaped — gone from the live registry; a second supervise is a no-op.
+    # Reaped; gone from the live registry; a second supervise is a no-op.
     assert job_id not in runner._JOBS
     assert await runner.supervise("inst_personal") == []
 
@@ -332,7 +332,7 @@ async def test_supervise_marks_error_on_nonzero_exit(tmp_path, monkeypatch):
     assert rows[0]["estado"] == "error"
 
 
-# ── runner._stream — draining stderr concurrently avoids a pipe-full deadlock ────
+# ── runner._stream; draining stderr concurrently avoids a pipe-full deadlock ────
 
 @pytest.mark.asyncio
 async def test_stream_drains_stderr_without_deadlock(monkeypatch):
@@ -345,7 +345,7 @@ async def test_stream_drains_stderr_without_deadlock(monkeypatch):
     anything to stdout or exiting. If the
     parent only drains stdout, the child's stderr write() never returns and
     ``_stream`` hangs past its own ``timeout`` (the timeout only bounds our own
-    await, not a blocked child process) — so this test itself is wrapped in a
+    await, not a blocked child process); so this test itself is wrapped in a
     short ``asyncio.wait_for`` as a safety net, and should complete well within
     it once stderr is drained concurrently.
     """
@@ -384,7 +384,7 @@ async def test_stream_drains_stderr_without_deadlock(monkeypatch):
     )
 
     # A big internal timeout: if the fix is broken, the deadlock would outlast
-    # it — this test's own wait_for is the thing that actually bounds the run.
+    # it; this test's own wait_for is the thing that actually bounds the run.
     await asyncio.wait_for(runner._stream(_TextAdapter(), rj, timeout=30), timeout=5)
 
     assert rj.estado == "done"
@@ -415,7 +415,7 @@ async def test_launch_unavailable_records_error_job(tmp_path, monkeypatch):
     assert job_id not in runner._JOBS  # nothing streaming
 
 
-# ── pick_harness — available + override ──────────────────────────────────────────
+# ── pick_harness; available + override ──────────────────────────────────────────
 
 def test_pick_harness_prefers_metered_over_subscription(monkeypatch):
     from lhassa.config import Config

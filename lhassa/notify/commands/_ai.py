@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""``/ai`` and ``/moa`` — the paid direct doors.
+"""``/ai`` and ``/moa``: the paid direct doors.
 
 Moved verbatim out of the former ``lhassa/notify/commands.py``.
 """
@@ -15,7 +15,7 @@ from ._shared import _config, _oops
 
 
 async def _resolve_chat_provider(cfg):
-    """The (provider, model) attempts for a chat-seat call — pin/router + chain."""
+    """The (provider, model) attempts for a chat-seat call; pin/router + chain."""
     from lhassa.llm import router
     from lhassa.llm.provider import get_model_provider
     from lhassa.llm.router import fallback_chain
@@ -31,14 +31,14 @@ async def _resolve_chat_provider(cfg):
 
 @register_command("ai")
 async def _cmd_ai(args: str, *, config=None) -> str:
-    """``/ai <question>`` — search the live web AND let the model SYNTHESIZE a
+    """``/ai <question>``: search the live web AND let the model SYNTHESIZE a
     concrete answer from what it finds.
 
     The difference from a plain question: free-text chat (tool-less) can only
     hand back links via the research bridge. ``/ai`` does the search itself,
     feeds the real results to the active model (with persona + the owner's
-    durable facts as context), and asks it to ANSWER — a specific figure, a
-    direct conclusion — citing the sources it used. It DOES spend one model
+    durable facts as context), and asks it to ANSWER; a specific figure, a
+    direct conclusion; citing the sources it used. It DOES spend one model
     call (the one paid direct door, like ``/cv``); kept explicit so it never
     fires on every message. Never raises.
     """
@@ -54,7 +54,7 @@ async def _cmd_ai(args: str, *, config=None) -> str:
         cfg = _config(config)
         instance_id = getattr(cfg, "instance_id", None) or "inst_personal"
 
-        # 1) Live search — news vertical for news-intent, else the web.
+        # 1) Live search; news vertical for news-intent, else the web.
         results: list[dict] = []
         try:
             if re.search(r"\b(noticias?|news|titulares|headlines?)\b", text, re.IGNORECASE):
@@ -65,10 +65,10 @@ async def _cmd_ai(args: str, *, config=None) -> str:
             logger.debug(f"commands: /ai search failed: {exc}")
 
         sources = "\n".join(
-            f"- {str(r.get('title') or '')[:100]} — {str(r.get('body') or '')[:200]} "
+            f"- {str(r.get('title') or '')[:100]}; {str(r.get('body') or '')[:200]} "
             f"({r.get('url') or ''})"
             for r in results[:6]
-        ) or "(no web results — answer from your own knowledge and say it's not live-sourced)"
+        ) or "(no web results; answer from your own knowledge and say it's not live-sourced)"
 
         # 2) Persona + durable facts as grounding context.
         identity = load_identity(instance_id)
@@ -89,7 +89,7 @@ async def _cmd_ai(args: str, *, config=None) -> str:
                 identity.persona_block,
                 facts_block,
                 "You are given live web results. ANSWER the question directly and "
-                "specifically — a figure, a range, a concrete conclusion — using them; "
+                "specifically (a figure, a range, a concrete conclusion) using them; "
                 "cite the source name in-line. If the results don't cover it, say so "
                 "plainly. Be brief, plain, and honest about uncertainty.",
             ) if p
@@ -98,7 +98,7 @@ async def _cmd_ai(args: str, *, config=None) -> str:
 
         # 3) Synthesize through the active chat provider (with the fallback chain).
         # Looked up through the package (not the module-local name) so a test
-        # can monkeypatch ``lhassa.notify.commands._resolve_chat_provider`` —
+        # can monkeypatch ``lhassa.notify.commands._resolve_chat_provider``;
         # the same public seam the flat module used to expose directly.
         from lhassa.notify import commands as _commands
 
@@ -130,7 +130,7 @@ async def _cmd_ai(args: str, *, config=None) -> str:
 
 
 # Provider name -> the label shown in the panel footer. "default" is the
-# cost-gateway seat (deepseek, in practice) — the owner-facing name is more
+# cost-gateway seat (deepseek, in practice); the owner-facing name is more
 # honest than the internal registry key.
 _MOA_LABELS: dict[str, str] = {"default": "deepseek"}
 
@@ -155,13 +155,13 @@ def _moa_footer(result) -> str:
 
 @register_command("moa")
 async def _cmd_moa(args: str, *, config=None) -> str:
-    """``/moa <question>`` — mixture-of-agents: ask a panel, get a synthesized verdict.
+    """``/moa <question>``: mixture-of-agents: ask a panel, get a synthesized verdict.
 
     For a decision that is expensive to get wrong, one model's opinion isn't
     enough: this fans ``<question>`` out to the owner's configured fleet
     (:func:`lhassa.llm.moa.moa`, default ``claude,codex,default``) in
     parallel and has ONE more (cheap) completion compare the answers and
-    synthesize a single verdict — honestly naming real disagreement. This is
+    synthesize a single verdict; honestly naming real disagreement. This is
     an explicit, opt-in spend: it is never wired into the automatic think
     path, only this command (and the forge's ``moa_verdict`` review). Never
     raises.
@@ -169,7 +169,7 @@ async def _cmd_moa(args: str, *, config=None) -> str:
     question = (args or "").strip()
     if not question:
         return (
-            "Usage: /moa <question> — asks a panel of models (not just one) and "
+            "Usage: /moa <question>; asks a panel of models (not just one) and "
             "synthesizes their answers; costs more than a normal chat, so use it "
             "for decisions that are expensive to get wrong."
         )

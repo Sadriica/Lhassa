@@ -11,7 +11,7 @@ where ``level`` is one of ``"info"``, ``"notice"``, ``"warn"``, ``"alert"``.
 Anything that touches the outside world (systemctl, git, notify-send) is split
 into a PURE parser/helper plus a thin collector that shells out, so the logic is
 testable without those binaries present. Nothing here imports or calls an LLM,
-provider, or cloud service — pure standard library + subprocess.
+provider, or cloud service; pure standard library + subprocess.
 """
 
 from __future__ import annotations
@@ -27,7 +27,7 @@ from loguru import logger
 
 from lhassa.persona import format_alert
 
-# Severity ordering — used to pick the "worst" level across checks.
+# Severity ordering; used to pick the "worst" level across checks.
 _LEVELS = ("info", "notice", "warn", "alert")
 
 
@@ -153,7 +153,7 @@ def check_failed_units() -> dict:
 
     systemd on Linux. Off Linux the host platform layer answers instead
     (``launchctl`` on macOS); a platform that cannot answer reports "info" and
-    an empty list — which reads as "not checked", never as "none failed".
+    an empty list; which reads as "not checked", never as "none failed".
     """
     from lhassa.host import current_platform_name, get_platform
 
@@ -356,7 +356,7 @@ def check_mem_pressure(
     is NOT the same measurement: macOS accounts compressed, purgeable and wired
     pages differently, so an 85% there does not mean what 85% means here. The
     summary therefore NAMES its source and the payload carries
-    ``comparable: False`` — the reading is qualified rather than quietly
+    ``comparable: False``: the reading is qualified rather than quietly
     presented as the Linux figure.
     """
     from lhassa.host import current_platform_name, get_platform
@@ -364,7 +364,7 @@ def check_mem_pressure(
     # An EXPLICITLY injected path always wins over platform dispatch. That is
     # the point of the injected-path pattern: a caller (or a test) naming a
     # meminfo file is asking for THAT file to be parsed, on any platform.
-    # Consulting the host layer regardless would silently ignore the argument —
+    # Consulting the host layer regardless would silently ignore the argument;
     # exactly the regression macOS CI caught.
     if meminfo_path is None and current_platform_name() != "linux":
         plat = get_platform()
@@ -381,7 +381,7 @@ def check_mem_pressure(
         return _result(
             "mem_pressure",
             level,
-            f"Memory {state} — {reading.used_pct:.0f}% in use, "
+            f"Memory {state}; {reading.used_pct:.0f}% in use, "
             f"{reading.swap_pct:.0f}% swap (via {reading.source}; "
             "not comparable to Linux meminfo).",
             {
@@ -409,12 +409,12 @@ def check_mem_pressure(
 
     if level == "info":
         summary = (
-            f"Memory healthy — {usage['mem_used_pct']:.0f}% RAM, "
+            f"Memory healthy; {usage['mem_used_pct']:.0f}% RAM, "
             f"{usage['swap_used_pct']:.0f}% swap."
         )
     else:
         summary = (
-            f"Memory under pressure — {usage['mem_used_pct']:.0f}% RAM, "
+            f"Memory under pressure; {usage['mem_used_pct']:.0f}% RAM, "
             f"{usage['swap_used_pct']:.0f}% swap."
         )
     return _result("mem_pressure", level, summary, usage)
@@ -439,7 +439,7 @@ def _default_out_dir() -> Path:
 def _notify(result: dict) -> bool:
     """Fan a single check result out over the configured notify channels.
 
-    Routes through :func:`lhassa.notify.dispatch.notify` (a lazy import — ``health``
+    Routes through :func:`lhassa.notify.dispatch.notify` (a lazy import; ``health``
     is an adapter and ``notify`` is a shell, an intentional, precisely whitelisted
     edge; see ``ALLOWED_EXCEPTIONS`` in ``tests/test_architecture.py``) so the alert
     fans out over whatever ``LHASSA_NOTIFY_CHANNELS`` configures (desktop is then
@@ -547,7 +547,7 @@ def run_all(out_dir: str | Path | None = None, notify: bool = True) -> dict:
 
 def format_digest(digest: dict) -> str:
     """Render a short, templated, LLM-free summary of a digest for the terminal."""
-    lines = ["Lhassa — PC state check"]
+    lines = ["Lhassa PC state check"]
     for name, result in digest["results"].items():
         marker = {"info": "ok", "notice": "··", "warn": "!!", "alert": "XX"}.get(
             result["level"], "··"

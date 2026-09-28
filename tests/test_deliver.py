@@ -1,18 +1,18 @@
-"""Tests for lhassa.org.deliver — the UP-hop mirror of lhassa.org.delegate.
+"""Tests for lhassa.org.deliver; the UP-hop mirror of lhassa.org.delegate.
 
 Offline + $0: a tmp brain DB (monkeypatched ``db.DB_PATH``), a seeded topology
 (lhassa → general → interns, mirroring tests/test_org_delegate.py), and FAKE send
 seams (``telegram_api.send_document`` / ``notify.dispatch.notify``) so nothing
 touches the network. Covers:
 
-  * a document delivery through the full chain — one Episode per brain on the
+  * a document delivery through the full chain; one Episode per brain on the
     path plus the final root outcome episode, the artifact row, and the actual
     fake send call;
-  * a text-only delivery — no artifact row, still per-brain episodes;
-  * a broken/missing topology — degrades to a single root-attributed hop, the
+  * a text-only delivery; no artifact row, still per-brain episodes;
+  * a broken/missing topology; degrades to a single root-attributed hop, the
     send still happens;
-  * an artifact-registration failure — send + episodes still happen, id is None;
-  * a send failure — ``(False, artifact_id)`` and a "failed" final episode.
+  * an artifact-registration failure; send + episodes still happen, id is None;
+  * a send failure; ``(False, artifact_id)`` and a "failed" final episode.
 """
 
 from types import SimpleNamespace
@@ -293,8 +293,8 @@ async def test_deliver_reports_send_failure(tmp_path, monkeypatch):
 def test_send_document_is_reachable_only_through_deliver():
     """The enforcement behind the standing principle: an artifact (a file) may
     reach the owner ONLY through org/deliver.py. A future flow or brain that
-    calls telegram_api.send_document directly — bypassing the per-brain
-    delivery ledger — fails this test. Documentation is not enforcement; this is.
+    calls telegram_api.send_document directly; bypassing the per-brain
+    delivery ledger; fails this test. Documentation is not enforcement; this is.
     """
     import ast
     import pathlib
@@ -316,7 +316,7 @@ def test_send_document_is_reachable_only_through_deliver():
                 if name == "send_document":
                     offenders.append(f"{rel}:{node.lineno}")
     assert not offenders, (
-        "send_document called outside org/deliver.py — a file reaching the owner "
+        "send_document called outside org/deliver.py; a file reaching the owner "
         "must bubble UP through the hierarchy (see doc CLAUDE.md standing "
         f"principle). Offenders: {offenders}"
     )
@@ -325,7 +325,7 @@ def test_send_document_is_reachable_only_through_deliver():
 @pytest.mark.asyncio
 async def test_deliver_walks_arbitrary_depth(tmp_path, monkeypatch):
     """The per-brain ledger is depth-independent: a 5-level chart logs 5 hops,
-    each attributed — so a FUTURE deeper org chart is respected with no seam
+    each attributed; so a FUTURE deeper org chart is respected with no seam
     change (deliver reuses delegate.command_path)."""
     import lhassa.core.db as _db
 

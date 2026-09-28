@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""The org CHART — a config-driven brain TOPOLOGY (Fase 7, slice E).
+"""The org CHART; a config-driven brain TOPOLOGY (Fase 7, slice E).
 
 Slices 1–2 shipped the minimal two-brain core (one ``general`` + departments). This
 module generalises the SHAPE of the org so the owner can run **1 brain OR N brains**
-and define the **hierarchical flow** those brains have — config-driven and
+and define the **hierarchical flow** those brains have; config-driven and
 user-manageable, NOT hard-coded general→department.
 
 The model is a TREE of :class:`BrainNode` descriptors:
@@ -18,11 +18,11 @@ Where a chart comes from:
 
   - If ``config.org_topology_file`` exists, it is the source of truth (JSON: a list
     of node objects). The owner creates/edits it via ``lhassa org`` or by hand.
-  - Otherwise a default chart is DERIVED from config — a single standalone brain
+  - Otherwise a default chart is DERIVED from config; a single standalone brain
     when ``org_role`` is empty, else a flat ``general`` → ``[org_departments…]``
     chart (back-compatible with the existing two-brain behaviour).
 
-A coordinator COORDINATES, it never executes — only leaves/departments execute.
+A coordinator COORDINATES, it never executes; only leaves/departments execute.
 That asymmetry is enforced in :mod:`lhassa.org.coordinator` (which walks this tree);
 this module is the pure, side-effect-free shape + its load/save.
 """
@@ -37,14 +37,14 @@ from typing import TYPE_CHECKING, Iterable, Mapping, Optional
 if TYPE_CHECKING:
     from lhassa.config import Config
 
-# Open role vocabulary — kept as plain strings so the owner can name roles freely
+# Open role vocabulary; kept as plain strings so the owner can name roles freely
 # (e.g. "general", "department", "sub_general"). RBAC is enforced by COORDINATING
 # vs EXECUTING (a node with children coordinates; a leaf executes), not by the
 # label, so new role names never need an RBAC edit.
 ROLE_GENERAL = "general"
 ROLE_DEPARTMENT = "department"
 # The role of the PERMANENT root administrator brain (Lhassa). It is never a leaf
-# "executor" label — it sits above any org and coordinates everything beneath it.
+# "executor" label; it sits above any org and coordinates everything beneath it.
 ROLE_ADMIN = "administrator"
 
 # Fallback admin id when a Config (or a stand-in) does not carry ``root_admin_id``.
@@ -63,14 +63,14 @@ class BrainNode:
       - ``id``: the logical brain id (e.g. ``"general"``, ``"dept:optimization"``).
         Unique within a topology; doubles as the messaging identity.
       - ``role``: an open label (``"general"``/``"department"``/``"sub_general"``…).
-      - ``department``: the department name/identity this brain owns (optional —
+      - ``department``: the department name/identity this brain owns (optional;
         coordinators may have none; leaves usually do).
       - ``parent``: the id of the parent brain, or ``None`` for the single root.
       - ``skills``: the skill/specialist domains this brain HANDLES (e.g.
         ``("optimization", "finance")``). Free-form strings so the org stays
         modular; management validates them against the specialist registry where
         it can and merely warns on an unknown skill. Stored as a tuple (hashable).
-      - ``limits``: the brain's LIMITATIONS — an opaque, forward-compatible mapping
+      - ``limits``: the brain's LIMITATIONS; an opaque, forward-compatible mapping
         (e.g. ``{"max_risk": "high|medium|low", "budget_usd": 1.0,
         "allowed_actions": [...]}``). Unknown keys are kept verbatim. Excluded from
         the node hash so adding limits never breaks hashing of a frozen node.
@@ -109,7 +109,7 @@ class BrainNode:
         """Rebuild a node from a persisted/loaded JSON object.
 
         Backward-compatible: a node JSON without ``skills``/``limits`` (the
-        pre-management shape) loads fine — both default to empty.
+        pre-management shape) loads fine; both default to empty.
         """
         node_id = (data.get("id") or "").strip()
         if not node_id:
@@ -133,7 +133,7 @@ class BrainNode:
 
 
 class Topology:
-    """A validated TREE of :class:`BrainNode`\\ s — the org chart.
+    """A validated TREE of :class:`BrainNode`\\ s; the org chart.
 
     Validation (on construction): unique ids, every parent exists, exactly one root
     (``parent is None``), and acyclic. Supports the trivial single-brain topology
@@ -188,7 +188,7 @@ class Topology:
         raise TopologyError("no root brain")  # pragma: no cover - guarded by validate
 
     def admin(self) -> BrainNode:
-        """The PERMANENT administrator brain — always the root of the chart.
+        """The PERMANENT administrator brain; always the root of the chart.
 
         :func:`load_topology` / :func:`default_topology` guarantee the
         ``config.root_admin_id`` brain (Lhassa) sits at the root, so the
@@ -258,7 +258,7 @@ def _parse_departments(raw: str) -> list[str]:
 def admin_id(config: "Optional[Config]" = None) -> str:
     """The id of the PERMANENT root administrator (``config.root_admin_id``).
 
-    Lhassa is the default/main brain — the total administrator that always sits at
+    Lhassa is the default/main brain; the total administrator that always sits at
     the top of any org and is never removed or demoted. Resolved from config so a
     stand-in without the field still gets the ``"lhassa"`` default.
     """
@@ -301,7 +301,7 @@ def default_topology(config: "Config") -> Topology:
     The root is ALWAYS the permanent administrator brain ``config.root_admin_id``
     (Lhassa), with ``role="administrator"``:
 
-    - ``org_role`` empty → just the **single admin brain** (Lhassa standalone — it
+    - ``org_role`` empty → just the **single admin brain** (Lhassa standalone; it
       both coordinates and executes, there is no one else, but it is still the
       administrator).
     - else → the admin brain with ``[org_departments…]`` hanging directly UNDER it
@@ -346,13 +346,13 @@ def topology_path(config: "Optional[Config]" = None) -> Path:
 def load_topology(config: "Optional[Config]" = None) -> Topology:
     """Load the org chart: the topology file if present, else a derived default.
 
-    The file is JSON — a list of node objects ``{"id","role","department","parent"}``
+    The file is JSON; a list of node objects ``{"id","role","department","parent"}``
     (a bare list, or an object with a ``"nodes"`` key). A missing/empty file falls
     back to :func:`default_topology` (the single admin brain, or the admin with its
     departments), so a fresh install needs no file at all.
 
     Whatever is loaded, the permanent administrator (``config.root_admin_id``) is
-    guaranteed to sit at the ROOT via :func:`_ensure_admin` — a pre-admin chart that
+    guaranteed to sit at the ROOT via :func:`_ensure_admin`: a pre-admin chart that
     rooted at ``general`` is migrated so Lhassa orbits above it.
     """
     config = _resolve_config(config)

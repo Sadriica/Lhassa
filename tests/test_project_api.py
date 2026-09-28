@@ -1,4 +1,4 @@
-"""Project API tests — TestClient over a fresh app that mounts just the
+"""Project API tests. TestClient over a fresh app that mounts just the
 project router, mirroring tests/test_flow_api.py's style (fresh app, tmp DB).
 """
 

@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Compile a tailored CV ``.tex`` into a PDF — the last mile of the CV seam.
+"""Compile a tailored CV ``.tex`` into a PDF; the last mile of the CV seam.
 
 The Telegram → CV bridge exports a tailored ``.tex``; the owner would rather receive
 a ready-to-read **PDF**. This module is that one seam: it runs a LaTeX engine on a
 ``.tex`` and returns the produced ``.pdf`` (same directory, same stem).
 
-The engine is ``tectonic`` by default (self-contained, non-interactive) — overridable
+The engine is ``tectonic`` by default (self-contained, non-interactive); overridable
 via ``LHASSA_TECTONIC_BIN`` and resolved at call time through :func:`shutil.which`, the
 same env-first pattern the rest of the CV seam uses (see :mod:`lhassa.cv.paths`). A
 ``pdflatex``-style binary works too (the argv is chosen by the binary name).
@@ -32,7 +32,7 @@ _TIMEOUT = 120.0
 
 
 def _engine_bin() -> str:
-    """The LaTeX engine binary name — ``LHASSA_TECTONIC_BIN`` or ``tectonic``.
+    """The LaTeX engine binary name; ``LHASSA_TECTONIC_BIN`` or ``tectonic``.
 
     Resolved at call time (env-first, mirroring :func:`lhassa.cv.paths.cv_dir`) so a
     test or a freshly-set override is picked up without a reimport.
@@ -64,7 +64,7 @@ def compile_pdf(tex_path: Union[str, Path]) -> Optional[Path]:
 
     Runs the LaTeX engine (:func:`_engine_bin`, default ``tectonic``) non-interactively,
     writing the PDF next to the ``.tex`` (same directory, same stem). Returns the ``.pdf``
-    :class:`~pathlib.Path` on success. Returns ``None`` — logging a debug line — when the
+    :class:`~pathlib.Path` on success. Returns ``None`` (logging a debug line) when the
     engine is not on PATH, the source is missing, the run errors/times out/exits non-zero,
     or no PDF is produced, so the caller can fall back to the raw ``.tex``.
     """

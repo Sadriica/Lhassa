@@ -2,7 +2,7 @@
 
 This folder is the KNOWLEDGE BASE of Lhassa's research line (declared in
 [`../doc/research.md`](../doc/research.md)): one document per idea/technology
-we study, taken **down to the base** — how it actually works, what evidence
+we study, taken **down to the base**: how it actually works, what evidence
 its authors present (labeled as theirs), how it maps to what Lhassa really
 built, and what WE have not yet verified with our own instruments.
 
@@ -14,13 +14,13 @@ failed ideas remain queryable results with complete event logs.
 Every document follows the same seven sections:
 
 1. **The idea in one sentence**
-2. **Mechanics — down to the base**
-3. **Evidence the authors present** (their numbers, their benchmarks — never
+2. **Mechanics - down to the base**
+3. **Evidence the authors present** (their numbers, their benchmarks; never
    presented as ours)
 4. **Sources** (primary + nested, all URLs; unavailable sources named as such)
 5. **Mapping to Lhassa** (verified against code and `doc/decisions.md`, with
    honest divergences)
-6. **Not yet verified by us — and the experiment that would** (the bridge to
+6. **Not yet verified by us - and the experiment that would** (the bridge to
    the comprobación method: LhassaBench/ledger/episodes as the instruments)
 7. **Open questions**
 
@@ -30,17 +30,17 @@ Every document follows the same seven sections:
 |---|---|---|
 | [loop-engineering.md](loop-engineering.md) | The unit of work is a bounded, verifier-terminated loop; the doer never judges | Anthropic loop-engineering material (via the 2.7M-view thread) |
 | [graph-engineering.md](graph-engineering.md) | A knowledge graph as the multi-agent memory layer: extract→resolve→assemble→query, provenance per edge | The 12-page "Anthropic Playbook" PDF (independent synthesis of Anthropic's public cookbook) |
-| [retrieval-as-code.md](retrieval-as-code.md) | Deterministic scoring + a curated index BEFORE any model read — 3 files, not 5,000 | The "second brain" thread + KG/RAG complementarity |
-| [memory-sovereignty.md](memory-sovereignty.md) | Agent memory as a first-class, owner-owned, curated asset — served warm to every harness | Memanto + jcode's verified-injection memory graph |
+| [retrieval-as-code.md](retrieval-as-code.md) | Deterministic scoring + a curated index BEFORE any model read. 3 files, not 5,000 | The "second brain" thread + KG/RAG complementarity |
+| [memory-sovereignty.md](memory-sovereignty.md) | Agent memory as a first-class, owner-owned, curated asset; served warm to every harness | Memanto + jcode's verified-injection memory graph |
 | [mixture-of-agents.md](mixture-of-agents.md) | A panel of independent models + an aggregator beats model luck on expensive-to-be-wrong calls | Hermes /moa + Wang et al. 2024 |
-| [token-efficient-serialization.md](token-efficient-serialization.md) | Serialize tabular data for prompts in a token-compact form — a translation layer, not a storage format | TOON spec/repo |
+| [token-efficient-serialization.md](token-efficient-serialization.md) | Serialize tabular data for prompts in a token-compact form; a translation layer, not a storage format | TOON spec/repo |
 | [eval-driven-agents.md](eval-driven-agents.md) | Evals before production; bounded autonomy, budgets and durable execution as infrastructure, not afterthought | ai-engineering-from-scratch (503 lessons) |
 | [output-quality.md](output-quality.md) | A versioned skill as a quality gate over generated text; slop is enumerable and removable | no-ai-slop (skill + eval rubric) |
 
 ## Provenance notes (read before trusting a tweet)
 
 - The graph-engineering PDF **self-declares as an independent synthesis** of
-  Anthropic's public material — the threads that circulated it over-attribute
+  Anthropic's public material; the threads that circulated it over-attribute
   it to "a senior Anthropic engineer" and (one of them) to Andrej Karpathy.
   The corpus documents the chain and works from the PDF itself.
 - Two nested X *articles* (the "14 steps" and the "12-step second brain")

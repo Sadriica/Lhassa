@@ -61,16 +61,16 @@ class Skill:
     """One reusable capability bundle (immutable).
 
     Fields:
-      - ``name``         — the skill's kebab-slug id (also the folder name).
-      - ``description``  — the one line used to decide WHEN the skill loads.
-      - ``instructions`` — the markdown body: what the skill does + how to apply
+      - ``name``        : the skill's kebab-slug id (also the folder name).
+      - ``description`` : the one line used to decide WHEN the skill loads.
+      - ``instructions``: the markdown body: what the skill does + how to apply
         it (may reference bundled ``resources`` by filename).
-      - ``metadata``     — free-form mapping (``allowed-tools``, ``domain``,
+      - ``metadata``    : free-form mapping (``allowed-tools``, ``domain``,
         ``tags``, ``level``, ``source``, ``license`` …). Kept verbatim so unknown
         keys survive a round-trip.
-      - ``resources``    — filenames bundled alongside SKILL.md in the folder,
+      - ``resources``   : filenames bundled alongside SKILL.md in the folder,
         LISTED but not interpreted.
-      - ``error``        — ``None`` when parsed cleanly; otherwise a clear,
+      - ``error``       : ``None`` when parsed cleanly; otherwise a clear,
         human-readable note about what was malformed (the file still loads).
 
     Frozen so a stored instance can't be mutated in place; use
@@ -110,7 +110,7 @@ def _split_frontmatter(text: str) -> tuple[Optional[str], str]:
 
     A document opens frontmatter with a line that is exactly ``---`` and closes
     it with the next ``---`` / ``...`` line. Anything else (no opener, no closer)
-    is treated as a body with no frontmatter — degrade, never raise.
+    is treated as a body with no frontmatter; degrade, never raise.
     """
     if not text:
         return None, ""
@@ -122,7 +122,7 @@ def _split_frontmatter(text: str) -> tuple[Optional[str], str]:
             fm = "\n".join(lines[1:i])
             body = "\n".join(lines[i + 1:])
             return fm, body
-    # No closing delimiter — treat the whole thing as a plain body.
+    # No closing delimiter; treat the whole thing as a plain body.
     return None, text
 
 
@@ -142,10 +142,10 @@ def parse_skill_md(text: str) -> Skill:
     if fm_raw is not None:
         try:
             loaded = yaml.safe_load(fm_raw)
-        except Exception as exc:  # malformed YAML — degrade, keep the body
+        except Exception as exc:  # malformed YAML; degrade, keep the body
             loaded = None
             error = f"invalid YAML frontmatter: {exc}"
-            logger.warning("skills: malformed SKILL.md frontmatter — {}", exc)
+            logger.warning("skills: malformed SKILL.md frontmatter; {}", exc)
         if isinstance(loaded, dict):
             fm = loaded
         elif loaded is not None and error is None:

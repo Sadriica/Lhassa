@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Approvals screen — the pending queue, rendered through the ONE describe()
+"""Approvals screen; the pending queue, rendered through the ONE describe()
 helper (never bare ids), with in-place approve/deny.
 
 ``a``/``d`` resolve the selected row via ``lhassa.security.approval.resolve``
-— the SAME seam the CLI/API use — never bypassed. A confirmation line renders
+(the SAME seam the CLI/API use; never bypassed). A confirmation line renders
 in the screen's status line and the queue reloads after every resolution.
 
 A :class:`~lhassa.cli.tui.screens.base.TableScreen`, so the queue also gets the

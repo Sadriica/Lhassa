@@ -1,4 +1,4 @@
-"""Tests for the loop RUNTIME (Wave A, TASK A2) — /goal's verify-terminate loop.
+"""Tests for the loop RUNTIME (Wave A, TASK A2); /goal's verify-terminate loop.
 
 ``core/step.py:_judge`` reads ``trigger.params["_loop_id"]`` (stamped by
 ``notify/commands.py:_cmd_goal --verify ...``) each turn: enforces the turn cap
@@ -18,7 +18,7 @@ from lhassa.llm.provider import Completion
 
 
 class FakeProvider:
-    """Offline ModelProvider double — records calls, returns a canned Completion."""
+    """Offline ModelProvider double; records calls, returns a canned Completion."""
 
     def __init__(self, *, replies=None, name="fake"):
         self.name = name
@@ -112,7 +112,7 @@ async def test_verify_fail_iterates_and_threads_feedback_then_passes(brain):
 
     # Second turn: simulate the recurrence becoming due (the real minted next
     # occurrence carries a future due_at; retire it and re-mint as immediately
-    # due with the SAME params — the loop-runtime bit under test is the
+    # due with the SAME params; the loop-runtime bit under test is the
     # params/feedback threading, not the recurrence scheduler's timing).
     await db.set_task_state("inst_personal", pending[0]["id"], "hecha")
     await db.add_task(
@@ -137,7 +137,7 @@ async def test_turn_cap_stops_before_any_model_call(brain):
     db = brain
     from lhassa.core import step
 
-    # Already at the cap — the model must never run this turn.
+    # Already at the cap; the model must never run this turn.
     loop_id = await _mk_loop(db, max_turns=2, turn=2, status="iterate")
     await db.add_task(
         "inst_personal", "goal", "watch for READY", params={"_judgment": True, "_loop_id": loop_id},
@@ -147,7 +147,7 @@ async def test_turn_cap_stops_before_any_model_call(brain):
     prov = FakeProvider(replies=["all systems READY"])
     summary = await step.step("inst_personal", provider=prov)
     assert summary["judged"] == 1
-    assert prov.calls == []  # never called — the cap is enforced BEFORE work
+    assert prov.calls == []  # never called; the cap is enforced BEFORE work
 
     row = await db.get_loop("inst_personal", loop_id)
     assert row["status"] == "capped"
@@ -176,7 +176,7 @@ async def test_missing_loop_row_degrades_to_normal_judgment(brain):
     assert summary["judged"] == 1
     assert len(prov.calls) == 1
 
-    # Recurrence behaves normally (a new occurrence IS minted — a missing loop
+    # Recurrence behaves normally (a new occurrence IS minted; a missing loop
     # row must not accidentally stop a goal's recurrence).
     pending = await db.list_tasks("inst_personal", estado="pendiente")
     assert len(pending) == 1

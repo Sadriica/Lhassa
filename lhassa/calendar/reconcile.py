@@ -1,18 +1,18 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Master-calendar reconcile — the $0, deterministic diff engine.
+"""Master-calendar reconcile; the $0, deterministic diff engine.
 
 An owner with several calendars (institutional, personal, a project one) picks
-ONE as the PRIMARY (the master — see :func:`lhassa.calendar.store.set_primary`).
+ONE as the PRIMARY (the master; see :func:`lhassa.calendar.store.set_primary`).
 This module finds events that live on a NON-primary ("secondary") calendar but
 are missing from the primary, so they can be surfaced to the owner as a
-tappable ``.ics`` to add — never modifying any calendar directly (there's no
+tappable ``.ics`` to add; never modifying any calendar directly (there's no
 write API to an institutional feed; a file the owner taps is the integration).
 
 Set diff, not sync: this reads :func:`lhassa.calendar.feed.upcoming` (which
 merges every configured feed and tags each event with its ``calendar`` name),
 partitions by the primary calendar, then matches each secondary event against
 the primary set. No model, no network call of its own (``upcoming`` does the
-one HTTP round trip per feed, already cached) — everything downstream is a
+one HTTP round trip per feed, already cached); everything downstream is a
 plain in-memory diff.
 
 Matching heuristic (and its honest limits)
@@ -20,17 +20,17 @@ Matching heuristic (and its honest limits)
 Two events are considered "the same" when:
 
   1. their ``summary`` matches after :func:`_normalize` (casefold + collapse
-     internal whitespace to single spaces + strip) — so "Team  meeting" and
+     internal whitespace to single spaces + strip); so "Team  meeting" and
      "team meeting" are the same event; and
   2. their ``start`` times are within :data:`MATCH_TOLERANCE_MINUTES` of each
-     other (default 5 minutes) — so a feed that rounds to the minute or a
+     other (default 5 minutes); so a feed that rounds to the minute or a
      institutional export off by a couple of minutes still matches.
 
 This is intentionally simple and has known false negatives: a RENAMED event
-(same time, different title — e.g. "Team meeting" → "Team sync") reads as
+(same time, different title; e.g. "Team meeting" → "Team sync") reads as
 unsynced even though a human would recognize it as the same meeting, and an
 event moved by more than the tolerance also reads as unsynced. Both are
-ACCEPTABLE by design — the owner reviews and taps each candidate rather than
+ACCEPTABLE by design; the owner reviews and taps each candidate rather than
 this module silently guessing; a false "unsynced" costs one ignored
 notification, while a false match (silently treating two different events as
 the same) would hide a real gap. There are no false POSITIVES: a genuinely
@@ -52,7 +52,7 @@ _WHITESPACE_RE = re.compile(r"\s+")
 
 
 def _normalize(summary: str) -> str:
-    """Casefold + collapse whitespace — the only text the matcher looks at."""
+    """Casefold + collapse whitespace; the only text the matcher looks at."""
     return _WHITESPACE_RE.sub(" ", str(summary or "")).strip().casefold()
 
 
@@ -86,7 +86,7 @@ async def find_unsynced(
     primary event. Each candidate: ``{summary, start, end, location,
     source_calendar}``.
 
-    No primary configured, or no feeds at all, degrades to ``[]`` — there is
+    No primary configured, or no feeds at all, degrades to ``[]``: there is
     nothing to reconcile against. Never raises.
     """
     try:
@@ -119,17 +119,17 @@ async def find_unsynced(
             )
         return candidates
     except Exception as exc:  # $0 diff must never crash a caller
-        logger.debug("calendar.reconcile: find_unsynced failed — {}", exc)
+        logger.debug("calendar.reconcile: find_unsynced failed; {}", exc)
         return []
 
 
 def to_ics(candidate: dict) -> str:
-    """A ``.ics`` string for ``candidate`` — a stable UID from ``summary`` +
+    """A ``.ics`` string for ``candidate``: a stable UID from ``summary`` +
     ``start`` so the SAME unsynced event always yields the SAME file content
     (upstream dedupe keys on this, see :mod:`lhassa.actionpack._calendar_sync`).
 
     Delegates the actual RFC5545 rendering to
-    :func:`lhassa.calendar.ics.build_event` — this function only shapes a
+    :func:`lhassa.calendar.ics.build_event`: this function only shapes a
     reconcile candidate into that call. Never raises; ``""`` on any trouble
     (e.g. a candidate missing ``start``), matching ``build_event``'s own
     degrade-to-empty-string contract.
@@ -155,12 +155,12 @@ def to_ics(candidate: dict) -> str:
             uid=uid,
         )
     except Exception as exc:
-        logger.warning("calendar.reconcile: to_ics failed — {}", exc)
+        logger.warning("calendar.reconcile: to_ics failed; {}", exc)
         return ""
 
 
 def stable_uid(summary: str, start: datetime) -> str:
-    """Deterministic UID seed — same summary+start always produces the same
+    """Deterministic UID seed; same summary+start always produces the same
     UID, which is what makes ``calendar_sync``'s watch_state dedupe work."""
     seed = f"{_normalize(summary)}|{start.isoformat()}"
     digest = hashlib.sha1(seed.encode("utf-8")).hexdigest()[:20]

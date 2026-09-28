@@ -1,4 +1,4 @@
-"""Tests for the feedback -> autonomy-knob bridge (§2.2 — the knob should MOVE
+"""Tests for the feedback -> autonomy-knob bridge (§2.2; the knob should MOVE
 from lived feedback, not only from explicit approve/deny taps).
 
 Seeds a tmp brain.db with episode sequences that exercise the attribution
@@ -23,7 +23,7 @@ from lhassa.security.trust import TrustLevel
 
 @dataclass
 class _FakeEpisode:
-    """Minimal Episode double — just enough for db.append_episode."""
+    """Minimal Episode double; just enough for db.append_episode."""
 
     id: str
     instance_id: str
@@ -69,7 +69,7 @@ async def _seed_episode(db, *, instance_id="inst_test", accion="responder", deci
 
 
 def _t(minute: int, hour: int = 9) -> str:
-    """A timestamp anchored to "yesterday" — always inside the default 7-day
+    """A timestamp anchored to "yesterday": always inside the default 7-day
     lookback regardless of when the test runs."""
     anchor = datetime.now(timezone.utc) - timedelta(days=1)
     return anchor.replace(hour=hour, minute=minute, second=0, microsecond=0).isoformat()
@@ -85,13 +85,13 @@ async def _seed_two_negative_signals_for(db, accion: str):
 
     The correction/cache-hit follow-up episodes are deliberately placed just
     OUTSIDE the (symmetric, 30min) attribution window measured from the
-    ``accion`` episode itself — close enough to the ORIGINAL answer to trigger
+    ``accion`` episode itself; close enough to the ORIGINAL answer to trigger
     the correction/re-ask heuristic in ``core.feedback`` (whose windows are
     measured from the answer), but far enough that the follow-up message
     itself (also a "responder" episode, independently scored) does not get
     mis-attributed to ``accion`` too via its own proximity search.
     """
-    # Cluster 1 — correction.
+    # Cluster 1; correction.
     await _seed_episode(db, accion=accion, when=_t(0, hour=9))
     await _seed_episode(
         db, accion="responder", resultado="pulled updates", when=_t(5, hour=9)
@@ -100,7 +100,7 @@ async def _seed_two_negative_signals_for(db, accion: str):
         db, accion="responder", resultado="No, that wasn't right", when=_t(32, hour=9)
     )
 
-    # Cluster 2 — re-ask (a cache-hit re-serve of the same answer).
+    # Cluster 2; re-ask (a cache-hit re-serve of the same answer).
     await _seed_episode(db, accion=accion, when=_t(0, hour=11))
     await _seed_episode(
         db, accion="responder", resultado="pulled updates X", when=_t(5, hour=11)
@@ -176,7 +176,7 @@ async def test_positive_signal_reinforces_existing_streak_by_one(brain, knob_con
 
 @pytest.mark.asyncio
 async def test_positive_signal_never_bootstraps_a_fresh_action(brain, knob_config):
-    # No prior human approval at all for "sync_repo" — feedback must not
+    # No prior human approval at all for "sync_repo": feedback must not
     # create autonomy out of nothing.
     await _seed_one_positive_signal_for(brain, "sync_repo")
 
@@ -233,7 +233,7 @@ async def test_second_call_same_window_is_a_noop(brain, knob_config):
     assert second["reset"] == []
     assert second["reinforced"] == []
     assert second["skipped"] == 0
-    # Still zero — the second call did not re-derive/re-apply anything.
+    # Still zero; the second call did not re-derive/re-apply anything.
     assert await autonomy.autonomy_level(INST, "sync_repo", "duenio") == 0
 
 

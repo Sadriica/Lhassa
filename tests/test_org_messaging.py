@@ -1,4 +1,4 @@
-"""Tests for lhassa.org.messaging — the typed inter-brain task queue (Fase 7)."""
+"""Tests for lhassa.org.messaging; the typed inter-brain task queue (Fase 7)."""
 
 import pytest
 import pytest_asyncio  # noqa: F401

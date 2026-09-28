@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Cross-instance sharing API (Stream 6 Phase A) — a thin surface over
+"""Cross-instance sharing API (Stream 6 Phase A); a thin surface over
 :mod:`lhassa.org.sharing`.
 
 A self-contained :class:`fastapi.APIRouter` (``router``) the integrator mounts
 with ``app.include_router(share_routes.router)``. Every write op returns a
-clear 4xx (never a 500) on a refusal — a bad resource type, an unpermitted
+clear 4xx (never a 500) on a refusal; a bad resource type, an unpermitted
 cross-instance read, or an unpublished resource are all ordinary, expected
 outcomes of a deny-by-default gate, not server errors.
 """
@@ -74,7 +74,7 @@ async def revoke_access(payload: dict):
 
 @router.get("/api/share/offerings/{instance_id}")
 async def get_offerings(instance_id: str, actor_id: str = ""):
-    """What ``instance_id`` offers — refused (403) without a live SHARES permit."""
+    """What ``instance_id`` offers; refused (403) without a live SHARES permit."""
     cfg = lhassa_config.Config()
     result = await sharing.list_offerings(
         instance_id,

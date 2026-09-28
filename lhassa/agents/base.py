@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """
-BaseAgent — autonomous background agent with tool access.
+BaseAgent; autonomous background agent with tool access.
 
 Uses the active LLM provider (same as the voice pipeline) and runs a ReAct-style
 tool loop: call LLM → execute any tool calls → feed results back → repeat until done.
@@ -264,7 +264,7 @@ class BaseAgent:
                 run.output += turn.text
                 await state.broadcast({"type": "agent_token", "run_id": run_id, "token": turn.text})
 
-            # No tool calls — we're done
+            # No tool calls; we're done
             if not turn.tool_calls:
                 return run.output or turn.text or ""
 
@@ -291,10 +291,10 @@ class BaseAgent:
                 result = await _execute_tool(tc["name"], tc["input"])
                 messages.append({"tool_call_id": tc["id"], "role": "tool", "content": result})
 
-        note = f"\n\n[Agent stopped after {MAX_ITERATIONS} iterations — task may be incomplete.]"
+        note = f"\n\n[Agent stopped after {MAX_ITERATIONS} iterations; task may be incomplete.]"
         run.output += note
         await state.broadcast({"type": "agent_token", "run_id": run_id, "token": note})
-        logger.warning(f"[{self.name}] reached MAX_ITERATIONS ({MAX_ITERATIONS}) — returning partial output")
+        logger.warning(f"[{self.name}] reached MAX_ITERATIONS ({MAX_ITERATIONS}); returning partial output")
         return run.output
 
     # ── Anthropic tool-use loop ────────────────────────────────────────────────
@@ -322,7 +322,7 @@ class BaseAgent:
                 run.output += turn.text
                 await state.broadcast({"type": "agent_token", "run_id": run_id, "token": turn.text})
 
-            # No tool use — done
+            # No tool use; done
             if not turn.tool_calls:
                 return run.output
 
@@ -353,8 +353,8 @@ class BaseAgent:
 
             messages.append({"role": "user", "content": tool_result_content})
 
-        note = f"\n\n[Agent stopped after {MAX_ITERATIONS} iterations — task may be incomplete.]"
+        note = f"\n\n[Agent stopped after {MAX_ITERATIONS} iterations; task may be incomplete.]"
         run.output += note
         await state.broadcast({"type": "agent_token", "run_id": run_id, "token": note})
-        logger.warning(f"[{self.name}] reached MAX_ITERATIONS ({MAX_ITERATIONS}) — returning partial output")
+        logger.warning(f"[{self.name}] reached MAX_ITERATIONS ({MAX_ITERATIONS}); returning partial output")
         return run.output

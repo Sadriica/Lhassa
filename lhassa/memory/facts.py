@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """
-Typed facts in the grande — the durable "hechos" that pass through the owner (§2.3).
+Typed facts in the grande; the durable "hechos" that pass through the owner (§2.3).
 
 Two flavors:
-  - ``dato``      — a durable fact about the world/owner ("le gusta el chocolate
+  - ``dato``     : a durable fact about the world/owner ("le gusta el chocolate
                     con menta"). Changes WHAT the brain knows.
-  - ``directiva`` — a standing instruction ("responder conciso por defecto").
+  - ``directiva``: a standing instruction ("responder conciso por defecto").
                     Changes the HOW; loaded always as identity.
 
 Storage discipline (la grande, Apéndice A): facts are **append-only**. A fact is
@@ -24,7 +24,7 @@ from datetime import datetime, timezone
 from lhassa.config import Config
 from lhassa.core import db
 
-# Literal negation prefixes this module can recognize as a heuristic — NOT
+# Literal negation prefixes this module can recognize as a heuristic. NOT
 # semantic NLP, just a plain string-prefix match (see ``_strip_negation_prefix``).
 # Longest/most-specific pattern first so "ya no " / "no longer " are stripped
 # whole rather than leaving a dangling "no "/"longer " on the body.
@@ -84,7 +84,7 @@ async def add_fact(
     """
     Append a new fact to the grande and return it. Append-only: this always
     inserts a fresh row (to supersede an earlier fact, add a new one with a newer
-    timestamp / higher confianza — :func:`resolve` will pick the winner).
+    timestamp / higher confianza; :func:`resolve` will pick the winner).
     """
     if tipo not in ("dato", "directiva"):
         raise ValueError(f"tipo must be 'dato' or 'directiva', got {tipo!r}")
@@ -116,7 +116,7 @@ async def add_fact(
             "actualizado_en": fact.actualizado_en,
         }
     )
-    # Embed on write — best-effort; any embedder failure NEVER breaks the fact write.
+    # Embed on write; best-effort; any embedder failure NEVER breaks the fact write.
     # The fact is already committed to the DB; embedding is a best-effort bonus.
     try:
         from lhassa.memory.embeddings import get_embedder
@@ -124,7 +124,7 @@ async def add_fact(
         vecs = embedder.embed([fact.contenido])
         await db.upsert_fact_embedding(instance_id, fact.id, vecs[0], model=embedder.name)
     except Exception:
-        pass  # embedding failure is silent — the fact was already written
+        pass  # embedding failure is silent; the fact was already written
     return fact
 
 
@@ -150,7 +150,7 @@ async def load_by_tags(instance_id: str | None, tags) -> list[Fact]:
 def _strip_negation_prefix(body: str) -> str | None:
     """If ``body`` starts with a literal negation prefix, return the rest.
 
-    Plain string-prefix matching only — NOT semantic negation detection. Checks
+    Plain string-prefix matching only. NOT semantic negation detection. Checks
     ``_NEGATION_PREFIXES`` longest-specific-first ("ya no " / "no longer "
     before the bare "no "/"not ") so a phrase like "ya no me gusta X" strips to
     "me gusta x" in one step rather than leaving a stray "no ". Returns
@@ -167,18 +167,18 @@ def _conflict_key(fact: Fact) -> str:
     """
     The conflict key: two facts contradict when this matches.
 
-    Base case: the normalized (stripped, case-folded) ``contenido`` — so
+    Base case: the normalized (stripped, case-folded) ``contenido``: so
     superseding facts written verbatim with the same subject collapse to one
     winner.
 
     Direct-negation heuristic (deliberately NOT semantic NLP): when
-    ``contenido`` starts with a literal negation prefix — Spanish "no " /
-    "ya no ", English "not " / "no longer " — the key is the body with that
+    ``contenido`` starts with a literal negation prefix. Spanish "no " /
+    "ya no ", English "not " / "no longer ": the key is the body with that
     prefix stripped, so "me gusta el chocolate" and "no me gusta el chocolate"
     collapse to the SAME key and are treated as a contradiction rather than
     two unrelated facts. This is a plain string-prefix match: it recognizes
     only a negation written at the very start of the sentence, in one of the
-    four listed forms — it will miss mid-sentence negation, synonyms, or any
+    four listed forms; it will miss mid-sentence negation, synonyms, or any
     other phrasing, and it can in principle collide with an unrelated fact
     that happens to start with the same words after stripping "no "/"not "
     (an accepted, honestly-documented risk rather than a claim of real
@@ -198,8 +198,8 @@ def resolve(facts: list[Fact]) -> list[Fact]:
     Conflict key: normalized ``contenido``, with a direct-negation prefix
     ("no "/"ya no "/"not "/"no longer ") stripped so a fact and its literal
     negation share a key (see :func:`_conflict_key` for exactly what this does
-    and does not catch — it is a string-prefix heuristic, not semantic NLP).
-    Winner: the **most recent AND highest confianza** — we rank conflicting facts
+    and does not catch; it is a string-prefix heuristic, not semantic NLP).
+    Winner: the **most recent AND highest confianza**: we rank conflicting facts
     by ``(actualizado_en, confianza)`` and keep the maximum (recency leads, with
     confianza as the tiebreaker), per the brief's contradiction rule.
 

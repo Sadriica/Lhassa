@@ -85,7 +85,7 @@ async def test_step_rejects_valid_signed_task_outside_objective_allowlist(
 @pytest.mark.asyncio
 async def test_health_alert_sensor_crosses_gate_and_runs(local_gate, monkeypatch):
     """The health sense's 'warn' reflex (-> fixed action 'notify') must still
-    cross the allowlist wall and execute — the fix must not break this sensor
+    cross the allowlist wall and execute; the fix must not break this sensor
     the same way ``test_legitimate_repo_sensor_crosses_gate_and_runs`` proves
     for the repo sensor.
     """

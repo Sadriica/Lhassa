@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Telegram notifier — a credential-gated adapter over the Telegram Bot API.
+"""Telegram notifier; a credential-gated adapter over the Telegram Bot API.
 
 Mirrors the ``github_token`` discipline (§ the token-gated GitHub-remote hooks):
 **no credential → no network, ever.** If either ``telegram_bot_token`` or
 ``telegram_chat_id`` is empty, :func:`send` returns ``False`` immediately without
-touching the network. On any HTTP/transport error it logs and returns ``False`` —
+touching the network. On any HTTP/transport error it logs and returns ``False``;
 it never raises, so a notification failure can never break a caller.
 
 This is the adapter only; callers reach it through ``notify.dispatch.notify()``
@@ -46,7 +46,7 @@ async def send(
     """Send ``text`` to the configured Telegram chat. Returns whether it was sent.
 
     ``parse_mode`` (e.g. ``"HTML"``) and ``reply_markup`` (an inline-keyboard dict,
-    passed straight through) are optional and default to ``None`` — omitted from the
+    passed straight through) are optional and default to ``None``: omitted from the
     payload, so existing callers behave identically. A caller using
     ``parse_mode="HTML"`` is responsible for HTML-escaping any interpolated dynamic
     content (``html.escape``) before it reaches this function.
@@ -77,7 +77,7 @@ async def send(
     try:
         async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
             response = await client.post(url, json=payload)
-    except Exception as exc:  # transport error — never propagate
+    except Exception as exc:  # transport error; never propagate
         logger.warning(f"Telegram notify failed (transport): {exc}")
         return False
 

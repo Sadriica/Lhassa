@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """
-The Appropriate Legal Notice — one source of truth for every surface.
+The Appropriate Legal Notice; one source of truth for every surface.
 
 Lhassa is licensed under AGPL-3.0-or-later with an additional term under
 section 7(b) of that license (see ``LICENSE``): the notice below must be
@@ -11,7 +11,7 @@ A term like that is only meaningful if the notice ACTUALLY EXISTS in the
 product. So it lives here as a constant rather than as a hard-coded string in
 each surface, every surface renders :data:`NOTICE` (or :func:`notice_lines`),
 and ``tests/test_legal_notice.py`` asserts each one still does. Deleting the
-notice from a surface breaks a test, which is the point — it is a legal notice,
+notice from a surface breaks a test, which is the point; it is a legal notice,
 not decoration.
 
 This is **leaf infra**: it imports nothing from the package, so any layer may

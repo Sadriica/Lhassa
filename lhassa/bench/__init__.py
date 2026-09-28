@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""LhassaBench — a deterministic, $0-scoring eval harness (adapter layer).
+"""LhassaBench; a deterministic, $0-scoring eval harness (adapter layer).
 
 Runs the fixture set (:mod:`lhassa.bench.loader`) against named subjects
 (providers today) via :func:`lhassa.bench.runner.run_bench`, scoring every
 completion with the SAME objective verifier the rest of Lhassa trusts
-(:mod:`lhassa.agents.verify`) — never an LLM judge. Results land in the
+(:mod:`lhassa.agents.verify`); never an LLM judge. Results land in the
 ``bench_runs`` table (:mod:`lhassa.core.db`); :func:`lhassa.bench.runner.summarize`
 renders a compact per-subject table for the CLI/dashboard/digest.
 """

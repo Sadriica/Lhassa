@@ -1,4 +1,4 @@
-"""Tests for lhassa.memory.facts — typed facts in the append-only grande."""
+"""Tests for lhassa.memory.facts; typed facts in the append-only grande."""
 
 import pytest
 
@@ -106,7 +106,7 @@ async def test_append_only_supersede_is_new_row(tmp_path, monkeypatch):
     from lhassa.memory import facts
     await facts.add_fact("inst_personal", "dato", "vive en Lima", confianza=0.5)
     await facts.add_fact("inst_personal", "dato", "vive en Lima", confianza=0.9)
-    # Both rows persist — nothing was overwritten.
+    # Both rows persist; nothing was overwritten.
     rows = await facts.load_facts("inst_personal")
     assert len(rows) == 2
 
@@ -212,7 +212,7 @@ def test_strip_negation_prefix_returns_none_without_a_negation_prefix():
 
 @pytest.mark.asyncio
 async def test_resolve_does_not_merge_unrelated_facts_without_negation(tmp_path, monkeypatch):
-    """Sanity check: the heuristic only fires on a literal negation prefix — two
+    """Sanity check: the heuristic only fires on a literal negation prefix; two
     otherwise-unrelated facts never collapse."""
     await _init(tmp_path, monkeypatch)
     from lhassa.memory import facts

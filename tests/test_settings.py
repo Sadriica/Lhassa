@@ -1,4 +1,4 @@
-"""Tests for lhassa.settings — the runtime settings service.
+"""Tests for lhassa.settings; the runtime settings service.
 
 Offline: HOME is redirected to a tmp dir so ``settings.env`` is written under a temp
 ``~/.lhassa``, and every editable Config attribute is snapshotted via monkeypatch so a

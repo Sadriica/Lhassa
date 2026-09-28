@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """
-The watchlist — the deterministic "what woke me?" check (§2.4).
+The watchlist; the deterministic "what woke me?" check (§2.4).
 
 Every tick, ``check()`` scans state in code with ZERO tokens and returns a list
 of ``Trigger``s. Nothing to do → empty list → the brain sleeps. A trigger that
@@ -41,18 +41,18 @@ class Trigger:
     """
     One reason the brain woke up, with everything needed to act on it.
 
-    ``kind``         — the source/category ("task"; "repo", "job", "health", …).
-    ``action``       — the typed action to take (closed set in ``actions.ACTIONS``
+    ``kind``        : the source/category ("task"; "repo", "job", "health", …).
+    ``action``      : the typed action to take (closed set in ``actions.ACTIONS``
                        when fixed; otherwise a label the Phase 2 router resolves).
-    ``objetivo``     — the target of the action (e.g. a repo/project name).
-    ``params``       — action parameters.
-    ``task_id``      — the originating task id, when the trigger came from a task.
-    ``origen_actor`` — QUIÉN originated it (§2.6 hook for roles), if known.
-    ``origen_trust`` — trust level of the originating task (0=MUNDO/1=INTERNO/2=HUMANO).
+    ``objetivo``    : the target of the action (e.g. a repo/project name).
+    ``params``      : action parameters.
+    ``task_id``     : the originating task id, when the trigger came from a task.
+    ``origen_actor``: QUIÉN originated it (§2.6 hook for roles), if known.
+    ``origen_trust``: trust level of the originating task (0=MUNDO/1=INTERNO/2=HUMANO).
                        Carried through to dispatch so minted tasks degrade by contagion.
-    ``due_at``       — ISO timestamp (from the task row) when this task was scheduled.
-    ``recurrence``   — recurrence interval in SECONDS (string) from the task row.
-    ``judgment``     — True when the task was minted with the judgment flag (any accion
+    ``due_at``      : ISO timestamp (from the task row) when this task was scheduled.
+    ``recurrence``  : recurrence interval in SECONDS (string) from the task row.
+    ``judgment``    : True when the task was minted with the judgment flag (any accion
                        allowed; the brain thinks about it rather than running a fixed action).
     """
 
@@ -73,7 +73,7 @@ class Trigger:
         """True iff ``action`` is in the closed deterministic set (no LLM needed).
 
         A judgment task always routes to the think path even when its accion name
-        happens to match a fixed action — the owner explicitly requested thought.
+        happens to match a fixed action; the owner explicitly requested thought.
         """
         if self.judgment:
             return False
@@ -112,7 +112,7 @@ async def _from_finished_jobs(
 
     Fires ONCE per job: the job row is marked ``acked=1`` (unless peek=True) so
     the next tick finds nothing new. The ``job_review`` action is NOT a fixed
-    action — the judgment path reviews the outcome and may mint notify/facts via
+    action; the judgment path reviews the outcome and may mint notify/facts via
     dispatch. The params include a ≤500-char result/status summary.
     """
     try:
@@ -184,17 +184,17 @@ async def _from_repo_changes(
         for repo_path in paths:
             current = _git_head(repo_path)
             if current is None:
-                continue  # unreadable repo — skip
+                continue  # unreadable repo; skip
             state_key = f"repo:{repo_path}"
             stored = await db.get_watch_state(instance_id, state_key)
             if stored is None:
-                # First observation — seed, no trigger.
+                # First observation; seed, no trigger.
                 if not peek:
                     await db.set_watch_state(instance_id, state_key, current)
                 continue
             if stored == current:
                 continue  # no change
-            # HEAD changed — fire trigger.
+            # HEAD changed; fire trigger.
             out.append(
                 Trigger(
                     kind="repo",
@@ -225,7 +225,7 @@ def _health_level_rank(level: str) -> int:
 def _read_health_digest() -> Optional[dict]:
     """Read the latest health digest written by lhassa-health timer.
 
-    Returns ``None`` if missing, unreadable, or malformed — never raises.
+    Returns ``None`` if missing, unreadable, or malformed; never raises.
     """
     try:
         text = _HEALTH_DIGEST.read_text(encoding="utf-8")
@@ -252,7 +252,7 @@ async def _from_health(
         state_key = "health:level"
         stored = await db.get_watch_state(instance_id, state_key)
         if stored is None:
-            # First observation — seed, no trigger.
+            # First observation; seed, no trigger.
             if not peek:
                 await db.set_watch_state(instance_id, state_key, current_level)
             return
@@ -296,7 +296,7 @@ _CHECKS: list[Callable[[str, list[Trigger], bool], Awaitable[None]]] = [
 # Extensible seam: a SHELL that wants its own $0 sense registers a check-func
 # here at import time (``register_check``) instead of core reaching UP to import
 # it. This is the inversion that keeps core/watchlist.py spine-only: the org
-# layer's inbox sense (``org.inbox_sense``) is the first user — core never
+# layer's inbox sense (``org.inbox_sense``) is the first user; core never
 # imports ``lhassa.org`` (spine ↛ shell is enforced by
 # tests/test_architecture.py), the shell registers itself instead. Checked after
 # the built-ins so a plugin sense never shadows the deterministic core sources.
@@ -306,7 +306,7 @@ _EXTRA_CHECKS: list[Callable[[str, list[Trigger], bool], Awaitable[None]]] = []
 def register_check(
     fn: Callable[[str, list[Trigger], bool], Awaitable[None]],
 ) -> Callable[[str, list[Trigger], bool], Awaitable[None]]:
-    """Register an additional watchlist check-func — the drop-in seam for shells.
+    """Register an additional watchlist check-func; the drop-in seam for shells.
 
     Usable as a direct call or a decorator; returns ``fn`` unchanged either way.
     A registered check must obey the same contract as the built-ins in this

@@ -1,17 +1,17 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Org MANAGEMENT — create brains, define their skills/limits, and shape the chart.
+"""Org MANAGEMENT; create brains, define their skills/limits, and shape the chart.
 
 This is the operations layer the owner drives through ``lhassa org`` (now) and the
 dashboard org panel (a later slice) through ``/api/org/...``. It sits ON TOP of the
 pure :mod:`lhassa.org.topology` model and turns the owner's intent into validated,
 persisted mutations:
 
-  - **CREATE BRAINS** — :func:`add_brain`.
-  - **define the SKILLS they handle** — :func:`set_skills` / the ``skills`` argument.
-  - **set their LIMITATIONS** — :func:`set_limits` / the ``limits`` argument.
-  - **define how they ORGANIZE** — who commands whom (:func:`set_parent`, a re-parent)
+  - **CREATE BRAINS**: :func:`add_brain`.
+  - **define the SKILLS they handle**: :func:`set_skills` / the ``skills`` argument.
+  - **set their LIMITATIONS**: :func:`set_limits` / the ``limits`` argument.
+  - **define how they ORGANIZE**: who commands whom (:func:`set_parent`, a re-parent)
     and who commands EVERYONE (:func:`set_root`, a re-root).
-  - inspect the whole chart for a UI — :func:`describe`.
+  - inspect the whole chart for a UI; :func:`describe`.
 
 Every mutation is validated by constructing a :class:`Topology` (unique ids, one
 root, every parent present, acyclic) BEFORE it is persisted, so a bad operation
@@ -21,7 +21,7 @@ reads through :func:`lhassa.org.topology.load_topology` (so a fresh install with
 file still works off the derived default chart).
 
 Skills are validated against the specialist registry (:mod:`lhassa.agents.specialists`)
-where possible, but an unknown skill is ALLOWED with a warning — the org stays
+where possible, but an unknown skill is ALLOWED with a warning; the org stays
 modular and a plugin's domain can be assigned before its code is loaded.
 
 **Permanent administrator invariant.** Lhassa (``config.root_admin_id``) is the
@@ -55,8 +55,8 @@ if TYPE_CHECKING:
 class ManagementError(ValueError):
     """Raised on an invalid management operation (e.g. duplicate/missing brain).
 
-    A :class:`ValueError` subclass — like
-    :class:`lhassa.org.topology.TopologyError` — so the CLI/API can catch both with
+    A :class:`ValueError` subclass; like
+    :class:`lhassa.org.topology.TopologyError`: so the CLI/API can catch both with
     one ``except ValueError`` and map a bad op to a clear 4xx / exit-1 without ever
     touching the persisted file.
     """
@@ -66,7 +66,7 @@ class ManagementError(ValueError):
 
 
 def available_skills() -> list[dict]:
-    """The skills that CAN be assigned — the specialist registry's domains.
+    """The skills that CAN be assigned; the specialist registry's domains.
 
     Returns a serialisable list (``domain``/``name``/``tools``/``metric``) for the
     CLI ``lhassa org skills`` and the dashboard's skill picker. New domains appear
@@ -89,7 +89,7 @@ def validate_skills(skills: Iterable[str]) -> tuple[tuple[str, ...], list[str]]:
     """Normalise ``skills`` and flag any not in the specialist registry.
 
     Returns ``(skills_tuple, unknown_list)``. Unknown skills are KEPT (the org is
-    modular — a skill may be a plugin domain not yet loaded), only logged as a
+    modular; a skill may be a plugin domain not yet loaded), only logged as a
     warning. Never raises.
     """
     from lhassa.agents.specialists.registry import get_specialist
@@ -98,7 +98,7 @@ def validate_skills(skills: Iterable[str]) -> tuple[tuple[str, ...], list[str]]:
     unknown = [s for s in cleaned if get_specialist(s) is None]
     if unknown:
         logger.warning(
-            "org.management: assigning unregistered skill(s) {} — allowed (modular), "
+            "org.management: assigning unregistered skill(s) {}; allowed (modular), "
             "but no specialist owns them yet.",
             unknown,
         )
@@ -152,7 +152,7 @@ def add_brain(
     admin = admin_id(config)
     if node_id == admin:
         raise ManagementError(
-            f"{admin!r} is the permanent administrator (Lhassa) and already exists — "
+            f"{admin!r} is the permanent administrator (Lhassa) and already exists; "
             "you cannot create a second one."
         )
     topology = load_topology(config)
@@ -213,12 +213,12 @@ def remove_brain(
 ) -> Topology:
     """Remove a brain. Returns the updated topology.
 
-    Refuses to ORPHAN children (or to drop a populated root) unless ``force`` — with
+    Refuses to ORPHAN children (or to drop a populated root) unless ``force``: with
     ``force`` the whole subtree under ``node_id`` is removed. Removing the last brain
     (an empty chart) is always rejected by :class:`Topology` validation, so the file
     is never left empty.
 
-    The permanent administrator (Lhassa) can NEVER be removed — it always orbits the
+    The permanent administrator (Lhassa) can NEVER be removed; it always orbits the
     org.
     """
     admin = admin_id(config)
@@ -233,7 +233,7 @@ def remove_brain(
     if children and not force:
         kids = ", ".join(c.id for c in children)
         raise ManagementError(
-            f"brain {node_id!r} has children ({kids}); refusing to orphan them — "
+            f"brain {node_id!r} has children ({kids}); refusing to orphan them; "
             "pass force to remove the whole subtree."
         )
     drop = {node_id} | {d.id for d in topology.descendants(node_id)}
@@ -250,18 +250,18 @@ def set_parent(
     *,
     config: "Optional[Config]" = None,
 ) -> Topology:
-    """RE-PARENT a brain — change WHO COMMANDS WHOM. Returns the updated topology.
+    """RE-PARENT a brain; change WHO COMMANDS WHOM. Returns the updated topology.
 
     Rejects self-parenting and a missing parent; a move that would create a cycle
     (under one's own descendant) is caught by :class:`Topology` validation. The
-    permanent administrator (Lhassa) cannot be re-parented / demoted — it is always
+    permanent administrator (Lhassa) cannot be re-parented / demoted; it is always
     the root; use :func:`set_root` to promote another brain beneath it.
     """
     admin = admin_id(config)
     if node_id == admin:
         raise ManagementError(
             f"{admin!r} is the permanent administrator (Lhassa) and cannot be given a "
-            "parent or demoted — it always orbits the org."
+            "parent or demoted; it always orbits the org."
         )
     topology = load_topology(config)
     node = topology.node(node_id)  # KeyError if absent
@@ -282,7 +282,7 @@ def set_root(
 
     Lhassa (``config.root_admin_id``) is the ABSOLUTE, permanent root and is never
     unseated. "Promoting" ``node_id`` therefore does NOT make it the new absolute
-    root — it makes it a **direct child of the administrator**: a top-level
+    root; it makes it a **direct child of the administrator**: a top-level
     coordinator that commands everything in its own subtree while still answering to
     Lhassa orbiting above. This reinterprets the old re-root semantics so the
     administrator can never be demoted.

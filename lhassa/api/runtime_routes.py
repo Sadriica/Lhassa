@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Runtime routes — status, health, metrics, and whole-state export/import.
+"""Runtime routes; status, health, metrics, and whole-state export/import.
 
 The dashboard's runtime surface: the liveness ``/api/status`` + ``/api/health``
 snapshots, the raw ``/api/metrics`` blob, and whole-brain state ``/api/export`` /
@@ -10,9 +10,9 @@ Mounted by the integrator with ``app.include_router(runtime_routes.router)``.
 Two deliberate seams keep behaviour identical to the pre-split server:
   * ``Config`` is read through the ``lhassa.config`` MODULE (``lhassa_config.Config``)
     rather than a bound name, so a config reload (some endpoint tests reload it) is
-    picked up live — exactly as the integrator's own routes see it.
+    picked up live; exactly as the integrator's own routes see it.
   * ``/api/export`` and ``/api/import`` read the memory-store functions through the
-    ``server`` module (a call-time import, never at load — no cycle). Those functions
+    ``server`` module (a call-time import, never at load; no cycle). Those functions
     are the integrator's single seam; reading them there preserves the existing
     endpoint tests, which patch ``server.load_facts`` / ``server.replace_memory_snapshot``.
 """
@@ -42,7 +42,7 @@ async def get_status():
         "metrics": state.metrics,
         "agent_count": len(state.agent_runs),
         "uptime_seconds": int(time.time() - _START_TIME),
-        # Appropriate Legal Notice — required by the AGPL-3.0 section 7(b) term
+        # Appropriate Legal Notice; required by the AGPL-3.0 section 7(b) term
         # in LICENSE. Rendered from lhassa.legal, asserted by
         # tests/test_legal_notice.py; do not inline or remove it.
         "legal": _legal.notice_dict(),

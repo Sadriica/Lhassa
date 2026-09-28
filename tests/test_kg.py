@@ -1,4 +1,4 @@
-"""Tests for lhassa.memory.kg — the persisted knowledge graph (Wave 3)."""
+"""Tests for lhassa.memory.kg; the persisted knowledge graph (Wave 3)."""
 
 from types import SimpleNamespace
 
@@ -100,7 +100,7 @@ async def test_weight_accumulates_on_repeated_edge(tmp_path, monkeypatch):
     assert edges[0]["weight"] == pytest.approx(3.0)
 
 
-# ── sync() — the $0 feeder, no provider call ─────────────────────────────────
+# ── sync(); the $0 feeder, no provider call ─────────────────────────────────
 
 
 @pytest.mark.asyncio
@@ -123,7 +123,7 @@ async def test_sync_populates_entities_and_edges_from_facts_and_episodes(tmp_pat
     await facts.add_fact(INSTANCE, "dato", "Ana works at Sezzle", tags=["work"])
     await _make_episode(db, INSTANCE, "checkin", resultado="Ana mentioned Sezzle again")
 
-    # Assert the routine think path is NEVER touched — extraction is $0 regex.
+    # Assert the routine think path is NEVER touched; extraction is $0 regex.
     import lhassa.llm.provider as provider_mod
 
     calls: list = []
@@ -181,7 +181,7 @@ async def test_sync_is_incremental_via_marker(tmp_path, monkeypatch):
     first = await kg.sync(INSTANCE, config=cfg)
     assert first["scanned"] == 1
 
-    # Nothing new — a second pass immediately after must scan nothing.
+    # Nothing new; a second pass immediately after must scan nothing.
     second = await kg.sync(INSTANCE, config=cfg)
     assert second == {"entities": 0, "edges": 0, "scanned": 0}
 
@@ -230,7 +230,7 @@ async def _asserts_edges(db, instance_id):
 
 @pytest.mark.asyncio
 async def test_sync_triples_flag_off_is_regression_locked(tmp_path, monkeypatch):
-    """kg_triples_enabled defaults False — sync must never touch a provider,
+    """kg_triples_enabled defaults False; sync must never touch a provider,
     even if one is explicitly injected, and must write no ``asserts`` edges."""
     db = await _init(tmp_path, monkeypatch)
     from lhassa.memory import facts
@@ -241,7 +241,7 @@ async def test_sync_triples_flag_off_is_regression_locked(tmp_path, monkeypatch)
 
     result = await kg.sync(INSTANCE, config=cfg, provider=fake, model="cheap")
 
-    assert fake.calls == []  # never invoked — the flag was off
+    assert fake.calls == []  # never invoked; the flag was off
     assert result["scanned"] == 1
     assert await _asserts_edges(db, INSTANCE) == []
 
@@ -299,7 +299,7 @@ async def test_sync_triples_budget_exceeded_degrades(tmp_path, monkeypatch):
 @pytest.mark.asyncio
 async def test_sync_triples_ignores_hallucinated_source(tmp_path, monkeypatch):
     """A triple whose 'source' isn't one of the offered ids is dropped, not
-    trusted — grounding is enforced, not merely requested."""
+    trusted; grounding is enforced, not merely requested."""
     db = await _init(tmp_path, monkeypatch)
     from lhassa.memory import facts
 
@@ -321,13 +321,13 @@ async def test_sync_triples_ignores_a_grounded_source_but_ungrounded_content(
     tmp_path, monkeypatch
 ):
     """A triple citing a REAL source id, but naming a subject/object the source's
-    own text never mentions, is a content hallucination — dropped just like a
+    own text never mentions, is a content hallucination; dropped just like a
     hallucinated source id, not merely a source-id check."""
     db = await _init(tmp_path, monkeypatch)
     from lhassa.memory import facts
 
     fact = await facts.add_fact(INSTANCE, "dato", "Ana works at Sezzle", tags=["work"])
-    # "Bogota" never appears in the fact's text — ungrounded object.
+    # "Bogota" never appears in the fact's text; ungrounded object.
     triple_json = (
         '[{"subject": "Ana", "predicate": "lives_in", "object": "Bogota", '
         f'"source": "fact:{fact.id}"}}]'
@@ -346,7 +346,7 @@ async def test_sync_triples_grounded_subject_and_object_both_present_is_kept(
 ):
     """The counterpart to the ungrounded test: when subject AND object both
     genuinely appear in the cited source's text, the triple is written as before
-    — the new guard must not reject legitimate, grounded triples."""
+   ; the new guard must not reject legitimate, grounded triples."""
     db = await _init(tmp_path, monkeypatch)
     from lhassa.memory import facts
 
@@ -505,9 +505,9 @@ async def test_graph_retrieve_via_includes_edge_kind_and_provenance(tmp_path, mo
 
     monkeypatch.setattr("lhassa.memory.load._semantic_layer", _no_semantic)
 
-    # Query "Ana" — a direct entity-name seed — but the second fact (mentioning
+    # Query "Ana" (a direct entity-name seed) but the second fact (mentioning
     # Visa, not Ana) can only be reached via the 1-hop expansion through Sezzle.
-    # The hop's "via" cites the ORIGINATING EDGE's own provenance — the fact
+    # The hop's "via" cites the ORIGINATING EDGE's own provenance; the fact
     # that produced the Ana↔Sezzle co_occurs edge (fact1), not the destination
     # fact the hop lands on.
     results = await graph_retrieve.retrieve(INSTANCE, "Ana", config=cfg)

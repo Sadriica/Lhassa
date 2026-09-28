@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Privileged command execution — scoped, allowlisted, and audited.
+"""Privileged command execution; scoped, allowlisted, and audited.
 
 lhassa may run a curated set of admin commands as root via ``sudo -n`` once the
 sudoers drop-in (``scripts/lhassa-sudoers``, installed by
@@ -110,7 +110,7 @@ async def run_privileged(
         await state.record_audit_event(
             "privileged_exec", command, source, "blocked", "destructive pattern"
         )
-        return f"I won't run that as root — it looks destructive ({base})."
+        return f"I won't run that as root; it looks destructive ({base})."
 
     allowed = allowlist()
     if base not in allowed:
@@ -140,7 +140,7 @@ async def run_privileged(
         )
         if not ok and "a password is required" in text:
             return (
-                "I don't have passwordless sudo for that yet — run "
+                "I don't have passwordless sudo for that yet; run "
                 "`sudo bash scripts/install-privileged.sh` to enable the allowlist."
             )
         if not text:

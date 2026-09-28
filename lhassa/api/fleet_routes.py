@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Fleet routes — the multi-machine fleet view (Phase-6, read-only).
+"""Fleet routes; the multi-machine fleet view (Phase-6, read-only).
 
 ``/api/fleet`` derives the known machines from existing reads: check-in episodes
 (``despertar_por`` = ``checkin:<machine>``) carry the last-seen time and
@@ -8,7 +8,7 @@ instance-scoped.
 
 ``Config`` is read through the ``lhassa.config`` MODULE (``lhassa_config.Config``)
 rather than a bound name, so a config reload (some endpoint tests reload it) is
-picked up live — the same seam ``runtime_routes`` uses.
+picked up live; the same seam ``runtime_routes`` uses.
 
 Mounted by the integrator with ``app.include_router(fleet_routes.router)``.
 """

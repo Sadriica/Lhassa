@@ -1,4 +1,4 @@
-"""Artifacts read-surface tests — the API router (``GET /api/artifacts``,
+"""Artifacts read-surface tests; the API router (``GET /api/artifacts``,
 ``GET /api/artifacts/{id}``) and the ``lhassa artifacts`` CLI sub-app.
 
 API tests use a TestClient over a fresh app mounting just the router, the same
@@ -6,7 +6,7 @@ pattern as ``tests/test_flow_api.py``. CLI tests use Typer's ``CliRunner``
 against the real ``app``, the same pattern as ``tests/test_flow_templates.py``.
 Both surfaces are pure reads over :mod:`lhassa.core.artifacts` (covered on its
 own in ``tests/test_artifacts.py``); artifacts are seeded here directly through
-``core.artifacts.register`` — the same seam :mod:`lhassa.org.deliver` uses —
+``core.artifacts.register``: the same seam :mod:`lhassa.org.deliver` uses;
 never through HTTP/CLI (neither surface writes).
 """
 

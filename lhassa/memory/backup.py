@@ -7,11 +7,11 @@ The brief: "la grande se replica **incremental** al PC (rutas espejo, redundanci
 to a backup path using SQLite's online backup API, which is WAL-safe (it copies a
 consistent snapshot while readers/writers continue, no manual checkpoint needed).
 
-  - :func:`backup`  — copy brain.db to the mirror (cheap to re-run; overwrites /
+  - :func:`backup` : copy brain.db to the mirror (cheap to re-run; overwrites /
     rotates the mirror). "Incremental" in the operational sense: idempotent and
     safe to call on every heartbeat.
-  - :func:`restore` — rebuild brain.db from a backup file.
-  - :func:`verify`  — copy a backup to disposable storage, migrate it to the
+  - :func:`restore`: rebuild brain.db from a backup file.
+  - :func:`verify` : copy a backup to disposable storage, migrate it to the
     current schema, and validate its integrity and schema without touching the
     source. Returns True/False; never raises.
 
@@ -33,7 +33,7 @@ from lhassa.core.migrations import (
     validate_schema,
 )
 
-# Module-level seam — tests monkeypatch this to a tmp directory.
+# Module-level seam; tests monkeypatch this to a tmp directory.
 BACKUP_DIR = Path(Config.backup_dir)
 
 # Tables a healthy grande must contain for a backup to be considered valid.
@@ -58,7 +58,7 @@ async def backup(*, dest: str | Path | None = None) -> str:
     Back up the grande (``db.DB_PATH``) to ``dest`` (default ``BACKUP_DIR``).
 
     Uses the online backup API: WAL-safe, consistent snapshot, no checkpoint
-    dance. Idempotent and cheap to re-run — the mirror is overwritten in place,
+    dance. Idempotent and cheap to re-run; the mirror is overwritten in place,
     which is the "incremental redundant mirror" the brief asks for. Returns the
     backup path as a string.
     """

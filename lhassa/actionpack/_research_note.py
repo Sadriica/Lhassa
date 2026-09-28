@@ -1,16 +1,16 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""draft_research_note — the evidence machine behind Lhassa's research line.
+"""draft_research_note; the evidence machine behind Lhassa's research line.
 
 The house principle (doc/research.md): knowledge is a documented byproduct of
-real work. This action makes that mechanical — `gather_evidence` assembles a
+real work. This action makes that mechanical; `gather_evidence` assembles a
 $0, deterministic EVIDENCE PACK from the instruments (ledger, bench_runs,
 episodes, loops, doc/decisions.md excerpts), each datum with provenance; then
 ONE routine-model pass drafts a technical note that may only state numbers the
 pack contains. No model available → the pack alone is written (the data is
 already the value). Drafts land in ``doc/notes/drafts/<slug>.md`` with a
-review-before-publishing header — a draft is NEVER published by the brain.
+review-before-publishing header; a draft is NEVER published by the brain.
 
-Deliberate, not scheduled: a note is an act, not a cadence — the doors are the
+Deliberate, not scheduled: a note is an act, not a cadence; the doors are the
 CLI (``lhassa research draft``) and the temple. Owned by the GESHE monk.
 """
 
@@ -69,7 +69,7 @@ def _within_window(value, cutoff: datetime) -> bool:
 
 
 async def gather_evidence(topic: str, config) -> dict:
-    """Assemble the evidence pack — deterministic, $0, provenance per datum.
+    """Assemble the evidence pack; deterministic, $0, provenance per datum.
 
     Never raises; a failing instrument contributes an honest ``error`` entry
     instead of silence, so the pack always says what it could and couldn't see.
@@ -230,7 +230,7 @@ async def draft_research_note(params: dict) -> str:
         cfg = params.get("config") or Config
         topic = str(params.get("topic") or "").strip()
         if not topic:
-            return "draft_research_note: no topic given — pass topic=<what the note is about>."
+            return "draft_research_note: no topic given; pass topic=<what the note is about>."
         lang = str(params.get("lang") or "en").strip().lower()
 
         pack = await gather_evidence(topic, cfg)
@@ -261,7 +261,7 @@ async def draft_research_note(params: dict) -> str:
                 system = (
                     "You are Lhassa drafting a Witara technical note (doc/research.md's "
                     "method): calm, no hype, claim → cited evidence. HARD RULE: every "
-                    "number and factual claim MUST come from the EVIDENCE PACK below — "
+                    "number and factual claim MUST come from the EVIDENCE PACK below; "
                     "if the pack doesn't support a claim, write what's missing instead "
                     "of inventing it. Rows are topic evidence only when listed under "
                     "bench_runs, episodes_window row_ids, loops, or decisions_excerpts; "
@@ -291,11 +291,11 @@ async def draft_research_note(params: dict) -> str:
             _DRAFT_HEADER,
             f"<!-- topic: {topic} | drafted: {pack['gathered_at']} | model: {model_used} -->",
             "",
-            body if body else "_No model available — evidence pack only; the data below is the draft._",
+            body if body else "_No model available; evidence pack only; the data below is the draft._",
             "",
             "---",
             "",
-            "## Appendix — evidence pack (verbatim, per-datum provenance)",
+            "## Appendix; evidence pack (verbatim, per-datum provenance)",
             "",
             "```json",
             pack_text,
@@ -304,6 +304,6 @@ async def draft_research_note(params: dict) -> str:
         ]
         path.write_text("\n".join(content), encoding="utf-8")
         kind = "note draft" if body else "evidence pack (no model)"
-        return f"draft_research_note: {kind} written to {path} — review before publishing."
+        return f"draft_research_note: {kind} written to {path}; review before publishing."
     except Exception as exc:
         return f"draft_research_note errored: {exc}"

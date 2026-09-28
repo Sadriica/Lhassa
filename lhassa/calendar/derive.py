@@ -1,16 +1,16 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Calendar-derived world model — bootstrap facts about the owner's world
+"""Calendar-derived world model; bootstrap facts about the owner's world
 (courses, recurring commitments, rhythm) FROM the calendar feed the brain
 already reads, without asking and without spending: deterministic, $0,
 stdlib + :mod:`lhassa.calendar.feed` only, never raises.
 
 Leaf infrastructure, like the rest of ``lhassa.calendar``: this module only
-DERIVES candidate facts (a list of dicts) — it never writes to the grande
+DERIVES candidate facts (a list of dicts); it never writes to the grande
 (see :mod:`lhassa.actionpack._derive` for the shell-side persistence). It
 never imports a shell (``tests/test_architecture.py``'s
 ``calendar-infra-isolation`` rule).
 
-Heuristics — stated HONESTLY, this infers from titles/cadence, not truth:
+Heuristics; stated HONESTLY, this infers from titles/cadence, not truth:
 
   * **Recurring commitment / course.** Events are grouped by a normalized
     summary (whitespace-collapsed, casefolded). A group with at least
@@ -23,18 +23,18 @@ Heuristics — stated HONESTLY, this infers from titles/cadence, not truth:
     a physical room/venue (``sala``, ``bloque``, ``aula``, ``room``,
     ``building``, ``salón``, ``campus``) upgrades the phrasing to "likely a
     course or class"; without that signal it's phrased as a plain recurring
-    commitment — we do NOT claim "course" from a title alone.
+    commitment; we do NOT claim "course" from a title alone.
   * **Meal/break filter.** A small denylist (``almuerzo``, ``lunch``,
     ``break``, ``descanso``, ``café``/``cafe``, ``coffee``, ``desayuno``,
-    ``breakfast``, ``merienda``) is skipped outright — a recurring lunch is
+    ``breakfast``, ``merienda``) is skipped outright; a recurring lunch is
     not a course or a commitment worth surfacing as a "fact".
   * **Rhythm.** Weekday + local time-of-day (morning/afternoon/evening) are
     tallied across every non-all-day event in the window; a single rhythm
     fact is derived ONLY when one bucket clearly dominates (see
-    :data:`RHYTHM_MIN_EVENTS` / :data:`RHYTHM_MIN_SHARE`) — weak/uniform
+    :data:`RHYTHM_MIN_EVENTS` / :data:`RHYTHM_MIN_SHARE`); weak/uniform
     signal yields no rhythm fact at all. This is a summary of busy-ness, not
     a claim about the owner's habits or preferences.
-  * **People — SKIPPED on purpose.** :func:`lhassa.calendar.feed.parse_events`
+  * **People. SKIPPED on purpose.** :func:`lhassa.calendar.feed.parse_events`
     does not capture ORGANIZER/ATTENDEE fields today, so deriving "meets
     repeatedly with X" would fabricate a signal the parser never gave us.
     Documented here as a future extension, not implemented: if/when the feed
@@ -43,7 +43,7 @@ Heuristics — stated HONESTLY, this infers from titles/cadence, not truth:
 
 Each candidate: ``{"contenido": str, "tags": [...], "procedencia":
 "calendar-derived", "confianza": float}``. :func:`derive_world` never
-raises — no calendar / no events / any parse hiccup degrades to ``[]``.
+raises; no calendar / no events / any parse hiccup degrades to ``[]``.
 """
 
 from __future__ import annotations
@@ -56,11 +56,11 @@ from typing import Optional
 # ── recurring-commitment tuning ──────────────────────────────────────────────
 
 #: A group needs at least this many occurrences before a cadence means
-#: anything — matches the design brief's "≥3 occurrences" heuristic.
+#: anything; matches the design brief's "≥3 occurrences" heuristic.
 MIN_OCCURRENCES = 3
 
 #: Coefficient of variation (population stdev / mean of the gaps, in days) at
-#: or below this counts as "regular enough". Generous on purpose — real
+#: or below this counts as "regular enough". Generous on purpose; real
 #: institutional calendars slip (holidays, makeup classes, breaks).
 MAX_CV = 0.35
 
@@ -70,14 +70,14 @@ MAX_CV = 0.35
 MIN_INTERVAL_DAYS = 5.0
 MAX_INTERVAL_DAYS = 9.0
 
-#: Obvious non-course/non-commitment noise — filtered before grouping even
+#: Obvious non-course/non-commitment noise; filtered before grouping even
 #: starts, so a recurring lunch never becomes a candidate at all.
 _DENYLIST_SUBSTRINGS: tuple[str, ...] = (
     "almuerzo", "lunch", "break", "descanso", "café", "cafe", "coffee",
     "desayuno", "breakfast", "merienda",
 )
 
-#: Location substrings that suggest a physical classroom/venue — upgrades a
+#: Location substrings that suggest a physical classroom/venue; upgrades a
 #: recurring group's phrasing from "commitment" to "course or class".
 _ROOM_HINTS: tuple[str, ...] = (
     "sala", "bloque", "aula", "room", "building", "salon", "salón", "campus",
@@ -113,7 +113,7 @@ def _looks_like_course(locations: list[str]) -> bool:
 
 
 def _cadence(starts: list[datetime]) -> Optional[dict]:
-    """Gaps-between-occurrences cadence check — same idea as
+    """Gaps-between-occurrences cadence check; same idea as
     ``lhassa.agents.repetition._cadence_stats``, reimplemented in stdlib so
     this leaf module never imports the adapter layer. ``None`` when there
     aren't enough points, the mean gap is off-band, or the gaps are too
@@ -192,7 +192,7 @@ def _commitment_facts(events: list[dict]) -> list[dict]:
             if course_like:
                 contenido = (
                     f"Has a recurring weekly commitment '{display}' "
-                    f"({weekday} {time_str}{loc_suffix}) — likely a course or class this term."
+                    f"({weekday} {time_str}{loc_suffix}); likely a course or class this term."
                 )
                 tags = ["calendar", "course"]
             else:
@@ -251,11 +251,11 @@ async def derive_world(instance_id: str, *, config=None, days: int = 45) -> list
     Reads a wide window (``days`` * 24 hours, recurring events expanded) via
     :func:`lhassa.calendar.feed.upcoming`, then derives recurring-commitment/
     course facts and (best-effort) one rhythm fact. $0, deterministic, no
-    model, no network beyond the feed's own cache. Never raises — a missing
+    model, no network beyond the feed's own cache. Never raises; a missing
     calendar, an empty window, or any internal hiccup degrades to ``[]``.
 
-    People/attendee facts are deliberately NOT derived — see the module
-    docstring's "People — SKIPPED on purpose" note.
+    People/attendee facts are deliberately NOT derived; see the module
+    docstring's "People. SKIPPED on purpose" note.
     """
     try:
         from lhassa.calendar import feed as _feed

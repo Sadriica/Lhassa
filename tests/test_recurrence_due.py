@@ -1,10 +1,10 @@
-"""The recurrence slot must survive suspend — lhassa.core.step.next_recurrence_due.
+"""The recurrence slot must survive suspend; lhassa.core.step.next_recurrence_due.
 
 Regression cover for the duplicate-digest bug: a laptop that suspends past more
 than one interval used to re-anchor every overdue recurring task to the wake
 instant, which both walked each schedule off its wall-clock slot AND collapsed
 separate schedules (08:00 + 21:00) onto the same time, so they fired as
-duplicates from then on. Pure arithmetic — no DB, no clock, no network.
+duplicates from then on. Pure arithmetic; no DB, no clock, no network.
 """
 
 from datetime import datetime, timedelta, timezone
@@ -35,7 +35,7 @@ def test_separate_schedules_do_not_collapse_onto_each_other():
     """A morning and an evening schedule keep their OWN hour across downtime.
 
     The old ``max(now, …)`` re-anchored both to the wake instant, making them
-    identical — which is exactly how the digest started arriving twice.
+    identical; which is exactly how the digest started arriving twice.
     """
     now = _dt(2026, 8, 4, 14, 11)
     morning = next_recurrence_due(_dt(2026, 8, 1, 8, 0), now, DAY)
@@ -46,7 +46,7 @@ def test_separate_schedules_do_not_collapse_onto_each_other():
 
 
 def test_missed_occurrences_are_not_replayed_in_a_burst():
-    """Exactly one next occurrence, in the future — never a catch-up storm."""
+    """Exactly one next occurrence, in the future; never a catch-up storm."""
     old_due = _dt(2026, 8, 1, 8, 0)
     now = _dt(2026, 9, 1, 8, 0)  # a month of downtime
     nxt = next_recurrence_due(old_due, now, DAY)

@@ -1,8 +1,8 @@
-"""Projects — the first-class workspace entity (Wave 0). Fully offline.
+"""Projects; the first-class workspace entity (Wave 0). Fully offline.
 
 Covers: migration 004 lands the table; CRUD + resolve semantics (id > name >
 deepest path); duplicate-name refusal; archive-not-delete; the create_project
-ACTION; and the detector sense — a configured repo with no project row mints a
+ACTION; and the detector sense; a configured repo with no project row mints a
 MUNDO-origin proposal (parked at the approval frontier, never auto-created),
 deduped via watch_state.
 """
@@ -112,7 +112,7 @@ def test_sense_proposes_with_mundo_origin_parked_for_approval(brain, tmp_path, m
     repo = tmp_path / "nuevo-repo"
     repo.mkdir()
     out = _run_sense(monkeypatch, brain, repo)
-    assert out == []  # the sense emits no triggers — it parks a proposal
+    assert out == []  # the sense emits no triggers; it parks a proposal
     # NOT created:
     assert asyncio.run(projects.resolve_project("inst_personal", str(repo))) is None
     # A create_project task exists, waiting for the owner.

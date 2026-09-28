@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Artifacts — the durable record of a delivered WORK PRODUCT (§org: "Lhassa is
+"""Artifacts; the durable record of a delivered WORK PRODUCT (§org: "Lhassa is
 the sender of record").
 
-A leaf brain in the hierarchy doesn't just *think*, it sometimes *produces* — a
+A leaf brain in the hierarchy doesn't just *think*, it sometimes *produces*; a
 tailored CV (the ``.tex`` source alongside the compiled ``.pdf``), a report, any
 file the owner ends up receiving. This module is the thin, append-only CRUD over
 the ``artifacts`` table (schema + raw row helpers live in :mod:`lhassa.core.db`,
@@ -12,9 +12,9 @@ travel together), a free-form JSON ``metadata`` dict, the ``origin_department``
 that produced it, and an optional ``episode_id`` linking back to the hop that
 delivered it.
 
-Append-only: registering an artifact never overwrites a prior one — a
+Append-only: registering an artifact never overwrites a prior one; a
 re-delivery (or a revision) is simply a new row. Imports **only**
-:mod:`lhassa.core.db` — no shells, so no architecture-guard exception is needed
+:mod:`lhassa.core.db`: no shells, so no architecture-guard exception is needed
 (this stays in the ``core`` spine layer).
 """
 
@@ -42,7 +42,7 @@ async def register(
     """Register one artifact in the grande. Returns its id (``art_...``).
 
     ``paths`` is a list of file paths (strings or :class:`~pathlib.Path`,
-    stringified here) that belong together — e.g. a CV's ``.tex`` source AND its
+    stringified here) that belong together; e.g. a CV's ``.tex`` source AND its
     compiled ``.pdf``. ``metadata`` is a free-form dict (e.g. ``{"company": ...,
     "role": ..., "run_id": ...}``). Append-only: this always inserts a NEW row.
     """

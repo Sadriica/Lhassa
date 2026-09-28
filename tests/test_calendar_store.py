@@ -88,7 +88,7 @@ def test_non_list_json_degrades_to_empty(tmp_path):
     assert store.load_calendars(config=cfg) == []
 
 
-# ── all_feeds — merges the env-var shortcut ───────────────────────────────────
+# ── all_feeds; merges the env-var shortcut ───────────────────────────────────
 
 
 def test_all_feeds_empty_when_nothing_configured(tmp_path):
@@ -129,7 +129,7 @@ def test_all_feeds_avoids_default_name_clash(tmp_path):
     assert "default2" in names
 
 
-# ── primary flag — exactly one master calendar ────────────────────────────────
+# ── primary flag; exactly one master calendar ────────────────────────────────
 
 
 def test_get_primary_none_when_unset(tmp_path):

@@ -1,12 +1,12 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""list_dir / read_file — deterministic file perception, $0, roots-bounded.
+"""list_dir / read_file; deterministic file perception, $0, roots-bounded.
 
-Reading a file or listing a directory needs NO model — these are the internal
+Reading a file or listing a directory needs NO model; these are the internal
 hands for it, so the chat never has to spin up an AI CLI just to look at a
 path. The security frontier is the SAME opt-in seam document perception uses
 (:mod:`lhassa.memory.knowledge`): a path is only touchable when it resolves
 INSIDE one of ``config.knowledge_roots``, and the hard ignore-list (dotfiles,
-``.env*``, keys, tokens…) applies even inside a root — a secret-shaped name is
+``.env*``, keys, tokens…) applies even inside a root; a secret-shaped name is
 refused, never read. No roots configured → an honest refusal naming the knob.
 Read-only, never raises, output capped for a chat bubble.
 """
@@ -22,7 +22,7 @@ _MAX_FILE_BYTES = 512 * 1024
 
 
 def _resolved_roots(cfg) -> list[Path]:
-    """Knowledge roots PLUS protected roots — both readable by these actions.
+    """Knowledge roots PLUS protected roots; both readable by these actions.
 
     The protected tier's per-access approval gate lives in
     ``security.approval.needs_approval`` (checked at MINT time, before the task
@@ -44,7 +44,7 @@ def _resolved_roots(cfg) -> list[Path]:
 def _resolve_within_roots(raw_path: str, cfg) -> "tuple[Path, str] | tuple[None, str]":
     """Resolve ``raw_path`` and require it inside a knowledge root.
 
-    Returns ``(path, "")`` on success or ``(None, reason)`` on refusal — the
+    Returns ``(path, "")`` on success or ``(None, reason)`` on refusal; the
     reason is an owner-facing sentence, never an exception.
     """
     import os
@@ -52,7 +52,7 @@ def _resolve_within_roots(raw_path: str, cfg) -> "tuple[Path, str] | tuple[None,
     roots = _resolved_roots(cfg)
     if not roots:
         return None, (
-            "no knowledge roots are set — point LHASSA_KNOWLEDGE_ROOTS at the "
+            "no knowledge roots are set; point LHASSA_KNOWLEDGE_ROOTS at the "
             "folder(s) I may read first."
         )
     try:
@@ -60,18 +60,18 @@ def _resolve_within_roots(raw_path: str, cfg) -> "tuple[Path, str] | tuple[None,
     except Exception:
         return None, "that path can't be resolved."
     if not str(raw_path or "").strip():
-        return None, "no path given — pass path=<file or folder>."
+        return None, "no path given; pass path=<file or folder>."
     inside = any(path == r or r in path.parents for r in roots)
     if not inside:
         return None, (
-            f"{path} is outside your configured roots (knowledge + protected) — "
+            f"{path} is outside your configured roots (knowledge + protected); "
             "I only read inside them."
         )
     return path, ""
 
 
 def _hard_ignored(path: Path, root_ceiling: list[Path]) -> bool:
-    """True when the file/dir name — or ANY component under its root — is
+    """True when the file/dir name (or ANY component under its root) is
     secret-shaped per the knowledge ignore-list."""
     from lhassa.memory.knowledge import _is_hard_ignored_dir, _is_hard_ignored_file
 
@@ -92,8 +92,8 @@ def list_dir(params: dict) -> str:
     """List a directory inside the knowledge roots. Never raises.
 
     params:
-        path — directory to list (required).
-        config — optional Config override (tests).
+        path; directory to list (required).
+        config; optional Config override (tests).
     """
     try:
         if not isinstance(params, dict):
@@ -143,8 +143,8 @@ def read_file(params: dict) -> str:
     """Read a text file inside the knowledge roots. Never raises.
 
     params:
-        path — file to read (required).
-        config — optional Config override (tests).
+        path; file to read (required).
+        config; optional Config override (tests).
     """
     try:
         if not isinstance(params, dict):
@@ -159,10 +159,10 @@ def read_file(params: dict) -> str:
             return f"read_file: {path} is not a file."
         roots = _resolved_roots(cfg)
         if _hard_ignored(path, roots):
-            return f"read_file: {path.name} is on the hard ignore-list — I don't read secret-shaped files."
+            return f"read_file: {path.name} is on the hard ignore-list; I don't read secret-shaped files."
         try:
             if path.stat().st_size > _MAX_FILE_BYTES:
-                return f"read_file: {path.name} is larger than {_MAX_FILE_BYTES // 1024} KB — too big for a chat read."
+                return f"read_file: {path.name} is larger than {_MAX_FILE_BYTES // 1024} KB; too big for a chat read."
         except OSError as exc:
             return f"read_file: can't stat {path.name}: {exc}"
 

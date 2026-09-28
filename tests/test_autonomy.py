@@ -1,10 +1,10 @@
-"""Tests for the autonomy knob (§2.6, principle #9) — offline, tmp brain DB.
+"""Tests for the autonomy knob (§2.6, principle #9); offline, tmp brain DB.
 
 Covers: the streak builds only on consecutive HUMANO-origin approvals and after N
 of them the action auto-approves; a denial resets the streak; the high-risk
 always-approve set is NEVER auto-promoted regardless of history; non-human-origin
 approvals do not build autonomy (no contagion-promotion); the streak is isolated
-per (accion, actor) — HITL is per-flow, never global.
+per (accion, actor); HITL is per-flow, never global.
 """
 
 import pytest
@@ -72,7 +72,7 @@ async def test_high_risk_never_auto_approves(tmp_path, monkeypatch, knob_config)
     await _init(tmp_path, monkeypatch)
     inst, accion, actor = "inst_personal", "move_money", "duenio"
 
-    # Approve it many times — far past the threshold.
+    # Approve it many times; far past the threshold.
     for _ in range(10):
         await autonomy.record_decision(
             inst, accion, actor, approved=True, origen_trust=int(TrustLevel.HUMANO)
@@ -119,7 +119,7 @@ async def test_missing_origin_trust_counts_as_human(tmp_path, monkeypatch, knob_
     await _init(tmp_path, monkeypatch)
     inst, accion, actor = "inst_personal", "sync_repo", "duenio"
     # When origen_trust is unknown, a human directly approving their own action is
-    # the common case — it builds autonomy.
+    # the common case; it builds autonomy.
     for _ in range(3):
         await autonomy.record_decision(inst, accion, actor, approved=True)
     assert await autonomy.should_auto_approve(inst, accion, actor) is True

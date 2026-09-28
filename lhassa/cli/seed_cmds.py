@@ -1,15 +1,15 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""``lhassa seed`` — apply reproducible BOOTSTRAP seeds (the elastic seed registry).
+"""``lhassa seed``: apply reproducible BOOTSTRAP seeds (the elastic seed registry).
 
 A small, OFFLINE surface over :mod:`lhassa.seeds`: list the registered seeds and
 apply one (or all). A *seed* recreates a whole working structure from code so a fresh
-environment has it without hand-rebuilding — the ``cv`` seed (the "Impossible-to-reject
+environment has it without hand-rebuilding; the ``cv`` seed (the "Impossible-to-reject
 CV" pipeline) is the first, and future seeds show up here automatically as they
 register (drop-in via ``@register_seed``; no edit to this file).
 
 Applying a seed is idempotent and non-destructive: re-running never duplicates brains
 and never overwrites an existing real base CV. Registered onto the main Typer ``app``
-as the ``seed`` sub-app — see :mod:`lhassa.cli.app`.
+as the ``seed`` sub-app; see :mod:`lhassa.cli.app`.
 """
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ from lhassa.cli.theme import LHASSA_THEME
 seed_app = typer.Typer(
     add_completion=False,
     no_args_is_help=True,
-    help="Apply reproducible bootstrap seeds (cv, …) — recreate a pipeline from code.",
+    help="Apply reproducible bootstrap seeds (cv, …); recreate a pipeline from code.",
 )
 
 
@@ -68,7 +68,7 @@ def _print_summary(out, name: str, summary: dict) -> None:
     if "base_cv" in summary:
         label = summary.get("base_cv")
         style = "warn" if label == "placeholder" else "dim"
-        note = " (placeholder written — replace with your real CV)" if label == "placeholder" else " (existing CV kept)"
+        note = " (placeholder written; replace with your real CV)" if label == "placeholder" else " (existing CV kept)"
         out.print(f"  base CV:        [{style}]{label}[/]{note}")
     for err in summary.get("errors") or []:
         out.print(f"  [error]✗[/] {err}", markup=True)
@@ -104,7 +104,7 @@ def apply_cmd(
     name: str = typer.Argument(..., help="Seed name (see `lhassa seed list`)."),
     json_out: bool = typer.Option(False, "--json", help="Emit the summary as JSON."),
 ) -> None:
-    """Apply one seed — idempotent + non-destructive. Prints what it created/kept."""
+    """Apply one seed; idempotent + non-destructive. Prints what it created/kept."""
     from lhassa.registry import NotRegistered
     from lhassa.seeds import apply_seed
 

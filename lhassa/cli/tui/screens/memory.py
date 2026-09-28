@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Memory screen — the grande's facts, and FTS5 recall over the episode log.
+"""Memory screen; the grande's facts, and FTS5 recall over the episode log.
 
 The filter input does DOUBLE duty here, which is the point of the screen: it
 substring-filters the facts table locally AND is handed to
 ``core/db.py:search_episodes`` (the BM25-ranked layer-5 recall) so the same
 keystrokes ask "what do I know?" and "what did I do?" at once. Both are $0 and
-read the local DB directly — no model, no API server.
+read the local DB directly; no model, no API server.
 """
 
 from __future__ import annotations
@@ -39,7 +39,7 @@ async def _recall(instance_id: str, query: str) -> list[dict]:
 
 
 async def _recall_unavailable(instance_id: str) -> bool:
-    """Whether the FTS5 recall index itself is missing/broken — the honest
+    """Whether the FTS5 recall index itself is missing/broken; the honest
     distinction between "no episodes match" and "recall unavailable"."""
     from lhassa.core import db
 
@@ -60,7 +60,7 @@ class MemoryScreen(TableScreen):
 
     def compose(self) -> ComposeResult:
         yield from super().compose()
-        yield Static("Episodic recall — type a query with /", id="memory-recall-label")
+        yield Static("Episodic recall; type a query with /", id="memory-recall-label")
         recall = DataTable(id="memory-recall-table", cursor_type="row")
         recall.add_columns("when", "trigger", "action", "snippet")
         yield recall
@@ -99,13 +99,13 @@ class MemoryScreen(TableScreen):
         except Exception:
             return
         if not self._filter:
-            label.update("Episodic recall — type a query with /")
+            label.update("Episodic recall; type a query with /")
         elif rows:
-            label.update(f"Episodic recall — [accent]{self._filter}[/] ({len(rows)})")
+            label.update(f"Episodic recall; [accent]{self._filter}[/] ({len(rows)})")
         elif await _recall_unavailable(self._instance_id):
-            label.update("[error]Episodic recall unavailable[/] — the FTS5 index is missing")
+            label.update("[error]Episodic recall unavailable[/]; the FTS5 index is missing")
         else:
-            label.update(f"Episodic recall — [accent]{self._filter}[/] — no episodes match")
+            label.update(f"Episodic recall; [accent]{self._filter}[/]; no episodes match")
         table.clear()
         for row in rows:
             table.add_row(

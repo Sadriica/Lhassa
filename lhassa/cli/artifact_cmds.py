@@ -1,13 +1,13 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""``lhassa artifacts`` — inspect the registered delivery-chain artifacts.
+"""``lhassa artifacts``: inspect the registered delivery-chain artifacts.
 
 A small, read-only surface over :mod:`lhassa.core.artifacts` (the append-only
 registry a leaf brain writes to via :mod:`lhassa.org.deliver` whenever it
-delivers a work product — a tailored CV's ``.tex``+``.pdf``, a report, any file
+delivers a work product; a tailored CV's ``.tex``+``.pdf``, a report, any file
 the owner ends up receiving). No writes happen here; artifacts are only ever
 registered as a side effect of a delivery.
 
-Registered onto the main Typer ``app`` as a sub-app — see ``lhassa.cli.app``
+Registered onto the main Typer ``app`` as a sub-app; see ``lhassa.cli.app``
 (``app.add_typer(artifact_cmds.artifact_app, name="artifacts")``), the same
 pattern as ``lhassa flows``.
 """
@@ -25,7 +25,7 @@ from rich.table import Table
 artifact_app = typer.Typer(
     add_completion=False,
     no_args_is_help=True,
-    help="Inspect registered artifacts — the delivery chain's audit trail.",
+    help="Inspect registered artifacts; the delivery chain's audit trail.",
 )
 
 

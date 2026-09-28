@@ -1,15 +1,15 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """
-LLM provider factory — selects the right Pipecat service and async client
+LLM provider factory; selects the right Pipecat service and async client
 based on LHASSA_LLM_PROVIDER.
 
 Supported providers:
-  groq         — Groq API (default, free tier)
-  anthropic    — Anthropic Claude
-  openai       — OpenAI
-  openrouter   — OpenRouter (access many models via one key)
-  ollama       — Local Ollama instance (no API key)
-  cerebras     — Cerebras (fast inference)
+  groq        . Groq API (default, free tier)
+  anthropic   . Anthropic Claude
+  openai      . OpenAI
+  openrouter  . OpenRouter (access many models via one key)
+  ollama      . Local Ollama instance (no API key)
+  cerebras    . Cerebras (fast inference)
 """
 
 from __future__ import annotations
@@ -27,17 +27,17 @@ from lhassa.registry import Registry
 if TYPE_CHECKING:
     from lhassa.config import Config
 
-# Module-level cache — reuses connection pools across agent instances
+# Module-level cache; reuses connection pools across agent instances
 _agent_clients: dict[tuple, Any] = {}
 
 
-# ── Axis 1: ModelProvider — "think directly", no harness (§2.2) ───────────────
+# ── Axis 1: ModelProvider; "think directly", no harness (§2.2) ───────────────
 #
 # The durable seam for the brain to reason: heartbeat, classification, decisions,
 # memory consolidation. Phase 2 ships one live implementation (GatewayProvider,
 # wrapping the existing key through the cost gateway) and one ready-to-enable
 # stub (OpenCodeZenProvider, the future free/cheap heartbeat). A local provider
-# (zero_retention=True) replaces the heartbeat later — only this seam changes.
+# (zero_retention=True) replaces the heartbeat later; only this seam changes.
 
 
 class ProviderNotConfigured(RuntimeError):
@@ -131,7 +131,7 @@ class GatewayProvider:
 
 
 class OpenCodeZenProvider:
-    """Future heartbeat provider (opencode Zen) — stub until creds exist.
+    """Future heartbeat provider (opencode Zen); stub until creds exist.
 
     Free Zen models may train on the data, so ``zero_retention`` is False. Enable
     it by implementing ``complete()`` against the Zen gateway once credentials are
@@ -162,7 +162,7 @@ class LocalModelProvider:
     Talks to ``{local_model_url}/chat/completions`` (Ollama, llama.cpp, LM Studio,
     …) over httpx, with no API key. Because inference runs on this machine the
     data never leaves the box, so ``zero_retention`` is True and ``is_local`` is
-    True — the router uses the latter to relax the pseudonymization hook.
+    True; the router uses the latter to relax the pseudonymization hook.
 
     Inference is free, so every ``Completion`` reports ``cost_usd=0.0``. On a
     connection failure, a non-200 response, or an unparseable body it raises
@@ -217,7 +217,7 @@ class LocalModelProvider:
             close_after = True
         else:
             # Production: REUSE a cached AsyncClient keyed by endpoint, mirroring
-            # ``_agent_clients`` — per-call client construction costs TCP/TLS +
+            # ``_agent_clients``: per-call client construction costs TCP/TLS +
             # pool teardown on every completion on the $0 local seat (the most
             # frequently used one). The client is closed at process shutdown via
             # ``main._close_http_clients``-style hooks; never per call.
@@ -368,8 +368,8 @@ def _extract_text(obj: dict) -> str | None:
 def _extract_usage(obj: dict) -> tuple[float, int, int]:
     """Pull (cost_usd, input_tokens, output_tokens) from one event, if present.
 
-    Verified live: a ``step_finish`` event nests the totals under ``part`` —
-    ``{"part": {"tokens": {"input": N, "output": M, ...}, "cost": 0}}`` — so we look
+    Verified live: a ``step_finish`` event nests the totals under ``part``;
+    ``{"part": {"tokens": {"input": N, "output": M, ...}, "cost": 0}}``: so we look
     at both the event and its ``part`` child. Several common key spellings are still
     accepted defensively for other opencode/model versions.
     """
@@ -460,7 +460,7 @@ class OpenCodeProvider:
     the JSON event stream for the assistant's text and (if reported) cost/usage.
 
     It is a cloud subscription (inference happens upstream), so ``zero_retention``
-    is False and ``is_local`` is False — the router still wraps it in the
+    is False and ``is_local`` is False; the router still wraps it in the
     pseudonymization hook when ``pseudonymize_remote`` is on. A non-zero exit, a
     missing binary, a timeout, or empty output raises ``ProviderNotConfigured`` so
     the existing degradation path handles it rather than crashing the heartbeat.
@@ -530,7 +530,7 @@ class OpenCodeProvider:
         binary = (getattr(self._config, "opencode_bin", "") or "") or "opencode"
         prompt = self._build_prompt(messages, opts.get("system"))
         # argv (verified live): ``opencode run --pure --format json -m <model> <prompt>``.
-        # ``--pure`` skips external plugins/MCP — without it a routine beat takes >120s
+        # ``--pure`` skips external plugins/MCP; without it a routine beat takes >120s
         # and can hang on plugin/network startup; with it the same call returns in ~8s.
         argv = [binary, "run", "--pure", "--format", "json", "-m", model, prompt]
 
@@ -581,7 +581,7 @@ class OpenCodeProvider:
 
 # Single CLI beat timeout: long enough for a subscription model, short enough that
 # a stuck CLI degrades the turn instead of hanging it. Configurable (LHASSA_CLI_TIMEOUT)
-# because a large generation — e.g. a full-page CV — legitimately runs past two minutes.
+# because a large generation; e.g. a full-page CV; legitimately runs past two minutes.
 _CLI_TIMEOUT = float(os.getenv("LHASSA_CLI_TIMEOUT", "300"))
 
 
@@ -683,7 +683,7 @@ def _parse_claude_json(stdout: str) -> tuple[str, float, int, int, str | None]:
         in_tok = _int(usage.get("input_tokens") or usage.get("prompt_tokens") or 0)
         out_tok = _int(usage.get("output_tokens") or usage.get("completion_tokens") or 0)
         return text, cost, in_tok, out_tok, _model_from_obj(obj)
-    # Non-JSON (text mode / banner) — fall back to the cleaned raw stdout.
+    # Non-JSON (text mode / banner); fall back to the cleaned raw stdout.
     return _clean_stdout(stdout), 0.0, 0, 0, None
 
 
@@ -772,12 +772,12 @@ class ClaudeCodeProvider:
         _assert_llm_live(self._config)
         binary = (getattr(self._config, "claude_bin", "") or "") or "claude"
         # Only honor a Claude model. The router may pair THIS CLI provider with the
-        # config's default model (e.g. a groq/openai name) — forwarding that as
+        # config's default model (e.g. a groq/openai name); forwarding that as
         # ``--model`` makes the claude CLI 404. So a non-Claude model falls back to
         # the configured ``claude_model``, else None ⇒ the CLI's own subscription model.
         claude_model = (getattr(self._config, "claude_model", "") or "").strip() or None
         ml = str(model).lower() if model else ""
-        # ``claude-cli`` is the router's marker for "the CLI's own model" — never a
+        # ``claude-cli`` is the router's marker for "the CLI's own model": never a
         # real model id, so it must NOT be forwarded as --model (would 404).
         if ml == "claude-cli" or not ml.startswith(("claude", "opus", "sonnet", "haiku")):
             model = claude_model
@@ -811,14 +811,14 @@ class ClaudeCodeProvider:
             raise ProviderNotConfigured("claude unavailable: empty output")
         if cost:
             # The CLI reports what the call WOULD cost by API; the subscription's
-            # marginal cash cost is $0 BY DESIGN (see gateway PRICING) — recording
+            # marginal cash cost is $0 BY DESIGN (see gateway PRICING); recording
             # the estimate as spend poisons the ledger and the router's budget
             # signal. Tokens stay: they are real observability.
             logger.debug(f"claude-cli: dropping API-equivalent cost estimate ${cost:.4f}")
 
         return Completion(
             # Report the ACTUAL model the CLI ran (parsed from its JSON), else the
-            # forwarded model, else a truthful ``claude-cli`` marker — never a
+            # forwarded model, else a truthful ``claude-cli`` marker; never a
             # foreign API model name the CLI never used.
             text=text,
             model=ran_model or model or "claude-cli",
@@ -858,7 +858,7 @@ class CodexProvider:
     ) -> Completion:
         _assert_llm_live(self._config)
         binary = (getattr(self._config, "codex_bin", "") or "") or "codex"
-        # ``codex-cli`` is the router's marker for "the CLI's own model" — not a real
+        # ``codex-cli`` is the router's marker for "the CLI's own model": not a real
         # model id, so drop it (forwarding it as -m would fail) and let the CLI pick.
         if model == "codex-cli":
             model = None
@@ -904,7 +904,7 @@ class CodexProvider:
 
         return Completion(
             # ACTUAL model the CLI reported, else the forwarded model, else a
-            # truthful ``codex-cli`` marker — never a foreign API model name.
+            # truthful ``codex-cli`` marker; never a foreign API model name.
             text=text,
             model=ran_model or model or "codex-cli",
             input_tokens=in_tok,
@@ -970,7 +970,7 @@ class PseudonymizingProvider:
 # The set of named provider FACTORIES lives in the shared keystone ``Registry``
 # (the same primitive that backs actions/channels/commands/harnesses), so a plugin
 # can drop in a new ModelProvider with ``@register_provider("x")`` WITHOUT editing
-# this file — the elastic/modular principle. A factory is a ``(config) -> provider``
+# this file; the elastic/modular principle. A factory is a ``(config) -> provider``
 # callable; ``get_model_provider`` routes through it, preserving the exact historical
 # behaviour (default → GatewayProvider; the named stubs/providers as before).
 ProviderFactory = Callable[["Config"], ModelProvider]
@@ -983,11 +983,11 @@ _DEFAULT_PROVIDER = "default"
 def register_provider(
     name: str, factory: Optional[ProviderFactory] = None, *, override: bool = False
 ):
-    """Register a ModelProvider factory under ``name`` — a wrapper over :data:`PROVIDERS`.
+    """Register a ModelProvider factory under ``name``: a wrapper over :data:`PROVIDERS`.
 
     Usable as a **decorator** (``@register_provider("x")`` on a ``(config) -> provider``
     factory) or a **direct call** (``register_provider("x", factory)``). A duplicate
-    ``name`` raises unless ``override=True`` — so two plugins can never silently
+    ``name`` raises unless ``override=True``: so two plugins can never silently
     clobber each other. This is the drop-in seam for adding a provider without
     touching core.
     """
@@ -1010,7 +1010,7 @@ def get_model_provider(config: "Config", *, name: str | None = None) -> ModelPro
     ``name="local"`` returns the LOCAL OpenAI-compatible heartbeat provider.
     ``name="opencode"`` returns the opencode-CLI heartbeat provider.
     ``name="claude"``/``name="codex"`` return the Claude Code / Codex CLI providers
-    (the owner's subscriptions — the chat/think fallback chain before paying cloud).
+    (the owner's subscriptions; the chat/think fallback chain before paying cloud).
 
     Routing goes through the :data:`PROVIDERS` registry; an absent or unknown
     ``name`` falls back to the ``default`` factory (GatewayProvider), preserving

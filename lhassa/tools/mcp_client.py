@@ -1,12 +1,12 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """
-MCP client — "plug in, don't program" (§2.11, Phase 4 DoD).
+MCP client; "plug in, don't program" (§2.11, Phase 4 DoD).
 
 Loads server definitions from ``~/.config/lhassa/mcp.json`` (overridable via
 ``Config.mcp_config_path``), connects to each configured server, discovers its
 tools, and adapts them into the brain's tool ecosystem as **namespaced** tools
 ``mcp__<server>__<tool>``. Registering those onto the LLM service is all it takes
-to make an integration invocable — no per-integration code.
+to make an integration invocable; no per-integration code.
 
 Config shape::
 
@@ -18,11 +18,11 @@ Config shape::
     }
 
 Defensive by construction: if the ``mcp`` SDK is absent, the config file is
-missing/garbage, or a server is unreachable, the loader logs and skips it — it
+missing/garbage, or a server is unreachable, the loader logs and skips it; it
 never raises and returns whatever loaded. The brain runs fine with zero servers.
 
-The SDK is funnelled through three small seams — ``_sdk()``, ``_list_server_tools``
-and ``_call_server_tool`` — so tests monkeypatch connect/list_tools/call_tool and
+The SDK is funnelled through three small seams; ``_sdk()``, ``_list_server_tools``
+and ``_call_server_tool``: so tests monkeypatch connect/list_tools/call_tool and
 stay fully offline (no real MCP process or network).
 """
 
@@ -62,7 +62,7 @@ def load_config(path: Optional[str] = None) -> dict:
     try:
         data = json.loads(raw)
     except (ValueError, TypeError):
-        logger.warning(f"[mcp] {cfg_path} is not valid JSON — ignoring")
+        logger.warning(f"[mcp] {cfg_path} is not valid JSON; ignoring")
         return {"servers": {}}
     servers = data.get("servers") if isinstance(data, dict) else None
     if not isinstance(servers, dict):
@@ -243,7 +243,7 @@ def _build_schema(server: str, tool: Any):
 def _make_handler(full_name: str, server_def: dict, tool_name: str):
     """Create an async handler (registry shape) that invokes the MCP tool.
 
-    Catches everything and reports via ``result_callback`` — it never raises, the
+    Catches everything and reports via ``result_callback``: it never raises, the
     convention every lhassa tool handler follows.
     """
     async def handler(params):
@@ -281,14 +281,14 @@ async def load_mcp_tools(
          "description": ..., "schema": FunctionSchema | None, "handler": async fn}
 
     Defensive: a missing SDK, missing config, or an unreachable server yields an
-    empty (or partial) list — never an exception.
+    empty (or partial) list; never an exception.
     """
     if config is None:
         config = load_config(path)
     servers = (config or {}).get("servers") or {}
     if not sdk_available():
         if servers:
-            logger.warning("[mcp] config has servers but the mcp SDK is not installed — skipping")
+            logger.warning("[mcp] config has servers but the mcp SDK is not installed; skipping")
         return []
 
     tools: list[dict] = []
@@ -345,7 +345,7 @@ async def pull_postulaciones(tool_name: str, args: Optional[dict] = None) -> lis
     ``tool_name`` is a namespaced ``mcp__<server>__<tool>``. Resolves the server
     from config, calls the tool, and parses its JSON-ish text result into a list
     of ``{empresa, rol, estado, fuente, link, notas}`` dicts. Returns ``[]`` on
-    any problem — this is the optional, guarded source for ``tracking_postulaciones``.
+    any problem; this is the optional, guarded source for ``tracking_postulaciones``.
     """
     try:
         if not tool_name or not tool_name.startswith(f"mcp{NAMESPACE_SEP}"):
@@ -392,7 +392,7 @@ async def mcp_list_lines(path: Optional[str] = None) -> list[str]:
     servers = config.get("servers") or {}
     lines: list[str] = []
     if not sdk_available():
-        lines.append("mcp SDK: NOT installed (pip/uv add mcp) — tools cannot be discovered")
+        lines.append("mcp SDK: NOT installed (pip/uv add mcp); tools cannot be discovered")
     else:
         lines.append("mcp SDK: installed")
     if not servers:

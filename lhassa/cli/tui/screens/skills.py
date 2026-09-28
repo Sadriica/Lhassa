@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Skills screen — the SKILL.md store, plus which brains carry each skill.
+"""Skills screen; the SKILL.md store, plus which brains carry each skill.
 
 Reads :class:`~lhassa.skills.store.SkillStore` (the filesystem layer of the
 3-layer skill) and cross-references the org topology's skill sets, so the screen

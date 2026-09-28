@@ -7,7 +7,7 @@ dependency** (no import-linter): it parses every ``lhassa/**/*.py`` with the
 standard-library :mod:`ast` and inspects its ``import`` / ``from ... import``
 statements.
 
-The rules below were *measured from the current tree*, not assumed — every
+The rules below were *measured from the current tree*, not assumed; every
 forbidden edge is one that does not exist today, so this test passes now and
 only trips when a NEW violation is introduced. See ``doc/architecture-layers.md``
 for the prose description of the layers and the allowed-exceptions list.
@@ -31,13 +31,13 @@ from typing import Iterator
 #                   bench
 #   cv seam       : cv                                         (leaf file-I/O used by flows)
 #   calendar seam : calendar                                   (leaf .ics file-I/O used by notify)
-#   leaf infra    : registry.py, plugins.py                   (keystone — depend on nothing)
+#   leaf infra    : registry.py, plugins.py                   (keystone; depend on nothing)
 #
 # ``flows`` counts as a SHELL: its engine composes the org layer (topology,
 # coordinator, executor), so no inner layer may depend on it. The two inner
 # importers that exist today (security/approval.py's durable flow-gate bridge,
 # personal/secretary.py's seed-shaped flow provisioning) are precisely keyed in
-# ALLOWED_EXCEPTIONS below — any NEW inner->flows edge trips the guard.
+# ALLOWED_EXCEPTIONS below; any NEW inner->flows edge trips the guard.
 #
 # The forbidden directions encode "inner layers must not reach out to shells",
 # the keystone-leaf rule, and the model-vs-harness swap-axis independence.
@@ -56,7 +56,7 @@ class Rule:
 
 
 RULES: tuple[Rule, ...] = (
-    # The spine never reaches out to a shell — the loop is driven *by* the
+    # The spine never reaches out to a shell; the loop is driven *by* the
     # shells (heartbeat/api/cli), it must not know them.
     Rule("spine-isolation", frozenset({"core"}), frozenset(SHELLS)),
     # The mid-layer contracts (memory/security/llm) are reusable by any shell;
@@ -67,7 +67,7 @@ RULES: tuple[Rule, ...] = (
         frozenset(SHELLS),
     ),
     # The personal secretary layer (check-ins, agenda) is an interface-like
-    # read-model over config/core/memory — shells compose it (digest, the
+    # read-model over config/core/memory; shells compose it (digest, the
     # /today /tomorrow /checkin commands); it must never reach back into one.
     Rule("personal-isolation", frozenset({"personal"}), frozenset(SHELLS)),
     # The "hands" (adapters) must not depend on the UI/messaging shells. ``voice``
@@ -75,8 +75,8 @@ RULES: tuple[Rule, ...] = (
     # ALLOWED_EXCEPTIONS below so this rule still blocks NEW voice coupling.
     # ``bench`` (LhassaBench, Wave E) joins this set: it is an adapter over the
     # existing swap points (agents/verify for scoring, llm/provider for the
-    # subjects under test) — a fixture-driven eval harness, not a world-facing
-    # surface — so it must never reach back into a shell either.
+    # subjects under test); a fixture-driven eval harness, not a world-facing
+    # surface; so it must never reach back into a shell either.
     Rule(
         "adapter-isolation",
         frozenset({"harness", "tools", "agents", "remote", "health", "bench"}),
@@ -89,7 +89,7 @@ RULES: tuple[Rule, ...] = (
     Rule("swap-axis-independence", frozenset({"harness"}), frozenset({"llm"})),
     # The CV file-I/O seam is leaf infrastructure used BY the flow engine (the "build
     # on a base CV, export a tailored .tex" foundation). Like the other inner layers
-    # it must never reach out to a shell — it depends only on the standard library.
+    # it must never reach out to a shell; it depends only on the standard library.
     Rule("cv-infra-isolation", frozenset({"cv"}), frozenset(SHELLS)),
     # The calendar file-I/O seam (RFC5545 ``.ics`` generation) is leaf
     # infrastructure exactly like ``cv``: pure stdlib, used BY a shell
@@ -102,7 +102,7 @@ RULES: tuple[Rule, ...] = (
 # import ANY ``lhassa.*`` feature module (they sit at the very bottom).
 KEYSTONE_FILES = ("registry.py", "plugins.py")
 
-# Documented allowed exceptions — precise (source-file-suffix, imported-module)
+# Documented allowed exceptions; precise (source-file-suffix, imported-module)
 # pairs that are intentionally permitted despite tripping a rule above.
 #   tools/{monitor.py, handlers/agents.py} -> lhassa.voice.notifier:
 #     ``voice/notifier.py`` is the cross-platform DESKTOP notification router
@@ -125,7 +125,7 @@ KEYSTONE_FILES = ("registry.py", "plugins.py")
 #     function body) rather than a general adapter -> shell coupling.
 #   personal/secretary.py -> lhassa.org{,.management,.topology}:
 #     The secretary module is SEED-SHAPED composition: it provisions the stable
-#     ``personal`` department in the org chart and its canonical briefing flows —
+#     ``personal`` department in the org chart and its canonical briefing flows;
 #     exactly what ``seeds/cv.py`` does from the shell layer. The read-model
 #     modules (``personal/agenda.py``, ``memory/checkins.py``) remain shell-free;
 #     keying the exception on secretary.py alone keeps them that way.
@@ -133,7 +133,7 @@ KEYSTONE_FILES = ("registry.py", "plugins.py")
 #     The durable flow-gate bridge: resolving a ``flow_gate`` approval must
 #     commit the decision and the run cursor atomically and resume the approved
 #     work, for every surface (API/CLI/chat) that resolves approvals. The import
-#     is lazy (inside ``resolve()``), keyed to the exact two modules — any other
+#     is lazy (inside ``resolve()``), keyed to the exact two modules; any other
 #     ``security`` -> ``flows`` edge still trips the guard.
 #   personal/secretary.py -> lhassa.flows.{model,store}:
 #     Same seed-shaped composition as its org edges above: provisioning the

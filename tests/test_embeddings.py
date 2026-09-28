@@ -1,4 +1,4 @@
-"""Tests for lhassa.memory.embeddings — the offline-capable layer-4 embedders."""
+"""Tests for lhassa.memory.embeddings; the offline-capable layer-4 embedders."""
 
 import httpx
 
@@ -109,7 +109,7 @@ def test_get_embedder_returns_remote_embedder_when_model_set():
 
 
 def test_openai_compat_embed_degrades_on_failure():
-    # Unreachable endpoint: embed() must NOT raise — it falls back to hashing.
+    # Unreachable endpoint: embed() must NOT raise; it falls back to hashing.
     emb = OpenAICompatEmbedder("m", "http://127.0.0.1:1/v1")
     out = emb.embed(["texto"])
     assert out == HashingEmbedder().embed(["texto"])
@@ -159,7 +159,7 @@ def test_needs_reindex_true_on_missing_stamp():
     assert needs_reindex(None, HashingEmbedder()) is True
 
 
-# ── RemoteEmbedder(backend="ollama") — native Ollama embeddings API ──────────────
+# ── RemoteEmbedder(backend="ollama"); native Ollama embeddings API ──────────────
 
 def _json_response(payload, status_code=200, url="http://localhost:11434/x"):
     return httpx.Response(status_code, json=payload, request=httpx.Request("POST", url))
@@ -224,16 +224,16 @@ def test_ollama_backend_degrades_to_hashing_when_totally_unreachable(monkeypatch
     emb_mod._warned_fallback = False
 
 
-# ── get_embedder — embedder_backend selection ("hash" / "ollama" / "auto") ───────
+# ── get_embedder; embedder_backend selection ("hash" / "ollama" / "auto") ───────
 
 class _BareCfg:
-    """No embedding-related attributes at all — every knob resolves via defaults."""
+    """No embedding-related attributes at all; every knob resolves via defaults."""
 
 
 def test_get_embedder_hash_backend_forces_hashing_even_if_legacy_knobs_set():
     class Cfg:
         embedder_backend = "hash"
-        embeddings_model = "text-embedding-3-small"  # would normally win — overridden
+        embeddings_model = "text-embedding-3-small"  # would normally win; overridden
 
     assert isinstance(get_embedder(Cfg), HashingEmbedder)
 
@@ -294,7 +294,7 @@ def test_get_embedder_ollama_backend_forced_and_unreachable_warns_and_degrades(m
 
 def test_get_embedder_auto_still_prefers_legacy_knob_over_ollama_probe(monkeypatch):
     """Explicit legacy configuration wins over the new auto-ollama path, even
-    when embedder_backend is left at its default 'auto' — backward compat."""
+    when embedder_backend is left at its default 'auto': backward compat."""
     def fake_get(url, timeout=None):
         raise AssertionError("must not probe Ollama when a legacy knob is set")
 
@@ -311,7 +311,7 @@ def test_get_embedder_auto_still_prefers_legacy_knob_over_ollama_probe(monkeypat
 
 
 def test_remote_embedder_clips_oversized_inputs(monkeypatch):
-    """An over-long text must be clipped BEFORE the remote call — an unclipped
+    """An over-long text must be clipped BEFORE the remote call; an unclipped
     input 400s at the backend and silently mixes hashing vectors into a store
     of real ones (the failure observed live on 2026-07-30)."""
     from lhassa.memory.embeddings import RemoteEmbedder

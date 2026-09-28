@@ -270,6 +270,6 @@ async def test_multiuser_migration_backfills_existing_rows(tmp_path, monkeypatch
             row = await cur.fetchone()
         assert row["actor_id"] == db.Config.root_admin_id
 
-        # The pre-existing rows are still exactly there — additive, not lossy.
+        # The pre-existing rows are still exactly there; additive, not lossy.
         async with conn.execute("SELECT COUNT(*) FROM approvals") as cur:
             assert (await cur.fetchone())[0] == 2

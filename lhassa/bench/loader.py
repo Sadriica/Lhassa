@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""LhassaBench fixture loading — YAML on disk, validated eagerly.
+"""LhassaBench fixture loading. YAML on disk, validated eagerly.
 
 Each fixture is one self-contained YAML file under ``lhassa/bench/fixtures/``:
 ``{id, title, prompt, subject_kind, verify, tags}``. ``verify`` is a spec dict
 shaped EXACTLY like what :func:`lhassa.agents.verify.make_verifier` accepts
-(``{"type": "regex"|"command"|"metric"|..., ...}``) — the one exception is a
+(``{"type": "regex"|"command"|"metric"|..., ...}``); the one exception is a
 ``metric`` spec's ``metric_fn`` key, a NAME from :data:`METRIC_FNS` resolved to
 a real callable by :func:`resolve_verify_spec` before it reaches
 ``make_verifier`` (a bare Python callable cannot round-trip through YAML).
@@ -88,9 +88,9 @@ def load_fixtures(ids: Optional[list[str]] = None, *, directory: Optional[Path] 
     """Load every fixture under ``directory`` (default the bundled set).
 
     With ``ids`` given, only fixtures whose ``id`` is in that list are
-    returned (order follows ``ids``; an unknown id is silently skipped —
+    returned (order follows ``ids``; an unknown id is silently skipped;
     callers that care can diff ``[f["id"] for f in result]`` against ``ids``).
-    Raises :class:`FixtureError` on a malformed fixture file — fixtures are
+    Raises :class:`FixtureError` on a malformed fixture file; fixtures are
     developer-authored content, not untrusted input, so loud failure here is
     correct (unlike the best-effort runner below).
     """

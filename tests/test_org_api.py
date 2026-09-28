@@ -83,7 +83,7 @@ def test_create_brain(client):
 def test_create_brain_bad_parent_is_4xx(client):
     r = client.post("/api/org/brains", json={"id": "dept:z", "parent": "ghost"})
     assert r.status_code == 400
-    # the chart is untouched — the bad op never persisted.
+    # the chart is untouched; the bad op never persisted.
     assert "dept:z" not in _ids(client.get("/api/org/topology").json())
 
 

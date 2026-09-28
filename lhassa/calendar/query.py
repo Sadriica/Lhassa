@@ -1,19 +1,19 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Deterministic calendar-query answering — the READ-in-chat half of the seam.
+"""Deterministic calendar-query answering; the READ-in-chat half of the seam.
 
 "Thinking is the EXCEPTION" (§CLAUDE.md): "¿qué hay en mi calendario el
 viernes?" / "what do I have Friday?" must be answered from the calendar
-DIRECTLY — a date parse + an event lookup + a template reply — never a model
+DIRECTLY (a date parse + an event lookup + a template reply) never a model
 call, never the web-search bridge. This module is that path:
 
-  :func:`parse_window`     — a natural time reference (Spanish + English) → a
+  :func:`parse_window`    : a natural time reference (Spanish + English) → a
                               UTC ``(start, end, label)`` window, or ``None``.
-  :func:`is_calendar_query` — is this message asking about the calendar at all?
-  :func:`answer`            — glue: classify → parse → :func:`lhassa.calendar.
+  :func:`is_calendar_query`: is this message asking about the calendar at all?
+  :func:`answer`           : glue: classify → parse → :func:`lhassa.calendar.
                               feed.upcoming` → a grouped, deterministic reply.
 
 Leaf infrastructure: stdlib only, plus :mod:`lhassa.calendar.feed` /
-:mod:`lhassa.calendar.store` (both leaf themselves) — imports NO shell (see
+:mod:`lhassa.calendar.store` (both leaf themselves); imports NO shell (see
 ``tests/test_architecture.py``'s ``calendar-infra-isolation`` rule). $0, no
 model, no embeddings, no network here directly (``feed.upcoming`` owns that,
 and it never raises either). Every public function here is defensive: a
@@ -71,12 +71,12 @@ def parse_window(
 ) -> Optional[tuple[datetime, datetime, str]]:
     """Parse a natural time reference (Spanish + English) into a UTC window.
 
-    Returns ``(start_utc, end_utc, label)`` — ``label`` is a lowercase phrase in
+    Returns ``(start_utc, end_utc, label)``: ``label`` is a lowercase phrase in
     whichever language matched (``"el viernes"``, ``"friday"``, ``"hoy"``,
     ``"today"``, ``"esta semana"``, ...), used later to pick the reply's
     language and (for a weekday) whether to show a day-of-month number.
 
-    Windows are LOCAL-day boundaries converted to UTC — "today" means the
+    Windows are LOCAL-day boundaries converted to UTC; "today" means the
     machine's local midnight-to-midnight, not a UTC day. ``now`` defaults to
     the real current time (aware UTC datetime; naive is treated as UTC).
     Recognised references, checked longest/most-specific first so e.g. "pasado
@@ -105,7 +105,7 @@ def parse_window(
         norm = _normalize(stripped)
         weekday = local_now.weekday()  # Monday=0 .. Sunday=6
 
-        # pasado mañana / day after tomorrow — check BEFORE "mañana"/"tomorrow".
+        # pasado mañana / day after tomorrow; check BEFORE "mañana"/"tomorrow".
         if re.search(r"\bpasado\s+manana\b", norm):
             start, end = _day_window(local_now, 2)
             return start.astimezone(timezone.utc), end.astimezone(timezone.utc), "pasado mañana"
@@ -116,7 +116,7 @@ def parse_window(
                 "the day after tomorrow",
             )
 
-        # este fin de semana / this weekend — check BEFORE "esta semana"/"this week".
+        # este fin de semana / this weekend; check BEFORE "esta semana"/"this week".
         if re.search(r"\bfin\s+de\s+semana\b", norm):
             days_to_sat = (5 - weekday) % 7
             start = _local_midnight(local_now, days_to_sat)
@@ -140,7 +140,7 @@ def parse_window(
             end = start + timedelta(days=7)
             return start.astimezone(timezone.utc), end.astimezone(timezone.utc), "next week"
 
-        # esta semana / this week — now → end of THIS local week (Sunday night).
+        # esta semana / this week; now → end of THIS local week (Sunday night).
         if re.search(r"\besta semana\b", norm):
             end = _local_midnight(local_now, (6 - weekday) + 1)
             return now.astimezone(timezone.utc), end.astimezone(timezone.utc), "esta semana"
@@ -164,7 +164,7 @@ def parse_window(
             start, end = _day_window(local_now, 1)
             return start.astimezone(timezone.utc), end.astimezone(timezone.utc), "tomorrow"
 
-        # A weekday name — the NEXT occurrence (today counts if it matches).
+        # A weekday name; the NEXT occurrence (today counts if it matches).
         for idx, name in enumerate(_ES_WEEKDAYS):
             if re.search(rf"\b{name}\b", norm):
                 days_ahead = (idx - weekday) % 7
@@ -184,11 +184,11 @@ def parse_window(
 
 # ── is_calendar_query ────────────────────────────────────────────────────────
 #
-# Trigger rules (conservative — must NOT swallow normal chat):
+# Trigger rules (conservative; must NOT swallow normal chat):
 #   1. An explicit calendar keyword anywhere in the message: calendario /
 #      calendar / agenda / evento(s) / schedule.
 #   2. OR a "have/tengo/hay" question WHOSE message also parses a time
-#      reference via parse_window() — i.e. both signals must be present. A
+#      reference via parse_window(); i.e. both signals must be present. A
 #      bare "hay"/"have" with no time reference (e.g. "¿qué hay de nuevo?")
 #      is NOT a calendar query; a time reference with no have/tengo/hay word
 #      that also isn't a calendar keyword (e.g. "noticias de hoy") is NOT one
@@ -201,7 +201,7 @@ _HAVE_WORD_RE = re.compile(r"\b(have|tengo|hay)\b", re.IGNORECASE)
 
 def is_calendar_query(text: str) -> bool:
     """Is this message asking about the calendar? See module docstring for the
-    exact trigger rules. Never raises — a malformed/None input is ``False``."""
+    exact trigger rules. Never raises; a malformed/None input is ``False``."""
     try:
         stripped = (text or "").strip()
     except Exception:
@@ -281,11 +281,11 @@ async def answer(instance_id: str, text: str, *, config=None) -> Optional[str]:
     """Answer a calendar question DETERMINISTICALLY, $0, no model.
 
     ``None`` when the message isn't a calendar query (or has no parseable time
-    reference) — the caller should fall through to the normal chat path in
+    reference); the caller should fall through to the normal chat path in
     that case. Gates on :func:`is_calendar_query` then delegates the actual
     window resolution to :func:`answer_window` (shared with the elliptical
-    follow-up continuation path — see :mod:`lhassa.notify.capabilities`).
-    Never raises — any trouble degrades to ``None`` (fall through).
+    follow-up continuation path; see :mod:`lhassa.notify.capabilities`).
+    Never raises; any trouble degrades to ``None`` (fall through).
     """
     try:
         if not is_calendar_query(text):
@@ -296,19 +296,19 @@ async def answer(instance_id: str, text: str, *, config=None) -> Optional[str]:
 
 
 async def answer_window(instance_id: str, text: str, *, config=None) -> Optional[str]:
-    """Answer straight from ``text``'s own parsed time window — deterministic,
-    $0 — WITHOUT the :func:`is_calendar_query` keyword/have-word gate.
+    """Answer straight from ``text``'s own parsed time window; deterministic,
+    $0. WITHOUT the :func:`is_calendar_query` keyword/have-word gate.
 
     Factored out of :func:`answer` for the sticky-topic follow-up continuation:
     an elliptical "Y el sábado?" carries no calendar keyword and no have/
-    tengo/hay word, so ``is_calendar_query`` alone would refuse it — but once
+    tengo/hay word, so ``is_calendar_query`` alone would refuse it; but once
     the conversation's STICKY topic is already ``calendar_view``, the
     follow-up's own time reference (parsed here) is enough. Fetches events via
     :func:`lhassa.calendar.feed.upcoming` (a real network/cache read, but
     itself $0/deterministic/never-raising) over a window wide enough to cover
     the parsed range, filters to ``[start, end)``, and renders a grouped
     reply. ``None`` when ``text`` has no parseable time reference (or the feed
-    lookup fails) — the caller then falls through to its normal path. Never
+    lookup fails); the caller then falls through to its normal path. Never
     raises.
     """
     try:
@@ -324,7 +324,7 @@ async def answer_window(instance_id: str, text: str, *, config=None) -> Optional
         hours = max(24, int(span_hours) + 6)  # a little slack past the window edge
 
         # Reach BACK to the window's own start so a single-day query ("hoy")
-        # includes events that already happened today — otherwise "hoy" asked
+        # includes events that already happened today; otherwise "hoy" asked
         # mid-morning silently drops the 08:00 class and then flatly denies it
         # exists when the owner follows up "¿y a las 8?".
         events = await _feed.upcoming(
@@ -343,15 +343,15 @@ async def answer_window(instance_id: str, text: str, *, config=None) -> Optional
 # ── time-of-day follow-ups ("¿y a las 6am?") ─────────────────────────────────
 #
 # A day window (parse_window) answers "what do I have today?". Its natural
-# elliptical follow-up is a bare TIME — "¿y a las 6am?", "and at 5pm?" — which
+# elliptical follow-up is a bare TIME; "¿y a las 6am?", "and at 5pm?": which
 # carries NO day reference, so parse_window declines and the message used to
 # fall to a tool-less think that hallucinated "no hay nada". These two helpers
 # resolve the time against the conversation's sticky calendar DAY instead.
 #
 # Only fires as a follow-up (see lhassa.notify.capabilities): the sticky topic
 # is already calendar_view, and this runs AFTER answer_window declined. It
-# demands an explicit time signal — a meridiem (am/pm), a colon (6:30), or an
-# "a las"/"at" lead — so a bare number in ordinary chat ("sala 6") never trips
+# demands an explicit time signal; a meridiem (am/pm), a colon (6:30), or an
+# "a las"/"at" lead; so a bare number in ordinary chat ("sala 6") never trips
 # it. A bare 1–12 with no meridiem is AMBIGUOUS, so both readings are checked
 # (6 → 06:00 AND 18:00): whichever the calendar actually has wins.
 _TOD_RE = re.compile(
@@ -365,7 +365,7 @@ def parse_time_of_day(text: str) -> Optional[list[tuple[int, int]]]:
     Returns EVERY plausible 24h reading: an unambiguous one (meridiem or 24h
     value → a single tuple), or both AM and PM for a bare 1–12. ``None`` when
     there is no time, or no explicit time signal (meridiem / colon / "a las" /
-    "at") — so ordinary chat never matches. Never raises.
+    "at"); so ordinary chat never matches. Never raises.
     """
     try:
         norm = _normalize(text or "")
@@ -374,7 +374,7 @@ def parse_time_of_day(text: str) -> Optional[list[tuple[int, int]]]:
             return None
         lead, hh, mm, mer = m.group(1), m.group(2), m.group(3), m.group(4)
         mer = (mer or "").replace(".", "").replace(" ", "")
-        # Require an explicit time signal — a lone number is not a time.
+        # Require an explicit time signal; a lone number is not a time.
         if not (lead or mer or mm):
             return None
         hour = int(hh)
@@ -413,7 +413,7 @@ def resolved_date(text: str, *, now: Optional[datetime] = None) -> Optional[str]
 
 
 def _is_spanish_tod(text: str) -> bool:
-    """Language of a time-of-day follow-up — Spanish unless it clearly reads
+    """Language of a time-of-day follow-up. Spanish unless it clearly reads
     English ("at 6pm" with no Spanish "las"). Defaults Spanish (the owner)."""
     norm = _normalize(text)
     if re.search(r"\blas\b", norm):
@@ -426,13 +426,13 @@ def _is_spanish_tod(text: str) -> bool:
 async def answer_time_of_day(
     instance_id: str, text: str, *, day_iso: Optional[str] = None, config=None
 ) -> Optional[str]:
-    """Answer a bare-time follow-up against a specific DAY — deterministic, $0.
+    """Answer a bare-time follow-up against a specific DAY; deterministic, $0.
 
     Resolves ``text``'s time (:func:`parse_time_of_day`) against ``day_iso``
     (the sticky calendar day; defaults to today), fetches that FULL local day's
     events (reaching back past ``now`` so a morning slot still shows) and
     reports the events at/around that time. ``None`` when ``text`` carries no
-    parseable time — the caller falls through to its normal path. A day with
+    parseable time; the caller falls through to its normal path. A day with
     nothing at that time answers honestly ("no tienes nada a las …") rather
     than falling through to a model that would guess. Never raises.
     """

@@ -1,8 +1,8 @@
-"""Quarantine across platforms — no sandbox tool now means refusal everywhere.
+"""Quarantine across platforms; no sandbox tool now means refusal everywhere.
 
 The invariant at stake is "authored code never executes outside quarantine".
 ``isolation="none"`` (no namespacing tool at all, on any platform) is REFUSED by
-default — Linux used to warn-and-proceed here, which was the one inconsistency:
+default. Linux used to warn-and-proceed here, which was the one inconsistency:
 every other platform already refused. Two explicit, deliberate opt-outs bypass
 the refusal on any platform: ``LHASSA_QUARANTINE_ISOLATION=none`` (skip trying a
 sandbox tool at all) and ``LHASSA_QUARANTINE_ALLOW_UNSANDBOXED=1`` (a sandbox
@@ -10,7 +10,7 @@ tool was looked for and not found; run anyway).
 
 Platform is selected by injection (``LHASSA_PLATFORM``), so these run on Linux CI.
 ``tests/conftest.py`` pins ``LHASSA_QUARANTINE_ISOLATION=none`` suite-wide, so a
-test that needs the real selection chain — or the not-forced refusal — clears it
+test that needs the real selection chain (or the not-forced refusal) clears it
 explicitly.
 """
 
@@ -74,7 +74,7 @@ async def test_allow_unsandboxed_escape_hatch_permits_the_run(tmp_path, monkeypa
 
     Distinct from LHASSA_QUARANTINE_ISOLATION=none (which skips even trying a
     sandbox tool): this one says "a sandbox tool was looked for, none was
-    found, run anyway" — and it works on every platform, including Linux.
+    found, run anyway": and it works on every platform, including Linux.
     """
     monkeypatch.delenv("LHASSA_QUARANTINE_ISOLATION", raising=False)
     monkeypatch.setenv("LHASSA_QUARANTINE_ALLOW_UNSANDBOXED", "1")
@@ -90,7 +90,7 @@ async def test_allow_unsandboxed_escape_hatch_permits_the_run(tmp_path, monkeypa
 
 
 def test_selection_does_not_consult_the_layer_on_linux(tmp_path, monkeypatch):
-    """On Linux the chain is the three tools and nothing else — byte-identical."""
+    """On Linux the chain is the three tools and nothing else; byte-identical."""
     monkeypatch.delenv("LHASSA_QUARANTINE_ISOLATION", raising=False)
     monkeypatch.setenv("LHASSA_PLATFORM", "linux")
     called = {"n": 0}
@@ -151,7 +151,7 @@ async def test_an_explicit_opt_out_is_honoured_on_every_platform(tmp_path, monke
     """LHASSA_QUARANTINE_ISOLATION=none is a deliberate operator choice.
 
     The refusal above is for "no sandbox was available", not for an operator who
-    switched it off on purpose — otherwise this suite's own convention (see
+    switched it off on purpose; otherwise this suite's own convention (see
     conftest) would become unrunnable off Linux.
     """
     monkeypatch.setenv("LHASSA_QUARANTINE_ISOLATION", "none")

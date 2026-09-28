@@ -1,4 +1,4 @@
-"""Tests for lhassa.memory.load and lhassa.memory.seed — the layered chica."""
+"""Tests for lhassa.memory.load and lhassa.memory.seed; the layered chica."""
 
 import pytest
 
@@ -59,7 +59,7 @@ async def test_load_directivas_not_duplicated(tmp_path, monkeypatch):
     from lhassa.memory import load, seed
     await seed.seed_default_facts("inst_personal")
     ctx = await load.load("inst_personal", token_budget=10_000)
-    # The directiva facts match the persona directives — must appear once each.
+    # The directiva facts match the persona directives; must appear once each.
     assert ctx.directives.count("responder conciso por defecto") == 1
     assert ctx.directives.count("optimizar; muy sensible a cualquier delay") == 1
 
@@ -226,7 +226,7 @@ async def test_load_knowledge_layer_defensive_on_failure(tmp_path, monkeypatch):
 
     monkeypatch.setattr(knowledge, "search", _boom)
     # _knowledge_layer wraps knowledge.search in its own try/except (mirrors
-    # _recall_layer exactly) — a broken search must degrade to an empty layer,
+    # _recall_layer exactly); a broken search must degrade to an empty layer,
     # never raise up through load().
     result = await load_mod._knowledge_layer("inst_personal", "x", None)
     assert result == []
@@ -275,12 +275,12 @@ def test_estimate_tokens_degrades_on_tiktoken_import_failure(monkeypatch):
     assert load_mod.estimate_tokens("abcdef") == 2
 
 
-# ── graph layer (Wave 3, LightRAG-lite — lowest priority) ────────────────────
+# ── graph layer (Wave 3, LightRAG-lite; lowest priority) ────────────────────
 
 
 async def _sync_kg_fixture(config):
     """Two facts sharing 'Sezzle' so a 1-hop expansion from 'Ana' surfaces a
-    SECOND fact (not the direct entity-match seed) — exercises the
+    SECOND fact (not the direct entity-match seed); exercises the
     "connected: X —kind→ Y" citation, not just a direct name match."""
     from lhassa.memory import facts, kg
 
@@ -303,7 +303,7 @@ async def test_load_graph_layer_absent_when_flag_off(tmp_path, monkeypatch):
     )
     await _sync_kg_fixture(cfg)
 
-    # ... but OFF for the load() call — the default, and the flag load() itself
+    # ... but OFF for the load() call; the default, and the flag load() itself
     # checks. The layer must not fire even though the graph is populated.
     off_cfg = SimpleNamespace(
         instance_id="inst_personal",
@@ -330,7 +330,7 @@ async def test_load_graph_layer_adds_hop_derived_fact_when_flag_on(tmp_path, mon
     await _sync_kg_fixture(cfg)
 
     # Isolate the KG-hop path from the always-on fact-embedding side effect
-    # (facts.add_fact embeds on write regardless of memory_layer4_enabled) —
+    # (facts.add_fact embeds on write regardless of memory_layer4_enabled);
     # this test targets graph_retrieve's OWN 1-hop expansion, not whichever
     # embedder backend happens to be reachable in this environment.
     async def _no_semantic(*a, **kw):
@@ -386,7 +386,7 @@ async def test_load_graph_layer_defensive_on_failure(tmp_path, monkeypatch):
 
 
 def test_truncate_drops_graph_before_knowledge():
-    """Graph is the LOWEST-priority layer — under a tight budget it must be
+    """Graph is the LOWEST-priority layer; under a tight budget it must be
     dropped before the (still low-priority, but ranked above it) knowledge
     layer."""
     from lhassa.memory import load as load_mod

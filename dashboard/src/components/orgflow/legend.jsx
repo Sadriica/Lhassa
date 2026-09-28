@@ -2,9 +2,9 @@ import { kindStyle } from '../relationshipKinds'
 
 // ── relationship overlay legend + layer toggles ────────────────────────────────
 // A small on-palette card pinned to the canvas. Each typed kind shows its dashed
-// per-kind swatch (with the direction arrow — a double arrow for the symmetric
+// per-kind swatch (with the direction arrow; a double arrow for the symmetric
 // `collaborates`) and a checkbox that shows/hides that layer so the owner isn't
-// overwhelmed. The command spine is intentionally NOT in here — it's the solid
+// overwhelmed. The command spine is intentionally NOT in here; it's the solid
 // hierarchy, not a toggleable overlay.
 function KindSwatch({ kind }) {
   const s = kindStyle(kind)

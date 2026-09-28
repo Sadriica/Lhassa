@@ -3,14 +3,14 @@
 
 Routes::
 
-    GET    /api/tasks?estado=...  — list tasks (newest first, cap 200)
-    POST   /api/tasks             — mint a new task via dispatch.mint_task
-    GET    /api/watchlist         — preview pending triggers (read-only peek)
+    GET    /api/tasks?estado=... ; list tasks (newest first, cap 200)
+    POST   /api/tasks            ; mint a new task via dispatch.mint_task
+    GET    /api/watchlist        ; preview pending triggers (read-only peek)
 
 Minting a task requires the ``accion`` to be in the ACTIONS registry OR the
 ``judgment`` flag set to ``true`` in the body. A judgment task is the
 standing-goal use case: the user asks the brain to THINK about something on a
-schedule (e.g. accion "review my inbox") — which costs tokens each tick.
+schedule (e.g. accion "review my inbox"); which costs tokens each tick.
 
 ``recurrence`` is accepted as an integer of seconds OR the convenience aliases
 ``hourly`` (3600), ``daily`` (86400), ``weekly`` (604800). ``due_at`` may be an
@@ -86,7 +86,7 @@ def _parse_due_at(raw: Any) -> Optional[str]:
                 status_code=400,
                 detail=f"Invalid due_at shorthand {raw!r}. Use +Nh / +Nm / +Ns.",
             )
-    # ISO 8601 — try parsing to validate.
+    # ISO 8601; try parsing to validate.
     try:
         datetime.fromisoformat(s.replace("Z", "+00:00"))
         return s
@@ -113,14 +113,14 @@ async def create_task(body: dict = Body(...)) -> dict:
     """Mint a new task via dispatch.mint_task (full security path: sign + approval).
 
     Required fields:
-      - ``accion`` (str) — the action name
+      - ``accion`` (str); the action name
 
     Optional fields:
-      - ``objetivo`` (str) — target of the action
-      - ``params`` (dict) — action parameters
-      - ``due_at`` (str) — ISO 8601 timestamp or ``+Nh``/``+Nm``/``+Ns`` shorthand
-      - ``recurrence`` (int|str) — seconds or ``hourly``/``daily``/``weekly``
-      - ``judgment`` (bool) — when true, any accion is allowed (costs tokens each tick)
+      - ``objetivo`` (str); target of the action
+      - ``params`` (dict); action parameters
+      - ``due_at`` (str); ISO 8601 timestamp or ``+Nh``/``+Nm``/``+Ns`` shorthand
+      - ``recurrence`` (int|str); seconds or ``hourly``/``daily``/``weekly``
+      - ``judgment`` (bool); when true, any accion is allowed (costs tokens each tick)
 
     Returns ``{id, estado}`` on success, ``400`` on validation failure.
     """

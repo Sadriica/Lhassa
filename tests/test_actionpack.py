@@ -1,4 +1,4 @@
-"""Tests for lhassa/actionpack — Phase 3.
+"""Tests for lhassa/actionpack. Phase 3.
 
 All tests are fully offline: httpx, subprocess, quarantine, notify, cv, health,
 and memory operations are monkeypatched. No real network, no real DB writes (where
@@ -30,7 +30,7 @@ def _run(coro):
 
 
 # ---------------------------------------------------------------------------
-# register_all — idempotency
+# register_all; idempotency
 # ---------------------------------------------------------------------------
 
 
@@ -46,7 +46,7 @@ def test_register_all_idempotent():
     # First call
     ap.register_all()
     count1 = len(ACTIONS)
-    # Second call — must not raise (registry raises on true duplicate)
+    # Second call; must not raise (registry raises on true duplicate)
     ap.register_all()
     count2 = len(ACTIONS)
     assert count1 == count2
@@ -227,7 +227,7 @@ def test_web_fetch_ssrf_refused():
 
 @patch("httpx.AsyncClient")
 def test_web_fetch_timeout_returns_string(mock_client_cls):
-    """web_fetch returns an error string on timeout — never raises."""
+    """web_fetch returns an error string on timeout; never raises."""
     import httpx
 
     mock_client = AsyncMock()
@@ -868,8 +868,8 @@ def test_send_reminder_never_raises_on_notify_error():
 
 
 def test_send_reminder_writes_the_root_hop_episode(monkeypatch):
-    """A reminder has no owning department — it takes the root-only hop, same as
-    ``research_reply`` — so one ``org-deliver`` Episode lands on ``lhassa``
+    """A reminder has no owning department; it takes the root-only hop, same as
+    ``research_reply``: so one ``org-deliver`` Episode lands on ``lhassa``
     alongside the actual delivery."""
     from lhassa.actionpack._reminder import send_reminder
     from lhassa.core import db

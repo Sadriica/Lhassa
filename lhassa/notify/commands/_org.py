@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Org-chart-facing commands — /org /fleet /temple.
+"""Org-chart-facing commands; /org /fleet /temple.
 
 Moved verbatim out of the former ``lhassa/notify/commands.py``.
 """
@@ -18,12 +18,12 @@ __all__ = ["_match_temple_action"]
 
 @register_command("org")
 async def _cmd_org(args: str, *, config=None) -> str:
-    """``/org`` — the org chart as a compact indented tree, LLM-free.
+    """``/org``: the org chart as a compact indented tree, LLM-free.
 
     Renders :func:`lhassa.org.topology.load_topology`: each brain's id, role and
     department (when it has one), indented by depth. The permanent administrator
     (the root) is marked ``★``; a coordinating brain ``○``; a leaf that actually
-    executes ``●``. Never constructs a provider — reads the topology file/derived
+    executes ``●``. Never constructs a provider; reads the topology file/derived
     default only.
     """
     try:
@@ -59,10 +59,10 @@ async def _cmd_org(args: str, *, config=None) -> str:
 
 @register_command("fleet")
 async def _cmd_fleet(args: str, *, config=None) -> str:
-    """``/fleet`` — known machines, last check-in and desired state, LLM-free.
+    """``/fleet``: known machines, last check-in and desired state, LLM-free.
 
-    Reuses :func:`lhassa.api.fleet_routes.get_fleet` directly — the exact same
-    read ``/api/fleet`` serves — rather than re-deriving the fleet from episodes.
+    Reuses :func:`lhassa.api.fleet_routes.get_fleet` directly; the exact same
+    read ``/api/fleet`` serves; rather than re-deriving the fleet from episodes.
     """
     try:
         from lhassa.api.fleet_routes import get_fleet
@@ -87,7 +87,7 @@ async def _cmd_fleet(args: str, *, config=None) -> str:
 
 # Free-form instruction -> a known temple action, LLM-free (a keyword match, not
 # NLP). Anything that doesn't match falls through to org_run(department="temple")
-# — the judgment door for internal work that isn't one of these fixed actions.
+#; the judgment door for internal work that isn't one of these fixed actions.
 _TEMPLE_KEYWORDS: tuple[tuple[str, str], ...] = (
     ("distill", "distill_memory"),
     ("repetition", "detect_repetition"),
@@ -114,7 +114,7 @@ _TEMPLE_KEYWORDS: tuple[tuple[str, str], ...] = (
 
 
 def _match_temple_action(text: str) -> Optional[str]:
-    """The known temple action ``text`` maps to, or ``None`` — LLM-free."""
+    """The known temple action ``text`` maps to, or ``None``: LLM-free."""
     lowered = text.lower()
     for keyword, action in _TEMPLE_KEYWORDS:
         if keyword in lowered:
@@ -156,7 +156,7 @@ def _short_local_due(raw: str) -> str:
 
 
 async def _temple_schedule(config) -> str:
-    """The temple's internal clock — its recurring work, each job's cadence and
+    """The temple's internal clock; its recurring work, each job's cadence and
     the monk that owns it. Deterministic, $0, never an LLM call.
 
     Reads the pending recurring ``temple_run`` tasks (the internal cronjobs the
@@ -194,15 +194,15 @@ async def _temple_schedule(config) -> str:
 
         if not jobs:
             return (
-                "The temple's clock is empty — no recurring internal work is "
+                "The temple's clock is empty; no recurring internal work is "
                 "scheduled. Run `lhassa seed apply maintenance` (or /temple <task>) "
                 "to give it a rhythm."
             )
         jobs.sort(key=lambda j: (j[2], j[0]))
-        lines = ["🛕 The temple's clock — recurring internal work:"]
+        lines = ["🛕 The temple's clock; recurring internal work:"]
         for action, cadence, worker, due in jobs:
             tail = f" · next {due}" if due else ""
-            lines.append(f"• {action} — {cadence} · {worker}{tail}")
+            lines.append(f"• {action}; {cadence} · {worker}{tail}")
         return "\n".join(lines)
     except Exception as exc:
         logger.warning(f"commands: /temple schedule failed: {exc}")
@@ -211,17 +211,17 @@ async def _temple_schedule(config) -> str:
 
 @register_command("temple")
 async def _cmd_temple(args: str, *, config=None) -> str:
-    """``/temple <instruction>`` — hand internal work to Lhassa's own inner
+    """``/temple <instruction>``: hand internal work to Lhassa's own inner
     department (temple), the down-execute-up loop (see :mod:`lhassa.org.temple`).
 
-    ``/temple schedule`` (or ``jobs``) shows the temple's own clock — its
+    ``/temple schedule`` (or ``jobs``) shows the temple's own clock; its
     recurring internal work with each job's cadence and owning monk, $0.
 
     LLM-free where the instruction keyword-matches a known deterministic
     action (distill/repetition/review tools/curate skills/calendar sync/
-    derive world) — runs it immediately through
+    derive world); runs it immediately through
     :func:`lhassa.org.temple.delegate_internal` and returns the result.
-    Otherwise mints an ``org_run`` task with ``department="temple"`` — the
+    Otherwise mints an ``org_run`` task with ``department="temple"``: the
     judgment door, resolved on the next tick.
     """
     text = (args or "").strip()
@@ -244,7 +244,7 @@ async def _cmd_temple(args: str, *, config=None) -> str:
         result = str(record.get("result") or "")[:300]
         return f"temple ran {action}: {result}"
 
-    # No fixed-action match — the judgment door: org_run(department="temple").
+    # No fixed-action match; the judgment door: org_run(department="temple").
     try:
         from lhassa.core import db as _db
         from lhassa.core.dispatch import mint_task

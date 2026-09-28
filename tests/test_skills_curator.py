@@ -1,4 +1,4 @@
-"""Tests for the skills curator (Fase 2) — usage telemetry + $0 lifecycle sweep.
+"""Tests for the skills curator (Fase 2); usage telemetry + $0 lifecycle sweep.
 
 Offline + hermetic: a tmp ``skills_dir`` stub config (same idiom as
 ``tests/test_skills.py``), no real model, no real agent runs.
@@ -91,7 +91,7 @@ def test_corrupt_usage_file_degrades(tmp_path):
     (skills_dir / curator.USAGE_FILE).write_text("{ not json ")
 
     assert curator.get_usage(cfg) == {}
-    # record_use must still work — it degrades the read then overwrites cleanly.
+    # record_use must still work; it degrades the read then overwrites cleanly.
     curator.record_use("x", config=cfg)
     assert curator.get_usage(cfg)["x"]["use_count"] == 1
 
@@ -163,7 +163,7 @@ def test_unused_91_days_archives_with_backup(tmp_path):
     assert summary["stale"] == 0
 
     skills_dir = Path(cfg.skills_dir)
-    # never deleted — moved into .archive/
+    # never deleted; moved into .archive/
     assert not (skills_dir / "ancient").exists()
     archived = skills_dir / curator.ARCHIVE_DIR / "ancient"
     assert archived.exists()
@@ -283,8 +283,8 @@ async def test_curate_skills_action_skips_when_agent_run_active(tmp_path, monkey
     )
 
     result = await _curate.curate_skills({})
-    assert result == "curate_skills: skipped — agent run active"
-    # nothing was touched — the sweep never ran
+    assert result == "curate_skills: skipped; agent run active"
+    # nothing was touched; the sweep never ran
     assert curator.get_usage(cfg) == {}
 
 

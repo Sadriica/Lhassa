@@ -1,4 +1,4 @@
-"""Tests for lhassa/org/inbox_sense.py — enqueue → heartbeat closes the loop.
+"""Tests for lhassa/org/inbox_sense.py; enqueue → heartbeat closes the loop.
 
 Fully offline: a tmp brain DB, no model, no real topology needed (messaging is
 self-contained). Verifies the watchlist sense drains THIS instance's org inbox,

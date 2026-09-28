@@ -1,7 +1,7 @@
-"""Tests for lhassa.calendar.ics — pure-stdlib RFC5545 ``.ics`` generation.
+"""Tests for lhassa.calendar.ics; pure-stdlib RFC5545 ``.ics`` generation.
 
 Offline + $0 by construction (no network, no model, no real clock read inside
-the module under test — every datetime is supplied by the caller).
+the module under test; every datetime is supplied by the caller).
 """
 
 from datetime import datetime, timedelta, timezone

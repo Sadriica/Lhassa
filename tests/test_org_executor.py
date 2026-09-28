@@ -1,4 +1,4 @@
-"""Tests for lhassa.org.executor — the real department executor (Fase 7).
+"""Tests for lhassa.org.executor; the real department executor (Fase 7).
 
 The department now actually THINKS: one-turn brain path (identity + layered memory +
 routine provider + provider.complete) with the department's identity in the system
@@ -100,7 +100,7 @@ async def test_brain_executor_degrades_on_provider_not_configured(tmp_path, monk
     provider = _FakeProvider(raises=ProviderNotConfigured("no creds"))
     _patch_router(monkeypatch, provider)
 
-    # must NOT raise — a failure becomes a structured result
+    # must NOT raise; a failure becomes a structured result
     result = await brain_executor("anything", department="finance")
     assert result["ok"] is True
     assert result["department"] == "finance"
@@ -187,7 +187,7 @@ async def test_brain_executor_loads_installed_skill_into_prompt(tmp_path, monkey
     # the installed skill's instructions were injected into the system prompt
     assert "## Skill: optimization" in provider.seen_system
     assert "MAGIC_MARKER_42" in provider.seen_system
-    # the uninstalled name is recorded, not loaded — and nothing raised
+    # the uninstalled name is recorded, not loaded; and nothing raised
     assert result["ok"] is True
     assert result["skills_loaded"] == ["optimization"]
     assert result["skills_not_installed"] == ["ghost-skill"]

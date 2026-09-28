@@ -52,7 +52,7 @@ async def checkin(payload: dict):
     must run, persist the new ones, record a check-in Episode, and return them.
 
     Body: ``{machine_id, capabilities: list[str], current_state: dict}``.
-    Returns ``{"tasks": [task_as_json, ...]}`` — each task carries its ``firma``
+    Returns ``{"tasks": [task_as_json, ...]}``: each task carries its ``firma``
     and an ``origen`` (Phase 0: INTERNO, actor 'brain').
     """
     if not isinstance(payload, dict):
@@ -72,7 +72,7 @@ async def checkin(payload: dict):
 
     # Pre-existing pending tasks for this instance (snapshot BEFORE we synthesize,
     # so reconciliation's freshly-persisted tasks aren't double-counted). Phase 0
-    # keeps it simple — all pending tasks; a machine-targeting field comes later.
+    # keeps it simple; all pending tasks; a machine-targeting field comes later.
     for row in await db.load_pending_tasks(instance_id):
         task = Task.from_db_row(row)
         if not task.firma:

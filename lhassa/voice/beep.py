@@ -32,7 +32,7 @@ def _generate_tone(
     return struct.pack(f"<{num_samples}h", *samples)
 
 
-# Cache PipeWire device index — scan only once instead of on every beep
+# Cache PipeWire device index; scan only once instead of on every beep
 _pw_scanned: bool = False
 _pw_idx: int | None = None
 
@@ -69,6 +69,6 @@ def _play_blocking(freq: float, duration_ms: int, volume: float):
             stream.stop_stream()
             stream.close()
     except Exception:
-        pass  # Beep is cosmetic — never crash because of it
+        pass  # Beep is cosmetic; never crash because of it
     finally:
         p.terminate()

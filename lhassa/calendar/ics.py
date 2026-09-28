@@ -1,21 +1,21 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Pure-stdlib ``.ics`` generation — the calendar file-I/O seam.
+"""Pure-stdlib ``.ics`` generation; the calendar file-I/O seam.
 
 One tap on the file this module writes adds an event to ANY calendar
-(institutional Outlook, Google, iPhone) with no API, no admin, no permissions —
+(institutional Outlook, Google, iPhone) with no API, no admin, no permissions;
 a ``.ics`` is just a file, not an integration. This module is the leaf-infra
 counterpart of :mod:`lhassa.cv.store`: it owns the RFC5545 rendering and the
 on-disk write so paths and format details never scatter across the callers.
 
-  * :func:`build_event` — a valid ``VCALENDAR``/``VEVENT`` string for a single
+  * :func:`build_event`: a valid ``VCALENDAR``/``VEVENT`` string for a single
     event. Deterministic: the UID is derived from a seed (or ``summary`` +
     ``start_dt``) rather than a random/``now`` call, so the same inputs always
-    produce the same file — no ``uuid4``/``datetime.now`` inside this module.
-  * :func:`write_ics` — write the content to ``~/.lhassa/calendar/`` (see
+    produce the same file; no ``uuid4``/``datetime.now`` inside this module.
+  * :func:`write_ics`: write the content to ``~/.lhassa/calendar/`` (see
     :mod:`lhassa.calendar.paths`) atomically, filename from a slug of the
     summary, returns the ``.ics`` path.
 
-Layer: leaf infrastructure — depends on nothing but the standard library and
+Layer: leaf infrastructure; depends on nothing but the standard library and
 :mod:`lhassa.calendar.paths`; never imports a shell (``notify``/``org``/``api``/
 ...). See ``tests/test_architecture.py``'s ``calendar-infra-isolation`` rule.
 """
@@ -86,7 +86,7 @@ def _fmt_utc(dt: datetime) -> str:
     """Render an (aware or naive) datetime as an RFC5545 UTC timestamp (``...Z``).
 
     A naive datetime is treated as already-UTC (never a local-clock guess); an
-    aware one is converted. No ``datetime.now()`` call — always derived from
+    aware one is converted. No ``datetime.now()`` call; always derived from
     the value the caller passed in, so the output is deterministic.
     """
     if dt.tzinfo is None:
@@ -98,7 +98,7 @@ def _fmt_utc(dt: datetime) -> str:
 
 def _stable_uid(summary: str, start_dt: datetime, uid: Optional[str]) -> str:
     """A stable UID: the given ``uid`` verbatim, else derived from
-    ``summary`` + ``start_dt`` (deterministic — same inputs, same UID)."""
+    ``summary`` + ``start_dt`` (deterministic; same inputs, same UID)."""
     if uid:
         return str(uid).strip() or "event@lhassa"
     seed = f"{summary}|{start_dt.isoformat()}"
@@ -118,11 +118,11 @@ def build_event(
     """A valid ``VCALENDAR``/``VEVENT`` string for one event. Never raises.
 
     ``end_dt`` defaults to ``start_dt + 1h``. Times are emitted as UTC
-    (``...Z``) from whatever ``start_dt``/``end_dt`` were passed in — this
+    (``...Z``) from whatever ``start_dt``/``end_dt`` were passed in; this
     function makes no clock calls of its own, so it is fully deterministic
     given its inputs (a requirement of the ``do-and-sleep`` spine's $0,
     reproducible-artifact discipline). On any failure it logs and returns
-    ``""`` — a caller degrades (no delivery) rather than crashing.
+    ``""``: a caller degrades (no delivery) rather than crashing.
     """
     try:
         clean_summary = str(summary or "").strip() or "Reminder"
@@ -150,13 +150,13 @@ def build_event(
         lines.append("END:VCALENDAR")
 
         return "\r\n".join(_fold(line) for line in lines) + "\r\n"
-    except Exception as exc:  # never raise — a bad input degrades to "" upstream
+    except Exception as exc:  # never raise; a bad input degrades to "" upstream
         logger.warning(f"calendar.ics: build_event failed: {exc}")
         return ""
 
 
 def _slug(name: Optional[str]) -> str:
-    """Slug a summary for a filename — same rule as :func:`lhassa.cv.store.slug_company`."""
+    """Slug a summary for a filename; same rule as :func:`lhassa.cv.store.slug_company`."""
     if not name:
         return "event"
     folded = unicodedata.normalize("NFKD", str(name)).encode("ascii", "ignore").decode("ascii")
@@ -165,7 +165,7 @@ def _slug(name: Optional[str]) -> str:
 
 
 def _short_id(seed: Optional[str] = None) -> str:
-    """A short (~6-char) id — deterministic when ``seed`` is given, else derived
+    """A short (~6-char) id; deterministic when ``seed`` is given, else derived
     from the content itself by the caller (see :func:`write_ics`)."""
     return hashlib.sha1(str(seed).encode("utf-8")).hexdigest()[:6]
 
@@ -176,7 +176,7 @@ def write_ics(content: str, *, name: str, run_id: Optional[str] = None) -> Path:
     The write is ATOMIC (temp file in the same directory + ``os.replace``), so
     an interrupted write never leaves a half-written ``.ics``. The id is
     derived from ``run_id`` when given (stable per run); otherwise from the
-    content itself (still deterministic — no random/``now`` call), so two
+    content itself (still deterministic; no random/``now`` call), so two
     calls with identical content land on the same filename.
     """
     slug = _slug(name)

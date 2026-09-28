@@ -29,7 +29,7 @@ async def test_monitor_file_change_notifies_on_rewrite(tmp_path, monkeypatch):
     target.write_text("rewritten\n")
     await asyncio.wait_for(task, timeout=3)
 
-    assert notified == [("Lhassa — File Monitor", "File events.log changed.")]
+    assert notified == [("Lhassa File Monitor", "File events.log changed.")]
     assert broadcasted == [{"type": "file_event", "path": str(target), "line": ""}]
 
 
@@ -61,5 +61,5 @@ async def test_monitor_file_pattern_handles_rotation(tmp_path, monkeypatch):
 
     await asyncio.wait_for(task, timeout=3)
 
-    assert notified == [("Lhassa — File Monitor", "File app.log: service ready")]
+    assert notified == [("Lhassa File Monitor", "File app.log: service ready")]
     assert broadcasted == [{"type": "file_event", "path": str(target), "line": "service ready"}]

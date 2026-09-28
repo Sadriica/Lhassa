@@ -1,4 +1,4 @@
-"""The loops table (Wave 0 of the intelligence plan) — bounded iteration state.
+"""The loops table (Wave 0 of the intelligence plan); bounded iteration state.
 
 Storage-only tests: the loop RUNTIME (forge iterate, /goal verify-terminate)
 lands in Wave A; this pins the substrate those build on.

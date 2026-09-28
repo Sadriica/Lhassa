@@ -1,8 +1,8 @@
-"""Tests for lhassa.agents.ptc — Programmatic Tool Calling (Fase 3).
+"""Tests for lhassa.agents.ptc. Programmatic Tool Calling (Fase 3).
 
 All offline, no LLM. A dummy action is registered directly against the real
 ``core.actions`` registry (and a matching allowlist entry) for the duration of
-each test and cleaned up afterwards — nothing here touches the real brain.db or
+each test and cleaned up afterwards; nothing here touches the real brain.db or
 the owner's real signing key (``tmp_keys`` redirects ``signing.KEY_PATH``).
 
 The end-to-end tests exercise the REAL Unix-domain-socket RPC path: a generated
@@ -115,7 +115,7 @@ async def test_unknown_action_is_refused_never_executed(dummy_action):
 
 
 async def test_action_outside_allowlist_is_refused(dummy_action, monkeypatch):
-    # Register the action in ACTIONS but withhold the allowlist entry — the
+    # Register the action in ACTIONS but withhold the allowlist entry; the
     # allowlist gate, not the registry, is what must refuse it.
     name = "ptc_test_not_allowlisted"
     _actions.register_action(name, _dummy_echo, override=True)

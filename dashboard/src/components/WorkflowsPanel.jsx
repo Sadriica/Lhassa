@@ -139,8 +139,8 @@ function FlowInsights({ items = [], onOpen }) {
 }
 
 // Props (all optional so this works before App.jsx wires the hash sub-route):
-//   route     — a flow id to auto-open (string), or null/undefined for the list
-//   onRoute   — onRoute(idOrNull): update the URL hash (id opens a flow, null → list)
+//   route    ; a flow id to auto-open (string), or null/undefined for the list
+//   onRoute  ; onRoute(idOrNull): update the URL hash (id opens a flow, null → list)
 export default function WorkflowsPanel({ route, onRoute } = {}) {
   const [flows, setFlows] = useState([])
   const [loading, setLoading] = useState(true)
@@ -229,10 +229,10 @@ export default function WorkflowsPanel({ route, onRoute } = {}) {
     setEditing(starterFlow())
     setIsNew(true)
     setFlowRuns([])
-    onRoute?.(null) // a new flow has no persistent id yet — keep the URL on the list
+    onRoute?.(null) // a new flow has no persistent id yet; keep the URL on the list
   }, [onRoute])
 
-  // #10 — recreate a just-deleted flow from its cached JSON (Undo). PUT re-creates the
+  // #10; recreate a just-deleted flow from its cached JSON (Undo). PUT re-creates the
   // flow at its id (replace-or-create), then refresh the list so it reappears.
   const recreateFlow = useCallback(async (flow) => {
     try {
@@ -244,7 +244,7 @@ export default function WorkflowsPanel({ route, onRoute } = {}) {
     }
   }, [loadFlows])
 
-  // #10 — DELETE is optimistic + undoable. The flow leaves the list the instant Confirm
+  // #10; DELETE is optimistic + undoable. The flow leaves the list the instant Confirm
   // is clicked; on success the toast offers Undo, which re-creates it from the cached
   // JSON. On failure the optimistic removal is rolled back and an error toast fires.
   const deleteFlow = useCallback(async (id) => {
@@ -255,7 +255,7 @@ export default function WorkflowsPanel({ route, onRoute } = {}) {
     setBusy(true)
     setError('')
     try {
-      // A 404 is fine here — the flow is already gone, which is the desired end state.
+      // A 404 is fine here; the flow is already gone, which is the desired end state.
       await deleteFlowApi(id).catch((e) => {
         if (!/endpoint is missing|not found/i.test(String(e?.message || ''))) throw e
       })
@@ -281,26 +281,26 @@ export default function WorkflowsPanel({ route, onRoute } = {}) {
       const d = isNew ? await createFlow(flowDict) : await replaceFlow(flowDict.id, flowDict)
       setIsNew(false)
       setEditing(d) // adopt the canonical stored flow (same id → editor keeps the canvas)
-      onRoute?.(d.id) // a freshly-created flow now has a persistent id — deep-link it
+      onRoute?.(d.id) // a freshly-created flow now has a persistent id; deep-link it
       await loadFlows()
       return { ok: true, flow: d }
     } catch (e) {
       // The client surfaces the API's own `{"detail": …}` (e.g. which node failed
-      // validation) in the Error message — show that, not a generic line.
-      return { ok: false, detail: e instanceof Error ? e.message : 'Save failed — network error.' }
+      // validation) in the Error message; show that, not a generic line.
+      return { ok: false, detail: e instanceof Error ? e.message : 'Save failed; network error.' }
     }
   }, [isNew, loadFlows, onRoute])
 
   const runFlow = useCallback(async (id, inputs = {}) => {
     try {
-      // The server routes this through org/delegate.py:delegate_flow — the
+      // The server routes this through org/delegate.py:delegate_flow; the
       // dashboard never reaches the engine directly.
       const d = await runFlowApi(id, { inputs })
       await loadAnalytics()
       await loadFlowRuns(id)
       return { ok: true, run: d }
     } catch (e) {
-      return { ok: false, detail: e instanceof Error ? e.message : 'Run failed — network error.' }
+      return { ok: false, detail: e instanceof Error ? e.message : 'Run failed; network error.' }
     }
   }, [loadAnalytics, loadFlowRuns])
 
@@ -329,7 +329,7 @@ export default function WorkflowsPanel({ route, onRoute } = {}) {
             />
           </div>
         </Suspense>
-        {/* The DURABLE runs of this flow (GET /api/flow-runs) — the operational
+        {/* The DURABLE runs of this flow (GET /api/flow-runs); the operational
             kernel's own record + its append-only event stream, polled while a run
             is still moving. Distinct from the analytics run history above it. */}
         {!isNew && <DurableRunsPanel flowId={editing.id} />}

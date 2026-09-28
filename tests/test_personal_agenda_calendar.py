@@ -1,4 +1,4 @@
-"""Personal agenda rendering of calendar names — additive to the existing
+"""Personal agenda rendering of calendar names; additive to the existing
 build()/render() behavior. Offline: lhassa.calendar.feed.upcoming is
 monkeypatched to fake events, no network or real ICS involved.
 """

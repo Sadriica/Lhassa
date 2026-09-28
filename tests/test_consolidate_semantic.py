@@ -1,5 +1,5 @@
 """
-Tests for lhassa.memory.consolidate — the Phase-2 semantic consolidation pass.
+Tests for lhassa.memory.consolidate; the Phase-2 semantic consolidation pass.
 
 Fully offline: a fake CHEAP provider (or an injected ``completion_fn`` through a
 tmp-file gateway) returns canned cluster summaries / contradiction pairs. tmp

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""The autonomy knob — friction that lowers with repeated human approval (§2.6, #9).
+"""The autonomy knob; friction that lowers with repeated human approval (§2.6, #9).
 
 "La autonomía se gana con evidencia. Supervisado primero; perilla que baja con
 aprobaciones repetidas." This module tracks, per ``(accion, actor_id)`` within an
@@ -9,13 +9,13 @@ auto-approves: "una `humano` repetida se vuelve automática".
 
 Three hard rules, straight from the brief and the invariants:
 
-1. **Per-action, per-actor — never global.** HITL is by flow. The streak is keyed
+1. **Per-action, per-actor; never global.** HITL is by flow. The streak is keyed
    on the specific action AND the specific WHO, so trust earned for drafting a
    document never leaks into moving money.
 
 2. **The high-risk set is never auto-promoted.** Actions in
    ``Config.always_approve_actions`` (e.g. move_money / delete_data) ALWAYS require
-   human approval regardless of history — "mover-dinero exige aprobación aunque un
+   human approval regardless of history; "mover-dinero exige aprobación aunque un
    borrador no". ``should_auto_approve`` returns ``False`` for them unconditionally.
 
 3. **The knob never raises trust.** It only LOWERS friction for actions a human has
@@ -37,20 +37,20 @@ from lhassa.config import Config
 from lhassa.core import db
 from lhassa.security.trust import TrustLevel
 
-# ── feedback → knob bridge (§2.2 — the knob should move from lived feedback,
+# ── feedback → knob bridge (§2.2; the knob should move from lived feedback,
 # not only from explicit approve/deny taps) ─────────────────────────────────
 
 # The file-perception actions are gated per-access by protected roots
-# (``security/allowlist.py``) — their approval is intentionally per-call, never
+# (``security/allowlist.py``); their approval is intentionally per-call, never
 # a streak. Feedback must never touch them (hard rule #3 below).
 _PROTECTED_ROOT_ACTIONS = frozenset({"read_file", "list_dir"})
 
 # How many negative signals attributed to the same accion, within one window,
-# force a reset — being wrong repeatedly must cost autonomy.
+# force a reset; being wrong repeatedly must cost autonomy.
 _NEGATIVE_RESET_THRESHOLD = 2
 
 # How far (minutes) before a scored "responder" episode we look for the nearest
-# concrete (non-"responder") episode to attribute a signal to — mirrors the
+# concrete (non-"responder") episode to attribute a signal to; mirrors the
 # windows already used by ``core.feedback`` for its own heuristics.
 _ATTRIBUTION_WINDOW_MINUTES = 30
 
@@ -101,7 +101,7 @@ async def record_decision(
     """Feed one approval decision into the knob and return the resulting streak.
 
     - A **denial** resets the streak to zero (the autonomy must be re-earned).
-    - An **approval of a HUMANO-origin action** advances the streak by one — this
+    - An **approval of a HUMANO-origin action** advances the streak by one; this
       is the only thing that builds autonomy ("una `humano` repetida se vuelve
       automática").
     - An approval whose action did NOT originate from a human leaves the streak
@@ -128,7 +128,7 @@ def _excluded_actions() -> "set[str]":
 
 
 def _feedback_marker_key(window_days: int, bucket: str) -> str:
-    """One idempotency marker per (window length, day) — see ``apply_feedback``."""
+    """One idempotency marker per (window length, day); see ``apply_feedback``."""
     return f"autonomy_feedback:{int(window_days)}d:{bucket}"
 
 
@@ -151,9 +151,9 @@ async def _subject_accion(conn: Any, instance_id: str, creado_en: str) -> Option
 
     A "responder" episode is a chat answer, never itself a controllable action;
     this looks EITHER SIDE (a preceding action the answer reported on, or a
-    following action the answer prompted — e.g. the "acted-on" heuristic's
+    following action the answer prompted; e.g. the "acted-on" heuristic's
     trigger) within :data:`_ATTRIBUTION_WINDOW_MINUTES`, and picks whichever is
-    closest in time. ``None`` when nothing concrete is nearby — the caller
+    closest in time. ``None`` when nothing concrete is nearby; the caller
     must SKIP rather than guess.
     """
     try:
@@ -199,7 +199,7 @@ async def _actors_for_accion(
     """Actors that already hold an autonomy row for ``accion``, streak >= min_streak.
 
     Feedback has no actor identity of its own (the episode log carries no
-    ``actor_id``) — it can only REINFORCE or RESET trust a human already
+    ``actor_id``); it can only REINFORCE or RESET trust a human already
     started, per (accion, actor). Never raises (empty list on any error).
     """
     try:
@@ -226,26 +226,26 @@ async def apply_feedback(
 
     1. **Only negative evidence acts strongly.** Two or more negative signals
        (re-ask/correction) attributed to the SAME accion within the window
-       RESET that accion's streak for every actor currently holding one — the
+       RESET that accion's streak for every actor currently holding one; the
        same effect as a human denial. Being wrong repeatedly must cost
        autonomy.
     2. **Positive/silence evidence acts weakly.** It adds AT MOST +1 streak per
        accion per window, and ONLY for actors who already hold a streak >= 1
-       for that accion — a human must have started the trust; feedback can
+       for that accion; a human must have started the trust; feedback can
        only reinforce it, never bootstrap it from nothing.
     3. **Never touch high-risk or per-access actions.** Anything in
        ``Config.always_approve_actions`` (never auto-promoted regardless of
        history) and the file-perception actions gated by protected roots
-       (``read_file``, ``list_dir`` — approval is per-access by design) are
+       (``read_file``, ``list_dir``: approval is per-access by design) are
        always skipped, even with strong feedback in either direction.
     4. **Attribution never guesses.** A signal is only actioned when it maps to
        a concrete accion: either the scored episode's own ``accion`` (when it
        is a real action, not the generic "responder" chat answer) or the
-       nearest concrete action episode shortly before it. Anything else —
-       including every "neutral"/inconclusive signal — is counted in
+       nearest concrete action episode shortly before it. Anything else;
+       including every "neutral"/inconclusive signal; is counted in
        ``skipped``, never applied.
     5. **Idempotent per window.** Guarded by a ``watch_state`` marker keyed on
-       ``(window_days, day)`` — like ``org/inbox_sense.py``'s dedup pattern —
+       ``(window_days, day)``: like ``org/inbox_sense.py``'s dedup pattern;
        so re-running within the same day is a $0 no-op.
 
     Returns ``{"reset": [...], "reinforced": [...], "skipped": n,
@@ -315,7 +315,7 @@ async def apply_feedback(
             for accion in positive_hit:
                 if accion in report["reset"]:
                     # Negative evidence for this accion already fired this
-                    # window — never let a weak positive undo a strong reset.
+                    # window; never let a weak positive undo a strong reset.
                     continue
                 actors = await _actors_for_accion(conn, instance_id, accion, min_streak=1)
                 if not actors:

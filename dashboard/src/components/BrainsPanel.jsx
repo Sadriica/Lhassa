@@ -9,7 +9,7 @@ import { fmtDuration, fmtPct } from '../lib/format'
 import { requireOk } from '../lib/api'
 import { EmptyState, ErrorState, SectionHeader } from './ui/common'
 
-// #12 — code-split the heavy React-Flow canvas out of the initial bundle. OrgFlow
+// #12; code-split the heavy React-Flow canvas out of the initial bundle. OrgFlow
 // (and all of @xyflow/react) only loads when the Flow view is actually rendered.
 const OrgFlow = lazy(() => import('./OrgFlow'))
 
@@ -67,7 +67,7 @@ function BrainPerformancePanel() {
   )
 }
 
-// The Brains management panel — the centerpiece. It is a clean composition: the
+// The Brains management panel; the centerpiece. It is a clean composition: the
 // data layer lives in useBrainsData (topology/overlay/selection state + every
 // fetch/mutate/optimistic-undo function), and the UI is the Toolbar + view switch
 // (OrgFlow / OrgTree / TemplatesPicker) + the dismissible Inspector popup.
@@ -135,8 +135,8 @@ export default function BrainsPanel() {
           <div>
             <div className="lh-label mb-2">
               {view === 'flow'
-                ? 'flow — drag a node onto another to re-parent it · click a brain to inspect'
-                : 'hierarchy — who commands whom · click a brain to inspect'}
+                ? 'flow; drag a node onto another to re-parent it · click a brain to inspect'
+                : 'hierarchy; who commands whom · click a brain to inspect'}
             </div>
             {/* The canvas spans the full panel width; the inspector floats over its
               right edge (desktop) or as a bottom sheet (mobile) when a node is picked. */}
@@ -177,7 +177,7 @@ export default function BrainsPanel() {
                 />
               )}
 
-              {/* Inspector — a dismissible popup, only while a brain is selected. */}
+              {/* Inspector; a dismissible popup, only while a brain is selected. */}
               {selected && (
                 <InspectorPopup onClose={() => setSelectedId(null)}>
                   <Inspector

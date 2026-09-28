@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """
-ccusage — cross-harness LLM accounting from the ``ccusage`` CLI's JSON output.
+ccusage; cross-harness LLM accounting from the ``ccusage`` CLI's JSON output.
 
 The gateway prices the calls Lhassa itself makes (``llm.gateway``). But a lot of
 real spend happens *outside* that choke point: work delegated to subscription
@@ -9,8 +9,8 @@ usage logs and reports cost + tokens; we shell out to it, normalize the JSON, an
 surface a single cross-harness summary.
 
 Two public functions:
-  * ``parse_ccusage(json_obj)`` — pure normalization (unit-tested on a fixture).
-  * ``read_ccusage()`` — runs the CLI and parses it; fully defensive (never raises,
+  * ``parse_ccusage(json_obj)``: pure normalization (unit-tested on a fixture).
+  * ``read_ccusage()``: runs the CLI and parses it; fully defensive (never raises,
     returns ``{"available": False, ...}`` if the tool is missing or misbehaves).
 """
 
@@ -21,7 +21,7 @@ import json
 
 # Try the installed binary first, then the npx fallback. ``--json`` = machine-readable;
 # ``--offline`` uses cached pricing instead of fetching it over the network per run (that
-# network fetch made a full run take 20s+ — offline drops it to ~3-4s).
+# network fetch made a full run take 20s+; offline drops it to ~3-4s).
 _CCUSAGE_COMMANDS: list[list[str]] = [
     ["ccusage", "--offline", "--json"],
     ["npx", "ccusage@latest", "--offline", "--json"],
@@ -129,7 +129,7 @@ async def read_ccusage(timeout: float = 15.0, allow_npx: bool = True) -> dict:
             continue  # skip the slow npx cold-start for snappy callers
         remaining = deadline - asyncio.get_event_loop().time()
         if remaining <= 0:
-            break  # budget spent — degrade rather than block on the next candidate
+            break  # budget spent; degrade rather than block on the next candidate
         try:
             proc = await asyncio.create_subprocess_exec(
                 *argv,
@@ -137,7 +137,7 @@ async def read_ccusage(timeout: float = 15.0, allow_npx: bool = True) -> dict:
                 stderr=asyncio.subprocess.PIPE,
             )
         except (FileNotFoundError, OSError):
-            continue  # binary not on PATH — try the next candidate
+            continue  # binary not on PATH; try the next candidate
         except Exception:
             continue
 

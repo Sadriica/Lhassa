@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Timed reminders + one-off calendar events — /remind /event.
+"""Timed reminders + one-off calendar events; /remind /event.
 
 Moved verbatim out of the former ``lhassa/notify/commands.py``.
 """
@@ -79,15 +79,15 @@ def parse_remind(text: str, *, now=None):
 
 
 async def _deliver_calendar_event(what: str, when: str, run_at, *, config=None) -> bool:
-    """Build + deliver a ``.ics`` for ``what``/``run_at`` — best-effort, never
+    """Build + deliver a ``.ics`` for ``what``/``run_at``: best-effort, never
     raises. Returns whether the delivery send succeeded (``False`` on ANY
-    trouble — .ics generation, write, or delivery — so a caller can degrade
+    trouble; .ics generation, write, or delivery; so a caller can degrade
     silently without breaking its own reply).
 
     Lazy shell→shell import of :mod:`lhassa.org.deliver` (same pattern as
     ``/cvbase`` reaching into :mod:`lhassa.cv`): the calendar leaf package
     itself never sends anything, this is the one caller that hands the file to
-    the sender-of-record seam. ``origin_department=""`` — a calendar event is
+    the sender-of-record seam. ``origin_department=""``: a calendar event is
     Lhassa's own hand, not delegated work, same as ``send_reminder``.
     """
     try:
@@ -102,7 +102,7 @@ async def _deliver_calendar_event(what: str, when: str, run_at, *, config=None) 
 
         delivered, _artifact_id = await deliver(
             document=ics_path,
-            caption=f"📅 {what} — {when}",
+            caption=f"📅 {what} · {when}",
             kind="calendar_event",
             metadata={"summary": what, "when": when},
             origin_department="",
@@ -116,12 +116,12 @@ async def _deliver_calendar_event(what: str, when: str, run_at, *, config=None) 
 
 @register_command("remind")
 async def _cmd_remind(args: str, *, config=None) -> str:
-    """``/remind <what> a las 5pm | at 17:00 | in 30 min [mañana]`` — a timed
+    """``/remind <what> a las 5pm | at 17:00 | in 30 min [mañana]``: a timed
     reminder through the one clock (a ``send_reminder`` task the heartbeat
     delivers). Deterministic parse, $0; the think never gets involved.
 
     ADDITIVELY also generates a ``.ics`` for the same event and delivers it
-    (a tappable calendar file, on top of the internal reminder) — see
+    (a tappable calendar file, on top of the internal reminder); see
     :func:`_deliver_calendar_event`. Best-effort: the internal reminder is
     minted and its reply returned regardless of whether the ``.ics`` step
     succeeds, so a calendar hiccup never breaks ``/remind``.
@@ -130,7 +130,7 @@ async def _cmd_remind(args: str, *, config=None) -> str:
         parsed = parse_remind(args)
         if parsed is None:
             return (
-                "Tell me what and when — e.g. /remind llamar al banco a las 5pm, "
+                "Tell me what and when, e.g. /remind llamar al banco a las 5pm, "
                 "/remind stretch in 45 min, /remind pagar arriendo mañana 9am."
             )
         run_at, what, when = parsed
@@ -159,7 +159,7 @@ async def _cmd_remind(args: str, *, config=None) -> str:
             logger.warning(f"commands: /remind calendar delivery failed: {exc}")
 
         local = run_at.astimezone().strftime("%a %H:%M")
-        return f"⏰ Noted — I'll remind you {when} ({local}): {what}"
+        return f"⏰ Noted. I'll remind you {when} ({local}): {what}"
     except Exception as exc:
         logger.warning(f"commands: /remind failed: {exc}")
         return _oops("schedule that reminder")
@@ -167,14 +167,14 @@ async def _cmd_remind(args: str, *, config=None) -> str:
 
 @register_command("event")
 async def _cmd_event(args: str, *, config=None) -> str:
-    """``/event <what> a las 5pm | at 17:00 | in 30 min [mañana]`` — calendar-only:
+    """``/event <what> a las 5pm | at 17:00 | in 30 min [mañana]``: calendar-only:
     generates and delivers a ``.ics`` for the event, no internal reminder task
     (see ``/remind`` for both). Same deterministic ``parse_remind``, $0."""
     try:
         parsed = parse_remind(args)
         if parsed is None:
             return (
-                "Tell me what and when — e.g. /event dentist appointment at 3pm, "
+                "Tell me what and when, e.g. /event dentist appointment at 3pm, "
                 "/event flight in 2 hours, /event standup mañana 9am."
             )
         run_at, what, when = parsed
@@ -185,7 +185,7 @@ async def _cmd_event(args: str, *, config=None) -> str:
             return _oops("build and send that calendar event")
 
         local = run_at.astimezone().strftime("%a %H:%M")
-        return f"📅 Sent — calendar event for {when} ({local}): {what}"
+        return f"📅 Sent. Calendar event for {when} ({local}): {what}"
     except Exception as exc:
         logger.warning(f"commands: /event failed: {exc}")
         return _oops("build and send that calendar event")

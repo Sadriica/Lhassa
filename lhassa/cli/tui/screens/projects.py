@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Projects screen — projects table + a detail pane of that project's recent runs.
+"""Projects screen; projects table + a detail pane of that project's recent runs.
 
 ``entity_id = lhassa.core.projects.entity_tag(project_id)`` is the ONE spelling
 used to scope ``runs`` to a project (see ``core/projects.py``). The evidence
-column renders through ``lhassa.memory.evidence.evidence_state`` — the same
+column renders through ``lhassa.memory.evidence.evidence_state``: the same
 humblest-first claim ladder used elsewhere.
 
 A :class:`~lhassa.cli.tui.screens.base.TableScreen`, so the project list gains
@@ -62,7 +62,7 @@ class ProjectsScreen(TableScreen):
 
     def compose(self) -> ComposeResult:
         yield from super().compose()
-        yield Static("Recent runs — select a project above", id="runs-label")
+        yield Static("Recent runs; select a project above", id="runs-label")
         runs_table = DataTable(id="project-runs-table", cursor_type="row")
         runs_table.add_columns("id", "kind", "status", "cost", "evidence")
         yield runs_table
@@ -100,7 +100,7 @@ class ProjectsScreen(TableScreen):
             runs_table = self.query_one("#project-runs-table", DataTable)
         except Exception:
             return
-        label.update(f"Recent runs — [accent]{project_id}[/]")
+        label.update(f"Recent runs; [accent]{project_id}[/]")
         runs = await _load_runs_for_project(self._instance_id, project_id)
         runs_table.clear()
         for run in runs:

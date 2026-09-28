@@ -2,7 +2,7 @@
 """Reminder / scheduling tool handlers.
 
 ``schedule_reminder`` / ``list_reminders`` mint and read ``send_reminder`` tasks
-in the ``tasks`` table (``core/db.py``) via ``core.dispatch.mint_task`` — the
+in the ``tasks`` table (``core/db.py``) via ``core.dispatch.mint_task``: the
 same do-and-sleep backbone the heartbeat sweeps every tick
 (``core/watchlist.py:_from_pending_tasks``). This tool no longer writes to the
 legacy ``memory/store.py`` ``scheduled_tasks`` table; see ``doc/scheduler.md``
@@ -117,7 +117,7 @@ async def handle_list_reminders(params: FunctionCallParams):
         return
 
     lines = [
-        "#{id} '{name}' — {when}: {message}".format(
+        "#{id} '{name}': {when}: {message}".format(
             id=t.get("id"),
             name=t.get("objetivo") or "Reminder",
             when=(t.get("due_at") or "")[:16].replace("T", " "),
@@ -134,7 +134,7 @@ async def handle_list_reminders(params: FunctionCallParams):
 # ``scheduled_tasks`` table, fired by the now-retired lhassa/scheduler.py 30s
 # poller. This copies any still-pending legacy rows into the real tasks table
 # as ``send_reminder`` tasks (so the heartbeat picks them up) and marks the
-# legacy rows ``migrated`` (never deleted — they remain visible for audit /
+# legacy rows ``migrated`` (never deleted; they remain visible for audit /
 # the memory export-import snapshot). Idempotent: guarded by a watch_state
 # marker, so running it twice (or once per process restart) is a no-op the
 # second time.
@@ -143,7 +143,7 @@ async def handle_list_reminders(params: FunctionCallParams):
 async def migrate_legacy_reminders(instance_id: str | None = None) -> str:
     """Copy pending legacy reminders into the tasks table exactly once.
 
-    Never raises — any failure is logged and reported in the returned string,
+    Never raises; any failure is logged and reported in the returned string,
     startup must not be blocked by this. Safe to call from any long-lived
     process entrypoint (main.py, docker/run_api.py); a second call after the
     marker is set is a cheap no-op (one watch_state read, no writes).
@@ -189,7 +189,7 @@ async def migrate_legacy_reminders(instance_id: str | None = None) -> str:
             if not task_id:
                 continue
 
-            # Mark the legacy row migrated (status update only — never deleted).
+            # Mark the legacy row migrated (status update only; never deleted).
             # Raw SQL against the legacy table: memory/store.py is not touched,
             # this reuses its DB_PATH constant only.
             async with aiosqlite.connect(_LEGACY_DB_PATH) as legacy_db:

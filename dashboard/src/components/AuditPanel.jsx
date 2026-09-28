@@ -31,7 +31,7 @@ export default function AuditPanel({ seed = [], refreshTick = 0 }) {
   }, [refreshTick])
 
   // Client-side filter over the already-fetched rows (action / target / detail /
-  // source / status) — keeps a busy activity log searchable.
+  // source / status); keeps a busy activity log searchable.
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
     if (!q) return events

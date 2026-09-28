@@ -6,7 +6,7 @@ environment at import time, never crash on import, and expose a single knob. The
 directory holds the fixed base CV (``cv_largo.tex``) and the per-run exports (``out/``).
 
 Kept as its own tiny config class (rather than a field on the global :class:`Config`)
-so the CV seam stays self-contained leaf infrastructure — it depends on nothing but
+so the CV seam stays self-contained leaf infrastructure; it depends on nothing but
 the standard library.
 """
 

@@ -3,7 +3,7 @@ import { getResearchAssessment, getResearchAssessments } from '../lib/api'
 import { shortWhen } from '../lib/format'
 import { EmptyState, ErrorState, SectionHeader } from './ui/common'
 
-// The "Research" section — the idea-intake docket.
+// The "Research" section; the idea-intake docket.
 // GET /api/research/assessments (optionally filtered by status) and
 // GET /api/research/assessments/{id}, which returns the row plus its `events`.
 //
@@ -151,7 +151,7 @@ export default function ResearchPanel() {
           <ErrorState>{error}</ErrorState>
         ) : rows.length === 0 ? (
           <EmptyState>
-            No assessments yet — send an idea with `/idea &lt;text or link&gt;` in chat.
+            No assessments yet; send an idea with `/idea &lt;text or link&gt;` in chat.
           </EmptyState>
         ) : (
           <div className="space-y-1.5 max-h-[70vh] overflow-y-auto">

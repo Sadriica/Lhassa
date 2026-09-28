@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""The two-brain core — a general that coordinates and a department that executes.
+"""The two-brain core; a general that coordinates and a department that executes.
 
 This is the minimal hierarchy where every Fase-7 problem appears with exactly TWO
 brains (one general + one department), never six. The asymmetry is the whole
@@ -7,7 +7,7 @@ point:
 
   - :class:`GeneralBrain` **coordinates, it does NOT execute.** ``assign`` routes a
     typed ``TASK_ASSIGN`` to a department and records it; ``collect`` gathers the
-    ``TASK_RESULT``\\ s. The general never runs the work itself — that avoids the
+    ``TASK_RESULT``\\ s. The general never runs the work itself; that avoids the
     bottleneck and keeps most decisions inside the department (the brief's golden
     rule, §3-Fase 7).
   - :class:`DepartmentBrain` **executes** with ITS OWN identity. ``handle`` runs the
@@ -16,13 +16,13 @@ point:
     so it stays test-safe and spends nothing) and returns a typed ``TASK_RESULT``
     correlated by ``corr_id``.
     Each handled task logs an ``Episode`` (``despertar_por="org"``) onto the audit
-    plane — the episodes table already in place.
+    plane; the episodes table already in place.
 
 Multi-person approval (high-risk work): the proposer (the general's ``by_actor`` on
 ``assign``) is separated from the approver (passed to ``handle``). A high-risk task
 self-approved by the SAME actor is rejected; a distinct approver lets it proceed.
 This reuses :mod:`lhassa.security.approval` (parked at assign-time, resolved at
-handle-time) — the existing HITL model, not a new one.
+handle-time); the existing HITL model, not a new one.
 
 RBAC gates every privileged step via :mod:`lhassa.org.rbac`.
 """
@@ -42,12 +42,12 @@ from lhassa.org.executor import brain_executor
 from lhassa.org.messaging import Message, MessageKind
 from lhassa.security import approval
 
-# Truthy values that turn the live reasoning path on — identical to the rest of
+# Truthy values that turn the live reasoning path on; identical to the rest of
 # the org layer's gate (executor.py / monitor.py): default OFF → offline + $0.
 _TRUTHY = {"1", "true", "yes", "on"}
 
 # Fan-out cap: at most this many departments run a goal in parallel (a director
-# general delegates WIDE, not unboundedly — mirrors dispatch._MAX_TASKS's spirit).
+# general delegates WIDE, not unboundedly; mirrors dispatch._MAX_TASKS's spirit).
 _MULTI_TOP_K = 3
 
 
@@ -88,7 +88,7 @@ async def _run_executor(executor: Executor, goal: str, *, department: str) -> An
 
 
 class GeneralBrain:
-    """The coordinator brain — routes typed work, never executes it.
+    """The coordinator brain; routes typed work, never executes it.
 
     Holds the shared org/tenant ``instance_id`` and the fixed identity
     ``"general"``. Its role is ``general`` for RBAC purposes.
@@ -171,8 +171,8 @@ class GeneralBrain:
     ) -> Message:
         """Route ``goal`` to the best department (deterministically) and assign it.
 
-        Uses :func:`lhassa.org.routing.route` — a table-driven keyword match, NO
-        LLM — to choose the target department, then delegates to :meth:`assign`. The
+        Uses :func:`lhassa.org.routing.route`: a table-driven keyword match, NO
+        LLM; to choose the target department, then delegates to :meth:`assign`. The
         general still only COORDINATES: it picks where the work goes and enqueues
         the typed ``TASK_ASSIGN``; it never executes the work itself.
         """
@@ -198,7 +198,7 @@ class GeneralBrain:
 
 
 class DepartmentBrain:
-    """An executor brain — does the work with its OWN identity/department.
+    """An executor brain; does the work with its OWN identity/department.
 
     Holds the shared org/tenant ``instance_id`` and its own logical identity
     (``"dept:<name>"``). Its role is ``department`` for RBAC purposes.
@@ -228,7 +228,7 @@ class DepartmentBrain:
 
         The department runs the work through ``executor`` (default: the real
         department brain :func:`brain_executor`, offline unless turned live) under
-        ITS OWN identity — the general never runs here. The result is correlated to
+        ITS OWN identity; the general never runs here. The result is correlated to
         the assignment by ``corr_id`` and an
         ``Episode`` (``despertar_por="org"``) is written to the audit plane.
 
@@ -268,7 +268,7 @@ class DepartmentBrain:
                     )
                 except (KeyError, approval.ApprovalResolutionConflict) as exc:
                     # A stale or raced approval id (duplicate delivery, resolved
-                    # elsewhere) must not abort the coordination walk — the
+                    # elsewhere) must not abort the coordination walk; the
                     # distinct-approver gate above already held.
                     logger.warning(
                         f"org: approval {approval_id!r} not resolvable ({exc}); "
@@ -312,7 +312,7 @@ class DepartmentBrain:
 
 
 # ══════════════════════════════════════════════════════════════════════════════════
-# Topology-aware coordination — walk a CHART of 1..N brains (slice E).
+# Topology-aware coordination; walk a CHART of 1..N brains (slice E).
 #
 # The two classes above are the special case (one general + departments). The
 # functions below GENERALISE coordination to an arbitrary :class:`Topology` tree:
@@ -324,7 +324,7 @@ class DepartmentBrain:
 # RBAC is preserved by COORDINATING vs EXECUTING, not by the node's label: a node
 # with children only assigns (the ``general`` permission), a leaf only handles (the
 # ``department`` permission via :class:`DepartmentBrain`). A coordinator NEVER calls
-# an executor — that is the golden rule, now enforced at every level of the tree.
+# an executor; that is the golden rule, now enforced at every level of the tree.
 # ══════════════════════════════════════════════════════════════════════════════════
 
 
@@ -334,7 +334,7 @@ def _name_keywords(name: str) -> set[str]:
 
 
 def _subtree_keywords(topology: "Topology", child: "BrainNode") -> frozenset[str]:
-    """The merged routing keywords a child OWNS — its own + its whole subtree's.
+    """The merged routing keywords a child OWNS; its own + its whole subtree's.
 
     A coordinator routes a goal into the subtree whose departments best match it, so
     a generic sub-coordinator still routes correctly when one of its descendants owns
@@ -355,13 +355,13 @@ def _subtree_keywords(topology: "Topology", child: "BrainNode") -> frozenset[str
 def route_scores_in_topology(
     topology: "Topology", parent_id: str, goal: str
 ) -> "list[tuple[BrainNode, int]]":
-    """Score every CHILD of ``parent_id`` against ``goal`` — deterministic, no LLM.
+    """Score every CHILD of ``parent_id`` against ``goal``: deterministic, no LLM.
 
     Returns ``[(child, score), ...]`` sorted best-first; a stable sort preserves
     the children's declared order among ties (the first-declared child wins a
     tie, matching :func:`route_in_topology`). Exposed separately from
     :func:`route_in_topology` so a caller (fan-out) can inspect the WHOLE ranking,
-    not just the winner — the same keyword-scoring policy as
+    not just the winner; the same keyword-scoring policy as
     :func:`lhassa.org.routing.route`.
     """
     children = topology.children_of(parent_id)
@@ -381,7 +381,7 @@ def route_scores_in_topology(
 
 
 def route_in_topology(topology: "Topology", parent_id: str, goal: str) -> str:
-    """Pick which CHILD of ``parent_id`` a goal routes to — deterministic, no LLM.
+    """Pick which CHILD of ``parent_id`` a goal routes to; deterministic, no LLM.
 
     Scores ``goal`` against each child's subtree keywords (its own department plus
     its descendants') and returns the best child's id. Ties break by child order
@@ -395,7 +395,7 @@ def route_in_topology(topology: "Topology", parent_id: str, goal: str) -> str:
 
 
 def _offline_synthesis(goal: str, branches: "list[dict]") -> str:
-    """Deterministic, $0 merge of per-department results — no model, no cost.
+    """Deterministic, $0 merge of per-department results; no model, no cost.
 
     One header per department followed by its result, in assignment order. This
     is the default (offline) synthesis; :func:`_live_synthesis` is the
@@ -403,7 +403,7 @@ def _offline_synthesis(goal: str, branches: "list[dict]") -> str:
     """
     lines = [f"Synthesis for: {goal}"]
     for b in branches:
-        lines.append(f"— {b['department']}: {b['result']}")
+        lines.append(f"- {b['department']}: {b['result']}")
     return "\n".join(lines)
 
 
@@ -413,7 +413,7 @@ async def _live_synthesis(
     """One extra think by the root/general brain over the collected branch results.
 
     Only reached under ``LHASSA_ORG_LIVE``; a failure (missing provider, budget,
-    anything) degrades to :func:`_offline_synthesis` — synthesis must never crash
+    anything) degrades to :func:`_offline_synthesis`: synthesis must never crash
     or block the (already-collected) branch results.
     """
     try:
@@ -435,7 +435,7 @@ async def _log_synthesis_episode(
 ) -> None:
     """One Episode for the fan-out + synthesis step ($0 regardless of ``live``).
 
-    ``live`` only describes whether the SYNTHESIS text came from a model — the
+    ``live`` only describes whether the SYNTHESIS text came from a model; the
     episode itself never calls one; this is bookkeeping, not thinking.
     """
     depts = ", ".join(b["department"] for b in branches)
@@ -597,7 +597,7 @@ async def _run_branch(
     """Run ``goal`` down ONE of root's children (single-route beneath it).
 
     Reuses :func:`_execute_leaf` / :func:`_walk` exactly as the single-winner path
-    does — a fan-out branch is otherwise indistinguishable from a normal single
+    does; a fan-out branch is otherwise indistinguishable from a normal single
     assignment. Returns ``(result, leaf_id, branch_path)``.
     """
     from lhassa.core import db
@@ -661,9 +661,9 @@ async def run_goal(
     best for ``goal``), or ``params={"multi": True}`` explicitly asks for it, the
     goal is assigned to the top :data:`_MULTI_TOP_K` children INSTEAD of just the
     winner; each branch still routes single-file beneath its own child (no
-    deeper multi-level fan-out — a deliberate scope decision to keep this
+    deeper multi-level fan-out; a deliberate scope decision to keep this
     tractable). All branch ``TASK_RESULT``\\ s are collected and merged into ONE
-    synthesis — a deterministic, $0 per-department merge by default, or one
+    synthesis; a deterministic, $0 per-department merge by default, or one
     extra think by the root/general brain under ``LHASSA_ORG_LIVE``. A single
     clear winner (the common case) is unaffected: same cost, same shape as
     before. The synthesis step logs exactly one ``Episode``.
@@ -685,7 +685,7 @@ async def run_goal(
     corr_id = db._new_id("msg")
 
     if topology.is_leaf(root.id):
-        # Single-brain / leaf root: it IS the executor — there is no one above it.
+        # Single-brain / leaf root: it IS the executor; there is no one above it.
         assign = await _make_assign(
             from_id=by_actor,
             to_id=root.id,

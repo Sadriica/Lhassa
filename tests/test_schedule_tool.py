@@ -27,7 +27,7 @@ class _FakeParams:
 
 
 # ---------------------------------------------------------------------------
-# schedule_reminder — mints a send_reminder task
+# schedule_reminder; mints a send_reminder task
 # ---------------------------------------------------------------------------
 
 
@@ -116,7 +116,7 @@ def test_schedule_reminder_requires_time():
 
 
 # ---------------------------------------------------------------------------
-# list_reminders — reads pending send_reminder tasks
+# list_reminders; reads pending send_reminder tasks
 # ---------------------------------------------------------------------------
 
 

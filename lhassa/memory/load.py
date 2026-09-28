@@ -1,28 +1,28 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """
-"Subir al despertar" — the layered load of the chica (live context) from the
+"Subir al despertar": the layered load of the chica (live context) from the
 grande, up to a token budget (§2.3).
 
 Layers, in priority order:
-  1. pinned facts + ALL ``directiva`` facts (ALWAYS — they are identity; the
+  1. pinned facts + ALL ``directiva`` facts (ALWAYS; they are identity; the
      persona's own directives are folded in here too).
   2. recency: the recent episodes (continuity).
   3. active context by TAGS (exact membership, NOT semantics).
   4. semantic retrieval (embeddings): facts whose embedding is closest to the
-     active ``query``. OFF by default — only when ``config.memory_layer4_enabled``
+     active ``query``. OFF by default; only when ``config.memory_layer4_enabled``
      and a ``query`` is supplied AND fact embeddings have been indexed.
   5. episodic recall (Fase 1): the top few past episodes whose text matches the
-     active ``query`` (FTS5, $0, deterministic — see ``core.db.search_episodes``).
+     active ``query`` (FTS5, $0, deterministic; see ``core.db.search_episodes``).
      Dropped before semantic, and fully defensive (any error → empty, never
      raises).
   6. knowledge (document perception): the top few chunks of the owner's OWN
      documents (``lhassa.memory.knowledge.search``) matching the active
-     ``query`` — grounds thinking in real notes/papers at $0, offline. Fires
+     ``query``: grounds thinking in real notes/papers at $0, offline. Fires
      ONLY when a ``query`` is given, mirroring the recall layer exactly.
      Dropped before recall, and fully defensive (any error → empty, never
-     raises — a missing/empty knowledge index is the default, silent case).
+     raises; a missing/empty knowledge index is the default, silent case).
   7. graph (Wave 3, "LightRAG-lite"): a handful of facts pulled in via
-     ``lhassa.memory.graph_retrieve.retrieve`` — vector-seeded, 1-hop expanded
+     ``lhassa.memory.graph_retrieve.retrieve``: vector-seeded, 1-hop expanded
      over the persisted knowledge graph (``memory/kg.py``). Fires ONLY when a
      ``query`` is given AND ``config.memory_graph_enabled`` (off by default),
      mirroring the recall/knowledge layers exactly. The LOWEST-priority
@@ -36,7 +36,7 @@ graph goes before knowledge, knowledge before recall, recall before semantic,
 semantic before tags, tags before recent, and the identity core (directives +
 pinned facts) is never dropped.
 
-Token counting is a deterministic estimate — exact via tiktoken when installed,
+Token counting is a deterministic estimate; exact via tiktoken when installed,
 else a ~3 chars/token safety heuristic (see :func:`estimate_tokens`). The semantic
 layer (4) is built but default OFF, so the default behavior is byte-for-byte the
 pinned/recent/tags load.
@@ -78,7 +78,7 @@ def _get_tiktoken_encoding():
 
 
 def estimate_tokens(text: str) -> int:
-    """Deterministic token estimate — exact via tiktoken when installed, else a
+    """Deterministic token estimate; exact via tiktoken when installed, else a
     safety char heuristic (~3 chars/token; mixed Spanish/English + code packs
     denser than 4 chars/token, so 3 keeps the budget from over-counting headroom).
     No network, never raises.
@@ -126,7 +126,7 @@ def _render_graph(item: dict) -> str:
 class Context:
     """
     The chica selected at wake: the identity directives, the chosen facts, and the
-    recent episodes — plus a deterministic token estimate and a prompt render.
+    recent episodes; plus a deterministic token estimate and a prompt render.
     """
 
     instance_id: str
@@ -183,7 +183,7 @@ class Context:
 def truncate(ctx: Context, token_budget: int) -> Context:
     """
     Trim ``ctx`` to ``token_budget`` in place, dropping the lowest-priority layer
-    first (tags before recent). The identity core — directives + pinned facts —
+    first (tags before recent). The identity core; directives + pinned facts;
     is mandatory and is never dropped, even if it alone exceeds the budget.
     """
     ctx.token_budget = token_budget
@@ -271,13 +271,13 @@ async def _semantic_layer(
         fid = row["fact_id"]
         if fid in exclude_ids or fid not in by_id:
             continue
-        # Only compare against rows stamped with the same model — vectors from
+        # Only compare against rows stamped with the same model; vectors from
         # different embedders/models must never be cosine-compared.
         row_model = row.get("model") or ""
         if row_model != embedder_name:
             continue
         vec = row.get("vector") or []
-        if len(vec) != len(qvec):  # different dim — skip, don't crash
+        if len(vec) != len(qvec):  # different dim; skip, don't crash
             continue
         sim = cosine(qvec, vec)
         if sim > 0.0:
@@ -289,7 +289,7 @@ async def _semantic_layer(
 
 
 async def _recall_layer(instance_id: str, query: str, *, topk: int = 3) -> list[dict]:
-    """Layer 5 (Fase 1 "Recall"): top past episodes matching ``query`` — $0, no LLM.
+    """Layer 5 (Fase 1 "Recall"): top past episodes matching ``query``: $0, no LLM.
 
     Fully defensive by design: this is the lowest-priority, purely-additive layer,
     so ANY failure (missing FTS5 index, bad DB state, whatever) must silently
@@ -306,7 +306,7 @@ async def _knowledge_layer(
 ) -> list[dict]:
     """Layer 6 (document perception): top past-document chunks matching ``query``.
 
-    Fully defensive by design — the LOWEST-priority, purely-additive layer, so
+    Fully defensive by design; the LOWEST-priority, purely-additive layer, so
     ANY failure (no roots configured, no index yet, a bad DB state) must
     silently yield an empty layer rather than disturb the rest of the context
     build. Mirrors :func:`_recall_layer` exactly.
@@ -325,7 +325,7 @@ async def _graph_layer(
     """Layer 7 (Wave 3, "LightRAG-lite"): a few facts pulled in via the
     persisted knowledge graph (see :mod:`lhassa.memory.graph_retrieve`).
 
-    Fully defensive by design — the LOWEST-priority, purely-additive layer, so
+    Fully defensive by design; the LOWEST-priority, purely-additive layer, so
     ANY failure (graph disabled, no entities indexed yet, a bad DB state) must
     silently yield an empty layer rather than disturb the rest of the context
     build. Mirrors :func:`_knowledge_layer` / :func:`_recall_layer` exactly.
@@ -343,7 +343,7 @@ async def index_facts(instance_id: str | None = None, config=None) -> int:
 
     Idempotent and cheap: facts that already have a stored embedding are skipped.
     This is the explicit index step layer 4 retrieves against (run by tests and,
-    later, a heartbeat) — :func:`load` never builds the index implicitly.
+    later, a heartbeat); :func:`load` never builds the index implicitly.
     """
     config = config or Config
     instance_id = instance_id or config.instance_id
@@ -383,7 +383,7 @@ async def load(
     config = config or Config
     instance_id = instance_id or config.instance_id
 
-    # Layer 1 — identity: pinned facts + ALL directiva facts (always).
+    # Layer 1; identity: pinned facts + ALL directiva facts (always).
     core_rows = await load_facts(instance_id)
     core = resolve(
         [f for f in core_rows if f.pinned or f.tipo == "directiva"]
@@ -403,17 +403,17 @@ async def load(
         else:  # a pinned dato
             pinned_facts.append(f)
 
-    # Layer 2 — active context by tags (exact membership, NOT semantics).
+    # Layer 2; active context by tags (exact membership, NOT semantics).
     core_ids = {f.id for f in core}
     tag_facts = [
         f for f in resolve(await load_by_tags(instance_id, active_tags))
         if f.id not in core_ids
     ]
 
-    # Layer 3 — recency (continuity).
+    # Layer 3; recency (continuity).
     episodes = await db.load_recent_episodes(instance_id, recent_n)
 
-    # Layer 4 — semantic retrieval (embeddings). OFF unless enabled + a query.
+    # Layer 4; semantic retrieval (embeddings). OFF unless enabled + a query.
     semantic_facts: list[Fact] = []
     if getattr(config, "memory_layer4_enabled", False) and query:
         exclude = core_ids | {f.id for f in tag_facts}
@@ -425,19 +425,19 @@ async def load(
             topk=getattr(config, "memory_semantic_topk", 5),
         )
 
-    # Layer 5 — episodic recall (Fase 1). Lowest priority, purely additive: only
+    # Layer 5; episodic recall (Fase 1). Lowest priority, purely additive: only
     # when a query is given, and never allowed to raise (see _recall_layer).
     recall_episodes: list[dict] = []
     if query:
         recall_episodes = await _recall_layer(instance_id, query)
 
-    # Layer 6 — document perception (knowledge roots). Lowest priority,
+    # Layer 6; document perception (knowledge roots). Lowest priority,
     # purely additive: only when a query is given, never allowed to raise.
     knowledge_chunks: list[dict] = []
     if query:
         knowledge_chunks = await _knowledge_layer(instance_id, query, config)
 
-    # Layer 7 — graph-augmented retrieval (Wave 3). Lowest priority, purely
+    # Layer 7; graph-augmented retrieval (Wave 3). Lowest priority, purely
     # additive: only when a query is given AND the feature flag is on
     # (default OFF), never allowed to raise.
     graph_items: list[dict] = []

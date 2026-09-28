@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Org screen — the command chart, read straight off ``org/topology.py``.
+"""Org screen; the command chart, read straight off ``org/topology.py``.
 
 One row per brain, indented by depth so the tree reads as a tree while still
 being a filterable DataTable. Lhassa (the permanent root administrator) is
@@ -7,7 +7,7 @@ marked. Read-only: the chart is mutated through ``lhassa org`` / the API, which
 validate the tree; this screen never writes.
 
 The org is actually TWO graphs: this table is the command TREE; a typed overlay
-of RELATIONSHIP edges (``org/relationships.py`` — reads/notifies/reviews/
+of RELATIONSHIP edges (``org/relationships.py``: reads/notifies/reviews/
 collaborates/shares) is a separate graph layered on top, not hierarchy. A nested
 detail panel below the table shows the edges touching the SELECTED brain, same
 pattern as Projects' runs pane / Flows' runs pane.
@@ -125,14 +125,14 @@ def _load_relationships():
 
 
 class OrgScreen(TableScreen):
-    """The org chart: brain, role, department, skills, limits, activity —
-    depth-indented — plus a relationship-overlay panel for the selected brain."""
+    """The org chart: brain, role, department, skills, limits, activity;
+    depth-indented; plus a relationship-overlay panel for the selected brain."""
 
     COLUMNS = ("brain", "role", "department", "skills", "limits", "activity (7d)")
     TABLE_ID = "org-table"
     EMPTY_TEXT = "no brains in the org chart yet"
     FILTER_PLACEHOLDER = "filter brains…"
-    # The topology is a file on disk, not a hot table — poll it gently.
+    # The topology is a file on disk, not a hot table; poll it gently.
     REFRESH_SECONDS = 8.0
 
     def __init__(self, instance_id: str, **kwargs) -> None:
@@ -143,7 +143,7 @@ class OrgScreen(TableScreen):
     def compose(self) -> ComposeResult:
         yield from super().compose()
         yield Static(
-            "Relationships — select a brain above", id="org-relationships-label"
+            "Relationships; select a brain above", id="org-relationships-label"
         )
         rel_table = DataTable(id="org-relationships-table", cursor_type="row")
         rel_table.add_columns("direction", "kind", "brain", "note")
@@ -190,7 +190,7 @@ class OrgScreen(TableScreen):
         if empty and not self._selected_brain:
             try:
                 self.query_one("#org-relationships-legend", Static).update(
-                    "[dim]no relationships defined — brains are linked only by "
+                    "[dim]no relationships defined; brains are linked only by "
                     "the command tree[/]"
                 )
             except Exception:
@@ -213,7 +213,7 @@ class OrgScreen(TableScreen):
         all_edges = _load_relationships()
         self.set_class(not all_edges, "-no-relationships")
         desc = self._descriptions.get(brain_id, "")
-        title = f"Relationships — [accent]{brain_id}[/]"
+        title = f"Relationships; [accent]{brain_id}[/]"
         if desc:
             title += f"  ({desc})"
         label.update(title)
@@ -221,7 +221,7 @@ class OrgScreen(TableScreen):
         rel_table.clear()
         if not all_edges:
             legend.update(
-                "[dim]no relationships defined — brains are linked only by the "
+                "[dim]no relationships defined; brains are linked only by the "
                 "command tree[/]"
             )
             return

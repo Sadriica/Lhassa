@@ -1,4 +1,4 @@
-"""Tests for ``lhassa capabilities`` / ``doctor`` — the elasticity surface.
+"""Tests for ``lhassa capabilities`` / ``doctor``: the elasticity surface.
 
 Fully offline and LLM-free: ``collect_capabilities`` never constructs a provider
 and never calls a model. These tests assert the expected sections are present, the

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from '../lib/toast'
 
-// AGENTIC panel — the dashboard face of `lhassa code`. Hand a task to a local AI
+// AGENTIC panel; the dashboard face of `lhassa code`. Hand a task to a local AI
 // CLI (claude/codex/opencode) and watch it run live.
 //
 //   GET  /api/code/clis  → {clis:[names], default}  populate the selector
@@ -33,7 +33,7 @@ async function copyText(text, okMsg = 'Output copied') {
   }
 }
 
-// Pull a readable message from an error body — the route returns {error};
+// Pull a readable message from an error body; the route returns {error};
 // the documented contract mentions {detail}. Honor both.
 async function errText(r, fallback) {
   const d = await r.json().catch(() => ({}))
@@ -372,7 +372,7 @@ export default function AgenticPanel({ agents }) {
   // Re-run: refill the task box so the user can tweak and launch again.
   const rerun = (t) => {
     setTask(t || '')
-    toast.info('Task loaded — edit and Run')
+    toast.info('Task loaded; edit and Run')
   }
 
   const onSelectRun = (id) => {
@@ -402,7 +402,7 @@ export default function AgenticPanel({ agents }) {
           <textarea
             className="lh-input"
             rows={3}
-            placeholder="Describe the coding task — e.g. add a /health route and a test for it"
+            placeholder="Describe the coding task; e.g. add a /health route and a test for it"
             value={task}
             onChange={(e) => setTask(e.target.value)}
             onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') launch() }}
@@ -442,7 +442,7 @@ export default function AgenticPanel({ agents }) {
         </div>
 
         <p className="text-[11px] mt-2" style={{ color: 'var(--lh-text-faint)' }}>
-          Runs in the server's working directory via the owner's subscription — no API key.
+          Runs in the server's working directory via the owner's subscription; no API key.
           It can edit files and run tools there.
         </p>
 

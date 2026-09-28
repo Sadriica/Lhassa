@@ -1,4 +1,4 @@
-"""Research source custody — deterministic and fully offline."""
+"""Research source custody; deterministic and fully offline."""
 
 import pytest
 

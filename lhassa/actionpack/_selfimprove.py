@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """Self-improvement actions: detect_repetition, review_tools (§2.8, Etapa 4).
 
-These close the auto-mejora loop end to end. Both are deterministic and $0 —
+These close the auto-mejora loop end to end. Both are deterministic and $0;
 the underlying detection/gate logic (agents.repetition / agents.gates) never
 calls an LLM; only a human resolving the resulting approval (or a later,
 explicit ``lhassa tools propose``) ever spends anything.
@@ -17,7 +17,7 @@ from lhassa.notify.dispatch import notify as _notify
 from lhassa.security import approval as _approval
 
 # watch_state key prefix: a repetition pattern is proposed only ONCE, not on
-# every subsequent run — mirrors the watchlist transition-dedup idiom.
+# every subsequent run; mirrors the watchlist transition-dedup idiom.
 _SEEN_PREFIX = "repetition:seen:"
 
 
@@ -30,8 +30,8 @@ async def detect_repetition(params: dict) -> str:
     <pattern>" AND sends a short notification. Never raises; never calls an LLM.
 
     params:
-        instance_id  — defaults to Config.instance_id.
-        days         — lookback window in days (default 7).
+        instance_id ; defaults to Config.instance_id.
+        days        ; lookback window in days (default 7).
     """
     try:
         instance_id = params.get("instance_id") or Config.instance_id
@@ -61,7 +61,7 @@ async def detect_repetition(params: dict) -> str:
                 instance_id, tipo="mint_action", payload=payload
             )
             await _notify(
-                f"{title} — repeated {f['count']}x in the last {days}d, "
+                f"{title}; repeated {f['count']}x in the last {days}d, "
                 f"cost ${f['total_cost_usd']:.4f}",
                 level="info",
             )
@@ -91,20 +91,20 @@ async def detect_repetition(params: dict) -> str:
             )
             await _notify(
                 f"PTC candidate: {chain_label} repeated {f['count']}x in the "
-                f"last {days}d — a draft script awaits your review.",
+                f"last {days}d; a draft script awaits your review.",
                 level="info",
             )
             await _db.set_watch_state(instance_id, key, "1")
             proposed += 1
 
-        # Third signal: the consciousness — recurring patterns (any cost,
+        # Third signal: the consciousness; recurring patterns (any cost,
         # temporal cadence, cache-worthy repeated questions) reasoned through
         # recommend_intervention into the cheapest of mint_memory / mint_schedule
-        # / seed_cache. "tool" and "script" recommendations are skipped here —
+        # / seed_cache. "tool" and "script" recommendations are skipped here;
         # those exact patterns are already covered by the two loops above, so
         # proposing them again would just duplicate the same fix.
         all_recurring = await _repetition.detect_recurring(instance_id, days=days)
-        # Only the kinds this loop actually owns count as a distinct signal —
+        # Only the kinds this loop actually owns count as a distinct signal;
         # "tool"/"script" recommendations are the SAME fix the two loops above
         # already proposed for that exact pattern, not a new finding.
         recurring = [
@@ -138,11 +138,11 @@ async def detect_repetition(params: dict) -> str:
             payload["title"] = title
 
             await _approval.request_approval(instance_id, tipo=tipo, payload=payload)
-            await _notify(f"{title} — {rec['rationale']}", level="info")
+            await _notify(f"{title}; {rec['rationale']}", level="info")
             await _db.set_watch_state(instance_id, key, "1")
             proposed += 1
 
-        # Fourth signal: the self-routing consciousness — a message class a
+        # Fourth signal: the self-routing consciousness; a message class a
         # deterministic capability already recognises (see
         # lhassa.notify.capabilities) but that still paid for a think/research
         # because no route is on yet. Same once-only dedupe; approving turns
@@ -155,7 +155,7 @@ async def detect_repetition(params: dict) -> str:
 
             rec = _repetition.recommend_intervention(f)
             if rec["kind"] != "route":
-                continue  # a malformed finding degraded elsewhere — skip it
+                continue  # a malformed finding degraded elsewhere; skip it
 
             payload = dict(rec["payload"])
             payload["accion"] = "mint_route"
@@ -166,7 +166,7 @@ async def detect_repetition(params: dict) -> str:
             await _approval.request_approval(
                 instance_id, tipo="mint_route", payload=payload
             )
-            await _notify(f"{title} — {rec['rationale']}", level="info")
+            await _notify(f"{title}; {rec['rationale']}", level="info")
             await _db.set_watch_state(instance_id, key, "1")
             proposed += 1
 
@@ -191,7 +191,7 @@ async def review_tools(params: dict) -> str:
     an LLM.
 
     params:
-        instance_id  — defaults to Config.instance_id.
+        instance_id ; defaults to Config.instance_id.
     """
     try:
         instance_id = params.get("instance_id") or Config.instance_id

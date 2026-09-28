@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""``lhassa research`` — the product's research line from the terminal.
+"""``lhassa research``: the product's research line from the terminal.
 
 Commands::
 
@@ -61,7 +61,7 @@ def list_cmd() -> None:
     drafts = _drafts_dir(Config)
     files = sorted(drafts.glob("*.md")) if drafts.exists() else []
     if not files:
-        _console.print("[stone]no drafts yet — lhassa research draft <topic>[/stone]")
+        _console.print("[stone]no drafts yet; lhassa research draft <topic>[/stone]")
         return
     table = Table(**TABLE_KWARGS)
     for col in ("draft", "size", "modified"):
@@ -100,7 +100,7 @@ def assessments_cmd(
 
     rows = asyncio.run(_load())
     if not rows:
-        _console.print("[stone]no idea assessments yet — use /idea <idea>[/stone]")
+        _console.print("[stone]no idea assessments yet; use /idea <idea>[/stone]")
         return
     table = Table(**TABLE_KWARGS)
     for column in ("id", "status", "investment", "decision", "score", "idea"):

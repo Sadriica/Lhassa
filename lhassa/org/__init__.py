@@ -1,24 +1,24 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""The organizational layer (Fase 7) — a coordinated two-brain core.
+"""The organizational layer (Fase 7); a coordinated two-brain core.
 
 This package is the foundation/skeleton of Lhassa's organizational layer: a
 **general** brain that *coordinates and routes* work (it never executes the
 department's work itself) and **department** brains that execute with their own
 identity. Every hierarchy concept appears here in its minimal form:
 
-  - ``messaging`` — TYPED inter-brain messages (a closed kind set, never free
+  - ``messaging``: TYPED inter-brain messages (a closed kind set, never free
     prose); the task queue between brains.
-  - ``commons``   — the ONE read-only cross-cutting source of truth; the general
+  - ``commons``  : the ONE read-only cross-cutting source of truth; the general
     is its sole curator, every brain reads it, no per-department copies.
-  - ``rbac``      — an explicit, table-driven role→permission matrix.
-  - ``coordinator`` — the two-brain core: general ``assign``/``collect``/
+  - ``rbac``     : an explicit, table-driven role→permission matrix.
+  - ``coordinator``: the two-brain core: general ``assign``/``collect``/
     ``assign_auto`` and department ``handle`` (with an injectable executor that
     defaults to the real department brain) plus the multi-person approval hook
     (proposer ≠ approver for high-risk work).
-  - ``executor``  — the real department executor (:func:`brain_executor`): a
+  - ``executor`` : the real department executor (:func:`brain_executor`): a
     department's one-turn think path (identity + memory + routine provider), offline
     by default so it stays test-safe.
-  - ``routing``   — a deterministic, table-driven department registry + ``route``
+  - ``routing``  : a deterministic, table-driven department registry + ``route``
     (keyword match, NO LLM) that the general uses to pick a department.
 
 Golden rules (from the brief, §3-Fase 7): the general coordinates and does NOT

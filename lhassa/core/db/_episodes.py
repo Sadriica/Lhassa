@@ -111,7 +111,7 @@ async def count_episodes_since(instance_id: str, since: str) -> int:
 async def dominio_activity(instance_id: str, since: Optional[str] = None) -> dict[str, dict]:
     """Per-``dominio`` activity summary: ``{dominio: {"last": iso, "count": n}}``.
 
-    One aggregate query over ``episodes`` (not one per brain) — the last episode
+    One aggregate query over ``episodes`` (not one per brain); the last episode
     timestamp and a count of episodes at/after ``since`` (defaults to 7 days back),
     grouped by ``dominio``. Rows with no ``dominio`` are skipped (they don't map to
     a brain). The org screens use this to show WHO WORKED, not just who exists.
@@ -138,9 +138,9 @@ async def dominio_activity(instance_id: str, since: Optional[str] = None) -> dic
     }
 
 
-# ── recall (FTS5 full-text search over episodes — Fase 1) ───────────────────────
+# ── recall (FTS5 full-text search over episodes. Fase 1) ───────────────────────
 #
-# $0, deterministic full-text search over the episode log — no model call. The
+# $0, deterministic full-text search over the episode log; no model call. The
 # query is SANITIZED into a safe FTS5 MATCH expression (each token individually
 # double-quoted) so arbitrary user input (quotes, parens, AND/OR/NOT, dangling
 # operators) can never raise an FTS5 syntax error. Automation-originated episodes
@@ -154,7 +154,7 @@ def _fts_query(query: str) -> str:
     Each whitespace-delimited token is individually double-quoted (FTS5 string
     syntax: a doubled `"` escapes a literal quote), then the tokens are joined
     with an implicit AND. This defuses any FTS5 operator/punctuation the user
-    might type (``AND``, ``OR``, ``NOT``, ``(``, ``)``, a bare ``"``) — the
+    might type (``AND``, ``OR``, ``NOT``, ``(``, ``)``, a bare ``"``); the
     result is always a valid MATCH argument, never a syntax error.
     """
     tokens = query.split()
@@ -165,7 +165,7 @@ def _fts_query(query: str) -> str:
 async def recall_available(instance_id: str) -> bool:
     """Whether the FTS5 recall index actually exists and is queryable.
 
-    ``search_episodes`` degrades to ``[]`` on ANY failure — the right contract
+    ``search_episodes`` degrades to ``[]`` on ANY failure; the right contract
     for its machine callers (context layers truncate an empty list and move
     on), but at the one place the answer reaches the OWNER (``/recall``) an
     empty list must not silently mean "the index is broken". This probe lets
@@ -187,16 +187,16 @@ async def search_episodes(instance_id: str, query: str, n: int = 10) -> list[dic
     Returns up to ``n`` dicts: ``id``, ``despertar_por``, ``decision``, ``accion``,
     a ``resultado`` snippet (via FTS5 ``snippet()``), ``creado_en`` and ``rank``.
     Automation episodes are ranked BELOW interactive ones for an equally-good
-    match (a CASE-based penalty added to the raw bm25 rank), never hidden — the
+    match (a CASE-based penalty added to the raw bm25 rank), never hidden; the
     row stays indexed and still wins if it is genuinely the better match. The
     penalty is GRADED by how much outcome the episode actually carries:
     ``monitor``, ``task:*`` and the org TRANSPORT hops (``org-deliver`` /
-    ``org-delegate`` — pure movement, no result) take the full 5.0, while
+    ``org-delegate``: pure movement, no result) take the full 5.0, while
     ``temple-execute`` takes only 2.0 because that hop ran the action and holds
     its real ``resultado``. An empty/blank
     ``query`` returns ``[]`` with no query executed. If the FTS5 index is
     missing (older SQLite build), returns ``[]`` (debug-logged) rather than
-    raising — recall degrades to "no results", never a crash.
+    raising; recall degrades to "no results", never a crash.
     """
     query = (query or "").strip()
     if not query:
