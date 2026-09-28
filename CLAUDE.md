@@ -360,7 +360,16 @@ degrades to plain — the digest always arrives).
 `health/checks.py` notifies through this channel registry too (documented layer
 exception).
 
-## The org layer (Phase 7)
+## The org layer (Phase 7, FROZEN 2026-08-30)
+
+**Frozen, not deleted.** As of 2026-08-30 Lhassa is no longer positioned as a
+personal assistant for other people (Orca already owns the multi-agent
+organisational-layer space); this layer stays as owned infrastructure and as
+evidence for `agent-ledger`'s reference implementation. Bug fixes and the
+existing surface stay maintained; do not extend this layer (new department
+kinds, new org primitives, multi-user features) without checking with the
+owner first. See `doc/decisions.md`, entry 2026-08-30, and
+`witara/context/LOG.md` of the same date.
 
 `org/topology.py` — `BrainNode` / `Topology` (validated tree) + `load/save`,
 config-driven (`LHASSA_ORG_TOPOLOGY_FILE`). **Lhassa is the permanent root
@@ -672,6 +681,13 @@ shared by the dashboard and the CLI theme (`cli/theme.py`).
   catch exceptions and call `result_callback(error)` — never raise.
 - Use `if … raise RuntimeError(...)` for runtime checks, not `assert`.
 - Everything in **English**. Lhassa is an **"it"** (no gender).
+- **No em dashes in anything new** (owner's rule). Runtime messages, UI
+  strings, docs, comments, commit messages: use ":", ";", "," or a plain
+  rewrite instead. Lead phrases are "Done: ", "Heads up: ", etc.
+  (`persona.LEAD_PHRASES`). The em dash is an AI tell; so are the cliches
+  `agents/verify.py` already flags ("delve", "game-changer", hype adjectives).
+  Legacy em dashes in old docstrings are being retired opportunistically;
+  never add new ones.
 
 ## Do not
 
