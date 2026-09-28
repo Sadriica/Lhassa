@@ -1,0 +1,12 @@
+{"arm": "a", "task_id": "svc", "seed": 0, "passed": true, "tokens_in": 11099, "tokens_out": 436, "tokens_cache": 41344, "latency_ms": 15662, "n_events": 0, "detail": ""}
+{"arm": "c", "task_id": "svc", "seed": 0, "passed": false, "tokens_in": 8203, "tokens_out": 704, "tokens_cache": 44288, "latency_ms": 23005, "n_events": 0, "detail": ""}
+{"arm": "d", "task_id": "svc", "seed": 0, "passed": true, "tokens_in": 8450, "tokens_out": 439, "tokens_cache": 42240, "latency_ms": 17550, "n_events": 0, "detail": ""}
+{"arm": "e", "task_id": "svc", "seed": 0, "passed": false, "tokens_in": 8523, "tokens_out": 437, "tokens_cache": 43392, "latency_ms": 18718, "n_events": 4, "detail": ""}
+{"arm": "a", "task_id": "svc", "seed": 1, "passed": true, "tokens_in": 11226, "tokens_out": 404, "tokens_cache": 41856, "latency_ms": 18002, "n_events": 0, "detail": ""}
+{"arm": "c", "task_id": "svc", "seed": 1, "passed": false, "tokens_in": 7989, "tokens_out": 282, "tokens_cache": 21120, "latency_ms": 17860, "n_events": 0, "detail": "Traceback (most recent call last):\n  File \"<stdin>\", line 5, in <module>\nTypeError: last_favorite() takes 1 positional argument but 2 were given\n"}
+{"arm": "d", "task_id": "svc", "seed": 1, "passed": true, "tokens_in": 8293, "tokens_out": 460, "tokens_cache": 32256, "latency_ms": 14201, "n_events": 0, "detail": ""}
+{"arm": "e", "task_id": "svc", "seed": 1, "passed": false, "tokens_in": 8211, "tokens_out": 415, "tokens_cache": 43392, "latency_ms": 20375, "n_events": 4, "detail": ""}
+{"arm": "a", "task_id": "svc", "seed": 2, "passed": true, "tokens_in": 11369, "tokens_out": 639, "tokens_cache": 70784, "latency_ms": 24435, "n_events": 0, "detail": ""}
+{"arm": "c", "task_id": "svc", "seed": 2, "passed": true, "tokens_in": 19329, "tokens_out": 1680, "tokens_cache": 234752, "latency_ms": 54005, "n_events": 0, "detail": ""}
+{"arm": "d", "task_id": "svc", "seed": 2, "passed": true, "tokens_in": 8301, "tokens_out": 464, "tokens_cache": 42624, "latency_ms": 17643, "n_events": 0, "detail": ""}
+{"arm": "e", "task_id": "svc", "seed": 2, "passed": false, "tokens_in": 8956, "tokens_out": 1086, "tokens_cache": 80000, "latency_ms": 60547, "n_events": 4, "detail": ""}

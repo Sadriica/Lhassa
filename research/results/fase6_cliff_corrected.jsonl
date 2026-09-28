@@ -1,0 +1,10 @@
+{"scale": "36k", "arm": "a", "passed": true, "tokens_in": 58853, "tokens_out": 162, "tokens_cache": 122112, "latency_ms": 41106, "detail": ""}
+{"scale": "36k", "arm": "b", "passed": true, "tokens_in": 69437, "tokens_out": 318, "tokens_cache": 143616, "latency_ms": 78445, "detail": ""}
+{"scale": "36k", "arm": "c", "passed": true, "tokens_in": 9133, "tokens_out": 2008, "tokens_cache": 44544, "latency_ms": 81240, "detail": ""}
+{"scale": "110k", "arm": "a", "passed": false, "tokens_in": 162137, "tokens_out": 110, "tokens_cache": 165632, "latency_ms": 39834, "detail": ""}
+{"scale": "110k", "arm": "b", "passed": false, "tokens_in": 0, "tokens_out": 0, "tokens_cache": 0, "latency_ms": 0, "detail": "no session id captured, cannot resume"}
+{"scale": "110k", "arm": "c", "passed": true, "tokens_in": 21498, "tokens_out": 355, "tokens_cache": 58112, "latency_ms": 48304, "detail": ""}
+{"scale": "110k", "arm": "b", "passed": true, "tokens_in": 8406, "tokens_out": 179, "tokens_cache": 15616, "latency_ms": 21683, "detail": ""}
+{"scale": "110k", "arm": "c", "passed": true, "tokens_in": 21918, "tokens_out": 288, "tokens_cache": 57600, "latency_ms": 41169, "detail": ""}
+{"scale": "230k", "arm": "b", "passed": true, "tokens_in": 337, "tokens_out": 184, "tokens_cache": 34816, "latency_ms": 39287, "detail": ""}
+{"scale": "230k", "arm": "c", "passed": true, "tokens_in": 23174, "tokens_out": 240, "tokens_cache": 33024, "latency_ms": 37235, "detail": ""}
