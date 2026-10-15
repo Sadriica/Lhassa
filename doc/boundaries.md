@@ -6,12 +6,12 @@ facts coexist because of ONE line, drawn in the architecture and enforced here:
 > **The repository is the brain. `~/.lhassa/` is the person.**
 
 Everything in git is machinery anyone may run; everything the machinery learns,
-schedules, tailors or remembers about its owner lives outside git, on the
-owner's disk.
+schedules, tailors or remembers about its owner lives outside this repository,
+on the owner's disk.
 
 ## What lives where
 
-| Public (this repo) | Personal (`~/.lhassa/`, never in git) |
+| Public (this repo) | Personal (`~/.lhassa/`, never in this repo) |
 |---|---|
 | The code: core, memory, security, org, flows engine, surfaces | `brain.db`: episodes, facts, tasks, approvals (the lived history) |
 | **Seeds**: generic, re-runnable presets (`cv`, `digest`, `maintenance`, `personal`) | `flows.json`: the owner's actual work-flows, including customized ones |
@@ -20,6 +20,17 @@ owner's disk.
 | The dashboard and CLI | `cv/`: the real CV and its tailored outputs |
 | | `skills/`: installed skill content and its usage telemetry |
 | | Ed25519 keys, backups, logs |
+
+## Versioning the personal side
+
+`~/.lhassa/` may be its own git repository, kept separate from this one and
+private (or local only). The pattern that works: ignore everything by default
+(`*`), then re-include only the living text (`flows.json`, `org.json`,
+`audit.json`, `cv/`, `skills/`), and keep databases, keys, `settings.env`,
+`calendars.json` and regenerable state out even if a broader rule would let
+them in. Databases are backed up by the `backup_memory` action, not by git.
+`~/.lhassa` can also be a symlink to wherever that repository lives; every
+path Lhassa opens resolves through it.
 
 ## The rules (enforced, not aspirational)
 
