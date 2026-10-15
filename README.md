@@ -159,7 +159,7 @@ No clone yet, on a totally fresh machine? A single command handles the clone,
 `uv` and the `lhassa` shim for you:
 
 ```bash
-curl -fsSL https://lhassa.witara.site/get-lhassa.sh | bash
+curl -fsSL https://raw.githubusercontent.com/Sadriica/Lhassa/main/scripts/get-lhassa.sh | bash
 ```
 
 Details and flags: [`doc/install.md`](doc/install.md#one-command-install).

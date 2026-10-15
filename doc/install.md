@@ -205,8 +205,6 @@ For a fresh machine with no clone, no Docker and no prior Python setup, there
 is a single-command bootstrap:
 
 ```bash
-curl -fsSL https://lhassa.witara.site/get-lhassa.sh | bash
-# or, until that host is live, straight from GitHub:
 curl -fsSL https://raw.githubusercontent.com/Sadriica/Lhassa/main/scripts/get-lhassa.sh | bash
 ```
 
