@@ -154,7 +154,7 @@ thesis [S6] argues FOR; not a system that needs it bolted on:
 - **`[[remember: …]]` is Lhassa's owner-facing curation primitive**: a
   chat-side marker that persists ONE durable fact to the grande per nudge
   interval, substring-deduped, procedencia-tagged `telegram-chat`
-  (documented in `CLAUDE.md`'s Notify section). This is a narrower analog of
+  (documented in `doc/architecture.md`'s Notify section). This is a narrower analog of
   Memanto's `remember` primitive: Lhassa's version is single-fact,
   cadence-gated, and $0 (no model call needed to decide WHETHER to persist;
   the marker itself is the decision), where Memanto's is a general-purpose
@@ -261,7 +261,7 @@ thesis [S6] argues FOR; not a system that needs it bolted on:
   design difference?
 - What would cross-harness memory import actually be FOR in Lhassa's case,
   given Lhassa is meant to be the durable brain and harnesses the
-  interchangeable rented body (`CLAUDE.md`'s "build the brain, rent the
+  interchangeable rented body (`doc/concepts.md`'s "build the brain, rent the
   body"); is importing another framework's memory export even a coherent
   ask inside that model, or is it solving a problem Lhassa's architecture
   doesn't have?

@@ -59,7 +59,7 @@ _README_NAMES = ("README.md", "README.rst", "README.txt", "README")
 
 _SKIP_DIRS = {".git", "__pycache__", "node_modules", ".venv", "venv", ".mypy_cache"}
 
-# Mirrors CLAUDE.md's spirit; the rented body's non-negotiables, in 5-6 lines.
+# Mirrors doc/architecture.md's spirit; the rented body's non-negotiables, in 5-6 lines.
 BASE_RULES = (
     "Never commit secrets, credentials, or personal/owner data.",
     'No AI/Claude attribution anywhere (no Co-Authored-By, no "generated with").',

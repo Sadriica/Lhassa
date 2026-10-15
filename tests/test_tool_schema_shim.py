@@ -2,7 +2,7 @@
 """The tool catalog must import (and render identically) without the voice extra.
 
 ``lhassa/tools/schemas.py`` is what every door sends the model, including the
-CLI. The default install ships without pipecat by design (see CLAUDE.md: the
+CLI. The default install ships without pipecat by design (see doc/install.md: the
 API/heartbeat/telegram/CLI roles never import pipecat or torch), so the catalog
 carries a local stand-in for pipecat's two data holders.
 

@@ -486,7 +486,7 @@ Verified against Lhassa's codebase and Plan 2 [S16]:
   summarizer (compaction) rather than deriving state mechanically from
   events+git. The research line (Family 5) confirms the cost exists but
   optimizes the same in-harness compaction path rather than removing it. Lhassa's
-  "build the brain, rent the body" position (CLAUDE.md) is the architectural
+  "build the brain, rent the body" position (doc/concepts.md) is the architectural
   claim that makes this niche coherent for Lhassa in a way it isn't for omp
   (which owns the body) or Letta (which is the brain *and* the runtime).
 - **Lhassa already has the durable event log the recorder needs.** `flows/`

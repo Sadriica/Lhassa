@@ -730,7 +730,7 @@ async def _brain_reply(text: str, *, config) -> str:
         routing = task_router.route(text)
         text = routing.text
 
-        # $0 intent classification BEFORE any provider/spend is resolved (§CLAUDE.md:
+        # $0 intent classification BEFORE any provider/spend is resolved (doc/concepts.md:
         # "thinking is the EXCEPTION"). Only a "cacheable" (stable, non-time-sensitive)
         # question is even eligible for the answer cache; live_data/judgment/command
         # are unaffected and fall straight through to the unchanged think below.

@@ -83,7 +83,7 @@ is deliberate: it is a legal notice, not decoration.
 2. **Capabilities are drop-in.** Providers, channels, commands, actions,
    verifiers, seeds; every swap point sits behind a registry. If your feature
    edits core to add a capability, there is probably a registry you missed
-   (see the keystone section of [`CLAUDE.md`](CLAUDE.md)).
+   (see the keystone section of [`doc/architecture.md`](doc/architecture.md)).
 3. **The deterministic plane stays deterministic.** Actions, verifiers, the
    monitor, the digest template and routing never call a model. Thinking is
    the exception; guard it behind the router and degrade on failure; a

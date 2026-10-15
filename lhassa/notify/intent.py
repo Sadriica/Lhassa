@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """Deterministic chat-intent classifier; the router for the answer cache.
 
-"Thinking is the EXCEPTION" (§CLAUDE.md): before a Telegram turn spends a model
+"Thinking is the EXCEPTION" (doc/concepts.md): before a Telegram turn spends a model
 call, this module answers one cheap ($0, no model, no embeddings) question;
 *what kind of message is this?*; so the caller (``notify.telegram_inbound``)
 can decide whether an answer cache lookup even applies.

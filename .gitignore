@@ -45,3 +45,4 @@ dashboard/playwright-report/
 # Coverage (make cov)
 .coverage
 htmlcov/
+CLAUDE.md

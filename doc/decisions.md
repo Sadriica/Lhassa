@@ -15,8 +15,8 @@ deleted.** Orca (~43k stars) already owns the multi-agent orchestration
 space; building it out further here duplicates work with no distribution
 this project has. The code stays, stays tested, and gets bug fixes; it does
 not grow new department kinds, new org primitives or new multi-user surface
-without checking with the owner first. `CLAUDE.md`'s "The org layer (Phase
-7)" section is marked FROZEN accordingly.
+without checking with the owner first. `doc/architecture.md` marks the org layer (Phase
+7) FROZEN accordingly.
 
 This does not change anything about how Lhassa is built for the owner's own
 use: the brain, the memory, the security model, the notify surfaces and the

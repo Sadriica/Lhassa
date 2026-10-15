@@ -2,7 +2,6 @@
 # This register only SHRINKS: clean a file, delete its line. Adding a new
 # line is not the fix for a failing scan, rewriting the punctuation is.
 # See tests/test_no_em_dashes.py.
-CLAUDE.md
 README.md
 dashboard/README.md
 dashboard/e2e/dashboard.spec.js

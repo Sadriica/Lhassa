@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """Deterministic calendar-query answering; the READ-in-chat half of the seam.
 
-"Thinking is the EXCEPTION" (§CLAUDE.md): "¿qué hay en mi calendario el
+"Thinking is the EXCEPTION" (doc/concepts.md): "¿qué hay en mi calendario el
 viernes?" / "what do I have Friday?" must be answered from the calendar
 DIRECTLY (a date parse + an event lookup + a template reply) never a model
 call, never the web-search bridge. This module is that path:

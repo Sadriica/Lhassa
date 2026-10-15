@@ -317,7 +317,7 @@ def test_send_document_is_reachable_only_through_deliver():
                     offenders.append(f"{rel}:{node.lineno}")
     assert not offenders, (
         "send_document called outside org/deliver.py; a file reaching the owner "
-        "must bubble UP through the hierarchy (see doc CLAUDE.md standing "
+        "must bubble UP through the hierarchy (see doc/architecture.md standing "
         f"principle). Offenders: {offenders}"
     )
 

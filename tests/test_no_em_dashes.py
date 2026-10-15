@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """The owner's no-em-dash rule, enforced on the tree instead of remembered.
 
-CLAUDE.md states it absolutely: "No em dashes in anything new. Runtime messages,
+The house rule states it absolutely: "No em dashes in anything new. Runtime messages,
 UI strings, docs, comments, commit messages." It has been swept by hand more
 than once and it keeps coming back, because a rule that lives only in a document
 is re-litigated by every new file. This is the same shape as
@@ -80,7 +80,7 @@ def test_no_new_file_carries_an_em_dash():
     if offenders:
         listing = "\n".join(f"  {name}" for name in offenders)
         pytest.fail(
-            "Em dashes in files outside the legacy register (CLAUDE.md forbids "
+            "Em dashes in files outside the legacy register (the house rule forbids "
             f"them in anything new):\n{listing}\n"
             "Replace them with ':', ';', ',' or a rewrite. Do NOT add the file "
             "to tests/em_dash_legacy.txt; that register only shrinks."

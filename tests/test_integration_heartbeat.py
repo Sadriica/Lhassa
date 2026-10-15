@@ -52,7 +52,7 @@ import pytest
 pytestmark = pytest.mark.integration
 
 # Priority order: free/local-friendly CLI first, then the owner's subscription
-# CLIs. Matches the fallback chain documented in CLAUDE.md
+# CLIs. Matches the fallback chain documented in doc/configuration.md
 # ("opencode -> claude -> codex -> cloud").
 _CLI_PRIORITY = ("opencode", "claude", "codex")
 

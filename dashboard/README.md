@@ -74,7 +74,7 @@ rebuild is what ships UI changes.
 
 ## Main endpoints it uses
 
-From the panels and the backend surface documented in the repo-root `CLAUDE.md`:
+From the panels and the backend surface documented in `doc/architecture.md` and `doc/dashboard.md`:
 
 - `/api/overview`, `/api/status`, `/api/metrics` — command-center aggregate, runtime status and metrics
 - `/api/org/*` (topology, brains, route, templates, relationships + `/kinds`)
