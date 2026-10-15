@@ -2,10 +2,10 @@
 
 **One scheduling system.** Ad-hoc reminders (`schedule_reminder` / `list_reminders`,
 `tools/handlers/schedule.py`) mint `send_reminder` tasks straight into the same
-`tasks` table (`core/db.py`: `add_task`/`load_pending_tasks`/`set_task_state`/
+`tasks` table (`core/db/`: `add_task`/`load_pending_tasks`/`set_task_state`/
 `sweep_deferred_tasks`) that backs the rest of the do-and-sleep brain; recurring
 `/goal … --every …` commands, the `digest`/`maintenance` **seeds**
-(`seeds.py`, `lhassa seed apply <name>`), and `sweep_deferred_tasks()`'s
+(`seeds/`, `lhassa seed apply <name>`), and `sweep_deferred_tasks()`'s
 backoff retries all mint into the exact same table. There is **no separate
 polling loop**: the systemd **heartbeat** timer (`core/heartbeat.py` +
 `lhassa-heartbeat.timer`) IS the due-sweep; every beat, `core/step.py` calls
@@ -163,7 +163,7 @@ Response format (unchanged for the dashboard):
 ]
 ```
 
-`/api/scheduled` reads the `tasks` table (`core/db.py`) filtered to `accion ==
+`/api/scheduled` reads the `tasks` table (`core/db/`) filtered to `accion ==
 "send_reminder"` and maps `estado` → `status` (`pendiente`/`esperando_aprobacion`/
 `diferida` → `"pending"`, `hecha` → `"done"`, `rechazada` → `"cancelled"`).
 

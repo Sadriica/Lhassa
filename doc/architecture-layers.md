@@ -16,9 +16,10 @@ From the bottom (depends on nothing) to the top (the world-facing surfaces):
 | --- | --- | --- |
 | **Leaf infrastructure** | `registry.py`, `plugins.py` (and `config.py`) | Generic, reusable machinery. Imports no feature code. |
 | **Spine** | `core/` | The do-and-sleep loop (`step`, `heartbeat`, `episode`, `db`). Driven *by* the shells; never reaches up to them. |
-| **Interfaces (mid)** | `memory/`, `security/`, `llm/` | Reusable contracts (typed facts, trust/approval, model provider + router). Usable by any shell; depend on none. |
-| **Adapters (the hands)** | `harness/`, `tools/`, `agents/`, `remote/`, `health/` | The rentable "body": harnesses, MCP/tools, specialist agents, the remote local-agent. |
-| **Shells (outer)** | `cli/`, `api/`, `voice/`, `notify/`, `org/`, `dashboard/` (JS) | The user/world surfaces. Allowed to compose everything below them. |
+| **Interfaces (mid)** | `memory/`, `security/`, `llm/`, `personal/` | Reusable contracts (typed facts, trust/approval, model provider + router, the personal agenda read-model). Usable by any shell; depend on none. |
+| **Adapters (the hands)** | `harness/`, `tools/`, `agents/`, `remote/`, `health/`, `bench/` | The rentable "body": harnesses, MCP/tools, specialist agents, the remote local-agent, the LhassaBench eval harness. |
+| **File-I/O seams** | `cv/`, `calendar/` | Leaf, stdlib-only seams (`.tex` CV, `.ics` calendar) used by shells; never reach into one. |
+| **Shells (outer)** | `cli/`, `api/`, `voice/`, `notify/`, `org/`, `actionpack/`, `flows/`, `dashboard/` (JS) | The user/world surfaces. Allowed to compose everything below them. `flows/` counts as a shell because its engine composes the org layer. |
 
 Principle: **inner layers never depend on outer shells.** Dependencies point
 "down" only. A shell may import the spine, interfaces and adapters; the spine and
@@ -27,16 +28,18 @@ the interfaces must not import a shell.
 ## Forbidden directions (encoded today)
 
 1. **spine-isolation**: `core/` must not import any shell
-   (`cli`, `api`, `voice`, `notify`, `org`, `dashboard`).
+   (`cli`, `api`, `voice`, `notify`, `org`, `actionpack`, `flows`, `dashboard`).
 2. **interface-isolation**: `memory/`, `security/`, `llm/` must not import any
-   shell.
-3. **adapter-isolation**: `harness/`, `tools/`, `agents/`, `remote/`, `health/`
-   must not import any shell (see the one whitelisted exception below).
+   shell. **personal-isolation** applies the same rule to `personal/`.
+3. **adapter-isolation**: `harness/`, `tools/`, `agents/`, `remote/`, `health/`,
+   `bench/` must not import any shell (see the one whitelisted exception below).
 4. **swap-axis-independence**: `harness/` (the agentic-body axis) must not
    import `llm/` (the think-directly model-provider axis). The two swap axes stay
    independent. The reverse edge; `llm/router.py` *choosing* a harness; is the
    intentional bridge seam and is **not** forbidden.
-5. **keystone-leaf**: `registry.py` and `plugins.py` must not import any
+5. **cv-infra-isolation** and **calendar-infra-isolation**: `cv/` and `calendar/`
+   must not import any shell.
+6. **keystone-leaf**: `registry.py` and `plugins.py` must not import any
    `lhassa.*` feature module (they are bottom-of-stack infrastructure).
 
 ## Allowed exceptions
@@ -44,7 +47,7 @@ the interfaces must not import a shell.
 Precise, intentional edges that are whitelisted in the test (keyed on the exact
 `source-file → imported-module` pair, so they do not loosen the rest of the rule):
 
-- `tools/monitor.py` and `tools/registry.py` → `lhassa.voice.notifier`;
+- `tools/monitor.py` and `tools/handlers/agents.py` → `lhassa.voice.notifier`;
   `voice/notifier.py` is the cross-platform **desktop notification router**
   (`notify-send` / `osascript` / BurntToast), a shared utility, **not** the voice
   conversation shell. Tools use it to surface alerts. The rest of the `voice`
@@ -57,6 +60,13 @@ Precise, intentional edges that are whitelisted in the test (keyed on the exact
   notify channel (desktop is then just one channel among Telegram/log/…) instead
   of hard-coding a desktop-only `notify-send` call. The import is lazy, inside the
   function body.
+
+- `personal/secretary.py` → `lhassa.org`, `lhassa.org.management`,
+  `lhassa.org.topology`, `lhassa.flows.model`, `lhassa.flows.store`: the personal
+  department is provisioned into the org chart together with its canonical
+  briefing flows (a seed-shaped bootstrap, not a runtime dependency).
+- `security/approval.py` → `lhassa.flows.durable`, `lhassa.flows.projection`: the
+  durable flow-gate bridge, so an approval can resume a paused flow run.
 
 ## How to evolve the rules
 

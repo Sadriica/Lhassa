@@ -5,7 +5,7 @@ digest lands there, approvals get resolved from the phone, and the CV
 work-flow is driven entirely from chat. This is the guide to setting it up
 and using every command it understands.
 
-Everything here is grounded in `lhassa/notify/commands.py`,
+Everything here is grounded in `lhassa/notify/commands/`,
 `lhassa/notify/telegram_inbound.py`, `lhassa/notify/telegram.py` and
 `lhassa/notify/digest.py`.
 
@@ -42,9 +42,10 @@ It is deliberately a **separate process** from `main.py` / the API server;
 never starts (and touches no network) unless `telegram_poll_enabled` is true
 **and** both credentials are present; otherwise it logs once and exits.
 
-On start it publishes the bot's command menu (`/cv`, `/cvnewbase`, `/cvbase`,
-`/status`, `/help`) via `setMyCommands`: best-effort, guarded so a slow or
-failing call never blocks startup.
+On start it publishes the bot's command menu via `setMyCommands`: `/cv` plus every
+command in the registry (the same curated list `/help` renders, from
+`commands.menu_entries()`). Best-effort, guarded so a slow or failing call never
+blocks startup.
 
 ---
 
@@ -64,7 +65,13 @@ underlying seams the terminal uses, all LLM-free: `/report [days]` (spend),
 `/today`, `/tomorrow`, `/checkin <text>`, `/remind <what> <when>` (timed
 reminders; see its section below), `/config [key [value]]` (read/change a
 runtime setting; see its section below), and `/code <task>` (parks an approval;
-see "remote hands" below). `/help` groups them all with one-liners, and the
+see "remote hands" below). Also registered: `/ai <question>` (web search plus a
+specific answer, not just links), `/knowledge <query>` (search your indexed
+notes and papers), `/calendar` (`add`, `remove`, `primary`, `sync`, `view <when>`)
+and `/calendars` (list the configured feeds, urls masked), `/event` (just the
+calendar file, no reminder), `/idea <text|link>` (the research intake; see
+`doc/research.md`) and `/temple <instruction>` (internal work through the temple
+department, or `schedule`). `/help` groups them all with one-liners, and the
 bot's "/" menu is published from the same registry on poller start.
 
 ### `/start`
@@ -136,7 +143,7 @@ An unknown id, or no id given, returns a usage hint rather than raising.
 
 ### `/recall <text>`
 Full-text search over the append-only episode log (the layer-5 FTS5 index in
-`core/db.py`); BM25-ranked, $0, never a model call:
+`core/db/`); BM25-ranked, $0, never a model call:
 
 ```
 > /recall sync_repo
@@ -500,7 +507,7 @@ metered cloud gateway (`opencode → claude → codex → default`,
 logged with `decision="deferred: telegram needs judgment"` and Lhassa replies
 with a short "I can't reach my model right now." Deferred *tasks* (not chat
 turns; those just answer with the fallback line) are re-queued with backoff
-by `core/db.py:sweep_deferred_tasks()` on the next heartbeat, up to
+by `core/db:sweep_deferred_tasks()` on the next heartbeat, up to
 `LHASSA_DEFERRED_MAX_RETRIES` before being marked `rechazada`.
 
 ### The chat remembers

@@ -124,17 +124,43 @@ approval gate that guards the attach.
 
 ## `lhassa tui`: the brain in a terminal
 
-`lhassa tui` launches a Textual terminal app: four tabs (Overview / Projects /
-Runs / Approvals), all reading `lhassa/core/db.py` **directly**: it works
+`lhassa tui` launches a Textual terminal app with eight tabs (Overview / Projects /
+Runs / Approvals / Flows / Skills / Memory / Org), reading `lhassa/core/db/`,
+`flows/store.py`, `skills/store.py` and `org/topology.py` **directly**: it works
 with the API server down. Approve/deny on the Approvals tab go through the
-same `security/approval.py:resolve()` seam the CLI/API use, never bypassed.
+same `security/approval.py:resolve()` seam the CLI/API use, never bypassed; running
+a flow goes through `org/delegate.py:delegate_flow`. Table tabs refresh live and
+skip the redraw when nothing changed. The palette follows `LHASSA_TUI_THEME`
+(auto/dark/light).
 
 | Key | Where | Action |
 |---|---|---|
 | `a` | Approvals tab | Approve the selected row |
 | `d` | Approvals tab | Deny the selected row |
+| `x` | Flows tab | Run the selected flow |
+| `/` | table tabs | Filter rows (case-insensitive substring); `escape` clears it |
+| `ctrl+p` | anywhere | Command palette (navigation and app actions, never mutations) |
+| `?` / `F1` | anywhere | Keyboard help |
 | `r` | any tab | Refresh |
 | `q` | anywhere | Quit |
+
+## Work, projects and data
+
+| Command | Purpose | Example |
+|---|---|---|
+| `flows list/show/templates/apply` | Inspect stored work-flows; instantiate a gallery template under a fresh id | `lhassa flows apply research-brief` |
+| `flow list/show/templates/create/edit/validate/run/watch/logs/runs/delete` | Author a flow (`create --template` or `--blank`, `edit` opens `$EDITOR`, `validate` exits 1 if invalid), run it THROUGH the org hierarchy (`run` uses `delegate_flow`, `--input` JSON, `--idempotency-key`), follow a durable run (`watch`, `logs`, `runs`) | `lhassa flow run <flow-id> --json` |
+| `task add/list/done/reject` | Mint a standing goal or scheduled action (`--due`, `--every hourly\|daily\|weekly\|<seconds>`; `--think` lets any text through as a judgment task) | `lhassa task add send_digest --every daily` |
+| `memory add/graph/entities/reindex` | Write a durable fact; `graph <term>` answers "what do I know about X?" from facts and episodes ($0) | `lhassa memory graph sezzle` |
+| `knowledge ingest/search/clear` | Index the configured knowledge roots; offline cosine search; wipe the index | `lhassa knowledge search "thesis outline"` |
+| `calendar add/list/remove` | Named `.ics` calendar feeds (urls shown masked) | `lhassa calendar add Work <ics-url>` |
+| `artifacts list/show` | The artifact registry, the delivery chain's audit trail | `lhassa artifacts list` |
+| `seed list/apply/apply-all` | Reproducible bootstrap seeds: `cv`, `digest`, `maintenance`, `temple`, `research`, `personal` | `lhassa seed apply maintenance` |
+| `share publish/unpublish/grant/revoke/offerings/subscribe/unsubscribe/subscriptions` | Cross-instance sharing of skills, flows, templates and knowledge, deny-by-default | `lhassa share publish skill code-review` |
+| `research draft/list/assessments/assessment/propose-change/build-change/apply-change` | The research line: evidence-cited note drafts (`draft <topic> --lang en\|es`) and the idea-assessment pipeline | `lhassa research draft earned-autonomy` |
+| `integrity check/status/findings/contracts` | Run and inspect the deterministic conformance contracts (`doc/integrity.md`) | `lhassa integrity status` |
+| `setup` | One wizard from a fresh clone: profile, scopes, seeds, services (`--yes`, `--profile`, `--dry-run`, `--no-services`) | `lhassa setup --yes --profile personal` |
+| `onboard` | Interactive questionnaire (~5 questions) that seeds the first owner facts | `lhassa onboard` |
 
 ## Approvals (HITL)
 
@@ -171,13 +197,20 @@ Reads and changes an **allowlist** of runtime settings, persisting to
 | `get <key>` | One setting's value, default, and overridden flag | `lhassa config get heartbeat_provider` |
 | `set <key> <value>` | Change a setting (persist + apply live) | `lhassa config set llm_provider claude` |
 
-Editable keys (groups): **Heartbeat** `heartbeat_provider`, `opencode_model`,
-`fallback_providers` · **Models** `llm_provider`, `model`, `model_cheap`,
-`model_smart`, `router_mode` · **Budget & Safety** `llm_kill_switch`,
-`llm_daily_token_budget`, `pseudonymize_remote` · **Memory**
-`memory_layer4_enabled` · **Surfaces** `voice_enabled`, `telegram_poll_enabled`,
-`notify_channels` · **Org** `org_departments`. Settings consumed only by the
-heartbeat take effect on the next beat; others carry a restart hint.
+Editable keys (38, by group; `lhassa config list` is the authoritative list):
+**Heartbeat** `heartbeat_provider`, `opencode_model`, `fallback_providers` ·
+**Models** `llm_provider`, `model`, `model_cheap`, `model_smart`, `router_mode` ·
+**Budget & Safety** `llm_kill_switch`, `llm_daily_token_budget`, `budget_soft_pct`,
+`deferred_max_retries`, `pseudonymize_remote` · **Memory** `memory_layer4_enabled`,
+`memory_distill_enabled`, `embeddings_url`, `embeddings_model`,
+`context_token_budget_minimal`, `knowledge_roots`, `protected_roots`,
+`answer_cache_enabled`, `answer_cache_threshold` · **Surfaces** `notify_style`,
+`voice_enabled`, `telegram_poll_enabled`, `telegram_history_turns`,
+`telegram_provider`, `tui_theme`, `calendar_ics_url`, `calendar_feed_ttl`,
+`notify_channels`, `digest_style`, `notify_language`, `digest_language`,
+`digest_personal_checkin` · **Watchlist** `auto_sync_repos` · **Org** `org_live`,
+`org_departments`. Settings consumed only by the heartbeat take effect on the next
+beat; others carry a restart hint.
 
 ---
 
@@ -203,6 +236,7 @@ topology lives in `~/.lhassa/org.json`.
 | `run <goal>` | Run a goal end-to-end (offline unless `LHASSA_ORG_LIVE=1`) | `lhassa org run "optimize the build"` |
 | `templates` | List the use-case org templates | `lhassa org templates` |
 | `apply <id>` | Apply a template; create its brains under Lhassa (idempotent) | `lhassa org apply software-factory` |
+| `monitor` | Run one monitoring pass (anomalies, risks, routed improvements); offline and $0 unless `LHASSA_ORG_LIVE=1` | `lhassa org monitor --json` |
 
 Templates: `code-review` (2), `bug-investigation` (2), `refactor-migration` (3),
 `incident-response` (4), `software-factory` (5; delivery over frontend/backend/
@@ -236,21 +270,18 @@ the brain's prompt at think time (effect). Assigning a skill offers to install i
 
 ## Not (yet) in the CLI; dashboard + API only
 
-Two org surfaces have **no dedicated `lhassa` subcommand yet**; drive them from the
+One org surface has **no dedicated `lhassa` subcommand yet**; drive it from the
 dashboard or the REST API:
 
 - **Typed relationships**: the overlay graph on the command tree (edge kinds
-  `reads` / `notifies` / `reviews` / `collaborates`). Stored at
+  `reads` / `notifies` / `reviews` / `collaborates`, plus the instance-scoped
+  `shares`, which `lhassa share grant` writes). Stored at
   `~/.lhassa/relationships.json` (`LHASSA_ORG_RELATIONSHIPS_FILE`). API:
   `GET /api/org/relationships` (+ `/kinds`), `POST`/`DELETE /api/org/relationships`.
   On the dashboard the **Brains** canvas draws them and the inspector edits them.
-- **Work-flows**: n8n-style DAGs wiring `trigger → task → gate → output` (+ branch).
-  Stored at `~/.lhassa/flows.json` (`LHASSA_FLOWS_FILE`). API: `GET/POST /api/flows`,
-  `GET/PUT/PATCH/DELETE /api/flows/{id}`, `POST /api/flows/{id}/run` (offline/stubbed
-  unless `LHASSA_ORG_LIVE`). The dashboard **Flows** section is the editor.
 
-The agentic run surface (`POST /api/code`, the dashboard **Run** section) **does**
-have a CLI door; `lhassa code "<task>"`, documented above.
+Work-flows (`lhassa flow`, `lhassa flows`) and the agentic run surface
+(`lhassa code "<task>"`) have CLI doors, documented above.
 
 ---
 

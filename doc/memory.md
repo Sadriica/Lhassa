@@ -14,7 +14,7 @@ append-only discipline), see [`concepts.md`](concepts.md).
 
 | File | Default path | Config knob | Role |
 |---|---|---|---|
-| **brain.db** (the grande) | `~/.lhassa/brain.db` | `LHASSA_BRAIN_DB_PATH` | Append-only source of truth: `episodes`, `facts`, `tasks`, `tools`, `approvals`, and more; see `lhassa/core/db.py`. |
+| **brain.db** (the grande) | `~/.lhassa/brain.db` | `LHASSA_BRAIN_DB_PATH` | Append-only source of truth: `episodes`, `facts`, `tasks`, `tools`, `approvals`, and more; see `lhassa/core/db/`. |
 | **chica.db** (the chica) | `~/.lhassa/chica.db` | `LHASSA_CHICA_DB_PATH` | Derived working cache, rebuilt from the grande; `lhassa/memory/chica.py`. |
 | **memory.db** (legacy) | `~/.lhassa/memory.db` |; | The original voice-session store (`facts` / `sessions` / `scheduled_tasks`) from before the grande/chica architecture existed; `lhassa/memory/store.py`. Still wired to the voice pipeline's system-prompt injection (`voice/pipeline.py`) and to shutdown fact/summary extraction (`memory/session.py`), and still backs the scheduler's task table and the dashboard's Session History panel. It predates, and does not talk to, the grande/chica/fact model described below; treat it as a separate, older lane that happens to still be live, not as part of the current fact/context design. |
 
@@ -26,7 +26,7 @@ Both the grande and the chica open in WAL mode and scope every row by
 ## The fact model (the grande)
 
 Facts are the durable, typed knowledge the grande carries. The schema lives in
-`lhassa/core/db.py` (`CREATE TABLE facts …`) and the typed API sits in
+`lhassa/core/db/` (`CREATE TABLE facts …`) and the typed API sits in
 `lhassa/memory/facts.py`.
 
 Every fact row carries:
@@ -108,7 +108,7 @@ log (every decision it has ever logged) so it can answer "what happened
 last time…" at `$0`, no model call, BM25-ranked.
 
 - **Storage:** `episodes_fts`, an FTS5 external-content table over `episodes`
-  (`lhassa/core/db.py`), kept in sync by insert/update/delete triggers and
+  (`lhassa/core/db/`), kept in sync by insert/update/delete triggers and
   backfilled once on first creation. Some SQLite builds ship without FTS5;
   `init_db()` catches that case and disables recall rather than failing to
   start.
@@ -132,7 +132,7 @@ last time…" at `$0`, no model call, BM25-ranked.
   and the flat penalty dominates instead; the behaviour is a ranking bias, not
   a guarantee.)
 - **Reachable directly:**
-  - Telegram **`/recall <text>`** (`lhassa/notify/commands.py`); returns the
+  - Telegram **`/recall <text>`** (`lhassa/notify/commands/`); returns the
     top 5 matches, LLM-free.
   - **`GET /api/episodes/search?q=...&n=...`** (`lhassa/api/reports_routes.py`)
    ; `n` capped `1..200`, returns `{query, count, results}`.
@@ -222,7 +222,7 @@ set of **knowledge roots**, and only those are ever touched.
   `LHASSA_KNOWLEDGE_CHUNK_CHARS`-sized chunks (~500 tokens) and embedded with
   the same offline-capable `get_embedder()` layer 4 uses; $0, deterministic,
   no network by default.
-- **Storage.** One row per chunk in the `knowledge` table (`lhassa/core/db.py`)
+- **Storage.** One row per chunk in the `knowledge` table (`lhassa/core/db/`)
  ; local to `~/.lhassa/brain.db`, scoped by `instance_id`, **never** the repo
   (see `doc/boundaries.md`: the index is private, gitignored territory).
 - **Incremental.** `ingest()` tracks each indexed file's `mtime`: unchanged →

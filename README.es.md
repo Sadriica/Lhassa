@@ -145,8 +145,8 @@ sobre ti) y luego `uv run lhassa`: ya estás hablando con él.
 Primeras cosas para probar:
 
 - simplemente háblale, en lenguaje llano, sin sintaxis especial
-- `lhassa recall <texto>`: busca en sus propios episodios pasados (FTS5)
 - `lhassa memory <consulta>`: busca en sus datos durables
+- `lhassa memory graph <término>`: qué sabe sobre un término, desde hechos y episodios pasados ($0)
 - `lhassa capabilities`: qué está conectado, qué está encendido/apagado
 
 ¿Lo quieres **siempre encendido**: un heartbeat que sigue latiendo mientras
@@ -173,7 +173,7 @@ Los CLIs de suscripción (`claude` / `codex` / `opencode`) son opcionales y **no
 ### Instalación de un comando (Linux siempre encendido)
 
 ```bash
-cd ~/Code/lhassa
+cd Lhassa
 bash scripts/install.sh
 ```
 
@@ -198,11 +198,14 @@ Después deja tu CV real en `~/.lhassa/cv/cv_largo.tex` (o define `LHASSA_CV_DIR
 ### Camino de desarrollo
 
 ```bash
-make install   # uv sync + compilar el dashboard (primera vez)
+make install   # uv sync --extra voice + compilar el dashboard (primera vez)
 make run       # voz + API + scheduler (uv run python main.py)
 make dev       # igual, con LHASSA_DEBUG=1 LHASSA_LOG_LEVEL=DEBUG
-make test      # uv run --extra dev python -m pytest
+make test      # pytest con los extras dev y voice (sin los tests de integración)
+make test-integration  # tests con CLI en vivo y DB en disco; más lentos, pueden gastar algo de presupuesto real
+make cov       # línea base de cobertura, reporte HTML en htmlcov/
 make lint      # ruff
+make dashboard # recompila el dashboard React/Vite
 make check     # valida el entorno, sin llamadas a API
 ```
 
@@ -210,12 +213,13 @@ make check     # valida el entorno, sin llamadas a API
 
 ```bash
 cp .env.example .env          # llena las keys que uses
-docker compose up -d          # roles api + heartbeat + monitor
+docker compose up -d          # roles api + heartbeat
+# roles opt-in: docker compose --profile telegram up -d  (y --profile monitor)
 docker compose logs -f lhassa
 ```
 
 Una imagen, `LHASSA_RUN` elige el rol (`api` / `heartbeat` / `telegram` /
-`monitor`). Todo el estado vive bajo `/data` (`HOME=/data`). Lhassa corre hoy en
+`monitor`); `telegram` y `monitor` son perfiles de compose, apagados por defecto. Todo el estado vive bajo `/data` (`HOME=/data`). Lhassa corre hoy en
 una laptop y está construida para correr sin cambios en un VPS pequeño: los
 detalles y la auditoría de portabilidad viven en
 [`doc/deployment.md`](doc/deployment.md) y [`doc/portability.md`](doc/portability.md).
@@ -227,13 +231,14 @@ detalles y la auditoría de portabilidad viven en
 **CLI (`lhassa`)**: chat con el loop de herramientas (tema Lhasa: dorado / rojo /
 blanco / verde), `lhassa code "<tarea>"` para tareas agénticas vía CLI local en
 suscripción, y subcomandos offline contra el cerebro local (`status`, `watch`,
-`report`, `memory`, `tools`, `approvals`, `org`, `skills`, `config`…). Referencia
+`report`, `memory`, `knowledge`, `tools`, `approvals`, `org`, `skills`, `flow`,
+`project`, `task`, `seed`, `tui`, `config`…). Referencia
 completa: [`doc/cli.md`](doc/cli.md).
 
 **Bot de Telegram**: comandos LLM-free (`/status`, `/approvals` con cada decisión
 descrita en palabras (qué es, cuánto lleva, qué hace aprobarla), `/recall
 <texto>` para buscar en sus episodios pasados, `/watch`, `/goal`, `/today`,
-`/tomorrow`, `/checkin <texto>`); los mensajes libres los responde un think sin
+`/tomorrow`, `/remind`, `/event`, `/idea`, `/checkin <texto>`; `/help` lista todos); los mensajes libres los responde un think sin
 herramientas; la puerta de chat puede fijar su propio proveedor rápido
 (`telegram_provider`) mientras el trabajo pesado sigue en el asiento del heartbeat,
 sobre la cadena de fallback (`opencode → claude → codex → cloud`). El digest de
@@ -241,10 +246,13 @@ las 8:00/21:00 llega en primera persona (plantilla determinista a $0; re-voz
 opcional con `digest_style=persona`); con `LHASSA_DIGEST_PERSONAL_CHECKIN=1`
 también pregunta por tu día y guarda tu siguiente respuesta como check-in diario.
 
-**Dashboard**: React/Vite en **:7766** con la identidad Lhasa: Overview, Brains
-(editor de jerarquía + overlay de relaciones), Skills, Run (tareas agénticas en
-vivo), Flows (editor estilo n8n), Settings, Reports, Fleet y Activity (con
-búsqueda de texto completo sobre el log de episodios). La misma app FastAPI
+**Dashboard**: React/Vite en **:7766** con la identidad Lhasa, con su riel de
+navegación en grupos: Command (Overview, Inbox, Run task con tareas agénticas en
+vivo), Autonomy (Watchlist, Flows con editor estilo n8n, Flow runs, Projects,
+Approvals), Capability (Capabilities, Actions, Skills, Brains con editor de
+jerarquía y overlay de relaciones, Knowledge), Operations (Artifacts, Research,
+Integrity, Readiness, Calendar, Postulaciones, Analytics, Activity con búsqueda
+de texto completo sobre el log de episodios) y System (Settings). La misma app FastAPI
 expone la API REST (`/api/org/*`, `/api/flows`, `/api/episodes/search`,
 `/api/code`, …).
 
@@ -287,7 +295,7 @@ hace fallar cualquier import que cruce capas. El mapa completo:
 ## Estado y honestidad
 
 Lhassa es un proyecto joven con un primer usuario exigente: su autor. Todo lo
-descrito arriba corre hoy y está cubierto por ~1,400 tests; lo que aún no corre
+descrito arriba corre hoy y está cubierto por ~2,700 tests; lo que aún no corre
 no está en esta página. Vive en una laptop y está construida para mudarse a un
 VPS pequeño sin cirugía.
 
@@ -296,10 +304,10 @@ VPS pequeño sin cirugía.
 **AGPL-3.0-or-later**, con un término adicional bajo la sección 7(b); ver
 [LICENSE](LICENSE).
 
-**Qué significa si te lo auto-hospedás.** Si corrés Lhassa en tu propia máquina,
-para vos o dentro de tu empresa, no debés nada: modificalo, guardate tus cambios
-y usalo como quieras. La obligación extra de la AGPL es estrecha; aplica **solo
-si le ofrecés Lhassa a otras personas por red, como servicio**. En ese caso, esos
+**Qué significa si te lo auto-hospedas.** Si corres Lhassa en tu propia máquina,
+para ti o dentro de tu empresa, no debes nada: modifícalo, guárdate tus cambios
+y úsalo como quieras. La obligación extra de la AGPL es estrecha; aplica **solo
+si le ofreces Lhassa a otras personas por red, como servicio**. En ese caso, esos
 usuarios deben poder obtener el código de la versión que estás corriendo,
 incluidas tus modificaciones.
 

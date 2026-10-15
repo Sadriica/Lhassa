@@ -146,8 +146,8 @@ you) and then `uv run lhassa`: you're talking to it.
 First things to try:
 
 - just talk to it, plain language, no special syntax
-- `lhassa recall <text>`: search its own past episodes (FTS5)
 - `lhassa memory <query>`: search its durable facts
+- `lhassa memory graph <term>`: what it knows about a term, from facts and past episodes ($0)
 - `lhassa capabilities`: what's wired, what's on/off
 
 Want it **always-on**: a heartbeat that keeps ticking while you sleep,
@@ -212,7 +212,7 @@ The subscription CLIs (`claude` / `codex` / `opencode`) are optional and need **
 ### One-command install (always-on Linux)
 
 ```bash
-cd ~/Code/lhassa
+cd Lhassa
 bash scripts/install.sh
 ```
 
@@ -238,11 +238,14 @@ Install the optional `tectonic` dep to get a compiled PDF instead of raw `.tex`.
 ### Developer path
 
 ```bash
-make install   # uv sync + build the dashboard (first time)
+make install   # uv sync --extra voice + build the dashboard (first time)
 make run       # voice pipeline + API server + scheduler (uv run python main.py)
 make dev       # same, with LHASSA_DEBUG=1 LHASSA_LOG_LEVEL=DEBUG
-make test      # uv run --extra dev python -m pytest
+make test      # pytest with the dev and voice extras (integration tests excluded)
+make test-integration  # live-CLI and on-disk-DB tests; slower, may spend a little real budget
+make cov       # coverage baseline, HTML report in htmlcov/
 make lint      # ruff
+make dashboard # rebuild the React/Vite dashboard
 make check     # validate the environment, no API calls
 ```
 
@@ -250,12 +253,13 @@ make check     # validate the environment, no API calls
 
 ```bash
 cp .env.example .env          # fill in the keys you use
-docker compose up -d          # api + heartbeat + monitor roles
+docker compose up -d          # api + heartbeat roles
+# opt-in roles: docker compose --profile telegram up -d  (and --profile monitor)
 docker compose logs -f lhassa
 ```
 
 One image, `LHASSA_RUN` selects the role (`api` / `heartbeat` / `telegram` /
-`monitor`). All state lives under `/data` (`HOME=/data`). Lhassa runs on a
+`monitor`); `telegram` and `monitor` are compose profiles, off by default. All state lives under `/data` (`HOME=/data`). Lhassa runs on a
 laptop today and is built to run unchanged on a small VPS: details and the
 portability audit live in [`doc/deployment.md`](doc/deployment.md) and
 [`doc/portability.md`](doc/portability.md).
@@ -289,7 +293,8 @@ Subcommands (most are offline against the local brain DB, each supports `--json`
 | `status` / `overview` | The whole brain at a glance (brains, skills, approvals, cost, health) |
 | `watch` | Tail recent activity (`--once` for one frame) |
 | `report [--days N]` | Cost/usage summary (gateway ledger + optional ccusage) |
-| `memory <query>` | Search durable facts (substring or tag) |
+| `memory <query>` | Search durable facts (substring or tag); `memory add`, `graph`, `entities`, `reindex` |
+| `knowledge ingest/search/clear` | Index and search your own documents (knowledge roots), offline |
 | `tools` | List self-written tools and their gate/usage state |
 | `approvals` / `approve <id>` / `deny <id>` | The HITL approval queue (feeds the autonomy knob) |
 | `fleet` | Known machines, last check-in, desired state |
@@ -298,8 +303,15 @@ Subcommands (most are offline against the local brain DB, each supports `--json`
 | `serve` | Run the dashboard + REST API |
 | `beat` | Run one heartbeat tick (deterministic, $0) |
 | `config get/set/list` | Runtime settings → `~/.lhassa/settings.env` (see below) |
+| `setup` / `onboard` | The one-command wizard from a fresh clone; a short questionnaire that seeds the first facts |
+| `tui` | The Textual terminal dashboard (eight tabs, direct DB reads) |
 | `org …` | Manage the brain hierarchy (1..N brains) |
 | `skills …` | Manage first-class skills (create/assign/recommend/…) |
+| `flow …` / `flows …` | Author, run and follow work-flows; the flow-templates gallery |
+| `project …` / `task …` | Projects (workspaces) and tasks (standing goals, scheduled actions) |
+| `seed …` | Apply reproducible bootstrap seeds (`cv`, `digest`, `maintenance`, `temple`, `research`, `personal`) |
+| `calendar …` / `artifacts …` / `share …` | Calendar feeds, the artifact registry, cross-instance sharing |
+| `bench …` / `research …` / `integrity …` / `utility …` | LhassaBench, the research line, conformance contracts, the utility tribunal |
 
 `lhassa config set llm_provider claude` switches the **chat provider** live;
 `lhassa org apply software-factory` adopts a use-case org chart;
@@ -312,8 +324,10 @@ Inbound/outbound over the Bot API, credential-gated (no token → no network).
 LLM-free commands: `/start`, `/help` (lists registered commands live), `/status`,
 `/approvals` (each pending decision described in plain words; what it is, how
 old, what approving does), `/approve` / `/deny`, `/recall <text>` (FTS5 search
-over the brain's own past episodes), `/watch`, `/goal`, `/today`, `/tomorrow`,
-and `/checkin <text>` for the personal digest thread. Free-text messages are
+over the brain's own past episodes), `/watch` / `/unwatch` / `/watches`, `/goal`,
+`/today`, `/tomorrow`, `/remind <what> <when>`, `/event`, `/calendar`,
+`/knowledge`, `/memory`, `/idea <text|link>`, `/temple`, and `/checkin <text>`
+for the personal digest thread; `/help` is the authoritative list. Free-text messages are
 answered by a tool-less brain think; the chat door can pin its own fast
 provider (`telegram_provider`) while heavier work stays on the heartbeat seat;
 over the routine **fallback chain** (`opencode → claude → codex → cloud`). The
@@ -325,13 +339,15 @@ question and captures your next Telegram reply as a daily check-in.
 ### Dashboard
 
 A React/Vite dashboard served by the FastAPI app on **:7766**, in the Lhasa
-identity (warm gold, a stupa mark). Sections: **Overview**; **Brains** (the
-Flow/Tree/Templates editor, with the typed **relationship overlay** drawn as dashed
-per-kind edges (legend + toggles) and add/remove from the inspector); **Skills**;
-**Run** (launch an agentic local-CLI task and watch it stream); **Flows** (an
-n8n-style work-flow editor wiring `trigger → task → gate → output`); **Settings**
-(the editable runtime knobs); **Reports**; **Fleet**; and **Activity** (with
-full-text search over the episode log). The LLM ledger/limits, approvals and
+identity (warm gold, a stupa mark). Sections, grouped in the nav rail:
+**Command** (Overview, Inbox, Run task: launch an agentic local-CLI task and watch it
+stream); **Autonomy** (Watchlist, Flows: an n8n-style work-flow editor wiring
+`trigger → task → gate → output`, Flow runs, Projects, Approvals); **Capability**
+(Capabilities, Actions, Skills, Brains: the Flow/Tree/Templates editor with the typed
+**relationship overlay** drawn as dashed per-kind edges, Knowledge); **Operations**
+(Artifacts, Research, Integrity, Readiness, Calendar, Postulaciones, Analytics,
+Activity with full-text search over the episode log); and **System** (Settings, the
+editable runtime knobs). The LLM ledger/limits, approvals and
 tools/quarantine surface here too. WebSocket fan-out at `/ws` streams live events
 (including the agentic run tokens).
 
@@ -369,6 +385,9 @@ is loaded *after* `.env` (override on) and never holds secrets. The most relevan
 | **Memory** | `LHASSA_MEMORY_LAYER4`, `LHASSA_EMBEDDING_MODEL`, `LHASSA_MEMORY_SEMANTIC_TOPK`, `LHASSA_MEMORY_DISTILL_ENABLED` |
 | **Monitor** | `LHASSA_MONITOR_ENABLED`, `LHASSA_MONITOR_IDLE_INTERVAL`, `LHASSA_MONITOR_FAILURE_WINDOW_H` |
 | **Skills curator** | `LHASSA_SKILL_STALE_DAYS` (30), `LHASSA_SKILL_ARCHIVE_DAYS` (90) |
+| **Utility tribunal** | `LHASSA_UTILITY_PINNED`, `LHASSA_UTILITY_DORMANT_DAYS` (30), `LHASSA_UTILITY_GRACE_DAYS` (14) |
+| **Integrity** | `LHASSA_INTEGRITY_ENABLED` (on), `LHASSA_INTEGRITY_INTERVAL` (3600 s) |
+| **Guardrails / routes** | `LHASSA_ALLOW_PERSISTENT_SHELL` (opt in to the persistence tier of shell commands), `LHASSA_ROUTES_FILE` (approved `mint_route` entries, default `~/.lhassa/routes.json`) |
 | **Privacy** | `LHASSA_PSEUDONYMIZE_REMOTE` |
 | **Org / topology** | `LHASSA_ROOT_ADMIN`, `LHASSA_ORG_ROLE`, `LHASSA_ORG_DEPARTMENT`, `LHASSA_ORG_DEPARTMENTS`, `LHASSA_ORG_TOPOLOGY_FILE`, `LHASSA_ORG_RELATIONSHIPS_FILE`, `LHASSA_ORG_LIVE` |
 | **Work-flows** | `LHASSA_FLOWS_FILE` (the work-flow graph store; runs are offline/stubbed unless `LHASSA_ORG_LIVE`) |
@@ -388,7 +407,7 @@ Brain state lives in `~/.lhassa/` (`brain.db`, `chica.db`, `llm_gateway.db`,
 `backups/`, Ed25519 keys, `settings.env`, `org.json`, `relationships.json`,
 `flows.json`, `skills/`, `plugins/`, `tools/`, logs). The codebase is layered; infra → spine →
 interfaces → adapters → shells; and the layering is enforced by an
-architecture-guard test. For the layer map, the data dir, the phase history (0–7),
+architecture-guard test. For the layer map, the data dir, the phase history (0–7; Phase 7, the org layer, is maintained but frozen since 2026-08-30),
 and the do-and-sleep / provider-harness / org-tree diagrams, read
 [`doc/architecture.md`](doc/architecture.md). For the full spec read
 [`doc/lhassa-brief.md`](doc/lhassa-brief.md); the running decisions log is
@@ -417,8 +436,8 @@ and the do-and-sleep / provider-harness / org-tree diagrams, read
 ## Development
 
 ```bash
-uv run --extra dev python -m pytest      # the test suite (== make test)
-uv run --extra dev python -m ruff check . # lint (== make lint)
+uv run --extra dev --extra voice python -m pytest  # the test suite (== make test)
+uv run --extra dev --extra voice python -m ruff check . # lint (== make lint)
 cd dashboard && npm run build             # rebuild the dashboard (== make dashboard)
 ```
 
@@ -432,7 +451,7 @@ PRs via [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
 ## Status & honesty
 
 Lhassa is a young project with one demanding first user: its author. Everything
-described above runs today and is covered by ~1,400 tests; what doesn't run yet
+described above runs today and is covered by ~2,700 tests; what doesn't run yet
 is not on this page. It lives on a laptop and is built to move to a small VPS
 without surgery.
 

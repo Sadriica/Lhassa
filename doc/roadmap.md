@@ -7,6 +7,13 @@ verdad histórica y NO se toca; este archivo solo dice **qué está hecho**
 (una línea + pointer), **qué está a medias** y **qué sigue**. `plan.md` y
 `plan-4.md` quedan como stubs de superseded (el contenido vive en git).
 
+> **Status note, 2026-10-15 (English).** Two things changed after this file was
+> written. (1) The 2026-08-30 strategy change (see `decisions.md`) froze Phase 7:
+> the org layer is maintained, not extended, so "Stream 6 Fase B" (per-actor auth,
+> general RBAC) and any new org primitive below need the owner's go-ahead first.
+> (2) Part of Stream 2 shipped on 2026-08-03; the "Siguiente" section marks which
+> steps. The rest of this file is in Spanish and was not retranslated.
+
 Una contradicción real apareció al consolidar y se resuelve aquí contra el
 código y `decisions.md`, no a ojo: `plan-4.md` listaba el Stream 0 (allowlist
 en el heartbeat) como bloqueante-pendiente y el Stream 6 Fase A (multi-user)
@@ -110,11 +117,15 @@ el gate de firmas que no debe matar una recurrencia al refusar.
 
 ## Siguiente
 
-**Stream 2; flow engine v2 ("graph of loops").** No empezado; el motor
-sigue siendo el DAG secuencial original (`trigger→task→gate→output→branch`,
-sin loops/paralelismo/sub-flows/retries reales/tipado/versionado; aunque la
-durabilidad de base, CAS/leases/fencing/checkpoints/idempotencia, ya es
-sólida). Diseño completo, sin recortar, movido tal cual desde `plan-4.md`:
+**Stream 2; flow engine v2 ("graph of loops").** Parcial (verificado en
+código el 2026-10-15): ya están los pasos 1 a 3 de abajo (registries
+`TASK_ROUTERS`/`CONTEXT_PROVIDERS`/`OUTPUT_HANDLERS` en `flows/registries.py`,
+commit 2d8b0b7; retries y timeouts por nodo en `flows/engine.py`, a0006bb; los
+node kinds `LOOP`/`WAIT`/`SUBFLOW` en `flows/model.py`, 456e36b). Faltan el
+paralelismo (`MAP`/`JOIN`, paso 4) y el I/O tipado y versionado (paso 5): no hay
+`MAP`/`JOIN` ni `input_schema`/`output_schema` en `lhassa/flows/`. La durabilidad
+de base (CAS/leases/fencing/checkpoints/idempotencia) ya era sólida. Diseño
+completo, sin recortar, movido tal cual desde `plan-4.md`:
 
 1. **De-Lhassa-ify primero (riesgo de comportamiento cero).** Tres costuras
    se vuelven registries cuyo default ES el comportamiento de hoy: el

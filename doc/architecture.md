@@ -24,9 +24,10 @@ guard test (`tests/test_architecture.py`) fails on any new layer-crossing import
 |---|---|---|
 | Leaf infra | `registry.py`, `plugins.py`, `config.py`, `host.py` | Generic machinery; imports no feature code |
 | Spine | `core/` | The do-and-sleep loop: `step`, `heartbeat`, `episode`, `db`, `watchlist`, `actions`, `task` |
-| Interfaces | `memory/`, `security/`, `llm/`, `settings.py` | Reusable contracts: typed facts, trust/approval, `ModelProvider` + router, the editable-settings service |
-| Adapters (hands) | `harness/`, `tools/`, `agents/`, `skills/`, `remote/`, `health/` | The rentable body: harnesses, MCP/tools, specialist agents, first-class skills, the check-in local agent |
-| Shells (outer) | `cli/`, `api/`, `voice/`, `notify/`, `org/`, dashboard (JS) | World-facing surfaces; compose everything below |
+| Interfaces | `memory/`, `security/`, `llm/`, `settings.py`, `personal/` | Reusable contracts: typed facts, trust/approval, `ModelProvider` + router, the editable-settings service, the personal agenda read-model |
+| Adapters (hands) | `harness/`, `tools/`, `agents/`, `skills/`, `remote/`, `health/`, `bench/` | The rentable body: harnesses, MCP/tools, specialist agents, first-class skills, the check-in local agent, the LhassaBench eval harness |
+| File-I/O seams | `cv/`, `calendar/` | Leaf, stdlib-only seams (`.tex` CV, `.ics` calendar) used by shells; never reach into one |
+| Shells (outer) | `cli/`, `api/`, `voice/`, `notify/`, `org/`, `actionpack/`, `flows/`, dashboard (JS) | World-facing surfaces; compose everything below |
 
 The two swap axes are kept **independent**: `harness/` (agentic body) must not
 import `llm/` (think-directly providers). The reverse edge; `llm/router.py`
@@ -84,6 +85,7 @@ state (the Docker image sets `HOME=/data`).
 | `~/.lhassa/settings.env` | Runtime overrides from `lhassa config` / the Settings panel (loaded after `.env`, override on; **no secrets**) |
 | `~/.lhassa/org.json` | The org command tree (1..N brains, Lhassa the root admin); `LHASSA_ORG_TOPOLOGY_FILE` |
 | `~/.lhassa/relationships.json` | Typed relationship **overlay** on the tree (reads/notifies/reviews/collaborates); `LHASSA_ORG_RELATIONSHIPS_FILE` |
+| `~/.lhassa/routes.json` | Approved `mint_route` entries (data, not code); `LHASSA_ROUTES_FILE` |
 | `~/.lhassa/flows.json` | Work-flow graphs (trigger→task→gate→output + branch); `LHASSA_FLOWS_FILE` |
 | `~/.lhassa/skills/` | First-class skills (`SKILL.md` per skill: frontmatter + instructions) |
 | `~/.lhassa/plugins/` | Drop-in plugin modules (self-register) |
@@ -105,7 +107,7 @@ Built additively over an existing skeleton (extend, never rewrite). From
 | 4 | The hands | `HarnessAdapter` (OpenCode/Claude Code/Codex) + runner/supervisor + `pick_harness`; MCP client + a typed task (`tracking_postulaciones`) |
 | 5 | Self-improvement (caged) | Quarantine sandbox + the four gates (segura/correcta/mejor/retiro); specialists as **skills not fine-tuning** + local-git tool versioning |
 | 6 | Maturity (continuous) | `LocalModelProvider` + PII pseudonymization + router routine→local; memory **layer 4** (semantic embeddings); CLI power subcommands + Telegram + opencode heartbeat + voice brain-bridge |
-| 7 | Org layer | Typed inter-brain messages, read-only commons, RBAC, `GeneralBrain` (coordinates) / `DepartmentBrain` (executes), the validated topology tree (1..N brains) + coordinator/routing/executor + `lhassa org` |
+| 7 | Org layer (**frozen 2026-08-30**: maintained, not extended; see `decisions.md`) | Typed inter-brain messages, read-only commons, RBAC, `GeneralBrain` (coordinates) / `DepartmentBrain` (executes), the validated topology tree (1..N brains) + coordinator/routing/executor + `lhassa org` |
 
 ## Action preconditions; silence means nothing happened
 
@@ -261,7 +263,7 @@ outcome (`resultado`); when a real monk ran it (not the bare department), the
 "guardian ran curate_skills → 3 stale skills archived → reports ↑ temple" from the
 tool's own log line, before the deliver seam's per-brain hops even start.
 
-The `maintenance` seed's five hygiene actions now mint `temple_run` (a closed
+The `maintenance` seed's eleven recurring hygiene actions now mint `temple_run` (a closed
 allowlisted wrapper, `actionpack/_temple.py`) instead of running bare, so every
 beat carries the full hop and worker attribution instead of an unattributed
 heartbeat action. The Telegram `/temple <instruction>` door keyword-matches a

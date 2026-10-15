@@ -59,12 +59,19 @@ drives hash routing (`#<id>`), localStorage persistence, and the command palette
 | Command | `run` | Run task | `AgenticPanel.jsx` |
 | Autonomy | `watchlist` | Watchlist | `WatchlistPanel.jsx` |
 | Autonomy | `flows` | Flows | `WorkflowsPanel.jsx` (the n8n-style work-flow editor) |
+| Autonomy | `flow-runs` | Flow runs | `DurableRunsPanel` (durable runs, `/api/flow-runs`) |
 | Autonomy | `projects` | Projects | `ProjectsPanel.jsx` |
 | Autonomy | `approvals` | Approvals | `ApprovalQueuePanel.jsx` |
 | Capability | `capabilities` | Capabilities | `CapabilitiesPanel.jsx` |
 | Capability | `tools` | Actions | `QuarantinePanel.jsx` (self-written-tool gates/graduation) |
 | Capability | `skills` | Skills | `SkillsPanel.jsx` |
 | Capability | `brains` | Brains | `BrainsPanel.jsx` (org Flow/Tree/Templates + relationship overlay) |
+| Capability | `knowledge` | Knowledge | `KnowledgePanel.jsx` (indexed documents + episode recall) |
+| Operations | `artifacts` | Artifacts | `ArtifactsPanel.jsx` |
+| Operations | `research` | Research | `ResearchPanel.jsx` |
+| Operations | `integrity` | Integrity | `IntegrityPanel.jsx` |
+| Operations | `calendar` | Calendar | `CalendarPanel.jsx` |
+| Operations | `postulaciones` | Postulaciones | `PostulacionesPanel.jsx` |
 | Operations | `fleet` | Readiness | `FleetPanel.jsx` + `HealthPanel.jsx` |
 | Operations | `reports` | Analytics | `ExecutionAnalyticsPanel.jsx` + `ReportsPanel.jsx` + `AIUsagePanel.jsx` + `MetricsPanel.jsx` |
 | Operations | `activity` | Activity | `AgentsPanel.jsx` + `RecentEpisodesPanel.jsx` + `HistoryPanel.jsx` + `AuditPanel.jsx` + `ScheduledPanel.jsx` + `MemoryPanel.jsx` |
@@ -276,7 +283,9 @@ the dashboard's panels actually call, plus the always-relevant liveness ones.
 | `GET/POST/PUT/DELETE` | `/api/org/*`, `/api/skills/*` | The Brains panel (topology, route, templates, relationships, skills) |
 | `GET` | `/api/fleet` | The Readiness panel |
 | `GET` | `/api/analytics/{summary,flows,brains,runs}` | The Analytics/Execution panel |
-| `GET` | `/api/reports`, `/api/projections`, `/api/episodes/search` | Episode/cost reporting (the last one isn't wired to a panel yet) |
+| `GET` | `/api/reports`, `/api/projections` | Episode/cost reporting |
+| `GET` | `/api/episodes/search` | FTS5 episode recall (Knowledge panel, Activity search) |
+| `GET` | `/api/flow-runs`, `/api/artifacts`, `/api/research/*`, `/api/integrity/*`, `/api/calendar/*`, `/api/postulaciones` | The Flow runs, Artifacts, Research, Integrity, Calendar and Postulaciones panels |
 | `GET` | `/api/llm/{ledger,limits,ccusage}` | The AI Usage panel |
 | `GET` | `/api/metrics` | Live counters (LLM calls, tool calls, etc.) |
 | `GET` | `/api/audit` | The audit event feed |

@@ -15,6 +15,9 @@ you are trying to do, not by subsystem.
 - [`security.md`](security.md); trust, approvals, the allowlist, quarantine and the gates.
 - [`architecture.md`](architecture.md); current high-level overview (layers, data dir, phases, diagrams).
 - [`architecture-layers.md`](architecture-layers.md); the modularity guard: layers + forbidden import directions.
+- [`boundaries.md`](boundaries.md); what is public code and what stays the owner's (read before committing anything).
+- [`research.md`](research.md); Lhassa's research line: the bench as tribunal, drafted notes.
+- [`integrity.md`](integrity.md); the integrity watcher: executable architecture and sovereignty contracts.
 - [`narrative.md`](narrative.md); the narrative & voice book (the flag, the pillars, tone, vocabulary).
 - [`lhassa-brief.md`](lhassa-brief.md); the implementation spec, in Spanish.
 - [`decisions.md`](decisions.md); the running decisions log, phase by phase.
@@ -30,6 +33,7 @@ you are trying to do, not by subsystem.
 - [`tools.md`](tools.md); self-written tools: quarantine, the gates, graduation.
 - [`agents.md`](agents.md); background/agentic execution (`lhassa code`, the harnesses).
 - [`scheduler.md`](scheduler.md); recurring tasks, the heartbeat, deferred retries.
+- [`calendar.md`](calendar.md); connecting a calendar: ICS feeds or Microsoft Graph.
 - [`outlook.md`](outlook.md); Outlook email/calendar setup (Azure app registration).
 - [`examples.md`](examples.md); worked end-to-end scenarios.
 - [`voice-interaction.md`](voice-interaction.md); voice, an opt-in surface (off by default).
@@ -37,6 +41,7 @@ you are trying to do, not by subsystem.
 ## Operate it
 
 - [`install.md`](install.md); the always-on Linux install (systemd user units, boot lingering).
-- [`configuration.md`](configuration.md); every `LHASSA_*` env var and setting.
+- [`configuration.md`](configuration.md); providers, voice, tools, agents and the main settings (the README's configuration table lists the `LHASSA_*` knobs by group).
+- [`coverage.md`](coverage.md); the coverage baseline and what is deliberately left out.
 - [`deployment.md`](deployment.md); the Docker image, Compose roles, secrets.
 - [`portability.md`](portability.md); the VPS-portability audit: couplings, status, blockers.

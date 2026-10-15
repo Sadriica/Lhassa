@@ -37,16 +37,22 @@ in `doc/architecture.md`.
 Tooling is **uv** + **make**:
 
 ```bash
-make install   # uv sync + dashboard build (first time)
+make install   # uv sync --extra voice + dashboard build (first time)
+make quickstart # the light on-ramp: uv sync, .env, detect a brain (scripts/quickstart.sh)
 make run       # voice + API + scheduler — uv run python main.py
 make dev       # same with LHASSA_DEBUG=1 LHASSA_LOG_LEVEL=DEBUG
-make test      # uv run --extra dev python -m pytest
-make lint      # uv run --extra dev python -m ruff check .
+make test      # uv run --extra dev --extra voice python -m pytest (integration excluded)
+make test-integration # live-CLI + on-disk-DB tests (-m integration); slower, may spend budget
+make cov       # coverage baseline over the unit suite, HTML in htmlcov/
+make lint      # uv run --extra dev --extra voice python -m ruff check .
 make dashboard # rebuild the React/Vite dashboard
+make dashboard-dev # Vite hot-reload server, proxies the API on :7766
 make check     # validate env, no API calls (scripts/check.py)
+make install-heartbeat | install-health | install-telegram | install-monitor | install-ollama | install-privileged
 ```
 
-Run a single test file: `uv run --extra dev python -m pytest tests/test_x.py`.
+Run a single test file: `uv run --extra dev --extra voice python -m pytest tests/test_x.py`.
+The suite is about 2,700 tests (2,730 collected on 2026-10-15; `make test` deselects the 2 integration ones).
 `tests/test_architecture.py` is the **architecture guard** — a dependency-free
 `ast` walk that fails on any new layer-crossing import. If you add a subpackage,
 slot it into the right layer in that test; if you add a deliberate edge, add a
@@ -58,11 +64,12 @@ Inner layers never import outer shells; dependencies point **down** only.
 
 | Layer | Subpackages | Role |
 |---|---|---|
-| Leaf infra | `registry.py`, `plugins.py`, `config.py` | Generic machinery; imports no feature code |
+| Leaf infra | `registry.py`, `plugins.py`, `config.py`, `host.py` | Generic machinery; imports no feature code |
 | Spine | `core/` | The do-and-sleep loop (`step`, `heartbeat`, `episode`, `db`, `watchlist`, `actions`) |
-| Interfaces | `memory/`, `security/`, `llm/`, `settings.py` | Reusable contracts (facts, trust/approval, provider + router, editable settings) |
-| Adapters (hands) | `harness/`, `tools/`, `agents/`, `skills/`, `remote/`, `health/` | The rentable body |
-| Shells (outer) | `cli/`, `api/`, `voice/`, `notify/`, `org/`, dashboard (JS) | World-facing surfaces; compose everything below |
+| Interfaces | `memory/`, `security/`, `llm/`, `settings.py`, `personal/` | Reusable contracts (facts, trust/approval, provider + router, editable settings, the personal agenda read-model) |
+| Adapters (hands) | `harness/`, `tools/`, `agents/`, `skills/`, `remote/`, `health/`, `bench/` | The rentable body (`bench/` is the fixture-driven eval harness) |
+| File-I/O seams | `cv/`, `calendar/` | Leaf, stdlib-only (`.tex` CV, `.ics`), used by shells, never reaching into one |
+| Shells (outer) | `cli/`, `api/`, `voice/`, `notify/`, `org/`, `actionpack/`, `flows/`, dashboard (JS) | World-facing surfaces; compose everything below |
 
 Encoded forbidden directions: spine/interfaces/adapters ↛ shells; `harness/` ⟂
 `llm/` (the two swap axes stay independent — `llm/router.py` *choosing* a harness
@@ -92,7 +99,7 @@ feature module. See `doc/architecture-layers.md`.
   beat is a fresh process that re-reads `.env` and runs one `step()`. Routine beats
   are deterministic and cost **$0**. `make install-heartbeat` enables the timer.
 - `core/episode.py` — the structured Episode (observability from the first commit;
-  every row carries `instance_id`). `core/db.py` is the append-only SQLite
+  every row carries `instance_id`). `core/db/` is the append-only SQLite
   "grande" (WAL).
 
 ## The two swap interfaces
@@ -122,8 +129,11 @@ commands (`COMMANDS`), actions (`core/actions.ACTIONS`), watchlist senses
 (`core/watchlist.register_check` — how `org/inbox_sense.py` plugs in without core
 importing org), **seeds** (`seeds.SEEDS` — `@register_seed`, a drop-in preset that
 bootstraps an env; `cv` rebuilds the interns department + the CV work-flow, `digest`
-schedules the 08:00/21:00 daily digests, `maintenance` schedules `distill_memory` +
-`detect_repetition` daily and `review_tools` + `curate_skills` weekly; `lhassa seed
+schedules the 08:00/21:00 daily digests, `maintenance` schedules the eleven recurring
+hygiene actions (daily: `distill_memory`, `detect_repetition`, `apply_feedback`,
+`calendar_sync`, `ingest_knowledge`; weekly: `review_tools`, `curate_skills`,
+`review_capabilities`, `kg_sync`, `kg_resolve`, `derive_world_facts`), `temple`,
+`research` and `personal` create their departments; `lhassa seed
 list|apply <name>|apply-all`), org departments.
 `plugins.py:load_plugins(config)` imports every module under `plugins_dir` **and**
 every `lhassa.plugins` entry point — self-registration with **no core edit**;
@@ -133,7 +143,7 @@ capabilities` (alias `doctor`) shows everything wired and on/off.
 
 ## Memory
 
-- **Grande** (`core/db.py` facts + `memory/facts.py`) — typed facts (`dato` /
+- **Grande** (`core/db/` facts + `memory/facts.py`): typed facts (`dato` /
   `directiva`), append-only, contradiction = newest + confianza. `memory/load.py`
   layers context by priority (pinned + directivas always → recency → active tags →
   optional **layer 4**), truncating low-priority first.
@@ -143,7 +153,7 @@ capabilities` (alias `doctor`) shows everything wired and on/off.
 - **Layer 4** (`memory/embeddings.py` + `memory/load.py`) — semantic facts via a
   pluggable `Embedder` (`HashingEmbedder` offline default, `RemoteEmbedder` for a
   real local endpoint). On by default (`LHASSA_MEMORY_LAYER4`).
-- **Episodic recall (layer 5, FTS5)** — `core/db.py` keeps an `episodes_fts`
+- **Episodic recall (layer 5, FTS5)**: `core/db/` keeps an `episodes_fts`
   FTS5 index over the episode log (triggers + backfill in `init_db`; degrades if
   the SQLite build lacks FTS5). `db.search_episodes` is BM25-ranked,
   hostile-input-safe, and *demotes* (never hides) automation episodes with a
@@ -251,7 +261,7 @@ deterministic, $0, degrade-to-normal-think on any failure:
   the remainder reported. Guardian owns it weekly through `temple_run`; nothing is
   tried before `utility_grace_days` (14) of history; `LHASSA_UTILITY_PINNED` is the
   deliberate-dormancy exemption. `lhassa utility survey|docket`.
-- **Loops** (`core/db.py`'s `loops` table) — the unit of work past a single think is a
+- **Loops** (`core/db/`'s `loops` table): the unit of work past a single think is a
   bounded, verifier-terminated loop, never an unbounded "call the model until it feels
   done." `agents/author.py:propose_tool(..., max_turns=3)` iterates: a failing gate's
   own detail (never a self-judgment) threads into the next authoring turn as feedback;
@@ -284,7 +294,7 @@ deterministic, $0, degrade-to-normal-think on any failure:
 `notify/channels.py` — `Channel` protocol + `CHANNELS` registry
 (`@register_channel`); `TelegramChannel` / `DesktopChannel` / `LogChannel`.
 `notify/dispatch.py:notify()` fans out over `active_channels(config)` (from
-`LHASSA_NOTIFY_CHANNELS`). `notify/commands.py` — `COMMANDS` registry
+`LHASSA_NOTIFY_CHANNELS`). `notify/commands/`: `COMMANDS` registry
 (`@register_command`): `/start`, `/help` (a grouped catalog with per-command
 one-liners; unregistered-in-DESCRIPTIONS commands still surface), `/status`,
 `/approvals`, `/approve <id>`,
@@ -364,12 +374,10 @@ exception).
 
 **Frozen, not deleted.** As of 2026-08-30 Lhassa is no longer positioned as a
 personal assistant for other people (Orca already owns the multi-agent
-organisational-layer space); this layer stays as owned infrastructure and as
-evidence for `agent-ledger`'s reference implementation. Bug fixes and the
+organisational-layer space); this layer stays as owned infrastructure. Bug fixes and the
 existing surface stay maintained; do not extend this layer (new department
 kinds, new org primitives, multi-user features) without checking with the
-owner first. See `doc/decisions.md`, entry 2026-08-30, and
-`witara/context/LOG.md` of the same date.
+owner first. See `doc/decisions.md`, entry 2026-08-30.
 
 `org/topology.py` — `BrainNode` / `Topology` (validated tree) + `load/save`,
 config-driven (`LHASSA_ORG_TOPOLOGY_FILE`). **Lhassa is the permanent root
@@ -408,7 +416,7 @@ proposer ≠ approver for high-risk.
 **Multi-user, Phase A — one brain per person, shared resources.** The owner's
 choice: multiple SOVEREIGN instances (one Lhassa per person), not one shared
 instance with per-user auth (that is Phase B, not built). `actor_id` is now a
-real column (additive migration 11, `core/db.py`) on `approvals` (already
+real column (additive migration 11, `core/db/`) on `approvals` (already
 carried in `payload["actor_id"]` via `Origin.actor_id`, now queryable), `facts`
 and `knowledge` — defaulting existing rows to the owner, never blank.
 `org/relationships.py` gains a fifth, INSTANCE-scoped edge kind, `shares`
@@ -455,7 +463,7 @@ new storage, never a stronger claim than the evidence supports.
 
 **The brain in a terminal.** `lhassa tui` (`cli/tui/`) is a Textual app — **eight
 tabs** (Overview/Projects/Runs/Approvals/Flows/Skills/Memory/Org) reading
-`core/db.py`, `flows/store.py`, `skills/store.py` and `org/topology.py` DIRECTLY,
+`core/db/`, `flows/store.py`, `skills/store.py` and `org/topology.py` DIRECTLY,
 so it works with the API server down. Every table screen subclasses
 `cli/tui/screens/base.py:TableScreen`, which is where the three app-wide
 affordances live: a `/` case-insensitive **substring filter** (predictable beats
@@ -482,9 +490,10 @@ carries it as its `research-method` skill, and owns `draft_research_note`); the 
 seed creates all six, idempotently.
 `org/temple.py:ACTION_OWNERS` is the deterministic action→monk ownership map for the
 maintenance seed's hygiene actions: `distill_memory`/`review_tools`/`curate_skills`/
-`kg_sync` → `guardian`, `detect_repetition`/`apply_feedback` → `oracle`,
-`calendar_sync`/`ingest_knowledge` → `synchronizer`, `derive_world_facts` →
-`guardian`; an unmapped action, or a topology missing the resolved worker, falls back to `temple`
+`review_capabilities`/`kg_sync`/`kg_resolve`/`check_integrity`/`derive_world_facts` →
+`guardian`, `detect_repetition`/`apply_feedback` → `oracle`,
+`calendar_sync`/`ingest_knowledge` → `synchronizer`, `draft_research_note` →
+`geshe`; an unmapped action, or a topology missing the resolved worker, falls back to `temple`
 itself. `org/temple.py:delegate_internal(action, params, config, instruction)` is the
 down-execute-up loop: it resolves the owning worker (`resolve_worker`), logs ONE
 `org-delegate` Episode delegating the action DOWN the path `lhassa → temple → <worker>`
@@ -499,7 +508,7 @@ outcome (`resultado`), and when a real monk (not the bare department) ran it, th
 `resultado` also states it reports up through `temple` — the trail reads "guardian ran
 curate_skills → 3 stale skills archived → reports ↑ temple" end to end from the tool's
 own log line, before the deliver seam's per-brain hops even start. The `maintenance`
-seed's five hygiene actions are minted as `temple_run` (a closed, allowlisted wrapper,
+seed's eleven recurring hygiene actions (`lhassa/seeds/maintenance.py`) are minted as `temple_run` (a closed, allowlisted wrapper,
 `actionpack/_temple.py`) instead of running bare, so every beat now carries the full
 down-execute-up hop and worker attribution — what each action DOES is unchanged. The
 Telegram `/temple <instruction>` door keyword-matches a known deterministic action
@@ -518,7 +527,10 @@ topology) via the injectable `Executor` (default `org/executor.py:brain_executor
 offline + $0 unless `LHASSA_ORG_LIVE`); a **gate** is verify/approval and a non-pass
 halts the path. `api/flow_routes.py`: `GET/POST /api/flows`,
 `GET/PUT/PATCH/DELETE /api/flows/{id}`, `POST /api/flows/{id}/run`. The dashboard
-"Flows" section is the n8n-style canvas. No dedicated `lhassa` CLI subcommand yet.
+"Flows" section is the n8n-style canvas. CLI: `lhassa flows` (list/show/templates/apply)
+and `lhassa flow` (create/edit/validate/run/watch/logs/runs/delete); `flow run` goes
+through `org/delegate.py:delegate_flow` like every other caller, and durable runs
+(`flows/durable.py`) are served at `/api/flow-runs`.
 
 **Standing principle — the hierarchy is the philosophy, not a feature.** It is
 an INVARIANT of the same rank as deny-by-default and $0-first, and it binds
@@ -645,8 +657,9 @@ current directory. See `doc/cli.md` for the full CLI reference.
 `api/server.py` (FastAPI) is a thin **integrator** — app + `require_local_or_token` auth
 middleware + CORS + the WebSocket `/ws` fan-out (`state.broadcast(dict)`) + static serving +
 `run_api_server` + `include_router(...)`; the actual routes live in domain routers
-(`api/<domain>_routes.py`: runtime/llm/approval/checkin/skills/org/memory/config/tools/misc/code/
-flow/relationship). Add a new endpoint group as its own `*_routes.py` with an `APIRouter`, don't
+(`api/<domain>_routes.py`: activity/analytics/approval/artifacts/calendar/checkin/code/config/fleet/
+flow/flow_run/integrity/llm/memory/org/overview/postulaciones/project/relationship/reports/research/
+runtime/share/skills/task/tools). Add a new endpoint group as its own `*_routes.py` with an `APIRouter`, don't
 grow server.py. Routes include `/api/status`,
 `/api/overview`, `/api/memory/*`, `/api/agents`, `/api/metrics`,
 `/api/llm/{ledger,limits,ccusage}`, `/api/approvals`, `/api/audit`,
@@ -654,11 +667,16 @@ grow server.py. Routes include `/api/status`,
 `/api/episodes/search` (FTS5 recall),
 `/api/fleet`, `/api/config` (GET/PATCH — the settings service), `/api/skills/*`,
 `/api/org/*` (topology, brains, route, templates, relationships),
+`/api/flow-runs` (durable runs), `/api/projects`, `/api/research`, `/api/integrity`,
+`/api/artifacts`, `/api/calendar`, `/api/postulaciones`, `/api/share/*`,
 `/api/flows[/{id}[/run]]` (the work-flow editor), `/api/code` (+ `/clis`, `/runs` —
 the agentic local-CLI door), and `/checkin` + `/report` (check-in, not push). The
-dashboard sections are Overview, Brains (Flow/Tree/Templates + the relationship
-overlay), Skills, **Run** (agentic), **Flows** (work-flow editor), Settings, Reports,
-Fleet, Activity (`dashboard/src/components/`). The always-on
+dashboard sections (`dashboard/src/lib/sections.js`, grouped in the nav rail) are
+Command: Overview, Inbox, **Run task** (agentic); Autonomy: Watchlist, **Flows**
+(work-flow editor), Flow runs, Projects, Approvals; Capability: Capabilities, Actions,
+Skills, Brains (Flow/Tree/Templates + the relationship overlay), Knowledge; Operations:
+Artifacts, Research, Integrity, Readiness, Calendar, Postulaciones, Analytics, Activity;
+System: Settings (`dashboard/src/components/`). The always-on
 services run **API-only** (no audio); `docker/run_api.py` is the audio-free
 entrypoint. The Lhasa visual identity (gold/red/white/green, a stupa mark) is
 shared by the dashboard and the CLI theme (`cli/theme.py`).
@@ -672,7 +690,7 @@ shared by the dashboard and the CLI theme (`cli/theme.py`).
   config must never crash tests or tooling. The API/heartbeat roles do **not** call
   `validate()`, so they run without the voice keys.
 - Provider auto-detection: one API key is enough (`_detect_provider()` priority
-  Anthropic → OpenAI → Groq → OpenRouter → Cerebras). Don't add
+  Anthropic → OpenAI → Groq → DeepSeek → OpenRouter → Cerebras). Don't add
   `LHASSA_LLM_PROVIDER` to examples where the key alone suffices.
 - Cached async clients in `llm/provider.py` (`_agent_clients`) and the tool
   modules' `_http`; all closed in `main._close_http_clients()`.

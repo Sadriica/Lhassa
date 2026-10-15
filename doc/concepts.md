@@ -126,7 +126,7 @@ Memory is not one store; it's a stack of layers with an explicit priority order,
 assembled by `memory/load.py:load()` and trimmed to a token budget by `truncate()`
 (`PRIORITY = ["pinned", "recent", "tags", "semantic", "recall"]`, dropped from the tail):
 
-1. **The grande** (`core/db.py` + `memory/facts.py`); the durable, append-only fact
+1. **The grande** (`core/db/` + `memory/facts.py`); the durable, append-only fact
    store. Every fact is typed `dato` (a fact about the world/owner) or `directiva` (a
    standing instruction that changes *how* the brain behaves). Facts are **never
    destructively overwritten**: superseding one means inserting a new row with a newer
@@ -146,7 +146,7 @@ assembled by `memory/load.py:load()` and trimmed to a token budget by `truncate(
    a query is given **and** the fact has been indexed (`memory/load.py:index_facts()`).
    It is the lowest-but-one priority layer, so it truncates before recency/tags but after
    layer 5.
-4. **Layer 5; episodic recall** (`core/db.py:search_episodes`, FTS5); the top few past
+4. **Layer 5; episodic recall** (`core/db:search_episodes`, FTS5); the top few past
    episodes whose text matches the active query, via SQLite's `episodes_fts` virtual
    table (an external-content FTS5 index over `decision`/`accion`/`resultado`/
    `despertar_por`, kept in sync by triggers, ranked with `bm25()`). $0, deterministic,
@@ -329,7 +329,7 @@ The four gates (`agents/gates.py`), in order, stopping at the first failure
 
 Past a single think, Lhassa's second unit of work is the **loop**: not "call the
 model until it feels done," but a bounded, deterministic state machine
-(`loops` table, `lhassa/core/db.py`) that terminates on an OBJECTIVE verdict, not
+(`loops` table, `lhassa/core/db/`) that terminates on an OBJECTIVE verdict, not
 a self-judgment. Two callers share the same substrate:
 
 - **The forge iterates.** `agents/author.py:propose_tool(..., max_turns=3)` no

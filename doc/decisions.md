@@ -6,9 +6,9 @@ Lhassa is no longer positioned as a personal assistant for other people.
 OpenClaw (~345k stars) and Hermes (~140k) already own that space at a scale
 this project cannot compete with by adding features faster. Lhassa stays as
 the owner's own infrastructure, and as the reference implementation and
-evidence source for `agent-ledger` (`products/extension/app`): a real system
-with a real usage history is what makes `agent-ledger`'s accounting honest,
-not a synthetic demo.
+evidence source for a separate accounting project: a real system with a real
+usage history is what makes that project's accounting honest, not a synthetic
+demo.
 
 **Phase 7 (the organisational layer, multi-brain hierarchy) is FROZEN, not
 deleted.** Orca (~43k stars) already owns the multi-agent orchestration

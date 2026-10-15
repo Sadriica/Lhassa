@@ -26,7 +26,7 @@ Set one (or more) of these keys. The first one found is used:
 | `DEEPSEEK_API_KEY` | `deepseek` | `deepseek-v4-flash` | [platform.deepseek.com](https://platform.deepseek.com); the metered cloud seat (subscription CLIs are still tried first in the fallback chain) |
 | `OLLAMA_BASE_URL` | `ollama` | `llama3.2` | No key needed; set URL if Ollama isn't on localhost |
 
-Auto-detection priority: `ANTHROPIC_API_KEY` → `OPENAI_API_KEY` → `GROQ_API_KEY` → `OPENROUTER_API_KEY` → `CEREBRAS_API_KEY` → `DEEPSEEK_API_KEY`.
+Auto-detection priority: `ANTHROPIC_API_KEY` → `OPENAI_API_KEY` → `GROQ_API_KEY` → `DEEPSEEK_API_KEY` → `OPENROUTER_API_KEY` → `CEREBRAS_API_KEY`.
 
 Note on DeepSeek: V4 Flash spends reasoning tokens as output tokens; a very
 small `max_tokens` budget can yield an empty reply; 512-768 tokens is a safe
@@ -207,8 +207,9 @@ ANTHROPIC_API_KEY=sk-ant-...
 
 **Groq for voice, Anthropic for vision:**
 ```dotenv
-GROQ_API_KEY=gsk_...           # Groq wins auto-detection → voice uses Groq
-ANTHROPIC_API_KEY=sk-ant-...   # picked up automatically by vision auto-detection
+GROQ_API_KEY=gsk_...
+ANTHROPIC_API_KEY=sk-ant-...   # Anthropic wins auto-detection (see the priority list above)
+LHASSA_LLM_PROVIDER=groq       # pin Groq explicitly so voice uses it; vision auto-detection still finds the Anthropic key
 ```
 
 **Explicit OpenRouter vision model:**

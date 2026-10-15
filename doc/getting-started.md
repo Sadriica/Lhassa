@@ -22,8 +22,8 @@ visible on the dashboard.
 | `ccusage` | Cross-harness LLM-spend CLI for the dashboard cost panels. `npm install -g --prefix ~/.local ccusage`. Without it those panels show "unavailable". | Optional |
 
 For thinking, you need **one** LLM API key. Lhassa auto-detects the provider
-from whichever one is set (priority: Anthropic → OpenAI → Groq → OpenRouter →
-Cerebras), no extra config needed. Or skip API keys entirely and point it at
+from whichever one is set (priority: Anthropic → OpenAI → Groq → DeepSeek →
+OpenRouter → Cerebras), no extra config needed. Or skip API keys entirely and point it at
 a subscription CLI you already have (`claude` / `codex` / `opencode`); those
 need no key at all, just the binary on `PATH`.
 
@@ -42,7 +42,7 @@ Two paths; pick one.
 ### One command (always-on Linux)
 
 ```bash
-cd ~/Code/lhassa
+cd Lhassa
 bash scripts/install.sh
 ```
 

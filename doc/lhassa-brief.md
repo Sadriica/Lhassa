@@ -11,6 +11,14 @@
 > durante todo el desarrollo del núcleo, multi-tenant **en la forma** desde el
 > esquema. Ver ganchos en §3-Fase 0 y la capa organizacional en §3-Fase 7.
 
+> **Nota de estado (2026-10-15).** Este brief es la especificación original y se
+> conserva como referencia de diseño. Dos cosas ya no son literales: la Fase 7 (capa
+> organizacional) se construyó y desde el 2026-08-30 está **congelada** (se mantiene,
+> no se extiende), y la meta de un "JARVIS organizacional" dejó de ser el
+> posicionamiento: Lhassa es infraestructura propia del dueño, no un asistente
+> ofrecido a terceros. La fuente de verdad de lo construido es `doc/decisions.md`;
+> el plan vigente es `doc/roadmap.md`.
+
 ---
 
 ## Cómo usar este documento (para la IA que implementa)

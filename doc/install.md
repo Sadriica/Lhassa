@@ -40,7 +40,7 @@ and `lhassa/tools/privileged.py` mirrors the same host-filtered set at runtime.
 ## Quickstart
 
 ```bash
-cd ~/Code/lhassa
+cd Lhassa
 bash scripts/install.sh
 ```
 
@@ -172,7 +172,7 @@ Application logs also land in `~/.lhassa/lhassa.log`.
 ## Update
 
 ```bash
-cd ~/Code/lhassa
+cd Lhassa
 git pull
 bash scripts/install.sh
 ```
@@ -196,7 +196,7 @@ also disables boot lingering.
 ## See also
 
 - [`deployment.md`](deployment.md); Docker image design, the Compose roles
-  (`api` / `heartbeat` / `telegram`), secrets, and the portability caveats
+  (`api` / `heartbeat` / `telegram` / `monitor`), secrets, and the portability caveats
   (voice needs host audio, the opencode heartbeat is a host CLI).
 
 ## One-command install
