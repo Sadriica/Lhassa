@@ -94,6 +94,12 @@ Individual units can also be installed via `make`: `make install-heartbeat`,
 `make install-health`, `make install-telegram`, `make install-monitor`,
 `make install-ollama`.
 
+The unit files in `scripts/systemd/` assume the clone lives at `~/Code/lhassa`
+(`%h/Code/lhassa`). `scripts/install.sh` rewrites that path to your real checkout
+when it copies them; the `make install-*` targets copy the files verbatim, so on
+any other checkout path edit `WorkingDirectory=` and `ExecStart=` in the installed
+units (or use `install.sh`).
+
 The voice pipeline (`make run` / `main.py`) is **not** run as a service; it
 needs host audio and the Deepgram/Cartesia keys. The always-on path is API-only
 by design.
