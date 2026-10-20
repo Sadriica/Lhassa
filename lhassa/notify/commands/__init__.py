@@ -26,8 +26,8 @@ per group of related commands; importing each submodule is what runs its
 * ``_memory``: ``/recall`` ``/memory`` ``/knowledge`` ``/checkin`` ``/today``
   ``/tomorrow``;
 * ``_ai``: ``/ai`` ``/moa`` (the paid direct doors);
-* ``_remind``: :func:`parse_remind`, ``/remind`` ``/event``;
-* ``_calendar``: ``/calendar`` ``/calendars``;
+* ``_remind``: :func:`parse_remind`, ``/remind`` (``/event`` and ``/calendar``
+  ship with the calendar pack);
 
 This module defines (via re-export from the submodules above):
 
@@ -79,7 +79,6 @@ from ._shared import (  # noqa: E402,F401
 from . import (  # noqa: E402,F401
     _ai,
     _approvals,
-    _calendar,
     _capabilities,
     _code,
     _core,
@@ -93,11 +92,10 @@ from . import (  # noqa: E402,F401
 # Re-export the public/quasi-public API a few outer modules and tests reach
 # into by name (kept identical to what the flat module exposed as attributes).
 from ._ai import _moa_footer, _moa_label, _resolve_chat_provider  # noqa: E402,F401
-from ._calendar import _calendar_sync_reply, _mask_url  # noqa: E402,F401
 from ._capabilities import _flag  # noqa: E402,F401
 from ._code import _CODE_APPROVAL_MARKER, _code_cwd  # noqa: E402,F401
 from ._core import DESCRIPTIONS, _ledger_window_cost, menu_entries  # noqa: E402,F401
 from ._memory import _render_personal_agenda  # noqa: E402,F401
 from ._org import _cadence_label, _match_temple_action, _short_local_due, _temple_schedule  # noqa: E402,F401
-from ._remind import _deliver_calendar_event, parse_remind  # noqa: E402,F401
+from ._remind import parse_remind, register_reminder_extra  # noqa: E402,F401
 from ._watch import _known_actions  # noqa: E402,F401

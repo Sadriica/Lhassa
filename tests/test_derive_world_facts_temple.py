@@ -84,16 +84,3 @@ def _isolated_db(tmp_path, monkeypatch):
         return True
 
     monkeypatch.setattr(notify_dispatch, "notify", fake_notify)
-
-
-def test_temple_derive_door_dispatches(tmp_path, monkeypatch):
-    async def fake_derive(instance_id, *, config=None, days=45):
-        return []
-
-    from lhassa.calendar import derive as derive_mod
-
-    monkeypatch.setattr(derive_mod, "derive_world", fake_derive)
-
-    reply = asyncio.run(commands.dispatch("/temple derive", config=_cfg(tmp_path)))
-    assert "derive_world_facts" in reply
-    assert "nothing to derive" in reply

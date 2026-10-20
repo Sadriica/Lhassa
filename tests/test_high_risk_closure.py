@@ -38,6 +38,7 @@ from __future__ import annotations
 
 import ast
 import importlib
+import importlib.util
 import inspect
 import textwrap
 
@@ -97,6 +98,8 @@ REVIEWED_LOW_RISK: dict[str, str] = {
 PACK_OWNED_ACTIONS: dict[str, str] = {
     "draft_research_note": "research",
     "research_intake": "research",
+    "calendar_sync": "calendar",
+    "derive_world_facts": "calendar",
 }
 
 # ── Dangerous-surface markers ───────────────────────────────────────────────

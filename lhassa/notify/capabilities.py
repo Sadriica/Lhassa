@@ -4,14 +4,17 @@
 Lhassa's self-improvement loop (:mod:`lhassa.agents.repetition`) has always found
 repeated COSTLY judgment patterns and proposed minting a deterministic action for
 them. This module closes a companion loop: a message class that already HAS a
-deterministic, $0 recognizer/handler (the calendar-query seam is the first one,
-:func:`lhassa.calendar.query.is_calendar_query` / :func:`lhassa.calendar.query.
-answer`) but that still falls through to a real think or the research bridge;
-because no ROUTE has been turned on for it yet.
+deterministic, $0 recognizer/handler (the calendar pack's ``calendar_view`` is
+the first one) but that still falls through to a real think or the research
+bridge; because no ROUTE has been turned on for it yet.
+
+The catalog is a registry: core ships it EMPTY and a capability pack appends
+its entry with :func:`register_capability` (no pack installed, no capability,
+every function below degrades to "no match").
 
 The layering is deliberate (see the module's callers in
-:mod:`lhassa.notify.telegram_inbound`): this is a SHELL (``notify/``), so it is
-free to import ``calendar.query`` (leaf), ``agents.repetition`` is never imported
+:mod:`lhassa.notify.telegram_inbound`): this is a SHELL (``notify/``);
+``agents.repetition`` is never imported
 FROM here (the dependency runs the other way; the consciousness only ever reads
 episode TEXT this module wrote, via plain SQL, never a Python import). That keeps
 ``agents/`` (an ADAPTER) completely shell-free.
@@ -59,63 +62,28 @@ Handler = Callable[..., Awaitable[Optional[str]]]
 ContinueFollowup = Callable[..., Awaitable[Optional[str]]]
 
 
-async def _calendar_handler(text: str, *, config=None) -> Optional[str]:
-    """The ``calendar_view`` deterministic handler; $0, no model.
-
-    Thin wrapper over :func:`lhassa.calendar.query.answer` so the catalog entry
-    below stays a plain data row. ``None`` when the calendar seam itself can't
-    resolve an answer (no parseable window, etc.); the caller then falls
-    through to its normal path, exactly like today's calendar short-circuit.
-    """
-    from lhassa.calendar import query as _cal_query
-
-    instance_id = getattr(config, "instance_id", None) or "inst_personal"
-    return await _cal_query.answer(instance_id, text, config=config)
-
-
-def _calendar_recognizer(text: str) -> bool:
-    from lhassa.calendar.query import is_calendar_query
-
-    return is_calendar_query(text)
-
-
-async def _calendar_continue_followup(
-    followup_text: str, context: dict, *, config=None
-) -> Optional[str]:
-    """The ``calendar_view`` follow-up continuation; $0, no model.
-
-    "Y el sábado?" carries no calendar keyword and no have/tengo/hay word, so
-    :func:`lhassa.calendar.query.is_calendar_query` (and therefore the plain
-    ``calendar_view`` handler above) would refuse it. Once the STICKY topic
-    says the thread is already about the calendar, though, the follow-up's
-    OWN reference is enough. Two shapes are handled, in order:
-
-      1. A DAY follow-up ("Y el sábado?") → :func:`lhassa.calendar.query.
-         answer_window`, which parses/answers WITHOUT the keyword gate.
-      2. A bare TIME follow-up ("¿y a las 6am?") → :func:`lhassa.calendar.
-         query.answer_time_of_day`, resolved against the sticky day carried in
-         ``context["date"]`` (the last calendar answer's day; today by
-         default); so it never again denies an event that exists.
-
-    ``None`` only when the follow-up carries NEITHER a parseable day nor a
-    time; the caller then falls through to the normal chat path. Never raises.
-    """
-    from lhassa.calendar import query as _cal_query
-
-    instance_id = getattr(config, "instance_id", None) or "inst_personal"
-    reply = await _cal_query.answer_window(instance_id, followup_text, config=config)
-    if reply is not None:
-        return reply
-    day_iso = (context or {}).get("date")
-    return await _cal_query.answer_time_of_day(
-        instance_id, followup_text, day_iso=day_iso, config=config
-    )
+#: ``(text, *, config) -> (reply, decision) | None``: an ALWAYS-ON deterministic
+#: answer served before the think (no route needed), with the ``decision`` text
+#: its episode records. ``None`` when the capability does not answer ``text``.
+Shortcut = Callable[..., Awaitable[Optional[tuple[str, str]]]]
+#: ``(text) -> dict``: the sticky-topic context a message carries for this
+#: capability (the calendar remembers which day was asked about). Falsy values
+#: are ignored when refreshing a topic.
+TopicContext = Callable[[str], dict]
 
 
 class Capability:
     """One entry in the catalog: a name, a $0 recognizer, and its handler."""
 
-    __slots__ = ("name", "recognizer", "description", "handler", "continue_followup")
+    __slots__ = (
+        "name",
+        "recognizer",
+        "description",
+        "handler",
+        "continue_followup",
+        "shortcut",
+        "topic_context",
+    )
 
     def __init__(
         self,
@@ -124,30 +92,46 @@ class Capability:
         description: str,
         handler: Handler,
         continue_followup: Optional[ContinueFollowup] = None,
+        shortcut: Optional[Shortcut] = None,
+        topic_context: Optional[TopicContext] = None,
     ) -> None:
         self.name = name
         self.recognizer = recognizer
         self.description = description
         self.handler = handler
         self.continue_followup = continue_followup
+        self.shortcut = shortcut
+        self.topic_context = topic_context
 
 
-# The catalog. Structured so a future capability (e.g. "remind_view") is a
-# one-line addition; no core edit, and (per the standing "every swap point is
-# a registry" principle) new entries only ever get APPENDED here. A capability
-# with no ``continue_followup`` simply can't be continued; an elliptical
-# follow-up sticking to its topic falls through to the normal chat path,
-# exactly as if no topic were set at all.
-CAPABILITIES: list[Capability] = [
-    Capability(
-        "calendar_view",
-        _calendar_recognizer,
-        "Answer 'what's on my calendar' style questions straight from the "
-        "calendar feed; $0, no model, no web search.",
-        _calendar_handler,
-        continue_followup=_calendar_continue_followup,
-    ),
-]
+# The catalog. Core ships it empty; a pack appends its entry through
+# register_capability (per the standing "every swap point is a registry"
+# principle: no core edit). A capability with no ``continue_followup`` simply
+# can't be continued; an elliptical follow-up sticking to its topic falls
+# through to the normal chat path, exactly as if no topic were set at all.
+CAPABILITIES: list[Capability] = []
+
+
+def register_capability(cap: Capability) -> Capability:
+    """Append ``cap`` to the catalog. Re-registering a name is a no-op (the
+    first registration wins), so a pack imported twice never duplicates."""
+    existing = get_capability(cap.name)
+    if existing is not None:
+        return existing
+    CAPABILITIES.append(cap)
+    return cap
+
+
+def topic_context(cap: Optional[Capability], text: str) -> dict:
+    """The sticky-topic context ``text`` carries for ``cap``; ``{}`` when the
+    capability declares none or its hook fails. Never raises."""
+    if cap is None or cap.topic_context is None:
+        return {}
+    try:
+        ctx = cap.topic_context(text)
+        return dict(ctx) if isinstance(ctx, dict) else {}
+    except Exception:
+        return {}
 
 
 def get_capability(name: str) -> Optional[Capability]:

@@ -83,8 +83,8 @@ def parse_window(
     mañana" never falls through to the plain "mañana" rule:
 
       pasado mañana / day after tomorrow   → local day +2
-      este fin de semana / this weekend    → next Sat 00:00 – next Mon 00:00
-      la próxima semana / next week        → next Mon 00:00 – following Mon 00:00
+      este fin de semana / this weekend    → next Sat 00:00 to next Mon 00:00
+      la próxima semana / next week        → next Mon 00:00 to following Mon 00:00
       esta semana / this week              → now → end of THIS week (Sun 24:00)
       hoy / today                          → local day +0
       mañana / tomorrow                    → local day +1
@@ -352,7 +352,7 @@ async def answer_window(instance_id: str, text: str, *, config=None) -> Optional
 # is already calendar_view, and this runs AFTER answer_window declined. It
 # demands an explicit time signal; a meridiem (am/pm), a colon (6:30), or an
 # "a las"/"at" lead; so a bare number in ordinary chat ("sala 6") never trips
-# it. A bare 1–12 with no meridiem is AMBIGUOUS, so both readings are checked
+# it. A bare 1 to 12 with no meridiem is AMBIGUOUS, so both readings are checked
 # (6 → 06:00 AND 18:00): whichever the calendar actually has wins.
 _TOD_RE = re.compile(
     r"(?:\b(a\s+las?|at)\s+)?(\d{1,2})(?::(\d{2}))?\s*(a\.?\s*m\.?|p\.?\s*m\.?)?",
@@ -363,7 +363,7 @@ def parse_time_of_day(text: str) -> Optional[list[tuple[int, int]]]:
     """A bare time reference → candidate ``(hour24, minute)`` tuples, or ``None``.
 
     Returns EVERY plausible 24h reading: an unambiguous one (meridiem or 24h
-    value → a single tuple), or both AM and PM for a bare 1–12. ``None`` when
+    value → a single tuple), or both AM and PM for a bare 1 to 12. ``None`` when
     there is no time, or no explicit time signal (meridiem / colon / "a las" /
     "at"); so ordinary chat never matches. Never raises.
     """
@@ -385,10 +385,10 @@ def parse_time_of_day(text: str) -> Optional[list[tuple[int, int]]]:
             return [(0 if hour == 12 else hour, minute)]
         if mer == "pm":
             return [(hour if hour == 12 else (hour + 12) % 24, minute)]
-        # No meridiem: a 0 or 13–23 value is already unambiguous 24h.
+        # No meridiem: a 0 or 13 to 23 value is already unambiguous 24h.
         if hour == 0 or hour > 12:
             return [(hour, minute)]
-        # Ambiguous 1–12 → check both readings; the calendar disambiguates.
+        # Ambiguous 1 to 12 → check both readings; the calendar disambiguates.
         cands = {(hour, minute), ((hour + 12) % 24, minute)}
         return sorted(cands)
     except Exception:

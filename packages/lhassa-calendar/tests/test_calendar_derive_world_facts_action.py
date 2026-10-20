@@ -1,4 +1,4 @@
-"""Tests for the ``derive_world_facts`` action (lhassa/actionpack/_derive.py).
+"""Tests for the ``derive_world_facts`` action (lhassa/calendar/world_facts.py).
 
 Offline, no network: :func:`lhassa.calendar.derive.derive_world` is
 monkeypatched to return fixed candidates so nothing touches a real calendar
@@ -12,7 +12,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from lhassa.actionpack import _derive
+from lhassa.calendar import world_facts as _derive
 from lhassa.core import db
 
 

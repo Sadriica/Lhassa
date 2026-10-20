@@ -34,7 +34,6 @@ quiet_logging()
 
 from lhassa.cli import agent  # noqa: E402  (must follow quiet_logging)
 from lhassa.cli import artifact_cmds as _artifact_cmds  # noqa: E402
-from lhassa.cli import calendar_cmds as _calendar_cmds  # noqa: E402
 from lhassa.cli import capabilities as _capabilities  # noqa: E402
 from lhassa.cli import commands as _commands  # noqa: E402
 from lhassa.cli import config_cmds as _config_cmds  # noqa: E402
@@ -301,9 +300,6 @@ app.add_typer(_flow_cmds.flow_app, name="flows")
 
 # Attach the `lhassa flow` sub-app (the singular lifecycle: create/edit/run/watch/logs).
 app.add_typer(_flow_cmds.one_flow_app, name="flow")
-
-# Attach the `lhassa calendar` sub-app (named calendar feeds: add/list/remove).
-app.add_typer(_calendar_cmds.calendar_app, name="calendar")
 
 # Attach the `lhassa artifacts` sub-app (registered artifacts; the delivery chain).
 app.add_typer(_artifact_cmds.artifact_app, name="artifacts")
