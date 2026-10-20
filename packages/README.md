@@ -16,6 +16,7 @@ packages/lhassa-<name>/
       __init__.py             #   chat commands, actions that compose shells
       api.py  cli.py  ...
   tests/
+    conftest.py               # re-exports tests/conftest.py (see rule 8)
     test_<sub>_*.py           # test file names carry the pack prefix (pytest
                               #   rootdir mode rejects duplicate basenames)
 ```
@@ -53,6 +54,11 @@ packages/lhassa-<name>/
    packs) both pass, and `tests/test_architecture.py` stays green: the guard
    walks `packages/*/src/lhassa` too and enforces `core-never-imports-a-pack`
    and `pack-isolation`.
+8. **Hermetic tests.** `tests/conftest.py` only reaches files under `tests/`,
+   so every pack's `tests/conftest.py` re-exports it (copy the one in
+   `packages/lhassa-bench/tests/`). Without it a pack test gets none of core's
+   isolation, including the autouse fixture that keeps tests off the real
+   `~/.lhassa/brain.db`.
 
 ## Installing
 
