@@ -337,6 +337,8 @@ def render(data: dict) -> str:
         f"  dir={pdir}  [{_mark(bool(plugins.get('plugins_dir_exists')))} exists]"
     )
     console.print(f"  loaded: {_names_line(plugins.get('loaded', []))}")
+    packs = [p.get("name", "") for p in plugins.get("packs", [])]
+    console.print(f"  packs: {_names_line(packs)}")
 
     # ── Active config (what's on/off) ──────────────────────────────────────────
     console.print("\n[bold]Active config (on/off)[/bold]")

@@ -36,14 +36,17 @@ WORKDIR /app
 # Resolve and install the runtime dependencies first (no dev deps, no voice pack
 # extra), from the lockfile, WITHOUT the project itself — this layer is cached
 # across code edits.
+# The capability packs are uv workspace members, so their pyproject files must
+# be present to resolve; their source is installed in the next layer.
 COPY pyproject.toml uv.lock ./
-RUN uv sync --frozen --no-dev --no-install-project
+COPY packages/ ./packages/
+RUN uv sync --frozen --no-dev --all-packages --no-install-workspace
 
 # Copy the application source and the pre-built dashboard, then install the
 # project package into the venv (still no dev deps, no voice pack).
 COPY . .
 COPY --from=dashboard-build /dashboard/dist ./dashboard/dist
-RUN uv sync --frozen --no-dev
+RUN uv sync --frozen --no-dev --all-packages
 
 
 # ─────────────────────────────────────────────────────────────────────────────
