@@ -47,7 +47,7 @@ def subject_available(subject: str, config: Any) -> bool:
     binary on PATH; anything else is assumed reachable (resolved lazily).
 
     Public (no leading underscore); the CLI's default-subject picker
-    (:mod:`lhassa.cli.bench_cmds`) reuses this exact check.
+    (:mod:`lhassa.bench.surfaces.cli`) reuses this exact check.
     """
     if subject in CLI_PROVIDERS:
         return shutil.which(_binary_for(subject, config)) is not None
@@ -241,7 +241,7 @@ def summarize(rows: list[dict]) -> str:
         metrics = [r["metric"] for r in subject_rows if r.get("metric") is not None]
         avg_metric = (sum(metrics) / len(metrics)) if metrics else None
         total_cost = sum(float(r.get("cost_usd") or 0.0) for r in subject_rows)
-        avg_metric_str = f"{avg_metric:.2f}" if avg_metric is not None else "—"
+        avg_metric_str = f"{avg_metric:.2f}" if avg_metric is not None else "-"
         lines.append(
             f"{subject:<12} {n:>4} {pass_pct:>6.1f}% {avg_metric_str:>11} {total_cost:>10.4f}"
         )

@@ -34,7 +34,6 @@ quiet_logging()
 
 from lhassa.cli import agent  # noqa: E402  (must follow quiet_logging)
 from lhassa.cli import artifact_cmds as _artifact_cmds  # noqa: E402
-from lhassa.cli import bench_cmds as _bench_cmds  # noqa: E402
 from lhassa.cli import calendar_cmds as _calendar_cmds  # noqa: E402
 from lhassa.cli import capabilities as _capabilities  # noqa: E402
 from lhassa.cli import commands as _commands  # noqa: E402
@@ -328,9 +327,6 @@ app.add_typer(_task_cmds.task_app, name="task")
 # ── lhassa project … (the first-class workspace entity) ─────────────────────
 app.add_typer(_project_cmds.project_app, name="project")
 
-# ── lhassa bench … (eval-driven development: fixture × subject, verifier-scored) ──
-app.add_typer(_bench_cmds.bench_app, name="bench")
-
 # ── lhassa research … (the product's research line: evidence-cited note drafts) ──
 app.add_typer(_research_cmds.research_app, name="research")
 app.add_typer(_integrity_cmds.integrity_app, name="integrity")
@@ -346,6 +342,19 @@ app.add_typer(_knowledge_cmds.knowledge_app, name="knowledge")
 
 # Attach `lhassa memory` (search + add) and `lhassa onboard` (guided questionnaire).
 _memory_cmds.register(app)
+
+# ── capability packs: each mounts its own `lhassa <name>` sub-app ───────────
+# (``extensions.register_cli_app``). Discovery rides on register_all(); a
+# failing factory is skipped so one broken pack never breaks the CLI.
+from lhassa import actionpack as _actionpack  # noqa: E402
+from lhassa.extensions import CLI_APPS as _CLI_APPS  # noqa: E402
+
+_actionpack.register_all()
+for _pack_cli_name, _pack_cli_factory in _CLI_APPS.items().items():
+    try:
+        app.add_typer(_pack_cli_factory(), name=_pack_cli_name)
+    except Exception as _exc:  # noqa: BLE001
+        print(f"lhassa: pack command {_pack_cli_name!r} failed to load: {_exc}", file=sys.stderr)
 
 
 @app.command("tui")

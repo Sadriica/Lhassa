@@ -37,7 +37,6 @@ docker/entrypoint.sh
 lhassa/_vendor/aiosqlite.py
 lhassa/agents/ptc.py
 lhassa/agents/verify.py
-lhassa/bench/runner.py
 lhassa/calendar/query.py
 lhassa/cli/artifact_cmds.py
 lhassa/cli/capabilities.py
