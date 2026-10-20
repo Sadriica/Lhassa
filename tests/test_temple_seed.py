@@ -1,7 +1,7 @@
 """Tests for the ``temple`` seed (lhassa.seeds.temple); Lhassa's inner department.
 
 Fully offline: a tiny Config stand-in redirects the topology file to a tmp path,
-mirroring tests/test_cv_seed.py. The seed goes through the validated org
+mirroring packages/lhassa-cv/tests/test_cv_seed.py. The seed goes through the validated org
 management API, so a bad op can never corrupt the saved topology file.
 """
 

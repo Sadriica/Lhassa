@@ -169,7 +169,6 @@ from lhassa.api import (  # noqa: E402
 # Re-exported for the CLI's ``lhassa status``, which reuses the aggregate in-process
 # (``lhassa.cli.extra_cmds`` imports ``server.build_overview``: no HTTP round-trip).
 from lhassa.api.overview_routes import build_overview  # noqa: F401,E402
-from lhassa.api.postulaciones_routes import router as postulaciones_routes
 
 app.include_router(task_routes.router)
 app.include_router(analytics_routes.router)
@@ -194,7 +193,6 @@ app.include_router(overview_routes.router)
 app.include_router(artifacts_routes.router)
 app.include_router(project_routes.router)
 app.include_router(share_routes.router)
-app.include_router(postulaciones_routes)
 
 # Capability packs mount their own routers (``extensions.register_api_router``).
 # Plugin discovery rides on register_all(); a failing factory is skipped so one

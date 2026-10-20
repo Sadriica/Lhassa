@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """The ``temple`` seed. Lhassa's own inner workshop for INTERNAL functions.
 
-Mirrors :mod:`lhassa.seeds.cv`'s topology-provisioning shape (idempotent, goes
+Mirrors the cv pack seed's (:mod:`lhassa.cv.surfaces.seed`) topology-provisioning shape (idempotent, goes
 through the validated org management API): a single department, ``temple``, a
 DIRECT child of Lhassa (``config.root_admin_id``); distinct from ``interns``
 (the CV pipeline's workers) and ``personal`` (the owner's own department);
@@ -86,7 +86,7 @@ def _ensure_brain(
     """Create ``node_id`` if it is missing. Return ``True`` if created, else ``False``.
 
     Idempotent: an existing brain is left untouched (never re-created, never
-    dropped). Mirrors :func:`lhassa.seeds.cv._ensure_brain` exactly.
+    dropped). Mirrors :func:`lhassa.cv.surfaces.seed._ensure_brain` exactly.
     """
     if load_topology(config).has(node_id):
         return False
@@ -158,7 +158,7 @@ def seed_temple(config: "Optional[Config]" = None) -> dict:
         return summary  # no department to hang workers under; stop here
 
     # The five monks; each a leaf under temple, sharing its department label
-    # (mirrors lhassa.seeds.cv's worker brains, which share INTERNS_DEPARTMENT
+    # (mirrors lhassa.cv.surfaces.seed's worker brains, which share INTERNS_DEPARTMENT
     # too); lhassa.org.temple resolves a SPECIFIC monk by its own id, not by
     # this shared department string, so the sharing is harmless.
     for worker_id in TEMPLE_WORKERS:

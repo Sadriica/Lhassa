@@ -401,7 +401,7 @@ class _RealCfg(SimpleNamespace):
 @pytest.fixture
 def real_seed_env(tmp_path, monkeypatch):
     """Wire the real seed registry at a tmp path — the same seams
-    tests/test_cv_seed.py, tests/test_digest_seed.py, tests/test_maintenance_seed.py
+    packages/lhassa-cv/tests/test_cv_seed.py, tests/test_digest_seed.py, tests/test_maintenance_seed.py
     and tests/test_personal_seed.py each use individually, combined here so
     ``apply_profile_seeds`` can run for real end to end."""
     import lhassa.core.db as db

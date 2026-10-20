@@ -17,7 +17,6 @@ per group of related commands; importing each submodule is what runs its
   (``_oops``, ``_config``, ``_routine_provider_model``, ``_health_line``,
   ``_today_spend``, ``_approval_age``);
 * ``_core``: ``/start`` ``/help`` ``/status`` ``/version`` ``/config`` ``/report``;
-* ``_cv``: ``/cvnewbase`` ``/cvbase``;
 * ``_code``: ``/code`` (an agentic coding run, gated behind approval);
 * ``_approvals``: ``/approvals`` ``/approve`` ``/deny``;
 * ``_watch``: ``/watch`` ``/watches`` ``/unwatch`` ``/goal``;
@@ -82,7 +81,6 @@ from . import (  # noqa: E402,F401
     _capabilities,
     _code,
     _core,
-    _cv,
     _memory,
     _org,
     _remind,
@@ -94,7 +92,7 @@ from . import (  # noqa: E402,F401
 from ._ai import _moa_footer, _moa_label, _resolve_chat_provider  # noqa: E402,F401
 from ._capabilities import _flag  # noqa: E402,F401
 from ._code import _CODE_APPROVAL_MARKER, _code_cwd  # noqa: E402,F401
-from ._core import DESCRIPTIONS, _ledger_window_cost, menu_entries  # noqa: E402,F401
+from ._core import DESCRIPTIONS, _ledger_window_cost, describe_command, menu_entries  # noqa: E402,F401
 from ._memory import _render_personal_agenda  # noqa: E402,F401
 from ._org import _cadence_label, _match_temple_action, _short_local_due, _temple_schedule  # noqa: E402,F401
 from ._remind import parse_remind, register_reminder_extra  # noqa: E402,F401

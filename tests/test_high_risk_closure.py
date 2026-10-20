@@ -100,6 +100,7 @@ PACK_OWNED_ACTIONS: dict[str, str] = {
     "research_intake": "research",
     "calendar_sync": "calendar",
     "derive_world_facts": "calendar",
+    "compile_cv": "cv",
 }
 
 # ── Dangerous-surface markers ───────────────────────────────────────────────

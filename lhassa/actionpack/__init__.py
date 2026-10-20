@@ -2,7 +2,7 @@
 """
 actionpack; the built-in set of deterministic actions (Phase 3; org_run Etapa 3).
 
-Shell-layer package: composes notify/, health/, memory/, cv/, security/, core/,
+Shell-layer package: composes notify/, health/, memory/, security/, core/,
 org/. Nothing in core/ or other inner layers may import from here.
 
 Public surface
@@ -92,7 +92,6 @@ def register_all() -> None:
     _reg("list_approvals", _brain.list_approvals)
     _reg("check_health", _brain.check_health)
     _reg("git_status_repos", _brain.git_status_repos)
-    _reg("compile_cv", _brain.compile_cv)
 
     # ── LLM spend visibility ───────────────────────────────────────────────────
     _reg("check_spend", _llm.check_spend)

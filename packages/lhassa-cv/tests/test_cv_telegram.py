@@ -5,7 +5,6 @@ helpers (``get_file`` / ``send_document``) are monkeypatched; the CV work-flow i
 either faked (routing tests) or run fully OFFLINE ($0, the injected base-CV override
 test). Covers:
 
-  * :func:`lhassa.cv.extract_text` on a ``.tex`` payload and a tiny generated PDF;
   * a document update → extract → ``run_flow(base_cv=<extracted>)`` → ``sendDocument``;
   * a no-caption document → asks for the target role (no flow, no download);
   * a gate failure → a short text reply, and NO file sent;
@@ -16,65 +15,16 @@ import asyncio
 from types import SimpleNamespace
 
 from lhassa import cv
+from lhassa.cv.surfaces import telegram as cvtg
 from lhassa.notify import telegram, telegram_api, telegram_inbound
-
-
-# ── a tiny, valid PDF with extractable text (no third-party writer needed) ────
-def _make_pdf(text: str) -> bytes:
-    objs = [
-        b"<< /Type /Catalog /Pages 2 0 R >>",
-        b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
-        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "
-        b"/Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>",
-        None,  # content stream, filled below
-        b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
-    ]
-    stream = b"BT /F1 24 Tf 72 700 Td (" + text.encode() + b") Tj ET"
-    objs[3] = b"<< /Length " + str(len(stream)).encode() + b" >>\nstream\n" + stream + b"\nendstream"
-    out = bytearray(b"%PDF-1.4\n")
-    offsets = []
-    for i, body in enumerate(objs, start=1):
-        offsets.append(len(out))
-        out += str(i).encode() + b" 0 obj\n" + body + b"\nendobj\n"
-    xref_pos = len(out)
-    n = len(objs) + 1
-    out += b"xref\n0 " + str(n).encode() + b"\n0000000000 65535 f \n"
-    for off in offsets:
-        out += ("%010d 00000 n \n" % off).encode()
-    out += b"trailer\n<< /Size " + str(n).encode() + b" /Root 1 0 R >>\n"
-    out += b"startxref\n" + str(xref_pos).encode() + b"\n%%EOF\n"
-    return bytes(out)
-
-
-# ── extract_text ──────────────────────────────────────────────────────────────
-def test_extract_text_reads_tex():
-    data = "\\documentclass{article}\n\\begin{document}\nHola\n\\end{document}".encode()
-    assert cv.extract_text(data, filename="cv.tex") == data.decode("utf-8")
-
-
-def test_extract_text_reads_pdf():
-    out = cv.extract_text(_make_pdf("Hello CV Test 42"), filename="cv.pdf")
-    assert "Hello CV Test 42" in out
-
-
-def test_extract_text_sniffs_pdf_without_extension():
-    # No ``.pdf`` name, but the %PDF- magic bytes route it to the PDF extractor.
-    out = cv.extract_text(_make_pdf("Magic Sniffed"), filename="document")
-    assert "Magic Sniffed" in out
-
-
-def test_extract_text_empty_and_garbage_never_raise():
-    assert cv.extract_text(b"") == ""
-    # A ``.pdf`` name over non-PDF bytes → pypdf fails → "" (never raises).
-    assert cv.extract_text(b"not a pdf at all", filename="x.pdf") == ""
 
 
 # ── company parsing ─────────────────────────────────────────────────────────────
 def test_parse_company_forms():
-    assert telegram_inbound._parse_company("Backend role @ Acme Corp") == "Acme Corp"
-    assert telegram_inbound._parse_company("company: Globex") == "Globex"
-    assert telegram_inbound._parse_company("company=Initech.") == "Initech"
-    assert telegram_inbound._parse_company("just a plain job posting") is None
+    assert cvtg._parse_company("Backend role @ Acme Corp") == "Acme Corp"
+    assert cvtg._parse_company("company: Globex") == "Globex"
+    assert cvtg._parse_company("company=Initech.") == "Initech"
+    assert cvtg._parse_company("just a plain job posting") is None
 
 
 # ── config / helpers ────────────────────────────────────────────────────────────
@@ -207,8 +157,8 @@ def test_document_update_runs_flow_and_sends_tex(monkeypatch, tmp_path):
 
 
 def test_no_caption_document_holds_cv_and_asks_for_role(monkeypatch):
-    telegram_inbound._PENDING_CV.clear()
-    telegram_inbound._AWAIT_BASE.clear()
+    cvtg._PENDING_CV.clear()
+    cvtg._AWAIT_BASE.clear()
     tex_body = "\\documentclass{article}\\begin{document}Body\\end{document}"
     payload = {
         "ok": True,
@@ -240,14 +190,14 @@ def test_no_caption_document_holds_cv_and_asks_for_role(monkeypatch):
 
     assert new_offset == 311
     # Not armed → the CV is HELD and we ask (plain text) for the posting; no file/flow.
-    assert telegram_inbound._PENDING_CV["123"]["base_cv"] == tex_body
+    assert cvtg._PENDING_CV["123"]["base_cv"] == tex_body
     assert len(sent) == 1 and sent[0].startswith("Got your CV")
-    telegram_inbound._PENDING_CV.clear()
+    cvtg._PENDING_CV.clear()
 
 
 def test_held_cv_then_followup_text_runs_flow(monkeypatch, tmp_path):
-    telegram_inbound._PENDING_CV.clear()
-    telegram_inbound._AWAIT_BASE.clear()
+    cvtg._PENDING_CV.clear()
+    cvtg._AWAIT_BASE.clear()
     tex_body = (
         "\\documentclass{article}\\begin{document}"
         "owner@example.edu +57 300 111 2222\\end{document}"
@@ -314,8 +264,8 @@ def test_held_cv_then_followup_text_runs_flow(monkeypatch, tmp_path):
     assert seen["inputs"] == {"summary": "AI Engineer @ Sezzle"}
     assert seen["company"] == "Sezzle"
     assert sent_docs == [str(out_file)]
-    assert telegram_inbound._PENDING_CV == {}  # consumed
-    telegram_inbound._PENDING_CV.clear()
+    assert cvtg._PENDING_CV == {}  # consumed
+    cvtg._PENDING_CV.clear()
 
 
 def test_gate_failure_replies_and_sends_no_file(monkeypatch):
@@ -521,21 +471,21 @@ def _document_payload(update_id, *, file_name="cv.tex", caption=None):
 
 
 def test_cvnewbase_arms_chat_and_replies(monkeypatch):
-    telegram_inbound._AWAIT_BASE.clear()
+    cvtg._AWAIT_BASE.clear()
     sent = _patch_send(monkeypatch)
 
     asyncio.run(telegram_inbound._answer("/cvnewbase", config=_cfg(), chat_id="123"))
 
     # The chat is ARMED for a base replacement and told to send the file next.
-    assert telegram_inbound._AWAIT_BASE.get("123") is not None
+    assert cvtg._AWAIT_BASE.get("123") is not None
     assert len(sent) == 1 and "new base CV" in sent[0]
-    telegram_inbound._AWAIT_BASE.clear()
+    cvtg._AWAIT_BASE.clear()
 
 
 def test_armed_document_saves_base_and_disarms(monkeypatch):
-    telegram_inbound._PENDING_CV.clear()
-    telegram_inbound._AWAIT_BASE.clear()
-    telegram_inbound._arm_base("123")  # as if /cvnewbase ran
+    cvtg._PENDING_CV.clear()
+    cvtg._AWAIT_BASE.clear()
+    cvtg._arm_base("123")  # as if /cvnewbase ran
     tex_body = "\\documentclass{article}\\begin{document}Body\\end{document}"
 
     monkeypatch.setattr(
@@ -567,14 +517,14 @@ def test_armed_document_saves_base_and_disarms(monkeypatch):
     assert new_offset == 601
     assert saved["text"] == tex_body  # the upload replaced the base (caption ignored)
     assert len(sent) == 1 and "Base CV updated" in sent[0]
-    assert telegram_inbound._AWAIT_BASE == {}  # disarmed
-    assert telegram_inbound._PENDING_CV == {}  # no one-off hold created
-    telegram_inbound._AWAIT_BASE.clear()
+    assert cvtg._AWAIT_BASE == {}  # disarmed
+    assert cvtg._PENDING_CV == {}  # no one-off hold created
+    cvtg._AWAIT_BASE.clear()
 
 
 def test_unarmed_document_holds_and_asks_no_save(monkeypatch):
-    telegram_inbound._PENDING_CV.clear()
-    telegram_inbound._AWAIT_BASE.clear()
+    cvtg._PENDING_CV.clear()
+    cvtg._AWAIT_BASE.clear()
     tex_body = "\\documentclass{article}\\begin{document}Body\\end{document}"
 
     monkeypatch.setattr(
@@ -596,9 +546,9 @@ def test_unarmed_document_holds_and_asks_no_save(monkeypatch):
 
     assert new_offset == 611
     # Held for a one-off; asked for the posting; base untouched.
-    assert telegram_inbound._PENDING_CV["123"]["base_cv"] == tex_body
+    assert cvtg._PENDING_CV["123"]["base_cv"] == tex_body
     assert len(sent) == 1 and sent[0].startswith("Got your CV")
-    telegram_inbound._PENDING_CV.clear()
+    cvtg._PENDING_CV.clear()
 
 
 # ── /cvbase reports the on-disk base CV ───────────────────────────────────────
@@ -772,7 +722,7 @@ def _run_reply_with_record(monkeypatch, tmp_path, compile_result):
         "steps": [{"kind": "output", "output": "tex", "path": str(tex)}],
     }
     asyncio.run(
-        telegram_inbound._reply_with_cv(record, "flow-zvzpry", "Acme", config=_cfg())
+        cvtg._reply_with_cv(record, "flow-zvzpry", "Acme", config=_cfg())
     )
     return tex, sent_docs
 
@@ -844,7 +794,7 @@ def test_cv_reply_writes_the_per_brain_delivery_chain(monkeypatch, tmp_path):
     }
 
     asyncio.run(
-        telegram_inbound._reply_with_cv(
+        cvtg._reply_with_cv(
             record,
             "flow-zvzpry",
             "Acme",
@@ -891,3 +841,38 @@ def test_cv_reply_writes_the_per_brain_delivery_chain(monkeypatch, tmp_path):
     assert artifact_rows[0]["metadata"]["company"] == "Acme"
     assert artifact_rows[0]["metadata"]["posting"] == "Backend role @ Acme"
     assert artifact_rows[0]["metadata"]["run_id"] == "run_xyz789"
+
+
+# ── /cv preflight and gate-failure replies ────────────────────────────────────
+def test_cv_with_bare_title_asks_for_the_posting_without_waking_brains(monkeypatch):
+    payload = {
+        "ok": True,
+        "result": [
+            {"update_id": 502, "message": {"chat": {"id": 123}, "text": "/cv Analista de datos"}}
+        ],
+    }
+    monkeypatch.setattr(
+        telegram_inbound.httpx, "AsyncClient", _client_returning(payload)
+    )
+    ran = []
+
+    async def fake_flow(**kw):
+        ran.append(kw)
+        return None, "flow-x"
+
+    monkeypatch.setattr(cvtg, "_run_cv_flow", fake_flow)
+    sent = _patch_send(monkeypatch)
+    asyncio.run(telegram_inbound.poll_once(_cfg(), offset=None))
+    assert ran == []  # six brains stayed asleep
+    assert any("FULL job posting" in s for s in sent)
+
+
+def test_gate_failure_reply_relays_the_teams_actual_words():
+    record = {
+        "steps": [
+            {"kind": "task", "output": {"summary": "No vi el contenido de la convocatoria; ¿puedes pegar el posting?"}},
+            {"kind": "output", "output": "tex"},
+        ]
+    }
+    msg = cvtg._gate_failure_reply(record)
+    assert "pegar el posting" in msg

@@ -10,15 +10,18 @@ engine:
   * :mod:`lhassa.cv.paths`  : ``cv_dir`` / ``base_path`` / ``out_dir``.
   * :mod:`lhassa.cv.store`  : ``load_base`` / ``save_base`` / ``base_info`` /
     ``slug_company`` / ``short_id`` / ``export``.
-  * :mod:`lhassa.cv.extract`: ``extract_text`` (bytes → text for uploaded CVs).
-  * :mod:`lhassa.cv.compile`: ``compile_pdf`` (a tailored ``.tex`` → a PDF to send).
+  * ``extract_text`` (bytes to text for uploaded CVs), re-exported from the core
+    :mod:`lhassa.memory.extract` seam.
+  * :mod:`lhassa.cv.compile`: ``compile_pdf`` (a tailored ``.tex`` to a PDF to send).
+  * :mod:`lhassa.cv.actions`: the ``compile_cv`` action.
 
-Layer: leaf infrastructure used BY the flow engine; it depends on nothing but the
-standard library and never imports an outer shell (see ``tests/test_architecture.py``).
+Shipped by the ``lhassa-cv`` pack (:mod:`lhassa.cv.pack` registers it). Layer: leaf
+file-I/O infrastructure; it never imports an outer shell (see
+``tests/test_architecture.py``). The pack's shell slice lives in
+:mod:`lhassa.cv.surfaces`.
 """
 
 from lhassa.cv.compile import compile_pdf
-from lhassa.cv.extract import extract_text
 from lhassa.cv.paths import base_path, cv_dir, out_dir
 from lhassa.cv.store import (
     base_info,
@@ -30,6 +33,7 @@ from lhassa.cv.store import (
     short_id,
     slug_company,
 )
+from lhassa.memory.extract import extract_text
 
 __all__ = [
     "base_info",

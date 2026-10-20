@@ -3,9 +3,10 @@
 
 A *seed* recreates a whole working structure on a fresh machine from code, with no
 hand-rebuilding: it is the reproducible counterpart to the config the owner would
-otherwise assemble by clicking around. The first seed is the ``cv`` pipeline (the
+otherwise assemble by clicking around. The first seed was the ``cv`` pipeline (the
 interns department, its worker brains, the monitor role, and the canonical
-"Impossible-to-reject CV" work-flow); future seeds drop in exactly the same way.
+"Impossible-to-reject CV" work-flow), now shipped by the cv pack; every seed drops in
+exactly the same way.
 
 Elastic + modular, like every other swap point in Lhassa (``PROVIDERS``,
 ``CHANNELS``, ``COMMANDS``, ``VERIFIERS`` …): a :class:`Seed` sits behind the generic
@@ -124,7 +125,6 @@ def apply_all(config: "Optional[Config]" = None) -> dict:
 # Imported last so ``register_seed`` above already exists when the module runs its
 # ``@register_seed`` decorators. New built-in seeds add a line here; external seeds
 # need no edit at all (they self-register when their plugin module is imported).
-from lhassa.seeds import cv as _cv  # noqa: E402,F401  (self-registers "cv")
 from lhassa.seeds import digest as _digest  # noqa: E402,F401  (self-registers "digest")
 from lhassa.seeds import maintenance as _maintenance  # noqa: E402,F401  (self-registers "maintenance")
 from lhassa.seeds import personal as _personal  # noqa: E402,F401  (self-registers "personal")

@@ -1522,40 +1522,6 @@ def test_empty_reply_twice_gets_the_honest_empty_message(monkeypatch):
     assert sent == [telegram_inbound._EMPTY_REPLY]  # never the 'can't reach' lie
 
 
-def test_cv_with_bare_title_asks_for_the_posting_without_waking_brains(monkeypatch):
-    payload = {
-        "ok": True,
-        "result": [
-            {"update_id": 502, "message": {"chat": {"id": 123}, "text": "/cv Analista de datos"}}
-        ],
-    }
-    monkeypatch.setattr(
-        telegram_inbound.httpx, "AsyncClient", _client_returning(payload)
-    )
-    ran = []
-
-    async def fake_flow(**kw):
-        ran.append(kw)
-        return None, "flow-x"
-
-    monkeypatch.setattr(telegram_inbound, "_run_cv_flow", fake_flow)
-    sent = _patch_send(monkeypatch)
-    asyncio.run(telegram_inbound.poll_once(_cfg(), offset=None))
-    assert ran == []  # six brains stayed asleep
-    assert any("FULL job posting" in s for s in sent)
-
-
-def test_gate_failure_reply_relays_the_teams_actual_words():
-    record = {
-        "steps": [
-            {"kind": "task", "output": {"summary": "No vi el contenido de la convocatoria; ¿puedes pegar el posting?"}},
-            {"kind": "output", "output": "tex"},
-        ]
-    }
-    msg = telegram_inbound._gate_failure_reply(record)
-    assert "pegar el posting" in msg
-
-
 def test_the_chat_episode_records_what_was_ASKED(monkeypatch, tmp_path):
     """/recall must find a Telegram turn by the question, not only the answer.
 

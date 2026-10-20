@@ -15,7 +15,7 @@ from loguru import logger
 from ._registry import COMMANDS, register_command
 from ._shared import _config, _health_line, _oops, _routine_provider_model, _today_spend
 
-__all__ = ["DESCRIPTIONS", "menu_entries"]
+__all__ = ["DESCRIPTIONS", "describe_command", "menu_entries"]
 
 
 @register_command("start")
@@ -37,7 +37,6 @@ _HELP_GROUPS: list[Tuple[str, list[str]]] = [
     ("Calendars", ["calendar", "calendars"]),
     ("Decisions", ["approvals", "approve", "deny"]),
     ("Watch & goals", ["watch", "watches", "unwatch", "goal", "temple"]),
-    ("CV", ["cvnewbase", "cvbase"]),
     ("Coding", ["code"]),
     ("System", ["status", "report", "capabilities", "tools", "skills", "org", "fleet", "version"]),
 ]
@@ -76,8 +75,6 @@ DESCRIPTIONS: dict[str, str] = {
         "<instruction> | schedule; internal work / the temple's own clock "
         "(e.g. 'distill', 'curate skills', 'sync calendar', 'derive world')."
     ),
-    "cvnewbase": "Arm a base-CV replacement.",
-    "cvbase": "Show the base CV on file.",
     "code": "<task>; launch a coding agent on your files (asks for your approval first).",
     "status": "Provider, health and today's spend.",
     "report": "[days]; spend summary (default 7d).",
@@ -89,6 +86,26 @@ DESCRIPTIONS: dict[str, str] = {
     "version": "My version, runtime and key toggles.",
     "config": "[key [value]]; read or change a runtime setting.",
 }
+
+
+def describe_command(name: str, description: str, *, group: Optional[str] = None) -> None:
+    """Give a plugin/pack command its ``/help`` line (and optionally a group).
+
+    A registered command with no description still shows up (see ``_cmd_help``'s
+    "also available" line); this lets a pack describe its own commands instead of
+    core listing them. ``group`` names a ``/help`` section, created after the
+    built-in ones when new. An existing description is never overwritten.
+    """
+    name = name.strip().lower()
+    DESCRIPTIONS.setdefault(name, description)
+    if not group:
+        return
+    for title, names in _HELP_GROUPS:
+        if title == group:
+            if name not in names:
+                names.append(name)
+            return
+    _HELP_GROUPS.append((group, [name]))
 
 
 def menu_entries() -> list[tuple[str, str]]:

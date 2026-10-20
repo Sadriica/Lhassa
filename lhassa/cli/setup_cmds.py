@@ -824,7 +824,7 @@ def setup_cmd(
         result = (report["seeds"].get("results") or {}).get(name, {})
         errs = result.get("errors") or ([result["error"]] if result.get("error") else [])
         if result.get("skipped"):
-            out.print(f"  [dim]- seed {name}: {result['skipped']}[/]")
+            out.print(f"  [dim]- seed {name}: skipped ({result['skipped']})[/]")
             continue
         mark = "[warn]✗[/]" if errs else "[success]✓[/]"
         out.print(f"  {mark} seed [model]{name}[/]" + (f": {'; '.join(errs)}" if errs else ""))

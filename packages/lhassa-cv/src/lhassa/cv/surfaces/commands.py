@@ -1,22 +1,21 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""CV commands: /cvnewbase /cvbase.
+"""CV chat commands: /cvnewbase /cvbase (registered by :mod:`lhassa.cv.pack`).
 
-Moved verbatim out of the former ``lhassa/notify/commands.py``.
+Plain string-returning handlers for the notify ``COMMANDS`` registry. The ``/cv``
+command itself replies with a file, so it is an inbound hook
+(:mod:`lhassa.cv.surfaces.telegram`), not a registry command.
 """
 
 from __future__ import annotations
 
 from loguru import logger
 
-from ._registry import register_command
 
-
-@register_command("cvnewbase")
-async def _cmd_cvnewbase(args: str, *, config=None) -> str:
+async def cmd_cvnewbase(args: str, *, config=None) -> str:
     """Arm a base-CV replacement; the reply text for ``/cvnewbase``.
 
     The arming side-effect (marking this chat so its next upload replaces the base CV)
-    lives in the inbound poller, which has the chat id; this handler owns only the
+    lives in the cv inbound hook, which has the chat id; this handler owns only the
     instruction text, so ``/cvnewbase`` appears in ``/help`` and the command menu.
     """
     return (
@@ -25,8 +24,7 @@ async def _cmd_cvnewbase(args: str, *, config=None) -> str:
     )
 
 
-@register_command("cvbase")
-async def _cmd_cvbase(args: str, *, config=None) -> str:
+async def cmd_cvbase(args: str, *, config=None) -> str:
     """Show the base CV on file (``cv_largo.tex``); LLM-free, never raises.
 
     Reports whether a base CV exists, its size and first line, and how to update it
@@ -51,3 +49,10 @@ async def _cmd_cvbase(args: str, *, config=None) -> str:
     except Exception as exc:
         logger.warning(f"commands: /cvbase failed: {exc}")
         return "I couldn't read the base CV info right now."
+
+
+#: name -> handler; :mod:`lhassa.cv.pack` registers each one.
+HANDLERS = {
+    "cvnewbase": cmd_cvnewbase,
+    "cvbase": cmd_cvbase,
+}
