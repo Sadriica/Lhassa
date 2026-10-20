@@ -11,7 +11,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from lhassa.actionpack._research_note import (
+from lhassa.research.note import (
     _DRAFT_HEADER,
     draft_research_note,
     gather_evidence,

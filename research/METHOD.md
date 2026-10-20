@@ -32,7 +32,7 @@ does not impersonate scientific precision. Every value keeps its rationale and
 source ids.
 
 The model never assigns its own budget. The LLM-free
-`core.idea_assessments.score_document` recomputes the weighted score, applies
+`lhassa.research.assessments.score_document` recomputes the weighted score, applies
 hard rejects, and chooses:
 
 - `none → archive`: retain the negative result; no further spend.

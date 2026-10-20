@@ -36,7 +36,6 @@ docker-compose.yml
 docker/entrypoint.sh
 lhassa/_vendor/aiosqlite.py
 lhassa/agents/ptc.py
-lhassa/agents/verify.py
 lhassa/calendar/query.py
 lhassa/cli/artifact_cmds.py
 lhassa/cli/capabilities.py
@@ -47,7 +46,6 @@ lhassa/cli/flow_cmds.py
 lhassa/cli/memory_cmds.py
 lhassa/cli/org_cmds.py
 lhassa/cli/project_cmds.py
-lhassa/cli/research_cmds.py
 lhassa/cli/seed_cmds.py
 lhassa/cli/skills_cmds.py
 lhassa/cli/tui/screens/base.py

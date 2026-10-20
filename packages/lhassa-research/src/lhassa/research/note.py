@@ -35,12 +35,24 @@ def _slug(topic: str) -> str:
     return s or "untitled"
 
 
+def _checkout_root() -> Path:
+    """The core checkout that holds ``doc/``: the parent of core's ``lhassa/``.
+
+    Resolved through core (not this file) because the pack lives under
+    ``packages/lhassa-research/src``; the drafts and ``doc/decisions.md`` stay
+    where the research line has always kept them.
+    """
+    import lhassa.config
+
+    return Path(lhassa.config.__file__).resolve().parents[1]
+
+
 def _drafts_dir(config) -> Path:
     base = (getattr(config, "notes_dir", "") or "").strip()
     if base:
         return Path(base)
     # Repo-relative default: doc/notes/drafts next to doc/research.md.
-    return Path(__file__).resolve().parents[2] / "doc" / "notes" / "drafts"
+    return _checkout_root() / "doc" / "notes" / "drafts"
 
 
 def _topic_terms(topic: str) -> set[str]:
@@ -191,7 +203,7 @@ async def gather_evidence(topic: str, config) -> dict:
         pack["db_error"] = str(exc)
 
     try:
-        decisions = Path(__file__).resolve().parents[2] / "doc" / "decisions.md"
+        decisions = _checkout_root() / "doc" / "decisions.md"
         text = decisions.read_text(encoding="utf-8", errors="replace")
         needles = [w for w in re.split(r"[^a-zA-Z0-9]+", topic.lower()) if len(w) >= 4]
         excerpts = []

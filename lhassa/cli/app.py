@@ -50,7 +50,6 @@ from lhassa.cli import setup_cmds as _setup_cmds  # noqa: E402
 from lhassa.cli import share_cmds as _share_cmds  # noqa: E402
 from lhassa.cli import skills_cmds as _skills_cmds  # noqa: E402
 from lhassa.cli import project_cmds as _project_cmds  # noqa: E402
-from lhassa.cli import research_cmds as _research_cmds  # noqa: E402
 from lhassa.cli import task_cmds as _task_cmds  # noqa: E402
 from lhassa.cli import tools_cmds as _tools_cmds  # noqa: E402
 from lhassa.cli.theme import LHASSA_THEME, cost_markup, prompt_fragments  # noqa: E402
@@ -327,8 +326,6 @@ app.add_typer(_task_cmds.task_app, name="task")
 # ── lhassa project … (the first-class workspace entity) ─────────────────────
 app.add_typer(_project_cmds.project_app, name="project")
 
-# ── lhassa research … (the product's research line: evidence-cited note drafts) ──
-app.add_typer(_research_cmds.research_app, name="research")
 app.add_typer(_integrity_cmds.integrity_app, name="integrity")
 
 # ── lhassa utility … (the tribunal: which capabilities still SERVE the owner) ──

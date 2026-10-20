@@ -25,7 +25,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
-from lhassa.agents.verify import ResearchCorpusVerifier
+from lhassa.research.verifiers import ResearchCorpusVerifier
 from lhassa.core import artifacts, db, projects
 from lhassa.security import approval
 from lhassa.security.quarantine import run_in_quarantine
@@ -121,7 +121,7 @@ async def _log_research_line(
     if not assessment_id:
         return
     try:
-        from lhassa.core import idea_assessments
+        from lhassa.research import assessments as idea_assessments
 
         await idea_assessments.log_downstream(
             instance_id,

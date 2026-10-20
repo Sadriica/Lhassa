@@ -53,10 +53,10 @@ async def research_intake(params: dict | None = None) -> str:
 
     assessment_id = ""
     try:
-        from lhassa.actionpack._research_note import _DRAFT_HEADER, _drafts_dir
+        from lhassa.research.note import _DRAFT_HEADER, _drafts_dir
         from lhassa.core import artifacts, db
-        from lhassa.core import idea_assessments as assessments
-        from lhassa.agents.research_evidence import (
+        from lhassa.research import assessments
+        from lhassa.research.evidence import (
             build_evidence_bundle,
             bundle_for_model,
         )
@@ -354,7 +354,7 @@ async def research_intake(params: dict | None = None) -> str:
         if assessment_id:
             with suppress(Exception):
                 from lhassa.config import Config
-                from lhassa.core import idea_assessments as assessments
+                from lhassa.research import assessments
 
                 cfg = params.get("config") or Config()
                 instance_id = getattr(cfg, "instance_id", None) or "inst_personal"

@@ -12,6 +12,7 @@ resolution-markers = [
 members = [
     "lhassa",
     "lhassa-bench",
+    "lhassa-research",
     "lhassa-voice",
 ]
 
@@ -1153,6 +1154,17 @@ requires-dist = [
     { name = "lhassa", editable = "." },
     { name = "pyyaml", specifier = ">=6.0" },
 ]
+
+[[package]]
+name = "lhassa-research"
+version = "0.8.0"
+source = { editable = "packages/lhassa-research" }
+dependencies = [
+    { name = "lhassa" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "lhassa", editable = "." }]
 
 [[package]]
 name = "lhassa-voice"

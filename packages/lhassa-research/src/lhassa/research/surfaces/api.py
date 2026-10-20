@@ -1,5 +1,8 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Read-only research-funnel projections and their immutable event logs."""
+"""Read-only research-funnel projections and their immutable event logs.
+
+Mounted on the API by :mod:`lhassa.research.pack` (``register_api_router``).
+"""
 
 from fastapi import APIRouter, HTTPException, Query
 

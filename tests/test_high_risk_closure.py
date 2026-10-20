@@ -91,6 +91,14 @@ REVIEWED_LOW_RISK: dict[str, str] = {
     "curate_skills": "unlink is tmpfile cleanup on an atomic write; skills are archived, never deleted",
 }
 
+# Reviewed actions that a capability pack registers (action -> pack name).
+# Core alone does not have them, so the stale-entry check skips them unless
+# the pack is installed.
+PACK_OWNED_ACTIONS: dict[str, str] = {
+    "draft_research_note": "research",
+    "research_intake": "research",
+}
+
 # ── Dangerous-surface markers ───────────────────────────────────────────────
 _EXEC_MODULES = {"subprocess"}
 _EXEC_OS_ATTRS = {"system", "execv", "execvp", "execve", "spawnl", "popen"}
@@ -282,13 +290,18 @@ def test_reviewed_low_risk_entries_are_live():
     """Every REVIEWED_LOW_RISK entry must name a real, currently-flagged action.
 
     A stale entry (action renamed/removed, or no longer touching a dangerous
-    surface) would silently widen the exemption; prune it instead.
+    surface) would silently widen the exemption; prune it instead. An action
+    owned by a capability pack is exempt from the check only while that pack
+    is not installed (see PACK_OWNED_ACTIONS).
     """
+    from lhassa.extensions import PACKS
+
     dangerous = _dangerous_actions()
     stale = [
         name
         for name in REVIEWED_LOW_RISK
         if name not in dangerous
+        and not (name in PACK_OWNED_ACTIONS and PACK_OWNED_ACTIONS[name] not in PACKS)
     ]
     if stale:
         pytest.fail(

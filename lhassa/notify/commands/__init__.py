@@ -28,7 +28,6 @@ per group of related commands; importing each submodule is what runs its
 * ``_ai``: ``/ai`` ``/moa`` (the paid direct doors);
 * ``_remind``: :func:`parse_remind`, ``/remind`` ``/event``;
 * ``_calendar``: ``/calendar`` ``/calendars``;
-* ``_idea``: ``/idea``.
 
 This module defines (via re-export from the submodules above):
 
@@ -85,7 +84,6 @@ from . import (  # noqa: E402,F401
     _code,
     _core,
     _cv,
-    _idea,
     _memory,
     _org,
     _remind,

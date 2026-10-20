@@ -444,11 +444,17 @@ def apply_profile_seeds(profile: str, config=None, *, apply_seed_fn=None) -> dic
     """
     if apply_seed_fn is None:
         from lhassa.seeds import apply_seed as apply_seed_fn
+    from lhassa.registry import NotRegistered
+
     names = seeds_for_profile(profile)
     results: dict[str, dict] = {}
     for name in names:
         try:
             results[name] = apply_seed_fn(name, config)
+        except NotRegistered:
+            # A profile's domain seed can ship in a capability pack; with the
+            # pack absent the seed is simply not there, which is not a failure.
+            results[name] = {"skipped": "not installed (its capability pack is absent)"}
         except Exception as exc:  # a seed must never abort the whole wizard
             results[name] = {"error": f"{type(exc).__name__}: {exc}"}
     return {"profile": profile, "seeds": names, "results": results}
@@ -817,6 +823,9 @@ def setup_cmd(
     for name in seeds_for_profile(profile):
         result = (report["seeds"].get("results") or {}).get(name, {})
         errs = result.get("errors") or ([result["error"]] if result.get("error") else [])
+        if result.get("skipped"):
+            out.print(f"  [dim]- seed {name}: {result['skipped']}[/]")
+            continue
         mark = "[warn]✗[/]" if errs else "[success]✓[/]"
         out.print(f"  {mark} seed [model]{name}[/]" + (f": {'; '.join(errs)}" if errs else ""))
 

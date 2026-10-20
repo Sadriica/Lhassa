@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from lhassa.agents import product_change
+from lhassa.research import product_change
 from lhassa.core import db, projects
 from lhassa.security import approval
 from lhassa.security.quarantine import QuarantineResult

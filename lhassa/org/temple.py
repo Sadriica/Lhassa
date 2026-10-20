@@ -90,7 +90,7 @@ GESHE = "geshe"  # the research line; method, evidence-cited notes, focus
 TEMPLE_WORKERS: tuple[str, ...] = (SCRIBE, ARTIFICER, SYNCHRONIZER, GUARDIAN, ORACLE, GESHE)
 
 #: The geshe's AIDES; the research support department under the scholar-monk
-#: (seeded by ``seeds/research.py``). They mirror the corpus method's steps:
+#: (seeded by the research pack's ``research`` seed). They mirror the corpus method's steps:
 #: capture sources → analyze mechanics → verify claims → synthesize the doc.
 #: The skeptic exists because the doer never judges; verification is a
 #: separate brain by design.

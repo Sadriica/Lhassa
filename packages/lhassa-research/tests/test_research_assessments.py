@@ -6,10 +6,10 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from lhassa.api import research_routes
+from lhassa.research.surfaces import api as research_routes
 from lhassa.config import Config
 from lhassa.core import db
-from lhassa.core import idea_assessments as ideas
+from lhassa.research import assessments as ideas
 
 
 def document(score: int = 3) -> dict:

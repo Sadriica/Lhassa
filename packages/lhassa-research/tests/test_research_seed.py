@@ -19,7 +19,7 @@ def test_seed_creates_aides_under_geshe_and_the_flow(org_env, tmp_path):
     from lhassa.flows.store import FlowStore
     from lhassa.org.temple import GESHE, GESHE_AIDES
     from lhassa.org.topology import load_topology
-    from lhassa.seeds.research import seed_research
+    from lhassa.research.surfaces.seed import seed_research
 
     out = seed_research(org_env)
     assert not out["errors"]
@@ -58,7 +58,7 @@ def test_seed_creates_aides_under_geshe_and_the_flow(org_env, tmp_path):
 
 def test_seed_upgrades_an_existing_symbolic_research_gate(org_env):
     from lhassa.flows.store import FlowStore
-    from lhassa.seeds.research import seed_research
+    from lhassa.research.surfaces.seed import seed_research
 
     out = seed_research(org_env)
     store = FlowStore(org_env)
@@ -115,12 +115,12 @@ def test_idea_without_text_is_usage():
 def test_idea_persists_versioned_custody_and_uses_durable_idempotent_run(
     org_env, tmp_path, monkeypatch
 ):
-    from lhassa.actionpack._research_intake import research_intake
+    from lhassa.research.surfaces.intake import research_intake
 
-    import lhassa.agents.research_evidence as evidence_mod
+    import lhassa.research.evidence as evidence_mod
     import lhassa.org.delegate as delegate_mod
     import lhassa.org.deliver as deliver_mod
-    from lhassa.seeds.research import seed_research
+    from lhassa.research.surfaces.seed import seed_research
 
     seed_research(org_env)
     bundle = {
@@ -233,16 +233,16 @@ def test_idea_persists_versioned_custody_and_uses_durable_idempotent_run(
 def test_low_value_idea_is_logged_and_stops_before_full_corpus(
     org_env, tmp_path, monkeypatch
 ):
-    from lhassa.actionpack._research_intake import research_intake
+    from lhassa.research.surfaces.intake import research_intake
 
     import json
 
-    import lhassa.agents.research_evidence as evidence_mod
+    import lhassa.research.evidence as evidence_mod
     import lhassa.org.delegate as delegate_mod
     import lhassa.org.deliver as deliver_mod
     from lhassa.core import db
-    from lhassa.core.idea_assessments import CRITERIA_WEIGHTS, EVIDENCE_BOUND
-    from lhassa.seeds.research import seed_research
+    from lhassa.research.assessments import CRITERIA_WEIGHTS, EVIDENCE_BOUND
+    from lhassa.research.surfaces.seed import seed_research
 
     seed_research(org_env)
 
