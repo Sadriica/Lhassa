@@ -5,6 +5,24 @@ reminder into a calendar event. There are **two paths**: pick the one your
 account allows. If you're unsure which fits, just ask Lhassa (`/ai how do I
 connect my calendar?`) and it will walk you through it.
 
+## Where it lives
+
+The ICS path ships as the **`lhassa-calendar` capability pack**
+(`packages/lhassa-calendar`, see `packages/README.md`). Module paths below
+(`lhassa/calendar/...`) are import paths; the files sit under
+`packages/lhassa-calendar/src/lhassa/calendar/`, and the pack's shell slice
+(`/api/calendar`, `lhassa calendar`, `/calendar` `/calendars` `/event`, the
+`calendar_sync` and `derive_world_facts` actions) under its `surfaces/`.
+Core reaches it only through registries: the capability catalog
+(`notify/capabilities.py`, `calendar_view`), the `/remind` reminder extras
+(`notify/commands/_remind.py`, the `.ics`) and the agenda event sources
+(`personal/sources.py`). Without the pack, `/remind` still mints the reminder
+(no file), the agenda simply has no events, and the maintenance seed's
+`calendar_sync`/`derive_world_facts` beats are skipped as not installed.
+`uv sync --all-packages` installs it. `LHASSA_CALENDAR_ICS_URL` and
+`LHASSA_CALENDARS_FILE` stay in core's `config.py`; `LHASSA_CALENDAR_DIR` is
+read by the pack itself.
+
 ## Path A. ICS (no admin, works for everyone)
 
 The zero-friction path: files and feeds, no app registration, no API, no IT

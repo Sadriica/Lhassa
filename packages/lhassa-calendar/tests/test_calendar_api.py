@@ -1,8 +1,8 @@
-"""Calendar API tests. TestClient over a fresh app mounting only calendar_routes.
+"""Calendar API tests. TestClient over a fresh app mounting only the calendar router.
 
 Mirrors ``tests/test_flow_api.py``'s pattern: mount the router alone (not the full
 server) so these tests exercise exactly the routes the integrator includes via
-``app.include_router(calendar_routes.router)``, independent of its wiring.
+``app.include_router(router)``, independent of its wiring.
 
 SECURITY invariant asserted throughout: no response body from any route ever
 contains a real feed url; only ``url_masked`` (a short non-reversible tail).
@@ -14,7 +14,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from lhassa.api import calendar_routes
+from lhassa.calendar.surfaces import api as calendar_routes
 
 FAKE_URL_WORK = "https://calendar.example.com/secret-work-feed-abcdef1234567890.ics"
 FAKE_URL_PERSONAL = "https://calendar.example.com/secret-personal-feed-zzzz999999.ics"
@@ -171,7 +171,7 @@ def test_sync_returns_summary_string(client, monkeypatch):
     async def fake_sync(params):
         return "calendar_sync: 2 unsynced event(s), 2 delivered"
 
-    import lhassa.actionpack._calendar_sync as sync_mod
+    import lhassa.calendar.surfaces.actions as sync_mod
 
     monkeypatch.setattr(sync_mod, "calendar_sync", fake_sync)
 

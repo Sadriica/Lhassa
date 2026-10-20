@@ -1,5 +1,6 @@
 """Tests for the Lhassa CLI; fully mocked, no LLM or network is touched."""
 
+import importlib.util
 import json
 from unittest.mock import patch
 
@@ -268,8 +269,16 @@ def test_every_mapped_capability_is_a_real_action():
     from lhassa.core.actions import ACTIONS
 
     actionpack.register_all()
+    # Actions a capability pack provides are only real when that pack is
+    # installed (core alone has no calendar_sync); still checked when it is.
+    pack_actions = {"calendar_sync": "lhassa.calendar"}
+    absent = {
+        action
+        for action, module in pack_actions.items()
+        if importlib.util.find_spec(module) is None
+    }
     unknown = sorted(
-        set(agent_mod._TOOL_CAPABILITY.values()) - set(ACTIONS)
+        set(agent_mod._TOOL_CAPABILITY.values()) - set(ACTIONS) - absent
     )
     assert not unknown, f"mapped to actions that do not exist: {unknown}"
 

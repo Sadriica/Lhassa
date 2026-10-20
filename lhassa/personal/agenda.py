@@ -27,8 +27,9 @@ class PersonalAgenda:
     approvals: list[str] = field(default_factory=list)
     latest_checkin: str = ""
     spend_today_usd: Optional[float] = None
-    # Real calendar events (from the ICS feed, if configured) as "HH:MM Summary"
-    # strings in local time, already windowed + sorted. Empty when unconfigured.
+    # Events from the registered agenda sources (lhassa.personal.sources; the
+    # calendar pack's ICS feeds) as "HH:MM Summary" strings in local time,
+    # already windowed + sorted. Empty when no source is installed/configured.
     events: list[str] = field(default_factory=list)
 
     @property
@@ -118,25 +119,13 @@ async def build(config, *, slot: str | None = None, horizon_hours: int = 36) -> 
 
     latest = await checkins.latest(instance_id, within_hours=48.0)
 
-    # Real calendar events from the ICS feed (if configured); additive, $0,
-    # never breaks the agenda if the feed is absent or unreachable.
-    events: list[str] = []
-    try:
-        from lhassa.calendar.feed import _local_hhmm, upcoming
+    # Events from every registered agenda source (the calendar pack's ICS
+    # feeds, when installed); additive, $0, never breaks the agenda if a
+    # source is absent or unreachable.
+    from lhassa.personal.sources import collect_events
 
-        raw_events = await upcoming(instance_id, hours=horizon_hours, config=config)
-        # Show the calendar name (e.g. "· Work") only when the owner has MORE
-        # than one calendar configured; with a single calendar it's redundant
-        # noise, so keep that line clean.
-        calendar_names = {e.get("calendar") for e in raw_events if e.get("calendar")}
-        multi = len(calendar_names) > 1
-        for e in raw_events:
-            label = f"{_local_hhmm(e['start'])} {e['summary']}"
-            if multi and e.get("calendar"):
-                label += f" · {e['calendar']}"
-            if e.get("location"):
-                label += f" · {e['location']}"
-            events.append(label)
+    try:
+        events = await collect_events(instance_id, hours=horizon_hours, config=config)
     except Exception:
         events = []
 

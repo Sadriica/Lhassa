@@ -8,7 +8,6 @@ brain think runs (``provider.complete`` called) and that the 26-tool agent
 """
 
 import asyncio
-from datetime import timedelta
 from types import SimpleNamespace
 
 from lhassa.llm.provider import ProviderNotConfigured
@@ -1128,138 +1127,53 @@ def test_natural_acuerdame_without_time_falls_through(monkeypatch):
     assert sent  # answered by a later path (remember hook or the brain)
 
 
-# ── Deterministic calendar-query routing hook ────────────────────────────────
+# ── Deterministic capability shortcuts (the seam a pack plugs into) ─────────
 
 
-def test_calendar_query_answered_without_provider(monkeypatch):
-    """A calendar question is answered from lhassa.calendar.query; deterministic,
-    $0; and NEVER reaches the tool-less brain think (no provider.complete call).
-    An episode is logged through the calendar seam."""
-    payload = {
-        "ok": True,
-        "result": [
-            {
-                "update_id": 400,
-                "message": {
-                    "chat": {"id": 123},
-                    "text": "¿qué hay en mi calendario el viernes?",
-                },
-            }
-        ],
-    }
-    monkeypatch.setattr(
-        telegram_inbound.httpx, "AsyncClient", _client_returning(payload)
+def _probe_shortcut_catalog(monkeypatch):
+    """A one-entry catalog with an always-on shortcut, a continuation and a
+    topic context: the shape the calendar pack registers, without the pack."""
+    from lhassa.notify import capabilities
+
+    async def _handler(text, *, config=None):
+        return None
+
+    async def _shortcut(text, *, config=None):
+        if "probe" not in text.lower():
+            return None
+        return f"probe says: {text}", "probe-query: now"
+
+    async def _continue(text, context, *, config=None):
+        if "later" not in text.lower():
+            return None
+        return f"probe continues from {context.get('day')}"
+
+    cap = capabilities.Capability(
+        "probe_view",
+        lambda text: "probe" in text.lower(),
+        "stand-in",
+        _handler,
+        continue_followup=_continue,
+        shortcut=_shortcut,
+        topic_context=lambda text: {"day": "monday" if "monday" in text else ""},
     )
+    monkeypatch.setattr(capabilities, "CAPABILITIES", [cap])
+    return cap
+
+
+def test_capability_shortcut_answers_without_provider(monkeypatch):
+    """An always-on shortcut is served before the think ($0, no provider call)
+    and logs one episode with the decision the shortcut names."""
+    _probe_shortcut_catalog(monkeypatch)
     provider = _patch_brain(monkeypatch)
     sent = _patch_send(monkeypatch)
+    monkeypatch.setattr(
+        telegram_inbound.httpx,
+        "AsyncClient",
+        _client_returning(_payload_for("probe monday", 400)),
+    )
 
-    from lhassa.calendar import feed as feed_mod
-    from lhassa.calendar import query as query_mod
     from lhassa.core import episode as episode_mod
-
-    fixed_window = query_mod.parse_window("el viernes")
-    assert fixed_window is not None
-    start, _end, _label = fixed_window
-
-    async def _fake_upcoming(instance_id, *, hours=36, since=None, config=None):
-        return [
-            {
-                "summary": "Algorithms 201",
-                "start": start + timedelta(hours=9),
-                "end": start + timedelta(hours=10),
-                "location": "Room 204",
-                "all_day": False,
-                "calendar": "default",
-            }
-        ]
-
-    monkeypatch.setattr(feed_mod, "upcoming", _fake_upcoming)
-
-    logged_episodes = []
-
-    async def _capture_append(self):
-        logged_episodes.append(self)
-        return "ep"
-
-    monkeypatch.setattr(episode_mod.Episode, "append", _capture_append)
-
-    asyncio.run(telegram_inbound.poll_once(_cfg(), offset=None))
-
-    assert provider.calls == []  # never reached the tool-less think
-    assert sent and sent[0].startswith("El viernes")
-    assert "Algorithms 201" in sent[0]
-
-    assert len(logged_episodes) == 1
-    ep = logged_episodes[0]
-    assert ep.despertar_por == "telegram"
-    assert ep.decision.startswith("calendar-query:")
-    assert ep.accion == "calendar_view"
-    assert ep.costo_usd == 0.0
-    assert ep.resultado == sent[0]
-
-
-def test_calendar_query_falls_through_for_normal_message(monkeypatch):
-    """A normal message (no calendar keyword, no time reference) is unaffected;
-    it still reaches the tool-less brain think exactly as before."""
-    payload = {
-        "ok": True,
-        "result": [
-            {
-                "update_id": 401,
-                "message": {"chat": {"id": 123}, "text": "cómo estás?"},
-            }
-        ],
-    }
-    monkeypatch.setattr(
-        telegram_inbound.httpx, "AsyncClient", _client_returning(payload)
-    )
-    provider = _patch_brain(monkeypatch, reply="Muy bien, gracias.")
-    sent = _patch_send(monkeypatch)
-
-    from lhassa.calendar import feed as feed_mod
-
-    async def _boom(*a, **k):
-        raise AssertionError("a non-calendar message must never touch the feed")
-
-    monkeypatch.setattr(feed_mod, "upcoming", _boom)
-
-    asyncio.run(telegram_inbound.poll_once(_cfg(), offset=None))
-
-    assert len(provider.calls) == 1
-    assert sent == ["Muy bien, gracias."]
-
-
-# ── the self-routing consciousness (lhassa.notify.capabilities) ─────────────────
-
-
-def test_recognized_but_unrouted_capability_tags_the_think_episode(monkeypatch):
-    """A message a capability recognises (calendar keyword, no time reference;
-    the calendar seam itself can't resolve it) still falls through to the brain
-    think, but the episode's decision is tagged '[routable:calendar_view]' so
-    the consciousness (agents.repetition.detect_routable) can find it later."""
-    payload = {
-        "ok": True,
-        "result": [
-            {
-                "update_id": 402,
-                "message": {"chat": {"id": 123}, "text": "any events on my calendar?"},
-            }
-        ],
-    }
-    monkeypatch.setattr(
-        telegram_inbound.httpx, "AsyncClient", _client_returning(payload)
-    )
-    provider = _patch_brain(monkeypatch, reply="Nothing pinned down yet.")
-    sent = _patch_send(monkeypatch)
-
-    from lhassa.calendar import query as query_mod
-
-    # This message HAS the calendar keyword (so is_calendar_query is True) but
-    # no parseable time reference; the calendar seam itself returns None.
-    assert query_mod.is_calendar_query("any events on my calendar?")
-    assert query_mod.parse_window("any events on my calendar?") is None
-
-    import lhassa.core.episode as episode_mod
 
     logged = []
 
@@ -1269,12 +1183,64 @@ def test_recognized_but_unrouted_capability_tags_the_think_episode(monkeypatch):
 
     monkeypatch.setattr(episode_mod.Episode, "append", _capture_append)
 
+    cfg = _cfg()
+    asyncio.run(telegram_inbound.poll_once(cfg, offset=None))
+
+    assert provider.calls == []
+    assert sent == ["probe says: probe monday"]
+    assert len(logged) == 1
+    assert logged[0].decision == "probe-query: now"
+    assert logged[0].accion == "probe_view"
+    assert logged[0].costo_usd == 0.0
+    topic = telegram_inbound._topic_get(cfg, "123")
+    assert topic["capability"] == "probe_view"
+    assert topic["context"] == {"day": "monday"}
+
+
+def test_followup_continues_a_shortcut_topic_without_provider(monkeypatch):
+    _probe_shortcut_catalog(monkeypatch)
+    provider = _patch_brain(monkeypatch)
+    sent = _patch_send(monkeypatch)
+    cfg = _cfg()
+
+    monkeypatch.setattr(
+        telegram_inbound.httpx,
+        "AsyncClient",
+        _client_returning(_payload_for("probe monday", 410)),
+    )
+    asyncio.run(telegram_inbound.poll_once(cfg, offset=None))
+    monkeypatch.setattr(
+        telegram_inbound.httpx,
+        "AsyncClient",
+        _client_returning(_payload_for("y later?", 411)),
+    )
+    asyncio.run(telegram_inbound.poll_once(cfg, offset=None))
+
+    assert provider.calls == []
+    assert sent[-1] == "probe continues from monday"
+    # a falsy refreshed context value never clobbers the sticky one
+    assert telegram_inbound._topic_get(cfg, "123")["context"] == {"day": "monday"}
+
+
+def test_no_registered_capability_falls_through_to_think(monkeypatch):
+    """Core alone (an empty catalog): a calendar question reaches the think."""
+    from lhassa.notify import capabilities
+
+    monkeypatch.setattr(capabilities, "CAPABILITIES", [])
+    provider = _patch_brain(monkeypatch, reply="I have no calendar here.")
+    sent = _patch_send(monkeypatch)
+    monkeypatch.setattr(
+        telegram_inbound.httpx,
+        "AsyncClient",
+        _client_returning(_payload_for("¿qué hay en mi calendario el viernes?", 420)),
+    )
     asyncio.run(telegram_inbound.poll_once(_cfg(), offset=None))
 
-    assert len(provider.calls) == 1  # it DID reach the think; no route is on
-    assert sent == ["Nothing pinned down yet."]
-    assert len(logged) == 1
-    assert "[routable:calendar_view]" in logged[0].decision
+    assert len(provider.calls) == 1
+    assert sent == ["I have no calendar here."]
+
+
+# ── the self-routing consciousness (lhassa.notify.capabilities) ─────────────────
 
 
 def test_unrecognized_message_is_not_tagged(monkeypatch):
@@ -1309,12 +1275,13 @@ def test_unrecognized_message_is_not_tagged(monkeypatch):
 def test_callback_query_approve_mint_route_turns_on_the_route(tmp_path, monkeypatch):
     """Approving a mint_route proposal via the inline keyboard applies it;
     the SAME approval->apply pattern as an approved code_run launching."""
+    _probe_shortcut_catalog(monkeypatch)
     db = asyncio.run(_init_approval_db(tmp_path, monkeypatch))
     ap_id = asyncio.run(
         db.add_approval(
             "inst_personal",
             "mint_route",
-            {"accion": "mint_route", "capability": "calendar_view", "count": 6},
+            {"accion": "mint_route", "capability": "probe_view", "count": 6},
         )
     )
 
@@ -1341,16 +1308,17 @@ def test_callback_query_approve_mint_route_turns_on_the_route(tmp_path, monkeypa
     asyncio.run(_poll_and_drain(cfg))
 
     assert any("Approved" in s for s in sent)
-    assert capabilities.is_routed("calendar_view", config=cfg)
+    assert capabilities.is_routed("probe_view", config=cfg)
 
 
 def test_callback_query_deny_mint_route_does_not_turn_on_the_route(tmp_path, monkeypatch):
+    _probe_shortcut_catalog(monkeypatch)
     db = asyncio.run(_init_approval_db(tmp_path, monkeypatch))
     ap_id = asyncio.run(
         db.add_approval(
             "inst_personal",
             "mint_route",
-            {"accion": "mint_route", "capability": "calendar_view", "count": 6},
+            {"accion": "mint_route", "capability": "probe_view", "count": 6},
         )
     )
 
@@ -1377,7 +1345,7 @@ def test_callback_query_deny_mint_route_does_not_turn_on_the_route(tmp_path, mon
     asyncio.run(_poll_and_drain(cfg))
 
     assert any("Denied" in s for s in sent)
-    assert not capabilities.is_routed("calendar_view", config=cfg)
+    assert not capabilities.is_routed("probe_view", config=cfg)
 
 
 # ── sticky topic + follow-up thread continuity ───────────────────────────────
@@ -1414,86 +1382,6 @@ def _payload_for(text, update_id=500):
     }
 
 
-def test_calendar_followup_served_from_calendar_without_provider(monkeypatch):
-    """The exact owner-reported bug: a calendar question sets the sticky topic,
-    then a connector-led follow-up ("Y el sabado?") is served straight from the
-    calendar seam; the provider is NEVER called for the follow-up turn, and
-    the episode is tagged 'thread-continue: calendar_view' at $0."""
-    provider = _patch_brain(monkeypatch)
-    sent = _patch_send(monkeypatch)
-
-    from lhassa.calendar import feed as feed_mod
-    from lhassa.calendar import query as query_mod
-    from lhassa.core import episode as episode_mod
-
-    friday_window = query_mod.parse_window("el viernes")
-    saturday_window = query_mod.parse_window("el sabado")
-    assert friday_window is not None and saturday_window is not None
-    fri_start, _, _ = friday_window
-    sat_start, _, _ = saturday_window
-
-    async def _fake_upcoming(instance_id, *, hours=36, since=None, config=None):
-        return [
-            {
-                "summary": "Algorithms 201",
-                "start": fri_start + timedelta(hours=9),
-                "end": fri_start + timedelta(hours=10),
-                "location": None,
-                "all_day": False,
-                "calendar": "default",
-            },
-            {
-                "summary": "Mercado",
-                "start": sat_start + timedelta(hours=10),
-                "end": sat_start + timedelta(hours=11),
-                "location": None,
-                "all_day": False,
-                "calendar": "default",
-            },
-        ]
-
-    monkeypatch.setattr(feed_mod, "upcoming", _fake_upcoming)
-
-    logged = []
-
-    async def _capture_append(self):
-        logged.append(self)
-        return "ep"
-
-    monkeypatch.setattr(episode_mod.Episode, "append", _capture_append)
-
-    cfg = _cfg()
-
-    # Turn 1: the calendar question; answered directly, sets the topic.
-    monkeypatch.setattr(
-        telegram_inbound.httpx,
-        "AsyncClient",
-        _client_returning(_payload_for("¿qué hay en mi calendario el viernes?", 500)),
-    )
-    asyncio.run(telegram_inbound.poll_once(cfg, offset=None))
-    assert provider.calls == []
-    assert len(sent) == 1
-    assert "Algorithms 201" in sent[0]
-
-    # Turn 2: the elliptical follow-up; must be served from the calendar too,
-    # NOT the tool-less think.
-    monkeypatch.setattr(
-        telegram_inbound.httpx,
-        "AsyncClient",
-        _client_returning(_payload_for("Y el sabado?", 501)),
-    )
-    asyncio.run(telegram_inbound.poll_once(cfg, offset=None))
-
-    assert provider.calls == []  # still never reached the brain think
-    assert len(sent) == 2
-    assert "Mercado" in sent[1]
-
-    thread_episodes = [ep for ep in logged if ep.decision == "thread-continue: calendar_view"]
-    assert len(thread_episodes) == 1
-    assert thread_episodes[0].accion == "calendar_view"
-    assert thread_episodes[0].costo_usd == 0.0
-
-
 def test_followup_with_no_active_topic_falls_through_to_think(monkeypatch):
     """A connector-led message with NO prior sticky topic falls through to the
     normal tool-less think; is_followup alone is never enough."""
@@ -1509,66 +1397,6 @@ def test_followup_with_no_active_topic_falls_through_to_think(monkeypatch):
 
     assert len(provider.calls) == 1
     assert sent == ["Sure, what about it?"]
-
-
-def test_connector_message_that_is_not_really_a_followup_falls_through(monkeypatch):
-    """A connector-led message that doesn't carry a resolvable continuation for
-    the active capability (no date reference at all) declines (continue_followup
-    returns None) and falls through to the normal think; it must not force a
-    wrong calendar answer."""
-    provider = _patch_brain(monkeypatch, reply="Got it, noted.")
-    sent = _patch_send(monkeypatch)
-
-    from lhassa.calendar import feed as feed_mod
-    from lhassa.calendar import query as query_mod
-    from lhassa.core import episode as episode_mod
-
-    friday_window = query_mod.parse_window("el viernes")
-    assert friday_window is not None
-    fri_start, _, _ = friday_window
-
-    async def _fake_upcoming(instance_id, *, hours=36, since=None, config=None):
-        return [
-            {
-                "summary": "Algorithms 201",
-                "start": fri_start + timedelta(hours=9),
-                "end": fri_start + timedelta(hours=10),
-                "location": None,
-                "all_day": False,
-                "calendar": "default",
-            }
-        ]
-
-    monkeypatch.setattr(feed_mod, "upcoming", _fake_upcoming)
-
-    logged = []
-
-    async def _capture_append(self):
-        logged.append(self)
-        return "ep"
-
-    monkeypatch.setattr(episode_mod.Episode, "append", _capture_append)
-
-    cfg = _cfg()
-
-    monkeypatch.setattr(
-        telegram_inbound.httpx,
-        "AsyncClient",
-        _client_returning(_payload_for("¿qué hay en mi calendario el viernes?", 503)),
-    )
-    asyncio.run(telegram_inbound.poll_once(cfg, offset=None))
-    assert provider.calls == []
-
-    monkeypatch.setattr(
-        telegram_inbound.httpx,
-        "AsyncClient",
-        _client_returning(_payload_for("y además necesito comprar leche", 504)),
-    )
-    asyncio.run(telegram_inbound.poll_once(cfg, offset=None))
-
-    assert len(provider.calls) == 1  # the continuation declined; fell through
-    assert sent[-1] == "Got it, noted."
-    assert not any(ep.decision == "thread-continue: calendar_view" for ep in logged)
 
 
 def test_callback_query_approve_mint_task_runs_now_and_reports(tmp_path, monkeypatch):

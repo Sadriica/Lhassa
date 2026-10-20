@@ -43,6 +43,27 @@ TEMPLE_ACTIONS: frozenset[str] = frozenset(
 )
 
 
+def _not_installed(action: str) -> str:
+    """Why ``action`` cannot run because no installed pack provides it, or ``""``.
+
+    Some fronted actions ship in capability packs (``calendar_sync`` and
+    ``derive_world_facts`` with the calendar pack); the maintenance seed still
+    schedules them by name. Only trusted once the action registry has been
+    populated (``temple_run`` itself registered), so a bare unit test that
+    never ran ``register_all`` is not misread as "uninstalled". Never raises.
+    """
+    try:
+        from lhassa.core.actions import _REGISTRY
+
+        if _REGISTRY.get_or_none("temple_run") is None:
+            return ""
+        if _REGISTRY.get_or_none(action) is None:
+            return f"{action} is not installed (its capability pack is absent)"
+        return ""
+    except Exception:
+        return ""
+
+
 def temple_run_possible(params: dict) -> str:
     """``temple_run`` is exactly as capable as the action it fronts.
 
@@ -57,6 +78,9 @@ def temple_run_possible(params: dict) -> str:
         action = str(params.get("action") or "").strip()
         if not action:
             return ""
+        missing = _not_installed(action)
+        if missing:
+            return missing
         inner = params.get("params")
         inner = dict(inner) if isinstance(inner, dict) else {}
         if params.get("config") is not None:
@@ -109,7 +133,9 @@ async def temple_run(params: dict, *, return_record: bool = False) -> str | dict
         # without parsing prose.
         from lhassa.core.actions import precondition_unmet
 
-        unmet = precondition_unmet(action, {**inner_params, "config": config})
+        unmet = _not_installed(action) or precondition_unmet(
+            action, {**inner_params, "config": config}
+        )
         if unmet:
             return f"{SKIPPED_PREFIX}{action}; {unmet}"
 

@@ -39,10 +39,8 @@ def register_all() -> None:
     # Import sub-modules; this defines the functions without side-effects.
     from lhassa.actionpack import (  # noqa: F401
         _brain,
-        _calendar_sync,
         _config,
         _curate,
-        _derive,
         _digest,
         _feedback,
         _files,
@@ -104,13 +102,6 @@ def register_all() -> None:
     # ── Digest (Etapa 2; operative day via Telegram) ─────────────────────────
     _reg("send_digest", _digest.send_digest)
 
-    # ── Master calendar reconcile ($0 set diff, no model) ─────────────────────
-    _reg("calendar_sync", _calendar_sync.calendar_sync)
-
-    # ── Calendar-derived world model ($0, deterministic; courses/commitments/
-    # rhythm bootstrapped from the calendar feed into durable facts) ──────────
-    _reg("derive_world_facts", _derive.derive_world_facts)
-
     # ── Document perception; index the owner's opt-in knowledge roots ───────
     _reg("ingest_knowledge", _knowledge.ingest_knowledge)
     _reg("list_dir", _files.list_dir)
@@ -126,7 +117,6 @@ def register_all() -> None:
     # for saying nothing. Declared beside the registration, never inside core.
     from lhassa.core.actions import register_precondition
 
-    register_precondition("calendar_sync", _calendar_sync.calendar_sync_possible)
     register_precondition("ingest_knowledge", _knowledge.ingest_knowledge_possible)
     register_precondition("kg_sync", _kg.kg_possible)
     register_precondition("kg_resolve", _kg.kg_possible)

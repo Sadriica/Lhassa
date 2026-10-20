@@ -1,7 +1,10 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Named calendar feeds + the master-calendar reconcile; /calendar /calendars.
+"""The calendar pack's chat commands: /calendar /calendars /event.
 
-Moved verbatim out of the former ``lhassa/notify/commands.py``.
+Named calendar feeds, the master-calendar reconcile, and the calendar-only
+``/event`` door. Also owns the ``.ics`` extra that core's ``/remind`` runs
+through its reminder-extras seam (:func:`deliver_calendar_event`), so a
+reminder still works when this pack is not installed; it just carries no file.
 
 An owner can subscribe several calendars (institutional, personal, a project
 one), each with a name, so /today shows which calendar an event is from (see
@@ -15,8 +18,9 @@ import re
 
 from loguru import logger
 
-from ._registry import register_command
-from ._shared import _config, _oops
+from lhassa.notify.commands._registry import register_command
+from lhassa.notify.commands._remind import parse_remind
+from lhassa.notify.commands._shared import _config, _oops
 
 
 def _mask_url(url: str) -> str:
@@ -118,7 +122,7 @@ async def _cmd_calendar(args: str, *, config=None) -> str:
             return f"Master calendar set: {name}. /calendar sync will diff every other calendar against it."
 
         if sub == "sync":
-            from lhassa.actionpack._calendar_sync import calendar_sync
+            from lhassa.calendar.surfaces.actions import calendar_sync
 
             instance_id = getattr(cfg, "instance_id", None) or "inst_personal"
             summary = await calendar_sync({"instance_id": instance_id, "config": cfg})
@@ -158,7 +162,7 @@ _CALENDAR_SYNC_RE = re.compile(
 
 
 def _calendar_sync_reply(summary: str) -> str:
-    """Render :func:`lhassa.actionpack._calendar_sync.calendar_sync`'s plain
+    """Render :func:`lhassa.calendar.surfaces.actions.calendar_sync`'s plain
     outcome string in the Telegram voice. Falls back to the raw string for the
     "no primary" / "nothing to sync" / error outcomes; those already read
     fine verbatim."""
@@ -172,3 +176,65 @@ def _calendar_sync_reply(summary: str) -> str:
         f"I found {n} event(s) on your other calendars not in your master "
         f"calendar; sent you {delivered} to add."
     )
+
+
+async def deliver_calendar_event(what: str, when: str, run_at, *, config=None) -> bool:
+    """Build + deliver a ``.ics`` for ``what``/``run_at``: best-effort, never
+    raises. Returns whether the delivery send succeeded (``False`` on ANY
+    trouble: .ics generation, write, or delivery), so a caller can degrade
+    silently without breaking its own reply.
+
+    The calendar leaf package itself never sends anything; this surface hands
+    the file to the sender-of-record seam (:func:`lhassa.org.deliver.deliver`).
+    ``origin_department=""``: a calendar event is Lhassa's own hand, not
+    delegated work, same as ``send_reminder``. Registered as core's
+    ``calendar_event`` reminder extra, so ``/remind`` gets a file too.
+    """
+    try:
+        from lhassa.calendar import build_event, write_ics
+
+        content = build_event(what, run_at)
+        if not content:
+            return False
+        ics_path = write_ics(content, name=what)
+
+        from lhassa.org.deliver import deliver
+
+        delivered, _artifact_id = await deliver(
+            document=ics_path,
+            caption=f"📅 {what} · {when}",
+            kind="calendar_event",
+            metadata={"summary": what, "when": when},
+            origin_department="",
+            config=config,
+        )
+        return bool(delivered)
+    except Exception as exc:
+        logger.warning(f"commands: calendar event delivery failed: {exc}")
+        return False
+
+
+@register_command("event")
+async def _cmd_event(args: str, *, config=None) -> str:
+    """``/event <what> a las 5pm | at 17:00 | in 30 min [mañana]``: calendar-only:
+    generates and delivers a ``.ics`` for the event, no internal reminder task
+    (see ``/remind`` for both). Same deterministic ``parse_remind``, $0."""
+    try:
+        parsed = parse_remind(args)
+        if parsed is None:
+            return (
+                "Tell me what and when, e.g. /event dentist appointment at 3pm, "
+                "/event flight in 2 hours, /event standup mañana 9am."
+            )
+        run_at, what, when = parsed
+        cfg = _config(config)
+
+        ok = await deliver_calendar_event(what, when, run_at, config=cfg)
+        if not ok:
+            return _oops("build and send that calendar event")
+
+        local = run_at.astimezone().strftime("%a %H:%M")
+        return f"📅 Sent. Calendar event for {when} ({local}): {what}"
+    except Exception as exc:
+        logger.warning(f"commands: /event failed: {exc}")
+        return _oops("build and send that calendar event")

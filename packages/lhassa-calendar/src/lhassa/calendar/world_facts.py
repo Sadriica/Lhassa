@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""``derive_world_facts``: persist the calendar-derived world model.
+"""``derive_world_facts``: persist the calendar-derived world model (an action).
 
-Shell-side half of the calendar-derived world model: calls
+The persisting half of the calendar-derived world model: calls
 :func:`lhassa.calendar.derive.derive_world` (leaf, $0, deterministic; read
 + analysis only, never writes) then persists each NEW candidate to the
 grande via :mod:`lhassa.memory.facts`. Dedup reuses the SAME idiom the

@@ -76,7 +76,7 @@ def test_check_spend_phrasing_matches_its_real_return_string():
 
 
 def test_calendar_sync_phrasing_matches_its_real_return_string():
-    # lhassa/actionpack/_calendar_sync.py: f"calendar_sync: {n} unsynced event(s), {d} delivered"
+    # lhassa/calendar/surfaces/actions.py: f"calendar_sync: {n} unsynced event(s), {d} delivered"
     text = "⚙️ calendar_sync: calendar_sync: 3 unsynced event(s), 2 delivered"
     out = voice.template(text, "action-result")
     assert out.startswith("Done: I synced the calendar:")

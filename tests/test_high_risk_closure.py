@@ -38,6 +38,7 @@ from __future__ import annotations
 
 import ast
 import importlib
+import importlib.util
 import inspect
 import textwrap
 
@@ -90,6 +91,20 @@ REVIEWED_LOW_RISK: dict[str, str] = {
     # cleaned up after a failed atomic write.
     "curate_skills": "unlink is tmpfile cleanup on an atomic write; skills are archived, never deleted",
 }
+
+# Reviewed actions that a capability pack provides: with that pack absent the
+# action is simply not registered, which is not staleness. Still checked
+# whenever the pack is installed.
+_PACK_ACTIONS = {
+    "calendar_sync": "lhassa.calendar",
+    "derive_world_facts": "lhassa.calendar",
+}
+
+
+def _pack_absent(name: str) -> bool:
+    module = _PACK_ACTIONS.get(name)
+    return module is not None and importlib.util.find_spec(module) is None
+
 
 # ── Dangerous-surface markers ───────────────────────────────────────────────
 _EXEC_MODULES = {"subprocess"}
@@ -288,7 +303,7 @@ def test_reviewed_low_risk_entries_are_live():
     stale = [
         name
         for name in REVIEWED_LOW_RISK
-        if name not in dangerous
+        if name not in dangerous and not _pack_absent(name)
     ]
     if stale:
         pytest.fail(

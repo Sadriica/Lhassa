@@ -2,7 +2,7 @@
 """FastAPI routes for the calendar seam; upcoming events + configured feeds.
 
 A thin shell over :mod:`lhassa.calendar` (leaf infra) and
-:mod:`lhassa.actionpack._calendar_sync` (the master-calendar reconcile action):
+:mod:`lhassa.calendar.surfaces.actions` (the master-calendar reconcile action):
 this module only shapes requests/responses and NEVER lets a store/feed hiccup
 turn into a 500; every route degrades to an empty/typed default, matching the
 house style of the other ``*_routes`` modules.
@@ -21,7 +21,7 @@ This module NEVER returns a full url in any response; :func:`_mask` renders
 only a short, non-reversible tail. ``POST /calendars`` accepts a url from the
 client (write-only) but never echoes it back.
 
-The integrator wires this in with ``app.include_router(calendar_routes.router)``.
+The calendar pack mounts this router through ``extensions.register_api_router``.
 """
 
 from __future__ import annotations
@@ -52,7 +52,7 @@ def _public_calendars(config=None) -> list[dict]:
 
         items = _store.list_calendars(config)
     except Exception as exc:  # defensive; a store hiccup must not 500
-        logger.debug("calendar_routes: list_calendars failed; {}", exc)
+        logger.debug("calendar api: list_calendars failed; {}", exc)
         items = []
     return [
         {
@@ -82,7 +82,7 @@ async def get_events(hours: int = 48) -> list[dict]:
 
         events = await _feed.upcoming(Config.instance_id, hours=hours, config=Config)
     except Exception as exc:  # defensive; a feed hiccup must not 500
-        logger.debug("calendar_routes: get_events failed; {}", exc)
+        logger.debug("calendar api: get_events failed; {}", exc)
         events = []
 
     out: list[dict] = []
@@ -129,7 +129,7 @@ async def add_calendar_route(body: dict = Body(...)) -> list[dict]:
 
         ok = _store.add_calendar(name, url)
     except Exception as exc:  # defensive
-        logger.warning("calendar_routes: add_calendar failed; {}", exc)
+        logger.warning("calendar api: add_calendar failed; {}", exc)
         ok = False
     if not ok:
         raise HTTPException(status_code=400, detail="could not save that calendar")
@@ -144,7 +144,7 @@ async def remove_calendar_route(name: str) -> dict:
 
         removed = _store.remove_calendar(name)
     except Exception as exc:  # defensive
-        logger.warning("calendar_routes: remove_calendar failed; {}", exc)
+        logger.warning("calendar api: remove_calendar failed; {}", exc)
         removed = False
     if not removed:
         raise HTTPException(status_code=404, detail=f"calendar {name!r} not found")
@@ -163,7 +163,7 @@ async def set_primary_route(body: dict = Body(...)) -> list[dict]:
 
         ok = _store.set_primary(name)
     except Exception as exc:  # defensive
-        logger.warning("calendar_routes: set_primary failed; {}", exc)
+        logger.warning("calendar api: set_primary failed; {}", exc)
         ok = False
     if not ok:
         raise HTTPException(status_code=404, detail=f"calendar {name!r} not found")
@@ -174,14 +174,14 @@ async def set_primary_route(body: dict = Body(...)) -> list[dict]:
 async def sync_route() -> dict:
     """Run the ``calendar_sync`` reconcile action now; return its summary string.
 
-    Never raises; :func:`lhassa.actionpack._calendar_sync.calendar_sync` already
+    Never raises; :func:`lhassa.calendar.surfaces.actions.calendar_sync` already
     degrades to a clean "nothing to sync" message on any trouble.
     """
     try:
-        from lhassa.actionpack._calendar_sync import calendar_sync
+        from lhassa.calendar.surfaces.actions import calendar_sync
 
         summary = await calendar_sync({})
     except Exception as exc:  # defensive; belt and suspenders
-        logger.warning("calendar_routes: sync failed; {}", exc)
+        logger.warning("calendar api: sync failed; {}", exc)
         summary = f"calendar_sync: error: {exc}"
     return {"summary": str(summary)}

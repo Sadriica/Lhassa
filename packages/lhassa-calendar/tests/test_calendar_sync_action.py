@@ -1,4 +1,4 @@
-"""Tests for the ``calendar_sync`` action (lhassa/actionpack/_calendar_sync.py).
+"""Tests for the ``calendar_sync`` action (lhassa.calendar.surfaces.actions).
 
 Offline: :func:`lhassa.calendar.reconcile.find_unsynced` is monkeypatched to
 return fixed candidates (no real feed fetch), and
@@ -11,7 +11,7 @@ import asyncio
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
-from lhassa.actionpack import _calendar_sync
+from lhassa.calendar.surfaces import actions as _calendar_sync
 from lhassa.calendar import store
 
 

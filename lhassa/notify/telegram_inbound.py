@@ -626,44 +626,54 @@ async def _apply_action_marker(reply: str, *, instance_id: str, config) -> str:
     return "That action path is unavailable right now, ask me again in a bit."
 
 
-async def _answer_calendar_query(text: str, *, config) -> Optional[str]:
-    """Deterministic calendar-query answer, through the calendar seam — logs a
-    ``despertar_por="telegram"`` episode ($0, ``accion="calendar_view"``) and
-    records the turn in chat history exactly like a normal reply. ``None``
-    when :mod:`lhassa.calendar.query` doesn't recognise ``text`` as a calendar
-    question, so the caller falls through to the unchanged path. Never raises.
+async def _answer_capability_shortcut(text: str, *, config):
+    """Serve ``text`` through the first catalog capability whose always-on
+    ``shortcut`` answers it ($0, deterministic; the calendar pack's
+    ``calendar_view`` is the one today). Logs a ``despertar_por="telegram"``
+    episode (``accion=<capability>``, the decision the shortcut names) and
+    records the turn in chat history exactly like a normal reply.
+
+    Returns ``(capability, reply)``, or ``None`` when no capability answers
+    (including when no pack registered one), so the caller falls through to
+    the unchanged path. Never raises.
     """
-    from lhassa.calendar import query as _cal_query
-    from lhassa.core import db as _db_cal
-    from lhassa.core.episode import Episode
+    from lhassa.notify import capabilities as _capabilities
 
-    instance_id = getattr(config, "instance_id", None) or "inst_personal"
-    try:
-        reply = await _cal_query.answer(instance_id, text, config=config)
-    except Exception as exc:  # belt-and-braces; query.answer already never raises
-        logger.warning(f"Telegram inbound: calendar query failed: {exc}")
-        return None
-    if reply is None:
-        return None
+    for cap in list(_capabilities.CAPABILITIES):
+        if cap.shortcut is None:
+            continue
+        try:
+            hit = await cap.shortcut(text, config=config)
+        except Exception as exc:
+            logger.warning(f"Telegram inbound: {cap.name} shortcut failed: {exc}")
+            continue
+        if not hit:
+            continue
+        reply, decision = hit
+        if reply is None:
+            continue
 
-    try:
-        window = _cal_query.parse_window(text)
-        label = window[2] if window else "?"
-        await _db_cal.init_db()
-        ep = Episode.begin(despertar_por="telegram", instance_id=instance_id)
-        ep.finish(
-            decision=f"calendar-query: {label}",
-            accion="calendar_view",
-            resultado=reply,
-            costo_usd=0.0,
-        )
-        await ep.append()
-    except Exception as exc:  # a logging failure must not swallow a good reply
-        logger.warning(f"Telegram inbound: calendar-query episode logging failed: {exc}")
+        try:
+            from lhassa.core import db as _db_cap
+            from lhassa.core.episode import Episode
 
-    _history_record(config, "user", text)
-    _history_record(config, "assistant", reply)
-    return reply
+            instance_id = getattr(config, "instance_id", None) or "inst_personal"
+            await _db_cap.init_db()
+            ep = Episode.begin(despertar_por="telegram", instance_id=instance_id)
+            ep.finish(
+                decision=decision,
+                accion=cap.name,
+                resultado=reply,
+                costo_usd=0.0,
+            )
+            await ep.append()
+        except Exception as exc:  # a logging failure must not swallow a good reply
+            logger.warning(f"Telegram inbound: {cap.name} episode logging failed: {exc}")
+
+        _history_record(config, "user", text)
+        _history_record(config, "assistant", reply)
+        return cap, reply
+    return None
 
 
 #: How much of the owner's message the episode keeps. Long enough to be worth
@@ -1390,30 +1400,31 @@ async def _answer(text: str, *, config, chat_id: str = "") -> None:
                     await telegram.send(reply, config=config)
                     return
 
-    # Deterministic calendar-query shortcut — "¿qué hay en mi calendario el
+    # Deterministic capability shortcuts: "¿qué hay en mi calendario el
     # viernes?" / "what do I have tomorrow?" is answered straight from the
-    # calendar seam: a date parse + an event lookup + a template reply, $0, NO
-    # model, NEVER the tool-less think below (and never the [[research: …]]
-    # bridge, since it runs before that think is even attempted). Only fires
-    # for a message :func:`lhassa.calendar.query.is_calendar_query` actually
-    # recognises AND that parses a time reference — anything else (including a
-    # bare "hay"/"have" with no time reference) falls through unchanged.
+    # calendar pack's shortcut: a date parse + an event lookup + a template
+    # reply, $0, NO model, NEVER the tool-less think below (and never the
+    # [[research: ...]] bridge, since it runs before that think is even
+    # attempted). Anything no shortcut answers falls through unchanged; with
+    # no pack installed the catalog is empty and this is a no-op.
     if not stripped.startswith("/"):
-        calendar_reply = await _answer_calendar_query(stripped, config=config)
-        if calendar_reply is not None:
-            # This turn IS the calendar topic now — a connector-led follow-up
-            # ("Y el sabado?") should stay here rather than fall to the think.
-            # Remember the DAY too, so a bare-time follow-up ("¿y a las 6am?")
-            # resolves against the right day instead of hallucinating.
-            from lhassa.calendar import query as _cal_query_topic
+        shortcut_hit = await _answer_capability_shortcut(stripped, config=config)
+        if shortcut_hit is not None:
+            from lhassa.notify import capabilities as _capabilities
 
+            hit_cap, shortcut_reply = shortcut_hit
+            # This turn IS the capability's topic now: a connector-led
+            # follow-up ("Y el sabado?") should stay here rather than fall to
+            # the think. The topic context (the calendar's DAY) lets a
+            # bare-time follow-up ("¿y a las 6am?") resolve against the right
+            # day instead of hallucinating.
             _topic_set(
                 config,
                 chat_id,
-                "calendar_view",
-                {"date": _cal_query_topic.resolved_date(stripped)},
+                hit_cap.name,
+                _capabilities.topic_context(hit_cap, stripped),
             )
-            await telegram.send(calendar_reply, config=config)
+            await telegram.send(shortcut_reply, config=config)
             return
 
     # Deterministic "remember" shortcut — $0, no LLM, no task.
@@ -1443,9 +1454,9 @@ async def _answer(text: str, *, config, chat_id: str = "") -> None:
             return
 
     # The self-routing consciousness: an APPROVED capability route is served
-    # here for $0, before the command/brain fallback. calendar_view already has
-    # its own dedicated short-circuit above regardless of this table (so it
-    # never regresses today), so this mostly guards OTHER capabilities /
+    # here for $0, before the command/brain fallback. A capability with an
+    # always-on shortcut (calendar_view) is already served above regardless of
+    # this table, so this mostly guards OTHER capabilities /
     # research mis-routes once an owner turns one on via an approved
     # "mint_route" proposal. See lhassa.notify.capabilities.
     if not stripped.startswith("/"):
@@ -1513,16 +1524,13 @@ async def _answer(text: str, *, config, chat_id: str = "") -> None:
                             )
                         _history_record(config, "user", stripped)
                         _history_record(config, "assistant", followup_reply)
-                        # Keep the sticky topic, refreshing the calendar day if
-                        # THIS follow-up moved it ("y el sábado?") so the next
-                        # bare-time follow-up targets the right day.
+                        # Keep the sticky topic, refreshing its context if
+                        # THIS follow-up moved it (the calendar day: "y el
+                        # sábado?") so the next bare-time follow-up targets
+                        # the right day.
                         new_ctx = dict(topic.get("context") or {})
-                        if cap.name == "calendar_view":
-                            from lhassa.calendar import query as _cal_query_ctx
-
-                            moved = _cal_query_ctx.resolved_date(stripped)
-                            if moved:
-                                new_ctx["date"] = moved
+                        moved = _capabilities.topic_context(cap, stripped)
+                        new_ctx.update({k: v for k, v in moved.items() if v})
                         _topic_set(config, chat_id, cap.name, new_ctx)
                         await telegram.send(followup_reply, config=config)
                         return
