@@ -41,6 +41,8 @@ the interfaces must not import a shell.
    must not import any shell.
 6. **keystone-leaf**: `registry.py` and `plugins.py` must not import any
    `lhassa.*` feature module (they are bottom-of-stack infrastructure).
+7. **research-isolation**: the research pack's inner modules (`research/`
+   outside `research/surfaces/`) must not import any shell.
 
 ## Allowed exceptions
 

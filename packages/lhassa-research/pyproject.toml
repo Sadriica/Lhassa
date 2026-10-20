@@ -1,0 +1,23 @@
+[project]
+name = "lhassa-research"
+version = "0.8.0"
+description = "Lhassa's research line: /idea intake with source custody, theory-first assessment, the corpus flow and its gates, evidence-cited note drafts, research-to-product adoption"
+license = "AGPL-3.0-or-later"
+requires-python = ">=3.13"
+dependencies = [
+    "lhassa",
+]
+
+[project.entry-points."lhassa.plugins"]
+research = "lhassa.research.pack"
+
+[tool.uv.sources]
+lhassa = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+# Ship only the pack's own subpackage: core owns lhassa/__init__.py.
+packages = ["src/lhassa"]

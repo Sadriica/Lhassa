@@ -96,6 +96,12 @@ RULES: tuple[Rule, ...] = (
     # (``notify/commands.py``'s ``/remind`` and ``/event``) but never reaching
     # back into one itself.
     Rule("calendar-infra-isolation", frozenset({"calendar"}), frozenset(SHELLS)),
+    # The research pack's inner modules (evidence custody, assessments, the
+    # research gates, note drafting, product adoption) are adapters over core,
+    # llm, memory, security and tools; everything that composes a shell (the
+    # /idea intake, chat command, seed, API, CLI, integrity hooks) lives in
+    # ``research/surfaces/``.
+    Rule("research-isolation", frozenset({"research"}), frozenset(SHELLS)),
 )
 
 # Keystone leaf-infrastructure files: pure generic infrastructure that must not

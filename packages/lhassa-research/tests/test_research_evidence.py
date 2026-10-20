@@ -2,7 +2,7 @@
 
 import pytest
 
-from lhassa.agents.research_evidence import (
+from lhassa.research.evidence import (
     build_evidence_bundle,
     bundle_for_model,
     extract_urls,

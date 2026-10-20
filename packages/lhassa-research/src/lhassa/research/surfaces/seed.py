@@ -29,7 +29,6 @@ from loguru import logger
 from lhassa.flows.model import Flow
 from lhassa.flows.store import FlowStore
 from lhassa.org.temple import GESHE, GESHE_AIDES
-from lhassa.seeds import register_seed
 from lhassa.seeds.temple import seed_temple
 
 if TYPE_CHECKING:
@@ -224,12 +223,20 @@ def seed_research(config: "Optional[Config]" = None) -> dict:
     return summary
 
 
-@register_seed(
-    "research",
-    "Create the geshe's research aid department (collector/analyst/skeptic/"
-    "synthesist under the scholar-monk) and the idea-intake work-flow that "
-    "turns an idea into a corpus-style draft per research/METHOD.md.",
-)
 def apply(config: "Optional[Config]" = None) -> dict:
-    """The ``research`` seed entry point; see :func:`seed_research`."""
+    """The ``research`` seed entry point (registered by :mod:`lhassa.research.pack`)."""
     return seed_research(config)
+
+
+def canonical_flows(config: "Optional[Config]" = None) -> dict:
+    """``{flow_id: canonical Flow}`` for the two research flows (integrity seam)."""
+    cfg = _resolve_config(config)
+    flow_id = getattr(cfg, "research_flow_id", None) or DEFAULT_RESEARCH_FLOW_ID
+    assessment_flow_id = (
+        getattr(cfg, "research_assessment_flow_id", None)
+        or DEFAULT_ASSESSMENT_FLOW_ID
+    )
+    return {
+        assessment_flow_id: _canonical_flow(assessment_flow_id, _ASSESSMENT_FLOW_JSON),
+        flow_id: _canonical_flow(flow_id),
+    }

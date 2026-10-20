@@ -8,6 +8,12 @@ carries its **own line** underneath them. This file declares Lhassa's.
 > Owner TODO (other repo): mirror the "one line per product" structure into
 > `witara/docs/soul/03-investigacion.md`.
 
+The line's code ships as the `lhassa-research` capability pack
+(`packages/lhassa-research`, subpackage `lhassa.research`): the `/idea` intake,
+evidence custody, the assessment rubric, the corpus and assessment gates, note
+drafts, product adoption, `lhassa research` and `/api/research`. Core keeps the
+`idea_assessments` tables; without the pack the line is simply absent.
+
 ## The line
 
 Lhassa researches **AI down to the base**: no technique is adopted by hearsay

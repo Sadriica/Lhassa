@@ -1,18 +1,20 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """``/idea``: hand an idea to the geshe's aide department.
 
-Moved verbatim out of the former ``lhassa/notify/commands.py``.
+Registered into the chat ``COMMANDS`` registry by :mod:`lhassa.research.pack`
+(see :mod:`lhassa.research.surfaces.hooks`); absent pack, no ``/idea``.
 """
 
 from __future__ import annotations
 
 from loguru import logger
 
-from ._registry import register_command
-from ._shared import _config
+from lhassa.notify.commands._shared import _config
+
+#: The /help line for /idea; merged into the chat DESCRIPTIONS on registration.
+DESCRIPTION = "<text|link>; the geshe's aides investigate it into a corpus draft."
 
 
-@register_command("idea")
 async def _cmd_idea(args: str, *, config=None) -> str:
     """``/idea <text or link>``: hand an idea to the geshe's aid department.
 

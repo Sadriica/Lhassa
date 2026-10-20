@@ -158,7 +158,6 @@ from lhassa.api import (  # noqa: E402
     org_routes,
     overview_routes,
     project_routes,
-    research_routes,
     relationship_routes,
     reports_routes,
     runtime_routes,
@@ -196,7 +195,6 @@ app.include_router(overview_routes.router)
 app.include_router(artifacts_routes.router)
 app.include_router(calendar_routes.router)
 app.include_router(project_routes.router)
-app.include_router(research_routes.router)
 app.include_router(share_routes.router)
 app.include_router(postulaciones_routes)
 

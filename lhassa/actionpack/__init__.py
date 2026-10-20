@@ -50,8 +50,6 @@ def register_all() -> None:
         _kg,
         _knowledge,
         _projects,
-        _research_intake,
-        _research_note,
         _standing,
         _llm,
         _memory,
@@ -133,8 +131,6 @@ def register_all() -> None:
     register_precondition("temple_run", _temple.temple_run_possible)
     _reg("check_integrity", _integrity.check_integrity)
     _reg("attach_project_template", _standing.attach_project_template)
-    _reg("draft_research_note", _research_note.draft_research_note)
-    _reg("research_intake", _research_intake.research_intake)
     _projects.register_sense()
     _standing.register_sense()
 

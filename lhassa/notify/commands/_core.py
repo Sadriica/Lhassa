@@ -88,7 +88,6 @@ DESCRIPTIONS: dict[str, str] = {
     "fleet": "Known machines, last check-in, desired state.",
     "version": "My version, runtime and key toggles.",
     "config": "[key [value]]; read or change a runtime setting.",
-    "idea": "<text|link>; the geshe's aides investigate it into a corpus draft.",
 }
 
 

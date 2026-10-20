@@ -12,10 +12,9 @@ Commands::
     lhassa research apply-change <change-id>
 
 The line itself is declared in ``doc/research.md``; drafts land in
-``doc/notes/drafts/`` with a review-before-publishing header. Registered as a
-sub-app in ``lhassa.cli.app`` via::
-
-    app.add_typer(research_cmds.research_app, name="research")
+``doc/notes/drafts/`` with a review-before-publishing header. Mounted as
+``lhassa research`` by :mod:`lhassa.research.pack` through
+``extensions.register_cli_app``.
 """
 
 from __future__ import annotations
@@ -44,7 +43,7 @@ def draft(
 ) -> None:
     """Gather the evidence pack and draft one technical note."""
     from lhassa import actionpack
-    from lhassa.actionpack._research_note import draft_research_note
+    from lhassa.research.note import draft_research_note
 
     actionpack.register_all()
     out = asyncio.run(draft_research_note({"topic": topic, "lang": lang}))
@@ -55,7 +54,7 @@ def draft(
 @research_app.command("list")
 def list_cmd() -> None:
     """List existing note drafts."""
-    from lhassa.actionpack._research_note import _drafts_dir
+    from lhassa.research.note import _drafts_dir
     from lhassa.config import Config
 
     drafts = _drafts_dir(Config)
@@ -109,9 +108,9 @@ def assessments_cmd(
         table.add_row(
             row["id"],
             row["status"],
-            row.get("investment_level") or "—",
-            row.get("decision") or "—",
-            "—" if row.get("weighted_score") is None else f"{row['weighted_score']}/42",
+            row.get("investment_level") or "-",
+            row.get("decision") or "-",
+            "-" if row.get("weighted_score") is None else f"{row['weighted_score']}/42",
             str(row["idea"])[:70],
         )
     _console.print(table)
@@ -147,7 +146,7 @@ def assessment_cmd(
         "assessment_path",
         "draft_path",
     ):
-        _console.print(f"[stone]{key}:[/stone] {row.get(key) or '—'}")
+        _console.print(f"[stone]{key}:[/stone] {row.get(key) or '-'}")
     _console.print("\n[accent]criteria[/accent]")
     for name, item in (row.get("criteria") or {}).items():
         sources = ",".join(item.get("source_ids") or []) or "internal/UNVERIFIED"
@@ -170,7 +169,7 @@ def propose_change(
     verify: str = typer.Option(..., "--verify", "-v", help="Objective acceptance command."),
 ) -> None:
     """Turn gated research into an experiment proposal; change no product files."""
-    from lhassa.agents import product_change
+    from lhassa.research import product_change
 
     try:
         record = asyncio.run(
@@ -199,7 +198,7 @@ def build_change(
     cli: str | None = typer.Option(None, "--cli", help="claude, codex, or opencode."),
 ) -> None:
     """Build and verify an approved experiment in its external safe place."""
-    from lhassa.agents import product_change
+    from lhassa.research import product_change
 
     try:
         record = asyncio.run(
@@ -222,7 +221,7 @@ def apply_change(
     proposal_id: str = typer.Argument(..., help="Product-change proposal id."),
 ) -> None:
     """Integrate an unchanged candidate after its distinct integration approval."""
-    from lhassa.agents import product_change
+    from lhassa.research import product_change
 
     try:
         record = asyncio.run(product_change.apply(_instance_id(), proposal_id))
