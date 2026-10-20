@@ -1,7 +1,8 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """
-LLM provider factory; selects the right Pipecat service and async client
-based on LHASSA_LLM_PROVIDER.
+LLM provider factory; selects the right async client based on
+LHASSA_LLM_PROVIDER. (The voice pipeline's Pipecat service lives in the voice
+pack, ``lhassa.voice.llm_service``.)
 
 Supported providers:
   groq        . Groq API (default, free tier)
@@ -1020,70 +1021,6 @@ def get_model_provider(config: "Config", *, name: str | None = None) -> ModelPro
     if factory is None:
         factory = PROVIDERS.get(_DEFAULT_PROVIDER)
     return factory(config)
-
-
-# ── Voice pipeline service (Pipecat) ──────────────────────────────────────────
-
-def get_pipeline_llm(config: "Config"):
-    """Return the Pipecat LLM service for the voice pipeline."""
-    provider = config.llm_provider
-
-    if provider == "anthropic":
-        from pipecat.services.anthropic.llm import AnthropicLLMService
-        logger.info(f"LLM: Anthropic ({config.model})")
-        return AnthropicLLMService(
-            api_key=config.anthropic_api_key,
-            settings=AnthropicLLMService.Settings(model=config.model),
-        )
-
-    elif provider == "openai":
-        from pipecat.services.openai.llm import OpenAILLMService
-        logger.info(f"LLM: OpenAI ({config.model})")
-        return OpenAILLMService(
-            api_key=config.openai_api_key,
-            settings=OpenAILLMService.Settings(model=config.model),
-        )
-
-    elif provider == "openrouter":
-        from pipecat.services.openrouter.llm import OpenRouterLLMService
-        logger.info(f"LLM: OpenRouter ({config.model})")
-        return OpenRouterLLMService(
-            api_key=config.openrouter_api_key,
-            settings=OpenRouterLLMService.Settings(model=config.model),
-        )
-
-    elif provider == "ollama":
-        from pipecat.services.ollama.llm import OLLamaLLMService
-        logger.info(f"LLM: Ollama ({config.model} @ {config.ollama_base_url})")
-        return OLLamaLLMService(
-            base_url=config.ollama_base_url,
-            settings=OLLamaLLMService.Settings(model=config.model),
-        )
-
-    elif provider == "deepseek":
-        from pipecat.services.openai.llm import OpenAILLMService
-        logger.info(f"LLM: DeepSeek ({config.model})")
-        return OpenAILLMService(
-            api_key=config.deepseek_api_key,
-            base_url="https://api.deepseek.com",
-            settings=OpenAILLMService.Settings(model=config.model),
-        )
-
-    elif provider == "cerebras":
-        from pipecat.services.cerebras.llm import CerebrasLLMService
-        logger.info(f"LLM: Cerebras ({config.model})")
-        return CerebrasLLMService(
-            api_key=config.cerebras_api_key,
-            settings=CerebrasLLMService.Settings(model=config.model),
-        )
-
-    else:  # groq (default)
-        from pipecat.services.groq.llm import GroqLLMService
-        logger.info(f"LLM: Groq ({config.model})")
-        return GroqLLMService(
-            api_key=config.groq_api_key,
-            settings=GroqLLMService.Settings(model=config.model),
-        )
 
 
 # ── Agent async client ─────────────────────────────────────────────────────────

@@ -3,12 +3,14 @@
 Voice is one **opt-in** surface among CLI / Telegram / dashboard; not the
 identity of the project (Lhassa is a brain that rents audio as one of its
 bodies, not a voice-first product). It is off
-by default: set `LHASSA_VOICE_ENABLED=1`, install the `voice` extra
-(`uv sync --extra voice`: pulls in `pipecat`/`torch`/`pyaudio`, see
-[`deployment.md`](deployment.md)), and provide the Deepgram (STT) and
+by default: set `LHASSA_VOICE_ENABLED=1`, install the voice pack with its
+`runtime` extra (`uv sync --package lhassa-voice --extra runtime`, or
+`uv sync --all-packages --extra runtime` for everything: pulls in
+`pipecat`/`torch`/`pyaudio`, see [`deployment.md`](deployment.md) and
+`packages/lhassa-voice/README.md`), and provide the Deepgram (STT) and
 Cartesia (TTS) keys. It is a laptop-only surface: it needs local audio
 hardware, so it runs via `make run` / `make dev`, never in the container
-image (which is built without the `voice` extra).
+image (which is built without the voice pack).
 
 This document explains how to talk to Lhassa once voice is enabled: how to
 wake it, how to speak to it, how to interrupt it, and how to get the most

@@ -1,14 +1,15 @@
 .PHONY: install test-core quickstart install-health install-heartbeat install-telegram install-monitor install-privileged dashboard run dev check test test-integration cov lint clean
 
 # First-time setup: install Python deps + build the dashboard.
-# Installs the `voice` extra (pipecat/torch) — this is the laptop dev workflow
-# (`make run`/`make dev` run the voice pipeline via main.py). Headless deploys
-# (Docker/VPS) intentionally skip it — see doc/portability.md.
+# Installs every pack plus the voice pack's `runtime` extra (pipecat/torch):
+# this is the laptop dev workflow (`make run`/`make dev` run the voice pipeline
+# via main.py). Headless deploys (Docker/VPS) intentionally skip it; see
+# doc/portability.md.
 install:
-	uv sync --all-packages --extra voice
+	uv sync --all-packages --extra runtime
 	cd dashboard && npm install && npm run build
 
-# The 2-minute on-ramp: uv sync (no dashboard, no voice extra), ensure .env,
+# The 2-minute on-ramp: uv sync (no dashboard, no voice runtime), ensure .env,
 # detect a model backend (API key or Ollama), and print the next commands.
 # This is the LIGHT path — `bash scripts/install.sh` is the always-on one.
 quickstart:
@@ -83,11 +84,11 @@ dashboard-dev:
 check:
 	uv run python scripts/check.py
 
-# Run the test suite (dev + voice extras — the full suite covers the voice
-# pipeline modules too; the VPS/headless image never needs them, see
-# doc/portability.md).
+# Run the test suite: core + every pack, dev extra. The voice pack's `runtime`
+# extra (pipecat/torch) is not needed: its tests run without audio, and the
+# pipecat-comparison tests skip when it is absent (they run after `make install`).
 test:
-	uv run --all-packages --extra dev --extra voice python -m pytest
+	uv run --all-packages --extra dev python -m pytest
 
 # Real end-to-end integration tests (tests/test_integration_heartbeat.py):
 # a live CLI subprocess (opencode/claude/codex, whichever is on PATH) and a
@@ -113,7 +114,7 @@ cov:
 
 # Lint with ruff
 lint:
-	uv run --all-packages --extra dev --extra voice python -m ruff check .
+	uv run --all-packages --extra dev python -m ruff check .
 
 clean:
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true

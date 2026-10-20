@@ -12,6 +12,7 @@ resolution-markers = [
 members = [
     "lhassa",
     "lhassa-bench",
+    "lhassa-voice",
 ]
 
 [[package]]
@@ -1110,10 +1111,6 @@ dev = [
 tokens = [
     { name = "tiktoken" },
 ]
-voice = [
-    { name = "pipecat-ai", extra = ["cartesia", "deepgram", "groq", "local"] },
-    { name = "torch" },
-]
 
 [package.metadata]
 requires-dist = [
@@ -1125,7 +1122,6 @@ requires-dist = [
     { name = "mcp", specifier = ">=1.0.0" },
     { name = "msal", specifier = ">=1.28.0" },
     { name = "openai", specifier = ">=1.0.0" },
-    { name = "pipecat-ai", extras = ["cartesia", "deepgram", "groq", "local", "silero"], marker = "extra == 'voice'", specifier = ">=0.0.108" },
     { name = "prompt-toolkit", specifier = ">=3.0.0" },
     { name = "psutil", specifier = ">=7.2.2" },
     { name = "pypdf", specifier = ">=4.0.0" },
@@ -1138,11 +1134,10 @@ requires-dist = [
     { name = "starlette", specifier = "<1.0.0" },
     { name = "textual", specifier = ">=8.2.8" },
     { name = "tiktoken", marker = "extra == 'tokens'", specifier = ">=0.7.0" },
-    { name = "torch", marker = "extra == 'voice'", specifier = ">=2.0.0" },
     { name = "typer", specifier = ">=0.12.0" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.29.0" },
 ]
-provides-extras = ["dev", "tokens", "voice"]
+provides-extras = ["dev", "tokens"]
 
 [[package]]
 name = "lhassa-bench"
@@ -1158,6 +1153,28 @@ requires-dist = [
     { name = "lhassa", editable = "." },
     { name = "pyyaml", specifier = ">=6.0" },
 ]
+
+[[package]]
+name = "lhassa-voice"
+version = "0.8.0"
+source = { editable = "packages/lhassa-voice" }
+dependencies = [
+    { name = "lhassa" },
+]
+
+[package.optional-dependencies]
+runtime = [
+    { name = "pipecat-ai", extra = ["cartesia", "deepgram", "groq", "local"] },
+    { name = "torch" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "lhassa", editable = "." },
+    { name = "pipecat-ai", extras = ["cartesia", "deepgram", "groq", "local", "silero"], marker = "extra == 'runtime'", specifier = ">=0.0.108" },
+    { name = "torch", marker = "extra == 'runtime'", specifier = ">=2.0.0" },
+]
+provides-extras = ["runtime"]
 
 [[package]]
 name = "linkify-it-py"

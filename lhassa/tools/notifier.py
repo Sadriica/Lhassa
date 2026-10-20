@@ -1,42 +1,53 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """
-Notification router; speaks via TTS when the voice pipeline is active,
-falls back to a desktop notification when idle.
+Notification router: speaks through a registered speaker when one is live,
+falls back to a desktop notification otherwise.
 
 Platform support:
   Linux  ; notify-send (libnotify)
   macOS  ; osascript (built-in)
   Windows. PowerShell New-BurntToastNotification or a msg-box fallback
+
+The spoken path is a seam, not an import: a surface that can talk (the voice
+pack) calls :func:`register_speaker` with an async ``speak(message) -> bool``.
+``notify()`` tries each speaker in turn and stops at the first that returns
+True; with no speaker registered (core alone, or a headless role) every
+notification goes to the desktop. A speaker that raises is logged and skipped.
 """
 
 import platform
 import subprocess
+from typing import Awaitable, Callable
 
 from loguru import logger
 
-from lhassa.state import state
-
 _SYSTEM = platform.system()
+
+Speaker = Callable[[str], Awaitable[bool]]
+_SPEAKERS: list[Speaker] = []
+
+
+def register_speaker(speaker: Speaker) -> Speaker:
+    """Add a speaker (idempotent: the same callable is registered once)."""
+    if speaker not in _SPEAKERS:
+        _SPEAKERS.append(speaker)
+    return speaker
+
+
+def unregister_speaker(speaker: Speaker) -> None:
+    """Remove a speaker if present; never raises."""
+    if speaker in _SPEAKERS:
+        _SPEAKERS.remove(speaker)
 
 
 async def notify(message: str, title: str = "Lhassa"):
     """Send a notification through the best available channel."""
-    if state.is_voice_active and state.pipeline_task is not None:
+    for speaker in list(_SPEAKERS):
         try:
-            # Lazy import: the `voice` extra (pipecat) is only installed when the
-            # voice pipeline itself is running, which is the only place
-            # `state.is_voice_active` can ever be true. Guarding it here means
-            # this module; and everything that imports it (the scheduler, the
-            # proactive-monitoring tools); loads cleanly on a headless install
-            # with no voice extra.
-            from pipecat.frames.frames import TTSSpeakFrame
-
-            await state.pipeline_task.queue_frame(TTSSpeakFrame(text=message))
-            return
-        except ImportError:
-            logger.warning("voice extra not installed; falling back to desktop notify")
+            if await speaker(message):
+                return
         except Exception as e:
-            logger.warning(f"TTS notify failed, falling back to desktop: {e}")
+            logger.warning(f"Spoken notify failed, falling back to desktop: {e}")
 
     _desktop_notify(title, message)
 

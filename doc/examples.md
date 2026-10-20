@@ -159,8 +159,8 @@ delegation seam and is offline/stubbed unless `LHASSA_ORG_LIVE=1`.
 ## Voice (opt-in appendix)
 
 Voice is one opt-in surface among CLI / Telegram / dashboard; off by
-default (`LHASSA_VOICE_ENABLED=0`), needs the `voice` extra installed
-(`uv sync --extra voice`) and the Deepgram/Cartesia keys. It is not the
+default (`LHASSA_VOICE_ENABLED=0`), needs the voice pack with its runtime
+(`uv sync --package lhassa-voice --extra runtime`) and the Deepgram/Cartesia keys. It is not the
 identity of the project; it is a rentable interaction mode with the same
 tool surface as the CLI.
 

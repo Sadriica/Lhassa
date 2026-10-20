@@ -15,10 +15,10 @@ RUN npm run build
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Stage 2 — builder: resolve + install the Python venv (needs compilers)
-# The image is built WITHOUT the `voice` extra (no pipecat, no torch, no
+# The image is built WITHOUT the voice pack runtime (no pipecat, no torch, no
 # pyaudio) — the container only ever runs the API/heartbeat/telegram/monitor
 # roles, none of which need the voice stack (see doc/portability.md). This is
-# the whole point of the extra: a lean, fast-building headless image. The
+# the whole point of the `runtime` extra: a lean, fast-building headless image. The
 # toolchain stays out of the runtime image — only the finished /app/.venv is
 # copied forward.
 # ─────────────────────────────────────────────────────────────────────────────
@@ -33,14 +33,14 @@ ENV UV_LINK_MODE=copy \
 
 WORKDIR /app
 
-# Resolve and install the runtime dependencies first (no dev deps, no voice
+# Resolve and install the runtime dependencies first (no dev deps, no voice pack
 # extra), from the lockfile, WITHOUT the project itself — this layer is cached
 # across code edits.
 COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev --no-install-project
 
 # Copy the application source and the pre-built dashboard, then install the
-# project package into the venv (still no dev deps, no voice extra).
+# project package into the venv (still no dev deps, no voice pack).
 COPY . .
 COPY --from=dashboard-build /dashboard/dist ./dashboard/dist
 RUN uv sync --frozen --no-dev
@@ -52,7 +52,7 @@ RUN uv sync --frozen --no-dev
 FROM python:3.13-slim AS runtime
 
 # ca-certificates — TLS for outbound provider calls. No audio/ML shared libs
-# (libportaudio2/libgomp1/libsndfile1) needed: the voice extra isn't installed.
+# (libportaudio2/libgomp1/libsndfile1) needed: the voice pack runtime is not installed.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         ca-certificates \

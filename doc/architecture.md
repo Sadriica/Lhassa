@@ -55,7 +55,7 @@ any layer may use it.
 - **A registry, not a branch.** `PLATFORMS` + `@register_platform` means adding
   a platform is a drop-in module and selecting one is configuration
   (`LHASSA_PLATFORM`), never surgery. The existing module-level
-  `platform.system()` dispatch (`voice/notifier.py`, `agents/local_cli.py`,
+  `platform.system()` dispatch (`tools/notifier.py`, `agents/local_cli.py`,
   `tools/vision.py`) is left where it is and lives *inside* the default
   implementations; two idioms were not merged into a third.
 - **Honesty over completeness.** A reading that cannot be taken returns `None`,

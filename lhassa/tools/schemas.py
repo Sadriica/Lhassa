@@ -8,7 +8,7 @@ and the wiring lives in ``lhassa.tools.registry``. Keeping the schema list here
 lets the catalog grow without touching handler code.
 """
 
-try:  # the voice extra is optional; the catalog itself is not
+try:  # the voice runtime (lhassa-voice[runtime]) is optional; the catalog itself is not
     from pipecat.adapters.schemas.function_schema import FunctionSchema
     from pipecat.adapters.schemas.tools_schema import ToolsSchema
 except ModuleNotFoundError:  # pragma: no cover - exercised by the no-voice install

@@ -63,15 +63,8 @@ dev = [
 tokens = [
     "tiktoken>=0.7.0",
 ]
-# Voice pipeline (STT → LLM → TTS) — only the laptop/desktop voice surface needs
-# this. The default install (API/heartbeat/telegram/monitor/CLI) never imports
-# pipecat or torch; every import site is guarded (lazy import or TYPE_CHECKING).
-# Install with `uv sync --extra voice` to restore the voice surface.
-# Pipecat bundles LLM services for groq, anthropic, openai, openrouter, ollama, cerebras.
-voice = [
-    "pipecat-ai[cartesia,deepgram,groq,local,silero]>=0.0.108",
-    "torch>=2.0.0",             # required by Silero VAD
-]
+# The voice pipeline (pipecat, torch) moved to the lhassa-voice pack, extra
+# `runtime`: `uv sync --package lhassa-voice --extra runtime`.
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
@@ -88,7 +81,7 @@ markers = [
 source = ["lhassa"]
 omit = [
     "lhassa/_vendor/*",   # vendored third-party code, not ours to cover
-    "lhassa/voice/*",     # hardware/audio pipeline (pipecat/torch); untestable without mics/speakers
+    "*/lhassa/voice/*",   # voice pack: hardware/audio pipeline (pipecat/torch); untestable without mics/speakers
 ]
 
 [tool.coverage.report]
@@ -96,5 +89,5 @@ skip_covered = false
 show_missing = true
 
 [tool.uv]
-# To use CPU-only PyTorch and avoid the large CUDA wheel:
-#   uv add torch --extra-index-url https://download.pytorch.org/whl/cpu
+# torch now comes only through the lhassa-voice pack's `runtime` extra; see
+# packages/lhassa-voice/pyproject.toml for the CPU-only wheel note.

@@ -238,10 +238,10 @@ Install the optional `tectonic` dep to get a compiled PDF instead of raw `.tex`.
 ### Developer path
 
 ```bash
-make install   # uv sync --extra voice + build the dashboard (first time)
+make install   # uv sync --all-packages --extra runtime (voice runtime) + build the dashboard (first time)
 make run       # voice pipeline + API server + scheduler (uv run python main.py)
 make dev       # same, with LHASSA_DEBUG=1 LHASSA_LOG_LEVEL=DEBUG
-make test      # pytest with the dev and voice extras (integration tests excluded)
+make test      # pytest over core + every pack, dev extra (integration tests excluded)
 make test-integration  # live-CLI and on-disk-DB tests; slower, may spend a little real budget
 make cov       # coverage baseline, HTML report in htmlcov/
 make lint      # ruff
@@ -436,8 +436,8 @@ and the do-and-sleep / provider-harness / org-tree diagrams, read
 ## Development
 
 ```bash
-uv run --extra dev --extra voice python -m pytest  # the test suite (== make test)
-uv run --extra dev --extra voice python -m ruff check . # lint (== make lint)
+uv run --all-packages --extra dev python -m pytest  # the test suite (== make test)
+uv run --all-packages --extra dev python -m ruff check . # lint (== make lint)
 cd dashboard && npm run build             # rebuild the dashboard (== make dashboard)
 ```
 

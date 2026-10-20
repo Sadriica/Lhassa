@@ -198,10 +198,10 @@ Después deja tu CV real en `~/.lhassa/cv/cv_largo.tex` (o define `LHASSA_CV_DIR
 ### Camino de desarrollo
 
 ```bash
-make install   # uv sync --extra voice + compilar el dashboard (primera vez)
+make install   # uv sync --all-packages --extra runtime (runtime de voz) + compilar el dashboard (primera vez)
 make run       # voz + API + scheduler (uv run python main.py)
 make dev       # igual, con LHASSA_DEBUG=1 LHASSA_LOG_LEVEL=DEBUG
-make test      # pytest con los extras dev y voice (sin los tests de integración)
+make test      # pytest sobre core + todos los packs, extra dev (sin los tests de integración)
 make test-integration  # tests con CLI en vivo y DB en disco; más lentos, pueden gastar algo de presupuesto real
 make cov       # línea base de cobertura, reporte HTML en htmlcov/
 make lint      # ruff

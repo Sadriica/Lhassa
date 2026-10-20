@@ -47,11 +47,6 @@ the interfaces must not import a shell.
 Precise, intentional edges that are whitelisted in the test (keyed on the exact
 `source-file → imported-module` pair, so they do not loosen the rest of the rule):
 
-- `tools/monitor.py` and `tools/handlers/agents.py` → `lhassa.voice.notifier`;
-  `voice/notifier.py` is the cross-platform **desktop notification router**
-  (`notify-send` / `osascript` / BurntToast), a shared utility, **not** the voice
-  conversation shell. Tools use it to surface alerts. The rest of the `voice`
-  package (`voice.pipeline`, `voice.brain_bridge`, …) stays forbidden to adapters.
 - `plugins.py` → `lhassa.config`: `config` is itself leaf infrastructure (pure
   configuration, not a feature module), so the plugin loader reading `Config`
   does not break the keystone rule.

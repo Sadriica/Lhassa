@@ -219,7 +219,7 @@ is a clear "not supported yet" instead of a guess), installs `uv` if missing
 (leaving an existing install alone), clones the repo into
 `~/.local/share/lhassa` (override with `LHASSA_DIR`, or the source with
 `LHASSA_REPO_URL`) or updates it if already cloned, runs `uv sync` headless
-(no `voice` extra; pass `--voice` to include it), and drops a `lhassa` shim
+(no voice runtime; pass `--voice` to include it), and drops a `lhassa` shim
 into `~/.local/bin` so the command is on `PATH`. It is idempotent: re-running
 it updates the clone and re-syncs instead of duplicating anything.
 

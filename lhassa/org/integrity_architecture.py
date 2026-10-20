@@ -20,8 +20,6 @@ RULES = (
     ("leaf-infra-isolation", {"cv", "calendar"}, SHELLS),
 )
 EXCEPTIONS = {
-    ("tools/monitor.py", "lhassa.voice.notifier"),
-    ("tools/handlers/agents.py", "lhassa.voice.notifier"),
     ("health/checks.py", "lhassa.notify.dispatch"),
     ("personal/secretary.py", "lhassa.org"),
     ("personal/secretary.py", "lhassa.org.management"),

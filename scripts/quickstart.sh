@@ -4,7 +4,7 @@
 # This is the LIGHT on-ramp for a curious stranger cloning the repo; it is
 # NOT the always-on installer (that's scripts/install.sh: systemd + Docker).
 # Quickstart only:
-#   - resolves the Python venv (uv sync, no dashboard build, no voice extra),
+#   - resolves the Python venv (uv sync, no dashboard build, no voice runtime),
 #   - makes sure a .env exists,
 #   - detects whether ANY model backend is configured (an API key, or a local
 #     model via Ollama), and if not, explains the two easiest paths and stops,

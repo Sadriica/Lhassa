@@ -70,9 +70,9 @@ RULES: tuple[Rule, ...] = (
     # read-model over config/core/memory; shells compose it (digest, the
     # /today /tomorrow /checkin commands); it must never reach back into one.
     Rule("personal-isolation", frozenset({"personal"}), frozenset(SHELLS)),
-    # The "hands" (adapters) must not depend on the UI/messaging shells. ``voice``
-    # is included; the single legitimate desktop-notifier edge is whitelisted in
-    # ALLOWED_EXCEPTIONS below so this rule still blocks NEW voice coupling.
+    # The "hands" (adapters) must not depend on the UI/messaging shells,
+    # ``voice`` included (the desktop notifier the tools use lives in
+    # ``tools/notifier.py``; the voice pack plugs its speaker into it).
     # ``bench`` (LhassaBench, Wave E) joins this set: it is an adapter over the
     # existing swap points (agents/verify for scoring, llm/provider for the
     # subjects under test); a fixture-driven eval harness, not a world-facing
@@ -120,14 +120,6 @@ PACK_DEPENDENCIES: dict[str, frozenset[str]] = {}
 
 # Documented allowed exceptions; precise (source-file-suffix, imported-module)
 # pairs that are intentionally permitted despite tripping a rule above.
-#   tools/{monitor.py, handlers/agents.py} -> lhassa.voice.notifier:
-#     ``voice/notifier.py`` is the cross-platform DESKTOP notification router
-#     (notify-send / osascript / BurntToast), a shared utility, not the voice
-#     conversation shell. Tools legitimately use it to surface alerts (the
-#     delegate-to-agent handler notifies when a background agent finishes).
-#     Keying the exception on the exact module keeps the rest of the ``voice``
-#     package (e.g. ``voice.pipeline``, ``voice.brain_bridge``) forbidden to
-#     adapters.
 #   plugins.py -> lhassa.config:
 #     ``config`` is itself leaf infrastructure (pure configuration, not a feature
 #     module), so the plugin loader reading ``Config`` does not break the keystone
@@ -156,8 +148,6 @@ PACK_DEPENDENCIES: dict[str, frozenset[str]] = {}
 #     canonical briefing flows needs the flow data model + store, not the engine.
 ALLOWED_EXCEPTIONS: frozenset[tuple[str, str]] = frozenset(
     {
-        ("tools/monitor.py", "lhassa.voice.notifier"),
-        ("tools/handlers/agents.py", "lhassa.voice.notifier"),
         ("plugins.py", "lhassa.config"),
         ("extensions.py", "lhassa.registry"),
         ("health/checks.py", "lhassa.notify.dispatch"),
@@ -364,16 +354,16 @@ def test_checker_honours_allowed_exceptions() -> None:
     """A whitelisted edge is NOT flagged, but the same source importing a
     DIFFERENT module in the forbidden package still is."""
     allowed = ImportRecord(
-        src_rel="tools/monitor.py",
-        src_sub="tools",
-        module="lhassa.voice.notifier",
-        tgt_sub="voice",
+        src_rel="health/checks.py",
+        src_sub="health",
+        module="lhassa.notify.dispatch",
+        tgt_sub="notify",
     )
     not_allowed = ImportRecord(
-        src_rel="tools/monitor.py",
-        src_sub="tools",
-        module="lhassa.voice.pipeline",
-        tgt_sub="voice",
+        src_rel="health/checks.py",
+        src_sub="health",
+        module="lhassa.notify.telegram",
+        tgt_sub="notify",
     )
     assert find_violations([allowed]) == []
     flagged = find_violations([not_allowed])

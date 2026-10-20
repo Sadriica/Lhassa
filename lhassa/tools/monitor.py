@@ -9,7 +9,7 @@ from pathlib import Path
 from loguru import logger
 
 from lhassa.state import state
-from lhassa.voice.notifier import notify
+from lhassa.tools.notifier import notify
 
 
 def _stat_signature(p: Path) -> tuple[int, int, int, int]:
