@@ -33,7 +33,7 @@ from pipecat.turns.user_turn_strategies import UserTurnStrategies, default_user_
 
 from lhassa.config import Config
 from lhassa.llm.prompt import build_system_prompt
-from lhassa.llm.provider import get_pipeline_llm
+from lhassa.voice.llm_service import get_pipeline_llm
 from lhassa.memory.store import build_memory_context
 from lhassa.state import state
 from lhassa.tools.registry import TOOLS, register_tools
@@ -239,7 +239,7 @@ async def run():
         params=PipelineParams(allow_interruptions=True),
     )
 
-    # Expose refs so notifier can inject TTS frames and main can recover messages on shutdown
+    # Expose refs so the speaker (voice/speaker.py) can inject TTS frames and main can recover messages on shutdown
     state.pipeline_task = task
     state.llm_context = context
     await state.set_voice_active(False)

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""The tool catalog must import (and render identically) without the voice extra.
+"""The tool catalog must import (and render identically) without the voice runtime.
 
 ``lhassa/tools/schemas.py`` is what every door sends the model, including the
 CLI. The default install ships without pipecat by design (see doc/install.md: the
@@ -34,7 +34,7 @@ def test_the_shim_renders_exactly_what_pipecat_renders():
     """Pin the stand-in to the real type so the two cannot drift."""
     pipecat_schema = pytest.importorskip(
         "pipecat.adapters.schemas.function_schema",
-        reason="voice extra not installed; nothing to compare against",
+        reason="voice runtime (pipecat) not installed; nothing to compare against",
     )
 
     from lhassa.tools import schemas as catalog
@@ -47,6 +47,6 @@ def test_the_shim_renders_exactly_what_pipecat_renders():
     )
     theirs = pipecat_schema.FunctionSchema(**sample).to_default_dict()
     ours = catalog.FunctionSchema(**sample).to_default_dict()
-    # When the voice extra IS installed the module binds pipecat's own type, so
+    # When the voice runtime IS installed the module binds pipecat's own type, so
     # this also guards the import order: `ours` must never be a third shape.
     assert ours == theirs

@@ -9,7 +9,7 @@
 #      leaving an already-installed uv untouched,
 #   3. clones the Lhassa repo (or updates it if it is already there),
 #   4. resolves the Python venv with `uv sync` (headless by default, no
-#      `voice` extra; pass --voice to include it),
+#      voice runtime; pass --voice to include it),
 #   5. puts a `lhassa` command on PATH via a small shim in ~/.local/bin,
 #   6. prints the real next steps (.env, a model backend, `lhassa --help`,
 #      where the docs live); nothing this script cannot actually deliver.
@@ -28,7 +28,7 @@
 #   bash scripts/get-lhassa.sh [flags]
 #
 # Flags:
-#   --voice         Also install the optional `voice` extra (pipecat/torch).
+#   --voice         Also install every pack plus the voice pack `runtime` extra (pipecat/torch).
 #                    Needed only for the local mic/speaker pipeline (main.py);
 #                    the CLI, dashboard and API work fine without it.
 #   -h, --help      Show this help and exit.
@@ -143,10 +143,10 @@ clone_or_update_repo() {
 # ── 4. uv sync ─────────────────────────────────────────────────────────────────
 sync_project() {
     if [ "$INCLUDE_VOICE" -eq 1 ]; then
-        log "Resolving the Python venv (uv sync --extra voice)"
-        ( cd "$LHASSA_DIR" && uv sync --extra voice ) || die "uv sync --extra voice failed"
+        log "Resolving the Python venv (uv sync --all-packages --extra runtime; voice pack runtime)"
+        ( cd "$LHASSA_DIR" && uv sync --all-packages --extra runtime ) || die "uv sync --all-packages --extra runtime failed"
     else
-        log "Resolving the Python venv (uv sync, headless; no voice extra)"
+        log "Resolving the Python venv (uv sync, headless; no voice runtime)"
         ( cd "$LHASSA_DIR" && uv sync ) || die "uv sync failed"
     fi
     ok "venv ready at $LHASSA_DIR/.venv"
@@ -207,7 +207,7 @@ summary() {
     echo "     That is a separate, heavier step: bash $LHASSA_DIR/scripts/install.sh"
     printf '\n'
     if [ "$INCLUDE_VOICE" -eq 0 ]; then
-        warn "voice extra not installed (headless by default); re-run with --voice" \
+        warn "voice runtime not installed (headless by default); re-run with --voice" \
              "if you want the local mic/speaker pipeline (main.py)"
     fi
 }

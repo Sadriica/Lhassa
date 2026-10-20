@@ -103,7 +103,7 @@ is deliberate: it is a legal notice, not decoration.
 ## Dev loop
 
 ```bash
-make install   # uv sync (with the voice extra) + dashboard build
+make install   # uv sync --all-packages --extra runtime (voice runtime) + dashboard build
 make test      # the suite; keep it green, add tests with your change
 make lint      # ruff
 make check     # validate the environment, no API calls

@@ -26,7 +26,7 @@ by monkeypatching ``os.name``.
 (:func:`register_platform`), so adding one is a drop-in module and selecting one
 is configuration (``LHASSA_PLATFORM``), never surgery. The module-level
 ``platform.system()`` dispatch that already exists elsewhere in the repo
-(``voice/notifier.py``, ``agents/local_cli.py``) is not replaced or duplicated:
+(``tools/notifier.py``, ``agents/local_cli.py``) is not replaced or duplicated:
 it stays where it is, and lives *inside* the default implementation here.
 
 **Honesty over completeness.** A reading that cannot be taken returns ``None``,
@@ -324,7 +324,7 @@ class DarwinPlatform:
 
     def notify_argv(self, title: str, message: str) -> Optional[list[str]]:
         """AppleScript toast. Text is passed via the environment by the caller,
-        mirroring ``voice/notifier.py`` so no user text is interpolated here."""
+        mirroring ``tools/notifier.py`` so no user text is interpolated here."""
         if not shutil.which("osascript"):
             return None
         script = (

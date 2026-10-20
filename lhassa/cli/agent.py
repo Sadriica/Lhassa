@@ -231,7 +231,13 @@ def _anthropic_tools() -> list[dict]:
 
 async def _execute_tool(handlers: dict, name: str, args: dict) -> str:
     """Run a registry handler and capture what it passes to result_callback."""
-    from pipecat.services.llm_service import FunctionCallParams
+    try:
+        from pipecat.services.llm_service import FunctionCallParams
+    except ImportError:
+        # pipecat ships only with the voice pack's runtime extra. Handlers read
+        # just ``arguments`` and ``result_callback``, so a plain namespace with
+        # the same fields serves the CLI loop on a core-only install.
+        from types import SimpleNamespace as FunctionCallParams
 
     handler = handlers.get(name)
     if handler is None:

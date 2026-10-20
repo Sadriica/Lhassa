@@ -60,7 +60,7 @@ heartbeat is already ticking on a timer.
 ### Manual dev path
 
 ```bash
-make install   # uv sync --extra voice + npm install && npm run build
+make install   # uv sync --all-packages --extra runtime + npm install && npm run build
 ```
 
 This is the laptop dev/voice workflow: it resolves the venv and builds the

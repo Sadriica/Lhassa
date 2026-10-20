@@ -3,7 +3,7 @@
 
 A registered :class:`~lhassa.notify.channels.Channel` that pops a desktop toast via
 ``notify-send``. It mirrors the cross-platform notifier pattern already in the repo
-(``lhassa/voice/notifier.py``) but is intentionally a small, self-contained
+(``lhassa/tools/notifier.py``) but is intentionally a small, self-contained
 ``notify-send`` call so this module depends on nothing from the voice stack.
 
 Discipline matches the rest of :mod:`lhassa.notify`:
@@ -141,7 +141,7 @@ class DesktopChannel:
         if argv is not None:
             # The platform layer passes user text through the environment
             # rather than interpolating it into a script; same discipline as
-            # ``voice/notifier.py``'s AppleScript call.
+            # ``tools/notifier.py``'s AppleScript call.
             env = os.environ.copy()
             env["_LHASSA_TITLE"] = title
             env["_LHASSA_MSG"] = body

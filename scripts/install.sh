@@ -88,11 +88,12 @@ preflight() {
 
 # ── Sync: venv + dashboard ────────────────────────────────────────────────────
 sync_project() {
-    log "Sync; resolving the Python venv (uv sync --extra voice)"
+    log "Sync; resolving the Python venv (uv sync --all-packages --extra runtime)"
     # This script sets up the laptop dev/voice workflow (main.py, the voice
-    # pipeline), so it installs the `voice` extra (pipecat/torch). Headless
-    # deploys (Docker/VPS) intentionally skip it; see doc/portability.md.
-    ( cd "$REPO_ROOT" && uv sync --extra voice )
+    # pipeline), so it installs every pack plus the voice pack's `runtime`
+    # extra (pipecat/torch). Headless deploys (Docker/VPS) intentionally skip
+    # it; see doc/portability.md.
+    ( cd "$REPO_ROOT" && uv sync --all-packages --extra runtime )
     ok "venv ready at $REPO_ROOT/.venv"
 
     if [ -d "$REPO_ROOT/dashboard/dist" ] && [ -n "$(ls -A "$REPO_ROOT/dashboard/dist" 2>/dev/null)" ]; then
