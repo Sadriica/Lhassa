@@ -100,7 +100,23 @@ RULES: tuple[Rule, ...] = (
 
 # Keystone leaf-infrastructure files: pure generic infrastructure that must not
 # import ANY ``lhassa.*`` feature module (they sit at the very bottom).
-KEYSTONE_FILES = ("registry.py", "plugins.py")
+KEYSTONE_FILES = ("registry.py", "plugins.py", "extensions.py")
+
+# ── Capability packs ─────────────────────────────────────────────────────────
+# A pack is a separate distribution under ``packages/lhassa-<x>/src/lhassa/<sub>``
+# (see ``packages/README.md``). Two rules bind every pack on top of the layer
+# rules above (which still apply to a pack by its subpackage name):
+#
+#   * core-never-imports-a-pack : nothing in the core tree (``lhassa/``) imports
+#     a pack subpackage. Core reaches a pack only through a registry.
+#   * pack-isolation           : a pack imports another pack only if the edge is
+#     declared in PACK_DEPENDENCIES (and in that pack's pyproject).
+#
+# A pack's ``surfaces/`` subpackage is its own shell slice (API router, CLI
+# sub-app, chat commands, actions that compose shells), so the shell-isolation
+# rules do not apply to files under it; the two pack rules still do.
+PACK_SURFACE_DIR = "surfaces"
+PACK_DEPENDENCIES: dict[str, frozenset[str]] = {}
 
 # Documented allowed exceptions; precise (source-file-suffix, imported-module)
 # pairs that are intentionally permitted despite tripping a rule above.
@@ -143,6 +159,7 @@ ALLOWED_EXCEPTIONS: frozenset[tuple[str, str]] = frozenset(
         ("tools/monitor.py", "lhassa.voice.notifier"),
         ("tools/handlers/agents.py", "lhassa.voice.notifier"),
         ("plugins.py", "lhassa.config"),
+        ("extensions.py", "lhassa.registry"),
         ("health/checks.py", "lhassa.notify.dispatch"),
         ("personal/secretary.py", "lhassa.org"),
         ("personal/secretary.py", "lhassa.org.management"),
@@ -162,6 +179,7 @@ class ImportRecord:
     src_sub: str  # top-level subpackage of the source ("core", or "(root)")
     module: str  # fully-resolved dotted module being imported
     tgt_sub: str  # top-level lhassa subpackage of the target, or "(non-lhassa)"
+    src_pack: str = ""  # pack subpackage the source belongs to, "" for core
 
 
 def _subpackage(parts: list[str]) -> str:
@@ -214,13 +232,40 @@ def _lhassa_root() -> Path:
     return root
 
 
-def all_import_records() -> list[ImportRecord]:
-    root = _lhassa_root()
-    records: list[ImportRecord] = []
+def _pack_lhassa_roots() -> list[Path]:
+    """Every ``packages/*/src/lhassa`` directory (one per pack distribution)."""
+    packages = Path(__file__).resolve().parent.parent / "packages"
+    return sorted(p for p in packages.glob("*/src/lhassa") if p.is_dir())
+
+
+def pack_subpackages() -> dict[str, Path]:
+    """Pack subpackage name -> its directory, across all pack distributions."""
+    out: dict[str, Path] = {}
+    for root in _pack_lhassa_roots():
+        for sub in root.iterdir():
+            if sub.is_dir() and sub.name != "__pycache__":
+                if sub.name in out:
+                    raise AssertionError(f"two packs ship lhassa.{sub.name}")
+                out[sub.name] = sub
+    return out
+
+
+def _py_files(root: Path) -> Iterator[Path]:
     for py_file in sorted(root.rglob("*.py")):
-        if "__pycache__" in py_file.parts:
-            continue
+        if "__pycache__" not in py_file.parts:
+            yield py_file
+
+
+def all_import_records() -> list[ImportRecord]:
+    records: list[ImportRecord] = []
+    root = _lhassa_root()
+    for py_file in _py_files(root):
         records.extend(iter_import_records(root, py_file))
+    for pack_root in _pack_lhassa_roots():
+        for py_file in _py_files(pack_root):
+            for rec in iter_import_records(pack_root, py_file):
+                rec.src_pack = rec.src_sub
+                records.append(rec)
     return records
 
 
@@ -243,15 +288,31 @@ def find_violations(
     rules: tuple[Rule, ...] = RULES,
     exceptions: frozenset[tuple[str, str]] = ALLOWED_EXCEPTIONS,
     keystone_files: tuple[str, ...] = KEYSTONE_FILES,
+    packs: frozenset[str] | None = None,
+    pack_deps: dict[str, frozenset[str]] | None = None,
 ) -> list[Violation]:
     """Return every forbidden edge, minus the documented allowed exceptions."""
+    if packs is None:
+        packs = frozenset(pack_subpackages())
+    if pack_deps is None:
+        pack_deps = PACK_DEPENDENCIES
     out: list[Violation] = []
     for rec in records:
         if (rec.src_rel, rec.module) in exceptions:
             continue
         # Keystone leaf rule: registry.py / plugins.py import no lhassa feature.
-        if rec.src_rel in keystone_files and rec.tgt_sub != "(non-lhassa)":
+        if not rec.src_pack and rec.src_rel in keystone_files and rec.tgt_sub != "(non-lhassa)":
             out.append(Violation(rec.src_rel, rec.module, "keystone-leaf"))
+            continue
+        if rec.tgt_sub in packs and rec.tgt_sub != rec.src_pack:
+            if not rec.src_pack:
+                out.append(Violation(rec.src_rel, rec.module, "core-never-imports-a-pack"))
+                continue
+            if rec.tgt_sub not in pack_deps.get(rec.src_pack, frozenset()):
+                out.append(Violation(rec.src_rel, rec.module, "pack-isolation"))
+                continue
+        in_surface = bool(rec.src_pack) and rec.src_rel.split("/")[1:2] == [PACK_SURFACE_DIR]
+        if in_surface:
             continue
         for rule in rules:
             if rec.src_sub in rule.sources and rec.tgt_sub in rule.forbidden:
@@ -275,6 +336,7 @@ def test_rules_reference_real_subpackages() -> None:
     root = _lhassa_root()
     existing = {p.name for p in root.iterdir() if p.is_dir() and p.name != "__pycache__"}
     existing.add("dashboard")  # JS shell, lives outside the python package
+    existing |= set(pack_subpackages())  # a layer may move into a pack
     named = {sub for rule in RULES for sub in (rule.sources | rule.forbidden)}
     missing = named - existing
     assert not missing, f"rule references non-existent subpackage(s): {sorted(missing)}"
@@ -332,3 +394,42 @@ def test_keystone_files_import_no_feature_module() -> None:
     ]
     flagged = find_violations(synthetic)
     assert len(flagged) == 1 and flagged[0].rule == "keystone-leaf"
+
+
+# ── Pack rules: prove they have teeth ────────────────────────────────────────
+def test_core_importing_a_pack_is_flagged() -> None:
+    rec = ImportRecord(
+        src_rel="core/step.py", src_sub="core", module="lhassa.demo.thing", tgt_sub="demo"
+    )
+    flagged = find_violations([rec], packs=frozenset({"demo"}), pack_deps={})
+    assert [v.rule for v in flagged] == ["core-never-imports-a-pack"]
+
+
+def test_undeclared_pack_to_pack_edge_is_flagged_declared_is_not() -> None:
+    rec = ImportRecord(
+        src_rel="alpha/x.py", src_sub="alpha", module="lhassa.beta.y", tgt_sub="beta",
+        src_pack="alpha",
+    )
+    packs = frozenset({"alpha", "beta"})
+    assert [v.rule for v in find_violations([rec], packs=packs, pack_deps={})] == [
+        "pack-isolation"
+    ]
+    assert find_violations(
+        [rec], packs=packs, pack_deps={"alpha": frozenset({"beta"})}
+    ) == []
+
+
+def test_pack_surface_may_compose_shells_but_pack_core_may_not() -> None:
+    surface = ImportRecord(
+        src_rel="cv/surfaces/api.py", src_sub="cv", module="lhassa.notify.dispatch",
+        tgt_sub="notify", src_pack="cv",
+    )
+    inner = ImportRecord(
+        src_rel="cv/tex.py", src_sub="cv", module="lhassa.notify.dispatch",
+        tgt_sub="notify", src_pack="cv",
+    )
+    packs = frozenset({"cv"})
+    assert find_violations([surface], packs=packs, pack_deps={}) == []
+    assert [v.rule for v in find_violations([inner], packs=packs, pack_deps={})] == [
+        "cv-infra-isolation"
+    ]

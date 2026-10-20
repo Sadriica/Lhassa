@@ -68,6 +68,28 @@ Precise, intentional edges that are whitelisted in the test (keyed on the exact
 - `security/approval.py` → `lhassa.flows.durable`, `lhassa.flows.projection`: the
   durable flow-gate bridge, so an approval can resume a paused flow run.
 
+## Capability packs
+
+A capability can leave the core tree and ship as its own distribution under
+`packages/lhassa-<x>/src/lhassa/<sub>` (contract: `packages/README.md`). The
+`lhassa` package is a pkgutil namespace, so import paths do not change when a
+module moves into a pack. Packs are discovered as plugins (`lhassa.plugins`
+entry points, loaded by `actionpack.register_all()`), and reach the surfaces
+through `lhassa/extensions.py` (`register_api_router`, `register_cli_app`,
+`register_pack_migrations`, `register_pack`) plus the registries that already
+existed (actions, commands, seeds, channels, senses, providers).
+
+The guard walks `packages/*/src/lhassa` too and adds two rules on top of the
+layer rules (which still apply to a pack by its subpackage name):
+
+- **core-never-imports-a-pack**: nothing under `lhassa/` imports a pack.
+- **pack-isolation**: a pack imports another pack only when the edge is
+  declared in `PACK_DEPENDENCIES`.
+
+A pack's `surfaces/` subpackage is its shell slice (router, CLI sub-app, chat
+commands), so the shell-isolation rules do not apply to files under it.
+`make test-core` runs the root suite in an environment with no pack installed.
+
 ## How to evolve the rules
 
 If you intentionally add a new allowed edge, add a precise entry to

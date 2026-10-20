@@ -44,6 +44,12 @@ packages = ["lhassa"]
 [project.scripts]
 lhassa = "lhassa.cli:main"
 
+# Capability packs live in packages/lhassa-<x> (see packages/README.md); each is
+# its own distribution sharing the ``lhassa`` namespace. ``uv sync --all-packages``
+# installs core plus every pack; plain ``uv sync`` installs core alone.
+[tool.uv.workspace]
+members = ["packages/*"]
+
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0.0",
@@ -69,7 +75,7 @@ voice = [
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
-testpaths = ["tests"]
+testpaths = ["tests", "packages"]
 addopts = "-m \"not integration\""
 markers = [
     "integration: real end-to-end tests (live CLI subprocess, real DB file); excluded by default, run with `make test-integration`",

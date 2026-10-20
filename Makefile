@@ -1,11 +1,11 @@
-.PHONY: install quickstart install-health install-heartbeat install-telegram install-monitor install-privileged dashboard run dev check test test-integration cov lint clean
+.PHONY: install test-core quickstart install-health install-heartbeat install-telegram install-monitor install-privileged dashboard run dev check test test-integration cov lint clean
 
 # First-time setup: install Python deps + build the dashboard.
 # Installs the `voice` extra (pipecat/torch) — this is the laptop dev workflow
 # (`make run`/`make dev` run the voice pipeline via main.py). Headless deploys
 # (Docker/VPS) intentionally skip it — see doc/portability.md.
 install:
-	uv sync --extra voice
+	uv sync --all-packages --extra voice
 	cd dashboard && npm install && npm run build
 
 # The 2-minute on-ramp: uv sync (no dashboard, no voice extra), ensure .env,
@@ -87,15 +87,21 @@ check:
 # pipeline modules too; the VPS/headless image never needs them, see
 # doc/portability.md).
 test:
-	uv run --extra dev --extra voice python -m pytest
+	uv run --all-packages --extra dev --extra voice python -m pytest
 
 # Real end-to-end integration tests (tests/test_integration_heartbeat.py):
 # a live CLI subprocess (opencode/claude/codex, whichever is on PATH) and a
 # real on-disk DB file, no provider/DB mocks. Excluded from `make test` by
 # default (see pyproject.toml's addopts); run explicitly, and expect it to
 # take longer and spend a little real token budget.
+# Core alone, no packs installed: proves core never needs a pack. Uses its own
+# environment so the everyday .venv keeps every pack.
+test-core:
+	UV_PROJECT_ENVIRONMENT=.venv-core uv sync --extra dev
+	UV_PROJECT_ENVIRONMENT=.venv-core uv run --no-sync python -m pytest tests -q
+
 test-integration:
-	uv run --extra dev python -m pytest -m integration -q
+	uv run --all-packages --extra dev python -m pytest -m integration -q
 
 # Coverage baseline over the unit suite (respects pyproject's `-m "not
 # integration"` addopts — same tests `make test` runs, just measured). A
@@ -107,7 +113,7 @@ cov:
 
 # Lint with ruff
 lint:
-	uv run --extra dev --extra voice python -m ruff check .
+	uv run --all-packages --extra dev --extra voice python -m ruff check .
 
 clean:
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true

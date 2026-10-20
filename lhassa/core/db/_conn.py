@@ -42,6 +42,7 @@ from lhassa.core.migrations import (
     Migration,
     MigrationValidationError,
     apply_migrations,
+    apply_pack_migrations,
     ensure_supported,
     get_schema_version,
 )
@@ -1484,10 +1485,26 @@ async def init_db() -> None:
         await db.execute("PRAGMA busy_timeout=5000")
         # Already brought this DB file to the current schema in THIS process;
         # the migration/validation pass (the expensive part) is a no-op.
-        if _MIGRATED_VERSIONS.get(key) == version:
-            return
-        migrated_version = await apply_migrations(db, MIGRATIONS)
-        _MIGRATED_VERSIONS[key] = migrated_version
+        if _MIGRATED_VERSIONS.get(key) != version:
+            migrated_version = await apply_migrations(db, MIGRATIONS)
+            _MIGRATED_VERSIONS[key] = migrated_version
+        await _apply_pack_migrations(db, key)
+
+
+# (db file, pack) pairs already migrated in THIS process. A pack registered
+# after the first init_db (plugins load lazily) still gets its turn on the next.
+_MIGRATED_PACKS: set[tuple[str, str]] = set()
+
+
+async def _apply_pack_migrations(db, key: str) -> None:
+    """Run every registered pack's own migration track (see ``extensions``)."""
+    from lhassa.extensions import PACK_MIGRATIONS
+
+    for pack, migrations in PACK_MIGRATIONS.items().items():
+        if (key, pack) in _MIGRATED_PACKS:
+            continue
+        await apply_pack_migrations(db, pack, migrations)
+        _MIGRATED_PACKS.add((key, pack))
 
 
 # ── episodes (append-only) ───────────────────────────────────────────────────────

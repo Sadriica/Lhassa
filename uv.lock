@@ -8,6 +8,12 @@ resolution-markers = [
     "python_full_version < '3.14' and sys_platform != 'win32'",
 ]
 
+[manifest]
+members = [
+    "lhassa",
+    "lhassa-bench",
+]
+
 [[package]]
 name = "aiofiles"
 version = "25.1.0"
@@ -1137,6 +1143,21 @@ requires-dist = [
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.29.0" },
 ]
 provides-extras = ["dev", "tokens", "voice"]
+
+[[package]]
+name = "lhassa-bench"
+version = "0.8.0"
+source = { editable = "packages/lhassa-bench" }
+dependencies = [
+    { name = "lhassa" },
+    { name = "pyyaml" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "lhassa", editable = "." },
+    { name = "pyyaml", specifier = ">=6.0" },
+]
 
 [[package]]
 name = "linkify-it-py"

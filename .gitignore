@@ -8,6 +8,7 @@ wheels/
 
 # Virtual environment
 .venv/
+.venv-core/
 
 # Secrets — never commit
 .env

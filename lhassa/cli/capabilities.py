@@ -217,8 +217,13 @@ def _collect_plugins(errors: dict, config: Any) -> dict:
         raw = getattr(config, "plugins_dir", "") or ""
         path = Path(str(raw)).expanduser() if raw else None
         exists = bool(path and path.is_dir())
+        from lhassa.extensions import PACKS
+
         return {
             "loaded": loaded,
+            "packs": [
+                {"name": p.name, "summary": p.summary} for p in PACKS.all()
+            ],
             "plugins_dir": str(path) if path else "",
             "plugins_dir_exists": exists,
         }
@@ -227,7 +232,7 @@ def _collect_plugins(errors: dict, config: Any) -> dict:
         errors,
         "plugins",
         _do,
-        {"loaded": [], "plugins_dir": "", "plugins_dir_exists": False},
+        {"loaded": [], "packs": [], "plugins_dir": "", "plugins_dir_exists": False},
     )
 
 

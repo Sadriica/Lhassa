@@ -200,6 +200,19 @@ app.include_router(research_routes.router)
 app.include_router(share_routes.router)
 app.include_router(postulaciones_routes)
 
+# Capability packs mount their own routers (``extensions.register_api_router``).
+# Plugin discovery rides on register_all(); a failing factory is skipped so one
+# broken pack never takes the API down.
+from lhassa import actionpack as _actionpack  # noqa: E402
+from lhassa.extensions import API_ROUTERS  # noqa: E402
+
+_actionpack.register_all()
+for _pack_router_name, _pack_router_factory in API_ROUTERS.items().items():
+    try:
+        app.include_router(_pack_router_factory())
+    except Exception as _exc:  # noqa: BLE001
+        logger.warning(f"api: pack router {_pack_router_name!r} failed to mount: {_exc}")
+
 
 # ── WebSocket ──────────────────────────────────────────────────────────────────
 

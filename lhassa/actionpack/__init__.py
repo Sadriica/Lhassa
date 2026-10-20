@@ -173,3 +173,12 @@ def register_all() -> None:
 
     # ── Reminders (the one clock: tasks + heartbeat, no separate poller) ───────
     _reg("send_reminder", _reminder.send_reminder)
+
+    # ── Capability packs ─────────────────────────────────────────────────────
+    # Every long-lived entrypoint already calls register_all(), so this is the
+    # one place pack discovery rides on: each installed pack (``lhassa.plugins``
+    # entry point) registers its own actions, commands, seeds, senses and
+    # surfaces on import. Never raises; a broken pack is logged and skipped.
+    from lhassa.plugins import load_plugins
+
+    load_plugins()
