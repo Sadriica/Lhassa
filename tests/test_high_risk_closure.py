@@ -91,6 +91,11 @@ REVIEWED_LOW_RISK: dict[str, str] = {
     "curate_skills": "unlink is tmpfile cleanup on an atomic write; skills are archived, never deleted",
 }
 
+# Reviewed entries for actions a capability pack registers. They are legitimately
+# absent when that pack is not installed (``make test-core``), so an absent one
+# is not stale; a registered one is checked like any other entry.
+PACK_OWNED_ACTIONS: frozenset[str] = frozenset({"compile_cv"})
+
 # ── Dangerous-surface markers ───────────────────────────────────────────────
 _EXEC_MODULES = {"subprocess"}
 _EXEC_OS_ATTRS = {"system", "execv", "execvp", "execve", "spawnl", "popen"}
@@ -289,6 +294,7 @@ def test_reviewed_low_risk_entries_are_live():
         name
         for name in REVIEWED_LOW_RISK
         if name not in dangerous
+        and not (name in PACK_OWNED_ACTIONS and name not in actions.ACTIONS)
     ]
     if stale:
         pytest.fail(

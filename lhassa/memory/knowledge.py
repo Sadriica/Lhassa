@@ -29,7 +29,7 @@ from pathlib import Path
 from loguru import logger
 
 from lhassa.config import Config
-from lhassa.cv.extract import extract_text
+from lhassa.memory.extract import extract_text
 from lhassa.memory.embeddings import cosine, get_embedder
 
 # ── the HARD ignore-list (privacy-critical, non-negotiable) ─────────────────
@@ -118,7 +118,7 @@ def _roots_from_config(config) -> list[str]:
 def _extract_text(path: Path) -> str:
     """Read one indexable file's text. Returns ``""`` on any failure (skip).
 
-    Delegates PDF/text extraction to :func:`lhassa.cv.extract.extract_text`
+    Delegates PDF/text extraction to :func:`lhassa.memory.extract.extract_text`
     (the leaf file-I/O seam); one pypdf/UTF-8 implementation, not two.
     """
     try:

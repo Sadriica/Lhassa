@@ -33,8 +33,8 @@ Per-kind behaviour
     verdict (``passed`` / ``needs_approval``). On a non-pass the path STOPS unless an
     outgoing edge's ``when`` explicitly handles the failure.
   * ``output`` : records the output (notify/doc/log); best-effort, never raises. The
-    ``tex`` type additionally EXPORTS a tailored ``.tex`` file (``lhassa.cv.export``)
-    to ``~/.lhassa/cv/out/{id}_{company}.tex`` and records its path.
+    ``tex`` type (registered by the cv pack) additionally EXPORTS a tailored ``.tex``
+    file to ``~/.lhassa/cv/out/{id}_{company}.tex`` and records its path.
   * ``branch`` : evaluates the outgoing edges' ``when`` and follows the FIRST match
     (an unconditional edge is the ``else``).
   * ``loop``   : runs its declared ``body`` chain up to ``max_iterations`` times
@@ -486,9 +486,9 @@ def _run_output(
 
     ``notify`` / ``doc`` / ``log`` (and any other unregistered type) record the
     payload as a plain log entry. A type registered in
-    :mod:`lhassa.flows.registries` (``OUTPUT_HANDLERS``: ``tex`` by default,
-    which EXPORTS a tailored ``.tex`` file for the CV work-flow via
-    :func:`lhassa.cv.export`) additionally runs that handler and merges its
+    :mod:`lhassa.flows.registries` (``OUTPUT_HANDLERS``: e.g. ``tex``, which
+    the cv pack registers to EXPORT a tailored ``.tex`` file for the CV work-flow)
+    additionally runs that handler and merges its
     record fields (e.g. ``{"output": "tex", "path": "…/out/{id}_{company}.tex"}``).
     An unregistered type degrades to the plain log record; never a ``KeyError``.
     """

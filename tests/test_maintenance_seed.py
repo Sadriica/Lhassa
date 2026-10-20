@@ -1,7 +1,7 @@
 """Tests for the ``maintenance`` seed's routing through temple (temple_run).
 
 Offline + $0: monkeypatches ``lhassa.core.db.DB_PATH`` to a tmp file so the
-seed's minted tasks land in an isolated DB, exactly like tests/test_cv_seed.py.
+seed's minted tasks land in an isolated DB, exactly like packages/lhassa-cv/tests/test_cv_seed.py.
 Covers:
 
   * every recurring action is minted as ``temple_run`` (not bare), with the

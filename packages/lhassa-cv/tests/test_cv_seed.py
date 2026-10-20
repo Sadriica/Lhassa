@@ -1,4 +1,4 @@
-"""Tests for the seed registry + the ``cv`` seed (lhassa.seeds / lhassa.seeds.cv).
+"""Tests for the seed registry + the ``cv`` seed (lhassa.seeds / lhassa.cv.surfaces.seed).
 
 Fully offline: a tiny Config stand-in redirects the topology/flows/skills files to a
 tmp path and ``LHASSA_CV_DIR`` is monkeypatched, so nothing touches a real model, the
@@ -12,7 +12,7 @@ from lhassa import seeds
 from lhassa.flows.store import FlowStore
 from lhassa.org.topology import load_topology
 from lhassa.registry import NotRegistered
-from lhassa.seeds import cv as cv_seed
+from lhassa.cv.surfaces import seed as cv_seed
 
 
 class _Cfg:

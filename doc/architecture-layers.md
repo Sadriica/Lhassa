@@ -39,6 +39,9 @@ the interfaces must not import a shell.
    intentional bridge seam and is **not** forbidden.
 5. **cv-infra-isolation** and **calendar-infra-isolation**: `cv/` and `calendar/`
    must not import any shell.
+   `cv/` ships in the `lhassa-cv` pack (`packages/lhassa-cv`); its shell slice
+   (API router, chat commands, Telegram hook, flow entries, seed) lives under
+   `cv/surfaces/`, which the rule exempts.
 6. **keystone-leaf**: `registry.py` and `plugins.py` must not import any
    `lhassa.*` feature module (they are bottom-of-stack infrastructure).
 

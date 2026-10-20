@@ -1,21 +1,21 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Document text extraction; bytes in, plain text out, for the CV work-flow bridge.
+"""Document text extraction; bytes in, plain text out, $0 and local.
 
-The Telegram → CV bridge receives a CV as an uploaded document (a ``.tex`` source or
-a ``.pdf`` export) and needs its text to feed the "Impossible-to-reject CV" work-flow
-as the base CV. This module is that one seam: it turns raw ``bytes`` (plus the
-original filename, used only to pick a decoder) into text.
+One generic seam for every caller that holds a document as raw ``bytes`` and needs
+its text: document perception (:mod:`lhassa.memory.knowledge`) indexing the owner's
+knowledge roots, and any capability pack that receives an uploaded file (the CV pack
+reads an uploaded CV through it). The original filename is used only to pick a
+decoder.
 
-  * ``.tex`` / ``.txt`` / ``.md`` (or anything not recognised as a PDF); decoded as
+  * ``.tex`` / ``.txt`` / ``.md`` (or anything not recognised as a PDF): decoded as
     UTF-8 with ``errors="replace"`` so a stray byte never blows up.
   * ``.pdf``: text extracted with :mod:`pypdf` (a lightweight, pure-Python dep),
     page by page.
 
-Like the rest of the CV seam it is **leaf infrastructure**: it depends only on the
-standard library plus ``pypdf`` and never imports an outer shell (see
-``tests/test_architecture.py``). It **never raises**: on any failure it logs a debug
-line and returns ``""`` so a bad upload degrades to "no base CV" instead of crashing
-the poller.
+Interface layer, leaf-shaped: it depends only on the standard library plus
+``pypdf`` (lazy) and never imports an outer shell (see ``tests/test_architecture.py``).
+It **never raises**: on any failure it logs a debug line and returns ``""`` so a bad
+document degrades to "no text" instead of crashing the caller.
 """
 
 from __future__ import annotations
@@ -41,7 +41,7 @@ def _extract_pdf(data: bytes) -> str:
     try:
         from pypdf import PdfReader
     except Exception as exc:  # dependency missing / broken; degrade, never raise
-        logger.debug("cv.extract: pypdf unavailable ({})", exc)
+        logger.debug("memory.extract: pypdf unavailable ({})", exc)
         return ""
     try:
         reader = PdfReader(io.BytesIO(data))
@@ -50,20 +50,20 @@ def _extract_pdf(data: bytes) -> str:
             try:
                 parts.append(page.extract_text() or "")
             except Exception as exc:  # a single bad page must not lose the rest
-                logger.debug("cv.extract: pdf page extract failed ({})", exc)
+                logger.debug("memory.extract: pdf page extract failed ({})", exc)
         return "\n".join(parts).strip()
     except Exception as exc:
-        logger.debug("cv.extract: could not read pdf ({})", exc)
+        logger.debug("memory.extract: could not read pdf ({})", exc)
         return ""
 
 
 def extract_text(data: bytes, *, filename: str = "") -> str:
-    """Return the plain text of an uploaded document. Never raises.
+    """Return the plain text of a document. Never raises.
 
     ``.tex`` / ``.txt`` / ``.md`` (and any non-PDF payload) are decoded as UTF-8 with
     ``errors="replace"``; a ``.pdf`` (by name or magic bytes) is extracted with
     :mod:`pypdf`. Any failure logs a debug line and yields ``""`` so the caller can
-    treat "could not read" as "no base CV" without a try/except.
+    treat "could not read" as "no text" without a try/except.
     """
     if not data:
         return ""
@@ -74,5 +74,5 @@ def extract_text(data: bytes, *, filename: str = "") -> str:
         # Everything else (.tex/.txt/.md/unknown) is treated as UTF-8 text.
         return data.decode("utf-8", errors="replace")
     except Exception as exc:  # belt-and-braces; extraction never raises
-        logger.debug("cv.extract: extract_text failed for {!r} ({})", name, exc)
+        logger.debug("memory.extract: extract_text failed for {!r} ({})", name, exc)
         return ""

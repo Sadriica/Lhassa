@@ -8,7 +8,6 @@ possible), no real filesystem outside tmpdir.
 from __future__ import annotations
 
 import asyncio
-from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -56,7 +55,7 @@ def test_register_all_idempotent():
 
 
 def test_register_all_registers_expected_actions():
-    """All 15 Phase-3 actions are registered after register_all()."""
+    """The core Phase-3 actions are registered after register_all() (compile_cv is the cv pack's)."""
     import lhassa.actionpack as ap
     ap._REGISTERED = False
     ap.register_all()
@@ -68,7 +67,7 @@ def test_register_all_registers_expected_actions():
         "run_command", "system_snapshot", "power_mode",
         "add_fact", "backup_memory", "consolidate_memory",
         "notify", "add_task", "set_task_state", "list_approvals",
-        "check_health", "git_status_repos", "compile_cv",
+        "check_health", "git_status_repos",
     }
     for name in expected:
         assert name in ACTIONS, f"Action {name!r} not in ACTIONS after register_all()"
@@ -725,42 +724,6 @@ def test_git_status_repos_error_returns_string():
         from lhassa.actionpack._brain import git_status_repos
         result = git_status_repos({})
     assert "error" in result.lower()
-    assert isinstance(result, str)
-
-
-# ---------------------------------------------------------------------------
-# compile_cv
-# ---------------------------------------------------------------------------
-
-
-def test_compile_cv_happy_path(tmp_path):
-    pdf_path = tmp_path / "cv_largo.pdf"
-    with patch("lhassa.actionpack._brain.compile_pdf", return_value=pdf_path), \
-         patch("lhassa.actionpack._brain.base_path", return_value=tmp_path / "cv_largo.tex"):
-        from lhassa.actionpack._brain import compile_cv
-        result = compile_cv({})
-
-    assert str(pdf_path) in result
-    assert isinstance(result, str)
-
-
-def test_compile_cv_engine_not_found():
-    with patch("lhassa.actionpack._brain.compile_pdf", return_value=None), \
-         patch("lhassa.actionpack._brain.base_path", return_value=Path("/tmp/cv.tex")):
-        from lhassa.actionpack._brain import compile_cv
-        result = compile_cv({})
-
-    assert "failed" in result.lower() or "not found" in result.lower()
-    assert isinstance(result, str)
-
-
-def test_compile_cv_custom_path(tmp_path):
-    tex = tmp_path / "custom.tex"
-    pdf = tmp_path / "custom.pdf"
-    with patch("lhassa.actionpack._brain.compile_pdf", return_value=pdf):
-        from lhassa.actionpack._brain import compile_cv
-        result = compile_cv({"tex_path": str(tex)})
-    assert str(pdf) in result
     assert isinstance(result, str)
 
 

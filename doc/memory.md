@@ -214,8 +214,8 @@ set of **knowledge roots**, and only those are ever touched.
   `.cache/`, `dist/`, `build/`, `.ssh/`, and every dotfile/dotdir. This is not a
   default the owner widens; it is baked into `ingest()` itself.
 - **What's indexed.** Only `.md`/`.txt`/`.rst`/`.org`/`.tex`/`.markdown` and
-  `.pdf` (extracted with `pypdf`, the same pattern as the CV bridge's
-  `cv/extract.py`); code and everything else is out of scope; this is document
+  `.pdf` (extracted with `pypdf` through `memory/extract.py`, the same seam the
+  CV pack reads uploads with); code and everything else is out of scope; this is document
   perception, not a code indexer. A file over `LHASSA_KNOWLEDGE_MAX_FILE_KB`
   (default 512) is skipped.
 - **Chunking + embedding.** Each file's text is split into

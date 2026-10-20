@@ -29,7 +29,7 @@ from typing import Iterator
 #   interfaces    : memory, security, llm                     (mid layers / contracts)
 #   adapters      : harness, tools, agents, remote, health,    (the rentable "hands")
 #                   bench
-#   cv seam       : cv                                         (leaf file-I/O used by flows)
+#   cv seam       : cv                                         (leaf file-I/O; ships in the lhassa-cv pack)
 #   calendar seam : calendar                                   (leaf .ics file-I/O used by notify)
 #   leaf infra    : registry.py, plugins.py                   (keystone; depend on nothing)
 #
@@ -87,9 +87,9 @@ RULES: tuple[Rule, ...] = (
     # independently. The reverse edge (llm/router.py choosing a harness) is the
     # intentional bridge seam and is therefore NOT forbidden.
     Rule("swap-axis-independence", frozenset({"harness"}), frozenset({"llm"})),
-    # The CV file-I/O seam is leaf infrastructure used BY the flow engine (the "build
-    # on a base CV, export a tailored .tex" foundation). Like the other inner layers
-    # it must never reach out to a shell; it depends only on the standard library.
+    # The CV file-I/O seam (the lhassa-cv pack) is leaf infrastructure: "build on a
+    # base CV, export a tailored .tex". Like the other inner layers it must never
+    # reach out to a shell; the pack's shell slice lives under cv/surfaces/.
     Rule("cv-infra-isolation", frozenset({"cv"}), frozenset(SHELLS)),
     # The calendar file-I/O seam (RFC5545 ``.ics`` generation) is leaf
     # infrastructure exactly like ``cv``: pure stdlib, used BY a shell
@@ -142,7 +142,7 @@ PACK_DEPENDENCIES: dict[str, frozenset[str]] = {}
 #   personal/secretary.py -> lhassa.org{,.management,.topology}:
 #     The secretary module is SEED-SHAPED composition: it provisions the stable
 #     ``personal`` department in the org chart and its canonical briefing flows;
-#     exactly what ``seeds/cv.py`` does from the shell layer. The read-model
+#     exactly what the cv pack's ``cv/surfaces/seed.py`` does from its shell slice. The read-model
 #     modules (``personal/agenda.py``, ``memory/checkins.py``) remain shell-free;
 #     keying the exception on secretary.py alone keeps them that way.
 #   security/approval.py -> lhassa.flows.{durable,projection}:

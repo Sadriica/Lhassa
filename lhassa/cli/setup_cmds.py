@@ -442,11 +442,18 @@ def apply_profile_seeds(profile: str, config=None, *, apply_seed_fn=None) -> dic
     safe, mirroring every seed's own contract. A single seed raising is
     captured under its own result rather than aborting the rest.
     """
+    registered = None
     if apply_seed_fn is None:
+        from lhassa.seeds import SEEDS as registered
         from lhassa.seeds import apply_seed as apply_seed_fn
     names = seeds_for_profile(profile)
     results: dict[str, dict] = {}
     for name in names:
+        if registered is not None and name not in registered:
+            # A profile's extra seed may ship in a capability pack (e.g. ``cv``)
+            # that is not installed: skip it honestly instead of failing.
+            results[name] = {"skipped": "not installed"}
+            continue
         try:
             results[name] = apply_seed_fn(name, config)
         except Exception as exc:  # a seed must never abort the whole wizard
@@ -817,6 +824,9 @@ def setup_cmd(
     for name in seeds_for_profile(profile):
         result = (report["seeds"].get("results") or {}).get(name, {})
         errs = result.get("errors") or ([result["error"]] if result.get("error") else [])
+        if result.get("skipped"):
+            out.print(f"  [dim]- seed {name}: skipped ({result['skipped']})[/]")
+            continue
         mark = "[warn]✗[/]" if errs else "[success]✓[/]"
         out.print(f"  {mark} seed [model]{name}[/]" + (f": {'; '.join(errs)}" if errs else ""))
 

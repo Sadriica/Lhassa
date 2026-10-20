@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """The ``cv`` seed; recreate the "Impossible-to-reject CV" pipeline from code.
 
-This is the FIRST registered seed (see :mod:`lhassa.seeds`); future seeds drop in the
-same way. Applying it reproduces, on a fresh machine, everything we hand-built for the
+It was the first seed (see :mod:`lhassa.seeds`); the cv pack registers it from
+:mod:`lhassa.cv.pack`, so it is present only when the pack is installed. Applying it reproduces, on a fresh machine, everything we hand-built for the
 CV pipeline EXCEPT the owner's real base CV (which stays user-provided):
 
   * the ``interns`` department under ``general`` (created if missing),
@@ -39,7 +39,6 @@ from lhassa.flows.store import FlowStore
 from lhassa.org import management
 from lhassa.org.monitor import make_brain_monitor
 from lhassa.org.topology import load_topology
-from lhassa.seeds import register_seed
 
 if TYPE_CHECKING:
     from lhassa.config import Config
@@ -392,12 +391,6 @@ def seed_cv_pipeline(
     return summary
 
 
-@register_seed(
-    "cv",
-    "Recreate the 'Impossible-to-reject CV' pipeline: the interns department, its 6 "
-    "worker brains, the monitor role, the canonical CV work-flow, and a placeholder "
-    "base CV (never overwriting a real one).",
-)
 def apply(config: "Optional[Config]" = None) -> dict:
     """The ``cv`` seed entry point; see :func:`seed_cv_pipeline`."""
     return seed_cv_pipeline(config)
