@@ -40,3 +40,43 @@ async def collect_events(instance_id: str, *, hours: int, config=None) -> list[s
             continue
         events.extend(str(line) for line in (lines or []))
     return events
+
+
+# ── dated events: the same feeds, as structured rows ─────────────────────────
+#
+# The line sources above are for prose (the briefing flows). Surfaces that lay
+# events out by day (the REPL welcome) need the start time itself, so a pack may
+# also register a dated source: ``async (instance_id, *, since, until, config)
+# -> list[dict]`` with ``start`` (aware datetime), ``end`` (aware or None),
+# ``summary``, ``location``, ``calendar`` and ``all_day``.
+
+DatedEventSource = Callable[..., Awaitable[list[dict]]]
+
+#: name -> dated agenda event source. Empty unless a pack registers one.
+AGENDA_DATED_SOURCES: Registry[DatedEventSource] = Registry("agenda dated event source")
+
+
+def register_dated_event_source(name: str, fn: DatedEventSource) -> DatedEventSource:
+    """Add a dated agenda event source. Re-registering a name is a no-op."""
+    if name not in AGENDA_DATED_SOURCES:
+        AGENDA_DATED_SOURCES.register(name, fn)
+    return fn
+
+
+async def collect_dated_events(instance_id: str, *, since, until, config=None) -> list[dict]:
+    """Every dated source's events in ``[since, until]``, sorted by start.
+    A failing source or a malformed row contributes nothing; never raises."""
+    events: list[dict] = []
+    for _name, fn in AGENDA_DATED_SOURCES.items().items():
+        try:
+            rows = await fn(instance_id, since=since, until=until, config=config)
+        except Exception:
+            continue
+        for row in rows or []:
+            if isinstance(row, dict) and row.get("start") is not None:
+                events.append(row)
+    try:
+        events.sort(key=lambda e: e["start"])
+    except TypeError:
+        pass
+    return events

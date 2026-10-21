@@ -178,7 +178,7 @@ def _repl() -> None:
     try:
         data = asyncio.run(_repl_ui.gather_welcome())
     except Exception:
-        data = {"status": {}, "agenda": None}
+        data = {"status": {}, "days": None, "commitments": [], "calendar": False}
     snap.update(data.get("status") or {})
     err.print()
     try:
@@ -220,7 +220,10 @@ def _repl() -> None:
                 except Exception as e:  # a degraded subsystem must not kill the REPL
                     err.print(f"[error]✗[/] [accent]{e}[/]")
             elif head == "/agenda":
-                err.print(_repl_ui.agenda_markup(asyncio.run(_repl_ui._agenda_items())))
+                try:
+                    err.print(_repl_ui.agenda_view(asyncio.run(_repl_ui.gather_agenda())))
+                except Exception as e:
+                    err.print(f"[error]✗[/] [accent]{e}[/]")
             elif head == "/approvals":
                 try:
                     _commands.approvals_cmd(json_out=False)

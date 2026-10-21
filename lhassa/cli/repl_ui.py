@@ -38,7 +38,7 @@ from lhassa.views import status as status_view
 SLASH_COMMANDS: tuple[tuple[str, str, str], ...] = (
     ("/help", "", "show the commands"),
     ("/status", "", "the brain at a glance"),
-    ("/agenda", "", "what is waiting on you today"),
+    ("/agenda", "", "today, tomorrow and your commitments"),
     ("/approvals", "", "the pending approval queue"),
     ("/approve", "<id>", "approve one pending approval"),
     ("/deny", "<id>", "deny one pending approval"),
@@ -101,10 +101,6 @@ VOICE: dict[str, dict[str, str]] = {
         "budget": "{pct} of today's budget is spent.",
         "health": "Heads up: {checks} need a look.",
         "here": "We are in {cwd}.",
-        "waiting": "Waiting on your word",
-        "approvals": "{n} approvals",
-        "reminder": "reminder",
-        "nothing": "Nothing. The wheel turns on its own.",
         "more": "+{n} more",
         "hint_commands": "commands",
         "hint_history": "history",
@@ -112,6 +108,20 @@ VOICE: dict[str, dict[str, str]] = {
         "hint_sleep": "lets me sleep",
         "bye": "Going back to sleep. The heartbeat keeps watch.",
         "placeholder": "Ask me anything, or / for commands",
+        "calendar": "Calendar",
+        "today": "Today",
+        "tomorrow": "Tomorrow",
+        "free": "free",
+        "all_day": "all day",
+        "no_calendar": "No calendar connected (lhassa calendar add).",
+        "calendar_slow": "The calendar did not answer in time.",
+        "commitments": "Your commitments",
+        "no_commitments": "Nothing pending. /remind or /goal on Telegram adds one.",
+        "goal": "goal I keep watch on",
+        "every_day": "every day",
+        "every_days": "every {n} days",
+        "every": "every {span}",
+        "approvals_wait": "{n} approvals await your word",
     },
     "es": {
         "night": "¿Aún en pie? Yo también.",
@@ -126,10 +136,6 @@ VOICE: dict[str, dict[str, str]] = {
         "budget": "Llevo {pct} del presupuesto de hoy.",
         "health": "Ojo: {checks} necesitan una mirada.",
         "here": "Estamos en {cwd}.",
-        "waiting": "Esperando tu palabra",
-        "approvals": "{n} aprobaciones",
-        "reminder": "recordatorio",
-        "nothing": "Nada. La rueda gira sola.",
         "more": "+{n} más",
         "hint_commands": "comandos",
         "hint_history": "historial",
@@ -137,6 +143,20 @@ VOICE: dict[str, dict[str, str]] = {
         "hint_sleep": "me deja dormir",
         "bye": "Vuelvo a dormir. El latido sigue de guardia.",
         "placeholder": "Pregúntame lo que sea, o / para comandos",
+        "calendar": "Calendario",
+        "today": "Hoy",
+        "tomorrow": "Mañana",
+        "free": "libre",
+        "all_day": "todo el día",
+        "no_calendar": "Sin calendario conectado (lhassa calendar add).",
+        "calendar_slow": "El calendario no respondió a tiempo.",
+        "commitments": "Tus compromisos",
+        "no_commitments": "Nada pendiente. /remind o /goal en Telegram agregan uno.",
+        "goal": "meta que vigilo",
+        "every_day": "cada día",
+        "every_days": "cada {n} días",
+        "every": "cada {span}",
+        "approvals_wait": "{n} aprobaciones esperan tu palabra",
     },
 }
 
@@ -173,31 +193,44 @@ def _short_path(path: str) -> str:
     return "~" + path[len(home):] if path == home or path.startswith(home + os.sep) else path
 
 
-async def _agenda_items() -> "dict | None":
-    """Events, approval titles and due tasks; ``None`` if the agenda is unreadable."""
+async def _days() -> "list[dict] | None":
     try:
         from lhassa.config import Config
         from lhassa.personal import agenda as agenda_mod
 
-        built = await asyncio.wait_for(agenda_mod.build(Config, horizon_hours=24), AGENDA_TIMEOUT)
-        return {
-            "events": list(built.events),
-            "approvals": list(built.approvals),
-            "tasks": [(t.action, t.due_at) for t in built.pending_tasks],
-        }
+        return await asyncio.wait_for(agenda_mod.days(Config, count=2), AGENDA_TIMEOUT)
     except Exception:
         return None
 
 
+async def _commitments() -> list:
+    try:
+        from lhassa.config import Config
+        from lhassa.personal import agenda as agenda_mod
+
+        return await agenda_mod.commitments(Config, limit=50)
+    except Exception:
+        return []
+
+
+def _has_calendar() -> bool:
+    try:
+        from lhassa.personal.sources import AGENDA_DATED_SOURCES
+
+        return len(AGENDA_DATED_SOURCES) > 0
+    except Exception:
+        return False
+
+
 async def gather_welcome() -> dict:
-    """The status snapshot plus the agenda, fetched together. Never raises."""
-    snap, agenda = await asyncio.gather(status_view.gather(), _agenda_items())
-    return {"status": snap, "agenda": agenda}
-
-
-#: Task actions that are the owner's own (reminders); the rest of the queue is
-#: Lhassa's internal upkeep (temple_run, digests) and stays out of the welcome.
-OWNER_TASK_ACTIONS = frozenset({"send_reminder"})
+    """Status, today and tomorrow, and the owner's commitments. Never raises."""
+    snap, days, commitments = await asyncio.gather(status_view.gather(), _days(), _commitments())
+    return {
+        "status": snap,
+        "days": days,
+        "commitments": commitments,
+        "calendar": _has_calendar(),
+    }
 
 
 def _line(*parts: tuple[str, str]) -> Text:
@@ -266,27 +299,114 @@ def _styled(template: str, fields: dict[str, tuple[str, str]], base: str = STONE
     return out
 
 
-def _waiting_lines(agenda: "dict | None", status: dict, lang: str) -> list[Text]:
+# ── dates in the owner's language (no locale dependency) ─────────────────────
+
+_WEEKDAYS = {
+    "en": ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"),
+    "es": ("lun", "mar", "mié", "jue", "vie", "sáb", "dom"),
+}
+_MONTHS = {
+    "en": ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"),
+    "es": ("ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"),
+}
+
+
+def short_date(d, lang: str = "en") -> str:
+    """``Wed 21 Oct`` / ``mié 21 oct``."""
+    lang = lang if lang in _WEEKDAYS else "en"
+    return f"{_WEEKDAYS[lang][d.weekday()]} {d.day} {_MONTHS[lang][d.month - 1]}"
+
+
+def _every(seconds: "int | None", lang: str) -> str:
+    if not seconds:
+        return ""
     v = voice(lang)
-    bullet = ("◆ ", RED)
+    days = seconds / 86400
+    if days >= 1 and days == int(days):
+        return v["every_days"].format(n=int(days)) if days > 1 else v["every_day"]
+    return v["every"].format(span=status_view.format_duration(seconds))
+
+
+def _event_line(ev: dict, now: datetime, lang: str) -> Text:
+    v = voice(lang)
+    start = ev["start"]
+    try:
+        past = (ev.get("end") or start) < now
+    except TypeError:
+        past = False
+    when = v["all_day"] if ev.get("all_day") else start.astimezone().strftime("%H:%M")
+    text_style = STONE if past else WHITE
+    out = _line(
+        ("· " if past else "◆ ", STONE if past else RED),
+        (when.ljust(5), STONE if past else f"bold {WHITE}"),
+        ("  " + (ev.get("summary") or "?"), text_style),
+    )
+    if ev.get("location"):
+        out.append("  " + ev["location"], style=STONE)
+    return out
+
+
+def calendar_lines(days: "list[dict] | None", *, has_calendar: bool, lang: str,
+                   per_day: Optional[int] = 4, now: Optional[datetime] = None) -> list[Text]:
+    """Today and tomorrow, each under its own dated heading."""
+    v = voice(lang)
+    if not has_calendar:
+        return [Text(v["calendar"], style=f"bold {GOLD}"), Text(v["no_calendar"], style=STONE)]
+    if days is None:
+        return [Text(v["calendar"], style=f"bold {GOLD}"), Text(v["calendar_slow"], style=STONE)]
+    now = now or datetime.now().astimezone()
     lines: list[Text] = []
-    if agenda is None:
-        count = status.get("approvals")
-        if count:
-            lines.append(_line(bullet, (v["approvals"].format(n=count), f"bold {GOLD}"), ("  /approvals", STONE)))
-        return lines
-    for event in agenda["events"][:3]:
-        when, _, what = event.partition(" ")
-        lines.append(_line(bullet, (when, f"bold {WHITE}"), ("  " + what, WHITE)))
-    if len(agenda["events"]) > 3:
-        lines.append(_line(("  " + v["more"].format(n=len(agenda["events"]) - 3), STONE)))
-    approvals = agenda["approvals"]
+    for i, day in enumerate(days):
+        label = v["today"] if i == 0 else v["tomorrow"] if i == 1 else ""
+        if lines:
+            lines.append(Text(""))
+        lines.append(_line((label, f"bold {GOLD}"), (f"  {short_date(day['date'], lang)}", STONE)))
+        events = day["events"]
+        if not events:
+            lines.append(Text("  " + v["free"], style=STONE))
+            continue
+        shown = events if per_day is None else events[:per_day]
+        if per_day is not None and i == 0:
+            # Today: keep what is still ahead, past ones only while room is left.
+            ahead = [e for e in events if (e.get("end") or e["start"]) >= now]
+            behind = [e for e in events if e not in ahead]
+            room = per_day - len(ahead)
+            shown = (behind[-room:] if room > 0 else []) + ahead[:per_day]
+        lines += [_event_line(e, now, lang) for e in shown]
+        hidden = len(events) - len(shown)
+        if hidden > 0:
+            lines.append(Text("  " + v["more"].format(n=hidden), style=STONE))
+    return lines
+
+
+def commitment_lines(commitments: list, status: dict, *, lang: str,
+                     limit: Optional[int] = 4) -> list[Text]:
+    """What the owner asked Lhassa to remember or keep watch over, soonest first."""
+    v = voice(lang)
+    lines: list[Text] = [Text(v["commitments"], style=f"bold {GOLD}")]
+    shown = commitments if limit is None else commitments[:limit]
+    for c in shown:
+        if c.due:
+            local = c.due.astimezone()
+            day, hour = short_date(local, lang), local.strftime("%H:%M")
+        else:
+            day, hour = "?", ""
+        lines.append(_line(("◇ ", GOLD), (day.ljust(11), f"bold {WHITE}"), (hour.ljust(6), STONE),
+                           (c.text or "?", WHITE)))
+        extra = [v["goal"]] if c.kind == "goal" else []
+        if c.every_seconds:
+            extra.append(_every(c.every_seconds, lang))
+        if extra:
+            lines.append(_line((" " * 19 + "↻ " + " · ".join(extra), STONE)))
+    if not commitments:
+        lines.append(Text(v["no_commitments"], style=STONE))
+    elif limit is not None and len(commitments) > limit:
+        lines.append(Text("  " + v["more"].format(n=len(commitments) - limit), style=STONE))
+    approvals = status.get("approvals")
     if approvals:
-        lines.append(_line(bullet, (v["approvals"].format(n=len(approvals)), f"bold {GOLD}"),
+        lines.append(Text(""))
+        lines.append(_line(("◆ ", RED), (v["approvals_wait"].format(n=approvals), f"bold {GOLD}"),
                            ("  /approvals", STONE)))
-    reminders = [due for action, due in agenda["tasks"] if action in OWNER_TASK_ACTIONS]
-    for due in reminders[:3]:
-        lines.append(_line(bullet, (due or "?", f"bold {WHITE}"), ("  " + v["reminder"], WHITE)))
     return lines
 
 
@@ -301,12 +421,12 @@ def welcome(
     """The welcome for ``data`` (from :func:`gather_welcome`). Pure.
 
     No box: the stupa on the left, Lhassa speaking in the first person beside
-    it, a line of prayer flags, then what waits on the owner's word.
+    it, a line of prayer flags, then the calendar by day (today, tomorrow) and,
+    beside it on a wide terminal, the owner's commitments.
     """
     lang = lang or language()
-    v = voice(lang)
     s = data.get("status") or {}
-    width = max(40, min(width, 110))
+    width = max(40, min(width, 120))
 
     speech = _speech(s, lang, cwd or os.getcwd())
     head = Table.grid(padding=(0, 3))
@@ -318,11 +438,18 @@ def welcome(
     for i in range(max(len(mark), len(rows))):
         head.add_row(mark[i] if i < len(mark) else Text(""), rows[i] if i < len(rows) else Text(""))
 
-    waiting = _waiting_lines(data.get("agenda"), s, lang)
-    parts: list = [Text(""), head, Text(""), flag_line(width - 2), Text("")]
-    parts.append(Text(v["waiting"], style=f"bold {GOLD}"))
-    parts += waiting or [Text(v["nothing"], style=STONE)]
-    parts.append(Text(""))
+    cal = Group(*calendar_lines(data.get("days"), has_calendar=bool(data.get("calendar")), lang=lang))
+    com = Group(*commitment_lines(data.get("commitments") or [], s, lang=lang))
+    if width >= 96:
+        below = Table.grid(padding=(0, 4))
+        below.add_column(width=(width - 8) * 11 // 20, no_wrap=True, overflow="ellipsis")
+        below.add_column(width=(width - 8) * 9 // 20, no_wrap=True, overflow="ellipsis")
+        below.add_row(cal, com)
+        tail: list = [below]
+    else:
+        tail = [cal, Text(""), com]
+
+    parts: list = [Text(""), head, Text(""), flag_line(width - 2), Text(""), *tail, Text("")]
     return Group(*[Padding(p, (0, 0, 0, 2)) for p in parts])
 
 
@@ -337,28 +464,22 @@ def hints(lang: Optional[str] = None) -> Text:
     )
 
 
-def agenda_markup(agenda: "dict | None") -> str:
-    """``/agenda`` as Rich markup: the next 24 hours, owner items first."""
-    if agenda is None:
-        return "[dim]The agenda could not be read right now.[/]"
-    lines = ["[title]Next 24 hours[/]"]
-    if agenda["events"]:
-        lines += [f"  [model]{e}[/]" for e in agenda["events"]]
-    else:
-        lines.append("  [dim]no calendar events[/]")
-    reminders = [d for a, d in agenda["tasks"] if a in OWNER_TASK_ACTIONS]
-    if reminders:
-        lines.append("[title]Reminders[/]")
-        lines += [f"  reminder [dim]{d}[/]" for d in reminders[:10]]
-    if agenda["approvals"]:
-        lines.append(f"[title]Approvals[/] [dim]({len(agenda['approvals'])})[/]")
-        lines += [f"  {t}" for t in agenda["approvals"][:5]]
-        if len(agenda["approvals"]) > 5:
-            lines.append("  [dim]… /approvals for the rest[/]")
-    upkeep = len(agenda["tasks"]) - len(reminders)
-    if upkeep:
-        lines.append(f"[dim]{upkeep} upkeep tasks of my own are scheduled too.[/]")
-    return "\n".join(lines)
+async def gather_agenda() -> dict:
+    """What ``/agenda`` shows: the welcome's data with nothing trimmed."""
+    return await gather_welcome()
+
+
+def agenda_view(data: dict, *, lang: Optional[str] = None) -> Group:
+    """``/agenda``: today and tomorrow in full, then every commitment."""
+    lang = lang or language()
+    parts: list = [Text("")]
+    parts += calendar_lines(data.get("days"), has_calendar=bool(data.get("calendar")),
+                            lang=lang, per_day=None)
+    parts.append(Text(""))
+    parts += commitment_lines(data.get("commitments") or [], data.get("status") or {},
+                              lang=lang, limit=None)
+    parts.append(Text(""))
+    return Group(*[Padding(p, (0, 0, 0, 2)) for p in parts])
 
 
 # ── prompt_toolkit pieces ──────────────────────────────────────────────────────

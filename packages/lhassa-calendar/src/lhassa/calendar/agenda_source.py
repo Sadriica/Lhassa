@@ -28,3 +28,29 @@ async def agenda_events(instance_id: str, *, hours: int, config=None) -> list[st
         return events
     except Exception:
         return []
+
+
+async def dated_events(instance_id: str, *, since, until, config=None) -> list[dict]:
+    """Structured events in ``[since, until]`` for day-by-day layouts; ``[]`` on any trouble."""
+    try:
+        from datetime import datetime, timezone
+
+        from lhassa.calendar.feed import upcoming
+
+        now = datetime.now(timezone.utc)
+        hours = max(1, int((until - now).total_seconds() // 3600) + 1)
+        rows = await upcoming(instance_id, hours=hours, since=since, config=config)
+        return [
+            {
+                "start": e["start"],
+                "end": e.get("end"),
+                "summary": str(e.get("summary") or ""),
+                "location": str(e.get("location") or ""),
+                "calendar": str(e.get("calendar") or ""),
+                "all_day": bool(e.get("all_day")),
+            }
+            for e in rows
+            if e.get("start") is not None and since <= e["start"] <= until
+        ]
+    except Exception:
+        return []

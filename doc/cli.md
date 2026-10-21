@@ -26,8 +26,12 @@ The bare `lhassa` REPL opens with Lhassa introducing itself, in the first
 person and in the owner's language (`digest_language`, English or Spanish): the
 stupa mark, a greeting by the local hour, its last heartbeat and today's cost,
 the two model seats, the org mode and the working directory; then a line of
-prayer flags and what waits on your word in the next 24 hours (calendar events,
-approvals, reminders; Lhassa's own upkeep tasks stay out). Type `/` for a menu of
+prayer flags, the calendar by day (today and tomorrow, past events dimmed) and,
+beside it on a wide terminal, your commitments: the reminders and goals you
+asked for, soonest first, with their date, time and cadence (Lhassa's own upkeep
+tasks stay out), plus how many approvals wait. `/agenda` shows the same without
+trimming. Dated events come through `personal.sources.register_dated_event_source`
+(the calendar pack registers its ICS feeds). Type `/` for a menu of
 the REPL commands (`/status`, `/agenda`, `/approvals`, `/approve <id>`,
 `/deny <id>`, `/skills`, `/tools`, `/usage`, `/reset`, `/clear`, `/exit`). Input
 history persists in `repl_history` next to the brain DB (`↑`). Under the prompt

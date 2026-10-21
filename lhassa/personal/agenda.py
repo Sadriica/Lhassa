@@ -171,3 +171,87 @@ def render(agenda: PersonalAgenda, *, language: str = "en") -> str:
     lines.append("Reply with /goal if you want me to keep watch.")
     return "\n".join(lines)
 
+
+
+# ── days and commitments: the agenda laid out for a screen ───────────────────
+
+#: Task actions that are the owner's own commitments (things they asked Lhassa
+#: to remind them of or keep watch over); everything else in the queue is
+#: Lhassa's own upkeep.
+COMMITMENT_ACTIONS = {"send_reminder": "reminder", "goal": "goal"}
+
+
+@dataclass
+class Commitment:
+    kind: str  # "reminder" | "goal"
+    text: str
+    due: Optional[datetime]
+    every_seconds: Optional[int] = None
+
+
+def _local_midnight(now: datetime) -> datetime:
+    local = now.astimezone()
+    return local.replace(hour=0, minute=0, second=0, microsecond=0)
+
+
+async def days(config, *, count: int = 2, now: Optional[datetime] = None) -> list[dict]:
+    """``count`` local days from today: ``[{"date", "events"}]``, events sorted.
+
+    Today starts at local midnight, so events already past still show (a
+    surface may dim them). Events come from the dated agenda sources (the
+    calendar pack); with none installed every day is empty. Never raises.
+    """
+    from lhassa.personal.sources import collect_dated_events
+
+    now = now or datetime.now(timezone.utc)
+    start = _local_midnight(now)
+    bounds = [start + timedelta(days=i) for i in range(count + 1)]
+    out = [{"date": bounds[i].date(), "events": []} for i in range(count)]
+    try:
+        events = await collect_dated_events(
+            _instance(config), since=bounds[0], until=bounds[-1], config=config
+        )
+    except Exception:
+        events = []
+    for ev in events:
+        try:
+            local_day = ev["start"].astimezone().date()
+        except Exception:
+            continue
+        for day in out:
+            if day["date"] == local_day:
+                day["events"].append(ev)
+                break
+    return out
+
+
+def _task_text(row: dict) -> str:
+    params = row.get("params") or {}
+    if isinstance(params, dict) and params.get("text"):
+        return str(params["text"])
+    return str(row.get("objetivo") or row.get("accion") or "")
+
+
+async def commitments(config, *, limit: int = 6) -> list[Commitment]:
+    """The owner's pending reminders and goals, soonest first. Never raises."""
+    try:
+        from lhassa.core import db
+
+        await db.init_db()
+        rows = await db.list_tasks(_instance(config), estado="pendiente", limit=500)
+    except Exception:
+        return []
+    out: list[Commitment] = []
+    for row in rows:
+        kind = COMMITMENT_ACTIONS.get(str(row.get("accion") or ""))
+        if kind is None:
+            continue
+        due = _parse_dt(str(row.get("due_at") or "")) if row.get("due_at") else None
+        try:
+            every = int(row["recurrence"]) if row.get("recurrence") else None
+        except (TypeError, ValueError):
+            every = None
+        out.append(Commitment(kind=kind, text=_task_text(row).strip(), due=due, every_seconds=every))
+    far = datetime.max.replace(tzinfo=timezone.utc)
+    out.sort(key=lambda c: c.due or far)
+    return out[:limit]

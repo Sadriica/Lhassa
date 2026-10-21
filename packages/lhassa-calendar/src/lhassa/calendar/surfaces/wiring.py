@@ -21,12 +21,12 @@ def register() -> None:
     _DONE = True
 
     from lhassa.calendar import world_facts
-    from lhassa.calendar.agenda_source import agenda_events
+    from lhassa.calendar.agenda_source import agenda_events, dated_events
     from lhassa.calendar.surfaces import actions, capability
     from lhassa.calendar.surfaces import commands as _commands  # noqa: F401 (registers /calendar /calendars /event)
     from lhassa.core.actions import _REGISTRY, register_action, register_precondition
     from lhassa.notify.commands import register_reminder_extra
-    from lhassa.personal.sources import register_event_source
+    from lhassa.personal.sources import register_dated_event_source, register_event_source
 
     def _reg(name: str, fn) -> None:  # noqa: ANN001
         if _REGISTRY.get_or_none(name) is None:
@@ -55,3 +55,4 @@ def register() -> None:
     capability.register()
     register_reminder_extra("calendar_event", _commands.deliver_calendar_event)
     register_event_source("calendar", agenda_events)
+    register_dated_event_source("calendar", dated_events)
