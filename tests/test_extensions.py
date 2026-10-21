@@ -80,3 +80,15 @@ async def test_init_db_runs_registered_pack_migrations(tmp_path, monkeypatch):
         ).fetchone() == (2,)
     finally:
         extensions.PACK_MIGRATIONS.unregister("test-widgets")
+
+
+def test_cli_command_registration_first_wins():
+    name = "test-command"
+    try:
+        a = lambda: "a"  # noqa: E731
+        b = lambda: "b"  # noqa: E731
+        extensions.register_cli_command(name, a)
+        extensions.register_cli_command(name, b)
+        assert extensions.CLI_COMMANDS.get(name)() == "a"
+    finally:
+        extensions.CLI_COMMANDS.unregister(name)

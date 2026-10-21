@@ -8,9 +8,11 @@ These extend the terminal surface beyond the read-only power subcommands
   - ``lhassa status`` (alias ``overview``); the whole brain at a glance: brains,
     skills, pending approvals, today's cost, health and recent activity. It renders
     the SAME aggregate the dashboard's ``/api/overview`` serves, built by calling
-    the in-process :func:`lhassa.api.server.build_overview` directly (no HTTP).
+    the in-process :func:`lhassa.views.overview.build_overview` directly (no HTTP).
   - ``lhassa version``: the package version + Python + a few key toggles.
-  - ``lhassa serve``: run the dashboard + REST API (Ctrl-C stops it).
+  - ``lhassa serve``: run the dashboard + REST API (Ctrl-C stops it). The command
+    ships in the api pack (``extensions.register_cli_command``); without the pack a
+    stub here says how to install it.
   - ``lhassa beat``: fire one heartbeat tick (what the systemd timer runs).
   - ``lhassa watch``: periodically re-render the latest activity (Ctrl-C stops).
 
@@ -57,10 +59,11 @@ def _dump_json(obj) -> None:
 def load_overview() -> dict:
     """Build the dashboard-home aggregate in-process (the ``/api/overview`` data).
 
-    Lazily imports the API module so the CLI's quiet boot path never pays for
-    FastAPI unless ``status`` actually runs.
+    The read-model lives in core (:mod:`lhassa.views.overview`), so ``status``
+    works without the api pack; it is imported lazily to keep the CLI's quiet
+    boot path light.
     """
-    from lhassa.api.server import build_overview
+    from lhassa.views.overview import build_overview
 
     return asyncio.run(build_overview())
 
@@ -220,31 +223,18 @@ def version_cmd(
     )
 
 
-# ── serve (run the dashboard + API) ───────────────────────────────────────────────
+# ── serve (shipped by the api pack) ───────────────────────────────────────────────
 
-def _serve(host: str, port: int) -> None:
-    """Boot the dashboard + REST API (blocks until Ctrl-C). Factored out so tests
-    can patch the bind away and only exercise arg parsing."""
-    from lhassa.api.server import run_api_server
-
-    asyncio.run(run_api_server(host=host, port=port))
+API_PACK_HINT = "uv sync --package lhassa-api"
 
 
-def serve_cmd(
-    host: str = typer.Option("127.0.0.1", "--host", help="Bind host."),
-    port: int = typer.Option(7766, "--port", help="Bind port."),
-) -> None:
-    """Run the dashboard + REST API (Ctrl-C stops it)."""
-    err = _err()
-    display = "localhost" if host in ("0.0.0.0", "::") else host
-    err.print(
-        f"[brand]ᕮ Lhassa[/] [dim]· dashboard + API at[/] "
-        f"[model]http://{display}:{port}[/]  [dim](Ctrl-C to stop)[/]"
+def serve_absent_cmd() -> None:
+    """Run the dashboard + REST API (needs the api pack, lhassa-api)."""
+    _err().print(
+        "[error]✗[/] the dashboard + API ship in the api pack (lhassa-api), which is "
+        f"not installed. Install it with: [model]{API_PACK_HINT}[/]"
     )
-    try:
-        _serve(host, port)
-    except KeyboardInterrupt:
-        err.print("[dim]stopped.[/]")
+    raise typer.Exit(code=1)
 
 
 # ── beat (one heartbeat tick) ─────────────────────────────────────────────────────
@@ -428,12 +418,23 @@ def code_cmd(
         _out().print(result)
 
 
+def _register_serve_fallback(app: "typer.Typer") -> None:
+    # The api pack mounts the real ``serve`` (cli/app.py's CLI_COMMANDS loop);
+    # only when no pack provides it does core attach the "not installed" stub.
+    from lhassa import actionpack
+    from lhassa.extensions import CLI_COMMANDS
+
+    actionpack.register_all()
+    if "serve" not in CLI_COMMANDS:
+        app.command("serve")(serve_absent_cmd)
+
+
 def register(app: "typer.Typer") -> None:
     """Attach the action commands to the main Typer app."""
     app.command("status")(status_cmd)
     app.command("overview")(status_cmd)
     app.command("version")(version_cmd)
-    app.command("serve")(serve_cmd)
+    _register_serve_fallback(app)
     app.command("beat")(beat_cmd)
     app.command("watch")(watch_cmd)
     app.command("code")(code_cmd)

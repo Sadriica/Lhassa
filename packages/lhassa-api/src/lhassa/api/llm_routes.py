@@ -12,7 +12,6 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException
 
-from lhassa.state import state
 from lhassa.config import Config
 
 router = APIRouter()

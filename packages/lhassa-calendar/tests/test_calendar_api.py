@@ -11,10 +11,20 @@ contains a real feed url; only ``url_masked`` (a short non-reversible tail).
 from datetime import datetime, timedelta, timezone
 
 import pytest
-from fastapi import FastAPI
-from fastapi.testclient import TestClient
 
-from lhassa.calendar.surfaces import api as calendar_routes
+from lhassa import actionpack
+from lhassa.extensions import PACKS
+
+# The calendar router is served by the api pack (it brings fastapi); without that
+# pack installed there is nothing to mount it on, so these tests skip.
+actionpack.register_all()
+if "api" not in PACKS:
+    pytest.skip("needs the api pack (lhassa-api)", allow_module_level=True)
+
+from fastapi import FastAPI  # noqa: E402
+from fastapi.testclient import TestClient  # noqa: E402
+
+from lhassa.calendar.surfaces import api as calendar_routes  # noqa: E402
 
 FAKE_URL_WORK = "https://calendar.example.com/secret-work-feed-abcdef1234567890.ics"
 FAKE_URL_PERSONAL = "https://calendar.example.com/secret-personal-feed-zzzz999999.ics"

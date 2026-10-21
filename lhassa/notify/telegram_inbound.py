@@ -1059,7 +1059,7 @@ async def _launch_code_run(approval_row: dict, *, config) -> None:
     """Launch an approved ``code_run`` approval's task. Fire-and-forget; never raises.
 
     Reuses the EXACT seam the dashboard's Run section launches through
-    (:func:`lhassa.api.code_routes._stream_run` — it broadcasts ``agent_started``/
+    (:func:`lhassa.agents.code_run.stream_run`: it broadcasts ``agent_started``/
     ``agent_token``/``agent_done`` over ``/ws`` and persists the run through
     ``lhassa.state.state``), so a Telegram-launched run is indistinguishable from a
     dashboard one. Sends a "started" message immediately, awaits completion (capped
@@ -1079,8 +1079,7 @@ async def _launch_code_run(approval_row: dict, *, config) -> None:
     try:
         import uuid
 
-        from lhassa.agents import local_cli
-        from lhassa.api.code_routes import _stream_run
+        from lhassa.agents import code_run, local_cli
         from lhassa.state import AgentRun, state
 
         cli = str(payload.get("cli") or "").strip() or local_cli.detect_ai_cli()
@@ -1104,7 +1103,7 @@ async def _launch_code_run(approval_row: dict, *, config) -> None:
 
         try:
             await asyncio.wait_for(
-                _stream_run(agent, run_id, run, task), timeout=_CODE_RUN_TIMEOUT
+                code_run.stream_run(agent, run_id, run, task), timeout=_CODE_RUN_TIMEOUT
             )
         except asyncio.TimeoutError:
             with contextlib.suppress(Exception):

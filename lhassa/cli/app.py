@@ -349,6 +349,15 @@ for _pack_cli_name, _pack_cli_factory in _CLI_APPS.items().items():
     except Exception as _exc:  # noqa: BLE001
         print(f"lhassa: pack command {_pack_cli_name!r} failed to load: {_exc}", file=sys.stderr)
 
+# Single top-level pack commands (``extensions.register_cli_command``), same rules.
+from lhassa.extensions import CLI_COMMANDS as _CLI_COMMANDS  # noqa: E402
+
+for _pack_cmd_name, _pack_cmd_factory in _CLI_COMMANDS.items().items():
+    try:
+        app.command(_pack_cmd_name)(_pack_cmd_factory())
+    except Exception as _exc:  # noqa: BLE001
+        print(f"lhassa: pack command {_pack_cmd_name!r} failed to load: {_exc}", file=sys.stderr)
+
 
 @app.command("tui")
 def tui_cmd() -> None:

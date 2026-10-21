@@ -12,7 +12,6 @@ import json
 import pathlib
 import re
 
-import pytest
 
 from lhassa import legal
 
@@ -70,14 +69,6 @@ def test_cli_source_actually_references_the_notice_module():
     """The panel must render legal.NOTICE, not a copy pasted next to it."""
     src = (REPO / "lhassa" / "cli" / "extra_cmds.py").read_text()
     assert "_legal.NOTICE" in src
-
-
-@pytest.mark.asyncio
-async def test_api_exposes_the_notice():
-    from lhassa.api.runtime_routes import get_legal, get_status
-
-    assert (await get_legal())["notice"] == legal.NOTICE
-    assert (await get_status())["legal"]["notice"] == legal.NOTICE
 
 
 def test_dashboard_notice_matches_the_python_one():

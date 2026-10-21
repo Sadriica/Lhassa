@@ -27,15 +27,15 @@ _CODE_APPROVAL_MARKER = "[[approval_id: {ap_id}]]"
 def _code_cwd(config) -> str:
     """The working directory an approved /code run would launch in.
 
-    Mirrors :func:`lhassa.api.code_routes._agent_cwd` (the dashboard Run
+    Uses :func:`lhassa.agents.code_run.agent_cwd` (the dashboard Run
     section's own resolution: ``config.agent_dir`` if set, else the process
     cwd); for DISPLAY purposes at park time only; the actual launch re-resolves
     it the same way. Never raises.
     """
     try:
-        from lhassa.api.code_routes import _agent_cwd
+        from lhassa.agents import code_run
 
-        return str(_agent_cwd())
+        return str(code_run.agent_cwd())
     except Exception:
         return "?"
 

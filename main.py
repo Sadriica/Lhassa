@@ -7,12 +7,29 @@ from loguru import logger
 from lhassa.config import Config
 from lhassa.memory.session import close_session
 from lhassa.memory.store import init_db
-from lhassa.api.server import run_api_server
 from lhassa.state import state
 
 LOG_DIR = Path.home() / ".lhassa"
 
 VOICE_INSTALL_HINT = "uv sync --package lhassa-voice --extra runtime"
+API_INSTALL_HINT = "uv sync --package lhassa-api"
+
+
+def _load_api_server():
+    """Return the api pack's ``run_api_server`` or ``None`` with a clear log line.
+
+    The dashboard + REST API ship in the ``lhassa-api`` pack; without it the voice
+    pipeline still runs, just with no dashboard alongside.
+    """
+    try:
+        from lhassa.api.server import run_api_server
+    except ImportError as exc:
+        logger.warning(
+            f"The api pack (lhassa-api) is not installed ({exc}); running without the "
+            f"dashboard. Install it with: {API_INSTALL_HINT}"
+        )
+        return None
+    return run_api_server
 
 
 def _load_voice_pipeline():
@@ -126,14 +143,21 @@ async def _run_all(config: Config, run_voice_pipeline):
     except Exception as exc:
         logger.warning(f"Legacy reminder migration failed: {exc}")
 
-    api_task = asyncio.create_task(
-        run_api_server(host=config.api_host, port=config.api_port),
-        name="api-server",
-    )
+    run_api_server = _load_api_server()
+    background = []
+    if run_api_server is not None:
+        background.append(
+            asyncio.create_task(
+                run_api_server(host=config.api_host, port=config.api_port),
+                name="api-server",
+            )
+        )
     snapshot_interval = max(60, int(os.getenv("LHASSA_MEMORY_SNAPSHOT_INTERVAL", "1800")))
-    snapshot_task = asyncio.create_task(
-        _periodic_memory_snapshot(snapshot_interval),
-        name="memory-snapshot",
+    background.append(
+        asyncio.create_task(
+            _periodic_memory_snapshot(snapshot_interval),
+            name="memory-snapshot",
+        )
     )
 
     messages: list = []
@@ -150,9 +174,9 @@ async def _run_all(config: Config, run_voice_pipeline):
     finally:
         await state.set_voice_active(False)
         state.pipeline_task = None
-        api_task.cancel()
-        snapshot_task.cancel()
-        await asyncio.gather(api_task, snapshot_task, return_exceptions=True)
+        for task in background:
+            task.cancel()
+        await asyncio.gather(*background, return_exceptions=True)
         await _close_http_clients()
 
     if messages:

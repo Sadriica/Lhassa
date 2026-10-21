@@ -17,6 +17,8 @@ needs to reach the surfaces that used to be hard-wired:
 * :data:`API_ROUTERS` : name -> zero-arg factory returning a FastAPI ``APIRouter``.
 * :data:`CLI_APPS` : name -> zero-arg factory returning a ``typer.Typer``; the
   name is the subcommand (``lhassa <name> ...``).
+* :data:`CLI_COMMANDS` : name -> zero-arg factory returning a plain command
+  function, mounted as a single top-level command (``lhassa <name>``).
 * :data:`PACK_MIGRATIONS` : pack name -> ordered ``Migration`` tuple, tracked
   per pack in the ``pack_schema`` table (independent of the core
   ``PRAGMA user_version`` track).
@@ -38,10 +40,12 @@ __all__ = [
     "PACKS",
     "API_ROUTERS",
     "CLI_APPS",
+    "CLI_COMMANDS",
     "PACK_MIGRATIONS",
     "register_pack",
     "register_api_router",
     "register_cli_app",
+    "register_cli_command",
     "register_pack_migrations",
 ]
 
@@ -58,6 +62,7 @@ class PackInfo:
 PACKS: Registry[PackInfo] = Registry("pack")
 API_ROUTERS: Registry[Callable[[], Any]] = Registry("api router")
 CLI_APPS: Registry[Callable[[], Any]] = Registry("cli app")
+CLI_COMMANDS: Registry[Callable[[], Any]] = Registry("cli command")
 PACK_MIGRATIONS: Registry[Sequence[Any]] = Registry("pack migrations")
 
 
@@ -87,6 +92,11 @@ def register_api_router(name: str, factory: Callable[[], Any]) -> Callable[[], A
 def register_cli_app(name: str, factory: Callable[[], Any]) -> Callable[[], Any]:
     """Mount ``factory()`` as ``lhassa <name>`` (``cli/app.py``)."""
     return _register_once(CLI_APPS, name, factory)
+
+
+def register_cli_command(name: str, factory: Callable[[], Any]) -> Callable[[], Any]:
+    """Mount ``factory()`` (a command function) as ``lhassa <name>`` (``cli/app.py``)."""
+    return _register_once(CLI_COMMANDS, name, factory)
 
 
 def register_pack_migrations(pack: str, migrations: Sequence[Any]) -> Sequence[Any]:

@@ -42,7 +42,10 @@ from typing import Iterator
 # The forbidden directions encode "inner layers must not reach out to shells",
 # the keystone-leaf rule, and the model-vs-harness swap-axis independence.
 
-SHELLS = {"cli", "api", "voice", "notify", "org", "dashboard", "actionpack", "flows"}
+# ``views`` holds the shell-level read-models (the overview aggregate ``lhassa
+# status`` and ``/api/overview`` render): they compose the org chart and the flow
+# store read-only, so they sit at the shell level and no inner layer may use them.
+SHELLS = {"cli", "api", "voice", "notify", "org", "dashboard", "actionpack", "flows", "views"}
 
 
 @dataclass(frozen=True)
