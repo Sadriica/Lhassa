@@ -48,7 +48,14 @@ from typing import Iterator
 # ``views`` holds the shell-level read-models (the overview aggregate ``lhassa
 # status`` and ``/api/overview`` render): they compose the org chart and the flow
 # store read-only, so they sit at the shell level and no inner layer may use them.
-SHELLS = {"cli", "api", "voice", "notify", "org", "dashboard", "actionpack", "flows", "views", "tui"}
+# ``chat`` is the transport-agnostic chat engine (the brain's conversational
+# door): it composes notify (commands, hooks, capabilities), org (deliver) and
+# actionpack, so it is a shell; a transport drives it. ``telegram`` (the
+# lhassa-telegram pack) is that transport, a shell end to end like ``tui``.
+SHELLS = {
+    "cli", "api", "voice", "notify", "org", "dashboard", "actionpack", "flows", "views", "tui",
+    "chat", "telegram",
+}
 
 
 @dataclass(frozen=True)
@@ -374,7 +381,7 @@ def test_checker_honours_allowed_exceptions() -> None:
     not_allowed = ImportRecord(
         src_rel="health/checks.py",
         src_sub="health",
-        module="lhassa.notify.telegram",
+        module="lhassa.notify.channels",
         tgt_sub="notify",
     )
     assert find_violations([allowed]) == []

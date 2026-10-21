@@ -1,11 +1,12 @@
-"""Tests for the Telegram → CV work-flow bridge.
+"""Tests for the chat → CV work-flow bridge (the cv pack's inbound hook).
 
-Never hits the real Telegram API and never calls a real model. The Bot API file
-helpers (``get_file`` / ``send_document``) are monkeypatched; the CV work-flow is
-either faked (routing tests) or run fully OFFLINE ($0, the injected base-CV override
-test). Covers:
+Transport-free: every turn is played through the chat engine with
+``tests.chat_fakes.FakeTransport`` (an upload's ``fetch()`` is a fake), and the
+tailored file reaches a fake file-capable channel through ``org.deliver``; no
+Telegram, no network, no real model. The CV work-flow is either faked (routing
+tests) or run fully OFFLINE ($0, the injected base-CV override test). Covers:
 
-  * a document update → extract → ``run_flow(base_cv=<extracted>)`` → ``sendDocument``;
+  * an upload → extract → ``run_flow(base_cv=<extracted>)`` → the file is delivered;
   * a no-caption document → asks for the target role (no flow, no download);
   * a gate failure → a short text reply, and NO file sent;
   * the ``run_flow`` ``base_cv`` override is honoured (a fake executor sees the base).
@@ -15,8 +16,8 @@ import asyncio
 from types import SimpleNamespace
 
 from lhassa import cv
-from lhassa.cv.surfaces import telegram as cvtg
-from lhassa.notify import telegram, telegram_api, telegram_inbound
+from lhassa.cv.surfaces import chat as cvtg
+from tests.chat_fakes import FakeTransport, FileChannel, install_channel
 
 
 # ── company parsing ─────────────────────────────────────────────────────────────
@@ -39,41 +40,21 @@ def _cfg(**over):
     return SimpleNamespace(**base)
 
 
-def _client_returning(payload):
-    """An httpx.AsyncClient stand-in whose GET returns ``payload`` (getUpdates)."""
-
-    class _Resp:
-        status_code = 200
-        text = "ok"
-
-        def json(self):
-            return payload
-
-    class _Client:
-        def __init__(self, *a, **k):
-            pass
-
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, *a):
-            return False
-
-        async def get(self, url, params=None):
-            return _Resp()
-
-    return _Client
+def _files(monkeypatch, **kw):
+    """A fake file-capable owner channel: ``org.deliver`` sends the CV through it."""
+    return install_channel(monkeypatch, FileChannel(**kw))
 
 
-def _patch_send(monkeypatch):
-    sent = []
+async def _boom_send_doc(path, *, caption="", config=None):
+    raise AssertionError("must not send a file here")
 
-    async def _fake_send(text, *, config=None):
-        sent.append(text)
-        return True
 
-    monkeypatch.setattr(telegram, "send", _fake_send)
-    return sent
+def _upload(transport, content, *, caption=None, file_name="cv.tex"):
+    asyncio.run(
+        transport.upload(
+            config=_cfg(), content=content, caption=caption, file_name=file_name
+        )
+    )
 
 
 # ── document update → extract → run_flow(base_cv=...) → sendDocument ─────────────
@@ -82,38 +63,8 @@ def test_document_update_runs_flow_and_sends_tex(monkeypatch, tmp_path):
         "\\documentclass{article}\\begin{document}"
         "owner@example.edu +57 300 111 2222\\end{document}"
     )
-    payload = {
-        "ok": True,
-        "result": [
-            {
-                "update_id": 300,
-                "message": {
-                    "chat": {"id": 123},
-                    "document": {"file_id": "FID", "file_name": "cv.tex"},
-                    "caption": "Senior Backend Engineer @ Acme",
-                },
-            }
-        ],
-    }
-    monkeypatch.setattr(
-        telegram_inbound.httpx, "AsyncClient", _client_returning(payload)
-    )
-
-    # Bot API file helpers; no network.
-    async def _fake_get_file(file_id, *, config=None):
-        assert file_id == "FID"
-        return tex_body.encode()
-
-    monkeypatch.setattr(telegram_api, "get_file", _fake_get_file)
-
-    sent_docs = []
-
-    async def _fake_send_document(path, *, caption="", config=None):
-        sent_docs.append({"path": str(path), "caption": caption})
-        return True
-
-    monkeypatch.setattr(telegram_api, "send_document", _fake_send_document)
-    sent_text = _patch_send(monkeypatch)
+    files = _files(monkeypatch)
+    transport = FakeTransport()
     # No real LaTeX engine in the suite: compile fails → fall back to the .tex.
     monkeypatch.setattr(cv, "compile_pdf", lambda p: None)
 
@@ -143,52 +94,29 @@ def test_document_update_runs_flow_and_sends_tex(monkeypatch, tmp_path):
 
     monkeypatch.setattr(delegate_mod, "delegate_flow", _fake_delegate_flow)
 
-    new_offset = asyncio.run(telegram_inbound.poll_once(_cfg(), offset=None))
+    _upload(transport, tex_body.encode(), caption="Senior Backend Engineer @ Acme")
 
-    assert new_offset == 301
+    assert transport.fetched == ["FID"]
     # delegate_flow got the EXTRACTED text as base_cv, caption as summary, parsed company.
     assert seen["base_cv"] == tex_body
     assert seen["inputs"] == {"summary": "Senior Backend Engineer @ Acme"}
     assert seen["company"] == "Acme"
     # The exported .tex was sent as a document (not a plain text reply).
-    assert sent_docs and sent_docs[0]["path"] == str(out_file)
-    assert "Acme" in sent_docs[0]["caption"]
-    assert sent_text == []
+    assert files.documents and files.documents[0]["path"] == str(out_file)
+    assert "Acme" in files.documents[0]["caption"]
+    assert transport.sent == []
 
 
 def test_no_caption_document_holds_cv_and_asks_for_role(monkeypatch):
     cvtg._PENDING_CV.clear()
     cvtg._AWAIT_BASE.clear()
     tex_body = "\\documentclass{article}\\begin{document}Body\\end{document}"
-    payload = {
-        "ok": True,
-        "result": [
-            {
-                "update_id": 310,
-                "message": {
-                    "chat": {"id": 123},
-                    "document": {"file_id": "FID", "file_name": "cv.tex"},
-                },
-            }
-        ],
-    }
-    monkeypatch.setattr(
-        telegram_inbound.httpx, "AsyncClient", _client_returning(payload)
-    )
+    _files(monkeypatch, on_document=_boom_send_doc)  # no file without a target role
+    transport = FakeTransport()
+    sent = transport.sent
 
-    async def _fake_get_file(file_id, *, config=None):
-        return tex_body.encode()
+    _upload(transport, tex_body.encode())
 
-    async def _boom_send_doc(path, *, caption="", config=None):
-        raise AssertionError("must not send a file without a target role")
-
-    monkeypatch.setattr(telegram_api, "get_file", _fake_get_file)
-    monkeypatch.setattr(telegram_api, "send_document", _boom_send_doc)
-    sent = _patch_send(monkeypatch)
-
-    new_offset = asyncio.run(telegram_inbound.poll_once(_cfg(), offset=None))
-
-    assert new_offset == 311
     # Not armed → the CV is HELD and we ask (plain text) for the posting; no file/flow.
     assert cvtg._PENDING_CV["123"]["base_cv"] == tex_body
     assert len(sent) == 1 and sent[0].startswith("Got your CV")
@@ -202,40 +130,8 @@ def test_held_cv_then_followup_text_runs_flow(monkeypatch, tmp_path):
         "\\documentclass{article}\\begin{document}"
         "owner@example.edu +57 300 111 2222\\end{document}"
     )
-    # Two updates in order: the caption-less document, then the follow-up job posting.
-    payload = {
-        "ok": True,
-        "result": [
-            {
-                "update_id": 400,
-                "message": {
-                    "chat": {"id": 123},
-                    "document": {"file_id": "FID", "file_name": "cv.tex"},
-                },
-            },
-            {
-                "update_id": 401,
-                "message": {"chat": {"id": 123}, "text": "AI Engineer @ Sezzle"},
-            },
-        ],
-    }
-    monkeypatch.setattr(
-        telegram_inbound.httpx, "AsyncClient", _client_returning(payload)
-    )
-
-    async def _fake_get_file(file_id, *, config=None):
-        return tex_body.encode()
-
-    monkeypatch.setattr(telegram_api, "get_file", _fake_get_file)
-
-    sent_docs = []
-
-    async def _fake_send_document(path, *, caption="", config=None):
-        sent_docs.append(str(path))
-        return True
-
-    monkeypatch.setattr(telegram_api, "send_document", _fake_send_document)
-    _patch_send(monkeypatch)
+    files = _files(monkeypatch)
+    transport = FakeTransport()
     monkeypatch.setattr(cv, "compile_pdf", lambda p: None)  # no engine → send the .tex
 
     import lhassa.flows.store as store_mod
@@ -257,45 +153,23 @@ def test_held_cv_then_followup_text_runs_flow(monkeypatch, tmp_path):
 
     monkeypatch.setattr(delegate_mod, "delegate_flow", _fake_delegate_flow)
 
-    asyncio.run(telegram_inbound.poll_once(_cfg(), offset=None))
+    # Two turns in order: the caption-less document, then the follow-up job posting.
+    _upload(transport, tex_body.encode())
+    asyncio.run(transport.say("AI Engineer @ Sezzle", config=_cfg()))
 
     # The follow-up text ran the flow with the HELD CV as base + the text as the posting.
     assert seen["base_cv"] == tex_body
     assert seen["inputs"] == {"summary": "AI Engineer @ Sezzle"}
     assert seen["company"] == "Sezzle"
-    assert sent_docs == [str(out_file)]
+    assert [d["path"] for d in files.documents] == [str(out_file)]
     assert cvtg._PENDING_CV == {}  # consumed
     cvtg._PENDING_CV.clear()
 
 
 def test_gate_failure_replies_and_sends_no_file(monkeypatch):
-    payload = {
-        "ok": True,
-        "result": [
-            {
-                "update_id": 320,
-                "message": {
-                    "chat": {"id": 123},
-                    "document": {"file_id": "FID", "file_name": "cv.tex"},
-                    "caption": "Backend @ Acme",
-                },
-            }
-        ],
-    }
-    monkeypatch.setattr(
-        telegram_inbound.httpx, "AsyncClient", _client_returning(payload)
-    )
-
-    async def _fake_get_file(file_id, *, config=None):
-        return b"owner@example.edu +57 300 111 2222 base cv"
-
-    monkeypatch.setattr(telegram_api, "get_file", _fake_get_file)
-
-    async def _boom_send_doc(path, *, caption="", config=None):
-        raise AssertionError("must not send a file when a gate failed")
-
-    monkeypatch.setattr(telegram_api, "send_document", _boom_send_doc)
-    sent = _patch_send(monkeypatch)
+    _files(monkeypatch, on_document=_boom_send_doc)  # no file when a gate failed
+    transport = FakeTransport()
+    sent = transport.sent
 
     import lhassa.flows.store as store_mod
     from lhassa.org import delegate as delegate_mod
@@ -318,42 +192,21 @@ def test_gate_failure_replies_and_sends_no_file(monkeypatch):
 
     monkeypatch.setattr(delegate_mod, "delegate_flow", _fake_delegate_flow)
 
-    new_offset = asyncio.run(telegram_inbound.poll_once(_cfg(), offset=None))
+    _upload(transport, b"owner@example.edu +57 300 111 2222 base cv", caption="Backend @ Acme")
 
-    assert new_offset == 321
     assert len(sent) == 1
     assert "contact details" in sent[0].lower()
 
 
 def test_missing_flow_replies_not_set_up(monkeypatch):
-    payload = {
-        "ok": True,
-        "result": [
-            {
-                "update_id": 330,
-                "message": {
-                    "chat": {"id": 123},
-                    "document": {"file_id": "FID", "file_name": "cv.tex"},
-                    "caption": "Backend role",
-                },
-            }
-        ],
-    }
-    monkeypatch.setattr(
-        telegram_inbound.httpx, "AsyncClient", _client_returning(payload)
-    )
-
-    async def _fake_get_file(file_id, *, config=None):
-        return b"a base cv body"
-
-    monkeypatch.setattr(telegram_api, "get_file", _fake_get_file)
-    sent = _patch_send(monkeypatch)
+    transport = FakeTransport()
+    sent = transport.sent
 
     import lhassa.flows.store as store_mod
 
     monkeypatch.setattr(store_mod.FlowStore, "get", lambda self, fid: None)
 
-    asyncio.run(telegram_inbound.poll_once(_cfg(), offset=None))
+    _upload(transport, b"a base cv body", caption="Backend role")
     assert len(sent) == 1 and "flow-zvzpry" in sent[0]
 
 
@@ -439,42 +292,26 @@ def test_cv_command_runs_against_disk_base(monkeypatch, tmp_path):
 
     monkeypatch.setattr(delegate_mod, "delegate_flow", _fake_delegate_flow)
 
-    sent_docs = []
-
-    async def _fake_send_document(path, *, caption="", config=None):
-        sent_docs.append(str(path))
-        return True
-
-    monkeypatch.setattr(telegram_api, "send_document", _fake_send_document)
-    _patch_send(monkeypatch)
+    files = _files(monkeypatch)
     monkeypatch.setattr(cv, "compile_pdf", lambda p: None)  # no engine → send the .tex
 
     posting = 'Backend role @ Globex. Requirements: 5+ years Python, FastAPI and async IO; PostgreSQL schema design and query tuning; Docker/Kubernetes deployment to GCP; event-driven architectures with Kafka; strong testing culture (pytest, CI gates); fluent English. Nice to have: Rust, Terraform, observability with Grafana.'
-    asyncio.run(telegram_inbound._answer("/cv " + posting, config=_cfg()))
+    asyncio.run(FakeTransport().say("/cv " + posting, config=_cfg()))
 
     # No attachment → base_cv stays None (run_flow loads disk); posting is the summary.
     assert seen["base_cv"] is None
     assert seen["inputs"] == {"summary": posting}
     assert seen["company"] == "Globex"
-    assert sent_docs == [str(out_file)]
+    assert [d["path"] for d in files.documents] == [str(out_file)]
 
 
 # ── /cvnewbase arms → next upload replaces the base CV (no buttons) ────────────
-def _document_payload(update_id, *, file_name="cv.tex", caption=None):
-    message = {
-        "chat": {"id": 123},
-        "document": {"file_id": "FID", "file_name": file_name},
-    }
-    if caption is not None:
-        message["caption"] = caption
-    return {"ok": True, "result": [{"update_id": update_id, "message": message}]}
-
-
 def test_cvnewbase_arms_chat_and_replies(monkeypatch):
     cvtg._AWAIT_BASE.clear()
-    sent = _patch_send(monkeypatch)
+    transport = FakeTransport()
+    sent = transport.sent
 
-    asyncio.run(telegram_inbound._answer("/cvnewbase", config=_cfg(), chat_id="123"))
+    asyncio.run(transport.say("/cvnewbase", config=_cfg(), chat_id="123"))
 
     # The chat is ARMED for a base replacement and told to send the file next.
     assert cvtg._AWAIT_BASE.get("123") is not None
@@ -488,21 +325,10 @@ def test_armed_document_saves_base_and_disarms(monkeypatch):
     cvtg._arm_base("123")  # as if /cvnewbase ran
     tex_body = "\\documentclass{article}\\begin{document}Body\\end{document}"
 
-    monkeypatch.setattr(
-        telegram_inbound.httpx,
-        "AsyncClient",
-        _client_returning(_document_payload(600, caption="ignored caption")),
-    )
-
-    async def _fake_get_file(file_id, *, config=None):
-        return tex_body.encode()
-
-    async def _boom_send_doc(path, *, caption="", config=None):
-        raise AssertionError("arming a base replacement must not tailor/send a file")
-
-    monkeypatch.setattr(telegram_api, "get_file", _fake_get_file)
-    monkeypatch.setattr(telegram_api, "send_document", _boom_send_doc)
-    sent = _patch_send(monkeypatch)
+    # Arming a base replacement must not tailor/send a file.
+    _files(monkeypatch, on_document=_boom_send_doc)
+    transport = FakeTransport()
+    sent = transport.sent
 
     saved = {}
 
@@ -512,9 +338,8 @@ def test_armed_document_saves_base_and_disarms(monkeypatch):
 
     monkeypatch.setattr(cv, "save_base", _fake_save_base)
 
-    new_offset = asyncio.run(telegram_inbound.poll_once(_cfg(), offset=None))
+    _upload(transport, tex_body.encode(), caption="ignored caption")
 
-    assert new_offset == 601
     assert saved["text"] == tex_body  # the upload replaced the base (caption ignored)
     assert len(sent) == 1 and "Base CV updated" in sent[0]
     assert cvtg._AWAIT_BASE == {}  # disarmed
@@ -527,24 +352,15 @@ def test_unarmed_document_holds_and_asks_no_save(monkeypatch):
     cvtg._AWAIT_BASE.clear()
     tex_body = "\\documentclass{article}\\begin{document}Body\\end{document}"
 
-    monkeypatch.setattr(
-        telegram_inbound.httpx, "AsyncClient", _client_returning(_document_payload(610))
-    )
-
-    async def _fake_get_file(file_id, *, config=None):
-        return tex_body.encode()
-
-    monkeypatch.setattr(telegram_api, "get_file", _fake_get_file)
-
     def _boom_save(text, *, timestamp=None):
         raise AssertionError("a non-armed upload must never replace the base CV")
 
     monkeypatch.setattr(cv, "save_base", _boom_save)
-    sent = _patch_send(monkeypatch)
+    transport = FakeTransport()
+    sent = transport.sent
 
-    new_offset = asyncio.run(telegram_inbound.poll_once(_cfg(), offset=None))
+    _upload(transport, tex_body.encode())
 
-    assert new_offset == 611
     # Held for a one-off; asked for the posting; base untouched.
     assert cvtg._PENDING_CV["123"]["base_cv"] == tex_body
     assert len(sent) == 1 and sent[0].startswith("Got your CV")
@@ -557,9 +373,10 @@ def test_cvbase_reports_base(monkeypatch, tmp_path):
     from lhassa.cv import paths
 
     paths.base_path().write_text("\\documentclass{article}\n% my base cv\n", encoding="utf-8")
-    sent = _patch_send(monkeypatch)
+    transport = FakeTransport()
+    sent = transport.sent
 
-    asyncio.run(telegram_inbound._answer("/cvbase", config=_cfg()))
+    asyncio.run(transport.say("/cvbase", config=_cfg()))
 
     assert len(sent) == 1
     assert "Base CV on file" in sent[0]
@@ -568,9 +385,10 @@ def test_cvbase_reports_base(monkeypatch, tmp_path):
 
 def test_cvbase_reports_absent(monkeypatch, tmp_path):
     monkeypatch.setenv("LHASSA_CV_DIR", str(tmp_path))
-    sent = _patch_send(monkeypatch)
+    transport = FakeTransport()
+    sent = transport.sent
 
-    asyncio.run(telegram_inbound._answer("/cvbase", config=_cfg()))
+    asyncio.run(transport.say("/cvbase", config=_cfg()))
 
     assert len(sent) == 1 and "No base CV on file" in sent[0]
 
@@ -698,6 +516,12 @@ def test_compile_pdf_nonzero_exit_returns_none(monkeypatch, tmp_path):
 
 
 # ── reply sends the compiled PDF when possible, else falls back to the .tex ────
+def _reply_to(transport):
+    from lhassa.chat.outbound import text_sender
+
+    return text_sender(transport.send)
+
+
 def _run_reply_with_record(monkeypatch, tmp_path, compile_result):
     """Drive ``_reply_with_cv`` with a completed tex record; return the sent paths.
 
@@ -708,23 +532,19 @@ def _run_reply_with_record(monkeypatch, tmp_path, compile_result):
     tex.write_text("% tailored", encoding="utf-8")
     monkeypatch.setattr(cv, "compile_pdf", compile_result)
 
-    sent_docs = []
-
-    async def _fake_send_document(path, *, caption="", config=None):
-        sent_docs.append({"path": str(path), "caption": caption})
-        return True
-
-    monkeypatch.setattr(telegram_api, "send_document", _fake_send_document)
-    _patch_send(monkeypatch)
+    files = _files(monkeypatch)
+    transport = FakeTransport()
 
     record = {
         "status": "completed",
         "steps": [{"kind": "output", "output": "tex", "path": str(tex)}],
     }
     asyncio.run(
-        cvtg._reply_with_cv(record, "flow-zvzpry", "Acme", config=_cfg())
+        cvtg._reply_with_cv(
+            record, "flow-zvzpry", "Acme", config=_cfg(), reply=_reply_to(transport)
+        )
     )
-    return tex, sent_docs
+    return tex, files.documents
 
 
 def test_reply_sends_pdf_when_compile_succeeds(monkeypatch, tmp_path):
@@ -749,7 +569,7 @@ def test_reply_falls_back_to_tex_when_compile_fails(monkeypatch, tmp_path):
 # ── THE flagship migration: the tailored CV travels UP the org chain ──────────
 # (§org: "the hierarchy is the philosophy, not a feature": a surface-direct send
 # is a design bug). ``_reply_with_cv`` now goes through ``org.deliver.deliver``
-# instead of calling ``telegram_api.send_document`` itself: every brain on the
+# instead of sending the file itself: every brain on the
 # command chain (the owning department, then Lhassa) logs its own ``org-deliver``
 # Episode, and Lhassa is the one that actually sends.
 def test_cv_reply_writes_the_per_brain_delivery_chain(monkeypatch, tmp_path):
@@ -778,13 +598,8 @@ def test_cv_reply_writes_the_per_brain_delivery_chain(monkeypatch, tmp_path):
     tex.write_text("% tailored", encoding="utf-8")
     monkeypatch.setattr(cv, "compile_pdf", lambda p: None)  # no engine -> send the .tex
 
-    sent_docs = []
-
-    async def _fake_send_document(path, *, caption="", config=None):
-        sent_docs.append({"path": str(path), "caption": caption})
-        return True
-
-    monkeypatch.setattr(telegram_api, "send_document", _fake_send_document)
+    files = _files(monkeypatch)
+    sent_docs = files.documents
 
     record = {
         "id": "run_xyz789",
@@ -799,12 +614,13 @@ def test_cv_reply_writes_the_per_brain_delivery_chain(monkeypatch, tmp_path):
             "flow-zvzpry",
             "Acme",
             config=_cfg(instance_id="inst_personal"),
+            reply=_reply_to(FakeTransport()),
             posting="Backend role @ Acme",
         )
     )
 
     # The final outcome: exactly the same file/caption the owner used to get
-    # directly from ``telegram_api.send_document``: UX is byte-for-byte identical.
+    # directly from the Telegram file upload: UX is byte-for-byte identical.
     assert sent_docs == [{"path": str(tex), "caption": "Tailored CV for Acme."}]
 
     rows = asyncio.run(db.load_recent_episodes("inst_personal", n=100))
@@ -845,15 +661,6 @@ def test_cv_reply_writes_the_per_brain_delivery_chain(monkeypatch, tmp_path):
 
 # ── /cv preflight and gate-failure replies ────────────────────────────────────
 def test_cv_with_bare_title_asks_for_the_posting_without_waking_brains(monkeypatch):
-    payload = {
-        "ok": True,
-        "result": [
-            {"update_id": 502, "message": {"chat": {"id": 123}, "text": "/cv Analista de datos"}}
-        ],
-    }
-    monkeypatch.setattr(
-        telegram_inbound.httpx, "AsyncClient", _client_returning(payload)
-    )
     ran = []
 
     async def fake_flow(**kw):
@@ -861,8 +668,9 @@ def test_cv_with_bare_title_asks_for_the_posting_without_waking_brains(monkeypat
         return None, "flow-x"
 
     monkeypatch.setattr(cvtg, "_run_cv_flow", fake_flow)
-    sent = _patch_send(monkeypatch)
-    asyncio.run(telegram_inbound.poll_once(_cfg(), offset=None))
+    transport = FakeTransport()
+    sent = transport.sent
+    asyncio.run(transport.say("/cv Analista de datos", config=_cfg()))
     assert ran == []  # six brains stayed asleep
     assert any("FULL job posting" in s for s in sent)
 

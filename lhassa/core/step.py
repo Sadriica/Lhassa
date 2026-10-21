@@ -458,7 +458,7 @@ async def _judge(
                 # A live provider/CLI can fail in ways neither of the two typed
                 # exceptions cover (a real network error, an auth failure, a CLI
                 # crash); this must degrade to the next attempt (or defer), the
-                # same as ``notify/telegram_inbound._brain_reply``'s chain walk,
+                # same as ``chat/think.brain_reply``'s chain walk,
                 # never propagate and crash the tick.
                 logger.warning(
                     f"step: provider {getattr(attempt_provider, 'name', '?')!r} "

@@ -58,7 +58,7 @@ async def _cmd_watch(args: str, *, config=None) -> str:
     ``accion`` must be a registered fixed action or the literal ``"judgment"``
     (any action, the brain thinks about it later). ``pattern`` must compile as a
     regex. On success the rule is appended to the same JSON file the Telegram
-    poller reads (:mod:`lhassa.notify.telegram_inbound`); on any validation
+    chat engine reads (:mod:`lhassa.chat.rules`); on any validation
     failure NOTHING is written and a clear reason is returned.
     """
     m = _WATCH_ARROW_RE.match(args or "")
@@ -83,11 +83,11 @@ async def _cmd_watch(args: str, *, config=None) -> str:
             )
 
     try:
-        from lhassa.notify import telegram_inbound as _ti
+        from lhassa.chat import rules as _rules
 
-        rules = _ti._load_raw_watch_rules(cfg)
+        rules = _rules.load_raw_watch_rules(cfg)
         rules.append({"pattern": pattern_src, "accion": accion, "params": {}})
-        if not _ti.save_watch_rules(cfg, rules):
+        if not _rules.save_watch_rules(cfg, rules):
             return _oops("save the watch rule (is watch_rules_file configured?)")
         return f"Watch added (#{len(rules) - 1}): /{pattern_src}/ -> {accion}"
     except Exception as exc:
@@ -100,9 +100,9 @@ async def _cmd_watches(args: str, *, config=None) -> str:
     """``/watches``: list configured watch rules with their index."""
     try:
         cfg = _config(config)
-        from lhassa.notify import telegram_inbound as _ti
+        from lhassa.chat import rules as _rules
 
-        rules = _ti._load_raw_watch_rules(cfg)
+        rules = _rules.load_raw_watch_rules(cfg)
         if not rules:
             return "No watch rules configured."
         lines = ["Watch rules:"]
@@ -124,13 +124,13 @@ async def _cmd_unwatch(args: str, *, config=None) -> str:
 
     try:
         cfg = _config(config)
-        from lhassa.notify import telegram_inbound as _ti
+        from lhassa.chat import rules as _rules
 
-        rules = _ti._load_raw_watch_rules(cfg)
+        rules = _rules.load_raw_watch_rules(cfg)
         if idx < 0 or idx >= len(rules):
             return f"No watch rule at index {idx}. See /watches."
         removed = rules.pop(idx)
-        if not _ti.save_watch_rules(cfg, rules):
+        if not _rules.save_watch_rules(cfg, rules):
             return _oops("save after removing that rule")
         return (
             f"Removed watch rule {idx}: "

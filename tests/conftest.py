@@ -167,28 +167,33 @@ def _isolate_brain_db(tmp_path, monkeypatch):
 
 @pytest.fixture(autouse=True)
 def _reset_seen_telegram_updates():
-    """Give every test a poller that has never seen an update before.
+    """Give every test a fresh chat door: no seen updates, no conversation state.
 
-    The inbound poller de-dupes ``update_id`` in process-local state, which is
+    The Telegram poller de-dupes ``update_id`` in process-local state, which is
     correct for one long-lived poller and wrong for a suite where each test is
     a fresh poller reusing small ids: without this, the second test to use
-    ``update_id`` 200 has its update silently dropped as a redelivery.
+    ``update_id`` 200 has its update silently dropped as a redelivery. The
+    poller ships in the telegram pack, so it is reset only when it was loaded.
 
-    Also resets the poller's other module-level state (held CVs, armed
-    base-CV requests, chat history/turn counters, sticky topic): same
-    process-local-state-outlives-a-poll hazard, just for different dicts.
+    Also resets the chat engine's module-level state (held CVs, armed base-CV
+    requests, chat history/turn counters, sticky topic): same
+    process-local-state-outlives-a-turn hazard, just for different dicts.
     Without this, whichever test happened to run first for a given chat id
-    left its conversation state behind for the next test that reused it,
-    which is exactly the kind of order-dependent flake
-    ``tests/test_telegram_inbound.py`` was seeing.
+    left its conversation state behind for the next test that reused it.
     """
-    from lhassa.notify import telegram_inbound
+    import sys
 
-    telegram_inbound.reset_seen_updates()
-    telegram_inbound.reset_conversation_state()
+    from lhassa import chat
+
+    def _reset() -> None:
+        poller = sys.modules.get("lhassa.telegram.poller")
+        if poller is not None:
+            poller.reset_seen_updates()
+        chat.reset_conversation_state()
+
+    _reset()
     yield
-    telegram_inbound.reset_seen_updates()
-    telegram_inbound.reset_conversation_state()
+    _reset()
 
 
 @pytest.fixture

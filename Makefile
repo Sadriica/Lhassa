@@ -32,9 +32,12 @@ install-heartbeat:
 	systemctl --user enable --now lhassa-heartbeat.timer
 	@echo "Heartbeat scheduled. Status: systemctl --user status lhassa-heartbeat.timer"
 
-# Install + enable the Telegram inbound poller (user unit, no sudo). Credential-
-# gated: set LHASSA_TELEGRAM_BOT_TOKEN + LHASSA_TELEGRAM_CHAT_ID in .env first, or
-# it logs once and exits without touching the network.
+# Install + enable the Telegram inbound poller (user unit, no sudo). The poller is
+# the lhassa-telegram pack (`python -m lhassa.telegram.poller`; `make install`
+# syncs every pack). Re-run this after upgrading from a unit that still runs the
+# deprecated `python -m lhassa.notify.telegram_inbound` alias. Credential-gated:
+# set LHASSA_TELEGRAM_BOT_TOKEN + LHASSA_TELEGRAM_CHAT_ID in .env first, or it
+# logs once and exits without touching the network.
 install-telegram:
 	mkdir -p $(HOME)/.config/systemd/user
 	cp scripts/systemd/lhassa-telegram.service $(HOME)/.config/systemd/user/

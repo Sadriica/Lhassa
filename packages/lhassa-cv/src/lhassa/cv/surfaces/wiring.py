@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """The cv pack's shell-touching registrations (called once by :mod:`lhassa.cv.pack`).
 
-Thin wrappers only: each surface module (commands, Telegram hook, seed) is imported
+Thin wrappers only: each surface module (commands, chat hook, seed) is imported
 inside its wrapper, on first use. :func:`register` is idempotent.
 """
 
@@ -51,24 +51,28 @@ def _register_commands() -> None:
         describe_command(name, help_line, group="CV")
 
 
-# ── Telegram inbound hook ──────────────────────────────────────────────────────
-async def _on_text(text: str, *, config, chat_id: str = "") -> bool:
-    from lhassa.cv.surfaces import telegram
+# ── chat inbound hook ───────────────────────────────────────────────────────────
+async def _on_text(text: str, *, config, chat_id: str = "", reply) -> bool:
+    from lhassa.cv.surfaces import chat
 
-    return await telegram.on_text(text, config=config, chat_id=chat_id)
+    return await chat.on_text(text, config=config, chat_id=chat_id, reply=reply)
 
 
-async def _on_document(document: dict, caption, *, config, chat_id: str = "") -> bool:
-    from lhassa.cv.surfaces import telegram
+async def _on_document(
+    document: dict, caption, *, config, chat_id: str = "", reply, fetch
+) -> bool:
+    from lhassa.cv.surfaces import chat
 
-    return await telegram.on_document(document, caption, config=config, chat_id=chat_id)
+    return await chat.on_document(
+        document, caption, config=config, chat_id=chat_id, reply=reply, fetch=fetch
+    )
 
 
 def _reset() -> None:
     import sys
 
     # Only reset state that exists; never import the surface just to clear it.
-    module = sys.modules.get("lhassa.cv.surfaces.telegram")
+    module = sys.modules.get("lhassa.cv.surfaces.chat")
     if module is not None:
         module.reset()
 

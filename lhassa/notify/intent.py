@@ -3,7 +3,7 @@
 
 "Thinking is the EXCEPTION" (doc/concepts.md): before a Telegram turn spends a model
 call, this module answers one cheap ($0, no model, no embeddings) question;
-*what kind of message is this?*; so the caller (``notify.telegram_inbound``)
+*what kind of message is this?*; so the caller (``chat.think``)
 can decide whether an answer cache lookup even applies.
 
 Four buckets, in priority order (the first matching rule wins):
@@ -16,7 +16,7 @@ Four buckets, in priority order (the first matching rule wins):
                  MUST NEVER be served from the answer cache (a cached "today's
                  weather" is a lie tomorrow); this is exactly what already
                  routes to the research bridge (``actionpack/_research.py``,
-                 ``notify.telegram_inbound``'s ``[[research: …]]`` marker).
+                 ``chat.markers``' ``[[research: …]]`` marker).
   "cacheable" : a STABLE factual/how-to/definitional question: the answer
                  doesn't rot (a capital city, a definition, "how do I install
                  X"). Safe to serve from a past answer once semantically

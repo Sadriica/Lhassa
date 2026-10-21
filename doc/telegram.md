@@ -5,9 +5,20 @@ digest lands there, approvals get resolved from the phone, and the CV
 work-flow is driven entirely from chat. This is the guide to setting it up
 and using every command it understands.
 
-Everything here is grounded in `lhassa/notify/commands/`,
-`lhassa/notify/telegram_inbound.py`, `lhassa/notify/telegram.py` and
+Everything here is grounded in `lhassa/notify/commands/`, the chat engine
+`lhassa/chat/`, the telegram pack (`packages/lhassa-telegram/`:
+`lhassa/telegram/poller.py`, `client.py`, `api.py`, `channel.py`) and
 `lhassa/notify/digest.py`.
+
+**Two halves.** What Lhassa answers is the **chat engine** (`lhassa.chat`,
+core): transport-agnostic, it turns an `InboundMessage` (chat id + text, an
+uploaded document, or a button tap) into a `Reply` (text, `(label, data)`
+buttons, a tap acknowledgment). How it reaches you is the **telegram pack**
+(`lhassa-telegram`): the Bot API client, the getUpdates poller that feeds the
+engine and draws a reply's buttons as an inline keyboard, and the `telegram`
+notify channel (which also carries files for `org/deliver.py`). Without the
+pack, core still runs: there is simply no Telegram, and a file delivery
+reports `(none, failed)` honestly.
 
 ---
 
@@ -25,7 +36,7 @@ same discipline as `GITHUB_TOKEN`):
 | `LHASSA_NOTIFY_CHANNELS` | Must include `telegram` for outbound alerts/digest to reach it (default: `telegram,desktop`) |
 
 With both credentials set, **outbound** messages (the digest, watcher alerts)
-work immediately; `lhassa/notify/telegram.py:send()` is a plain credential-gated
+work immediately; `lhassa/telegram/client.py:send()` is a plain credential-gated
 HTTP call. **Inbound** chat (commands, free-text, the CV bridge) needs the
 separate long-poller process running:
 
@@ -37,10 +48,16 @@ journalctl --user -u lhassa-telegram -f      # watch it
 ```
 
 It is deliberately a **separate process** from `main.py` / the API server;
-`python -m lhassa.notify.telegram_inbound` long-polls Telegram's `getUpdates`
+`python -m lhassa.telegram.poller` long-polls Telegram's `getUpdates`
 (offset-based, 30s long-poll) forever, with exponential backoff on error. It
 never starts (and touches no network) unless `telegram_poll_enabled` is true
 **and** both credentials are present; otherwise it logs once and exits.
+
+The old entrypoint `python -m lhassa.notify.telegram_inbound` still works for
+one release as a deprecated alias (it logs a warning and hands over to the
+pack's poller, or exits with an install hint when the pack is missing), so a
+unit installed before the move keeps running. Reinstall the unit
+(`make install-telegram`) to switch it to `lhassa.telegram.poller`.
 
 On start it publishes the bot's command menu via `setMyCommands`: `/cv` plus every
 command in the registry (the same curated list `/help` renders, from
@@ -255,8 +272,10 @@ error, never silently accepted.
 
 ### `/cv <job posting>` (+ the document bridge)
 The "Impossible-to-reject CV" work-flow, driven entirely from chat; not a
-plain-string command, so it is handled ahead of the registry in
-`telegram_inbound._answer`:
+plain-string command, so it is an inbound hook (the cv pack's
+`cv/surfaces/chat.py`, through `notify/inbound_hooks.py`) the chat engine
+runs ahead of the registry; the hook replies through the engine's `reply()`
+and reads an upload through its `fetch()`, never through Telegram directly:
 
 ```
 > /cv Senior backend engineer at a fintech, Python/Postgres, remote
@@ -389,7 +408,7 @@ Reading the owner's OWN calendar back (subscribing to its `.ics` feed so
 
 After a calendar (or other deterministic-capability) answer, the chat
 remembers what it just answered for a short while (~15 min, process-memory,
-`lhassa/notify/telegram_inbound.py`'s `_CHAT_TOPIC`). A connector-led
+`lhassa/chat/state.py`'s `_CHAT_TOPIC`). A connector-led
 follow-up; "y el sábado?", "¿y en marzo?", "and Saturday?", "what about
 Monday?": is recognised as a CONTINUATION of that topic
 (`lhassa.notify.capabilities.is_followup`, pure regex/word-list, $0) and is
@@ -412,7 +431,7 @@ through to the normal chat path unchanged, same as if no topic were active.
 ## Free-text chat
 
 Anything that isn't a slash command and doesn't match a watch rule falls
-through to a **tool-less brain think** (`telegram_inbound._brain_reply`);
+through to a **tool-less brain think** (`lhassa.chat.think.brain_reply`);
 identity + layered memory (the message itself is the semantic query, so
 layer 4/5 recall can fire) → the router's routine decision → one plain
 completion, no tools. It is deliberately tool-less: routing chat through the
@@ -446,7 +465,7 @@ never includes key material, only names/counts.
 
 The third marker (mirroring `[[research: …]]` and `[[remember: …]]`): the chat
 stays tool-less, but the model can now REQUEST a real action instead of only
-explaining what it would do. `telegram_inbound._apply_action_marker` mints a
+explaining what it would do. `lhassa.chat.markers.apply_action_marker` mints a
 signed task through the exact same allowlist + approval frontier `/goal` uses
 (HUMANO/telegram origin); nothing here bypasses the allowlist:
 
@@ -638,12 +657,13 @@ every idle tick.
 
 An approval-type alert carries **inline Approve/Deny buttons**
 (`reply_markup` on the Telegram message, built in
-`org/watcher.py:_approval_keyboard` and sent via `notify/telegram.py`'s
-optional `reply_markup` param). Tapping one fires a `callback_query` that
-`telegram_inbound._handle_callback_query` resolves through the exact same
-`security.approval.resolve` path as `/approve` / `/deny`: it always answers
-the callback (clearing the button's loading spinner) and never crashes on a
-malformed or unauthorized tap.
+`org/watcher.py:_approval_keyboard` and sent via the telegram channel's
+optional `reply_markup` param). Tapping one fires a `callback_query`: the
+poller acknowledges taps from any chat but the owner's and drops them, and
+hands an owner tap to the chat engine (`lhassa.chat.callbacks.handle_callback`),
+which resolves it through the exact same `security.approval.resolve` path as
+`/approve` / `/deny`. The poller always answers the callback (clearing the
+button's loading spinner) and never crashes on a malformed or unauthorized tap.
 
 ---
 

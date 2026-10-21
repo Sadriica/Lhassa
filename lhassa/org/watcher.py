@@ -380,7 +380,7 @@ async def _approval_keyboard(instance_id: str) -> Optional[dict]:
     """An inline keyboard with an Approve/Deny row per pending approval, or ``None``.
 
     Callback data is the simple ``"approve:<id>"`` / ``"deny:<id>"`` encoding the
-    inbound Telegram poller parses (:mod:`lhassa.notify.telegram_inbound`). Never
+    chat engine resolves (:mod:`lhassa.chat.callbacks`). Never
     raises; a lookup failure (or nothing pending) degrades to ``None`` (no keyboard
     attached, the alert is still sent as plain text).
     """

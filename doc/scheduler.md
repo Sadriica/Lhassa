@@ -90,7 +90,7 @@ and that is credential-gated/available gets it (`notify/channels.py`):
 | Channel | Condition |
 |---|---|
 | `desktop` (`DesktopChannel`) | `notify-send` on `PATH` (Linux/libnotify toast) |
-| `telegram` (`TelegramChannel`) | bot token + chat id configured |
+| `telegram` (`TelegramChannel`, the telegram pack) | pack installed + bot token + chat id configured |
 | `log` (`LogChannel`) | always available; a log line, the last-resort fallback |
 
 A channel failure is logged and swallowed; `notify()` never raises, and

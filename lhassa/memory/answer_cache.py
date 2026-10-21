@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """The answer cache; a $0 semantic cache over past chat answers.
 
-The Telegram chat think (``notify.telegram_inbound._brain_reply``) spends a real
+The chat think (``chat.think.brain_reply``) spends a real
 model call on every non-command message, even when it has effectively answered the
 exact same STABLE question before ("what's the capital of France", "how do I undo
 a git commit"). This module is the store/lookup half of that cache: it never

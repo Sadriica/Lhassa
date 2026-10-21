@@ -200,7 +200,7 @@ async def test_remember_regex_variants(tmp_path, monkeypatch):
     monkeypatch.setattr(db, "DB_PATH", tmp_path / "brain.db")
     await db.init_db()
 
-    import lhassa.notify.telegram_inbound as ti
+    from tests.chat_fakes import FakeTransport
 
     class _Cfg:
         instance_id = "inst_test"
@@ -218,19 +218,13 @@ async def test_remember_regex_variants(tmp_path, monkeypatch):
         memory_semantic_topk = 5
         watch_rules_file = ""
 
-    sent_replies: list[str] = []
-
-    async def _fake_send(text, *, config):
-        sent_replies.append(text)
-
-    # Patch telegram.send.
-    import lhassa.notify.telegram as tg_mod
-    monkeypatch.setattr(tg_mod, "send", _fake_send)
+    transport = FakeTransport()
+    sent_replies = transport.sent
 
     cfg = _Cfg()
     for variant in ["remember: my birthday is June 5", "recuerda: prefiero el café oscuro", "recordá, trabajo con Python"]:
         sent_replies.clear()
-        await ti._answer(variant, config=cfg, chat_id="123")
+        await transport.say(variant, config=cfg)
         assert sent_replies, f"no reply for variant {variant!r}"
         # Reply must contain a fact id.
         assert "f_" in sent_replies[-1] or "Remembered:" in sent_replies[-1], \
@@ -239,7 +233,7 @@ async def test_remember_regex_variants(tmp_path, monkeypatch):
     # 500-char cap test.
     sent_replies.clear()
     long_text = "remember: " + "x" * 600
-    await ti._answer(long_text, config=cfg, chat_id="123")
+    await transport.say(long_text, config=cfg)
     # The fact was written; check DB.
     rows = await db.query_facts("inst_test")
     capped = [r for r in rows if r["contenido"] == "x" * 500]

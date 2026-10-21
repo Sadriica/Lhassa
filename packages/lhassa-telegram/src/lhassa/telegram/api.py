@@ -1,12 +1,13 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """Telegram Bot API file helpers; send a local file, fetch an uploaded one.
 
-The text notifier (:mod:`lhassa.notify.telegram`) only sends ``sendMessage``. The
-Telegram → CV work-flow bridge additionally needs to (a) DOWNLOAD an uploaded CV
-document and (b) SEND BACK a tailored ``.tex`` file. Those two file operations live
-here so the text path stays untouched.
+The text notifier (:mod:`lhassa.telegram.client`) only sends ``sendMessage``. The
+chat door additionally needs to (a) DOWNLOAD an uploaded document (the poller's
+``fetch()`` for inbound hooks such as the cv bridge) and (b) SEND a file to the
+owner (only ever through :func:`lhassa.org.deliver.deliver`, via the ``telegram``
+channel). Those file operations live here so the text path stays untouched.
 
-Same discipline as the rest of :mod:`lhassa.notify`: **credential-gated** (no token
+Same discipline as :mod:`lhassa.telegram.client`: **credential-gated** (no token
 or chat id → no network, returns falsy) and **fully defensive** (any HTTP/transport
 error is logged and yields a falsy result; these helpers never raise into the
 poller).
@@ -24,7 +25,7 @@ from typing import Optional
 import httpx
 from loguru import logger
 
-from lhassa.notify.telegram import _credentials
+from lhassa.telegram.client import _credentials
 
 # Bot API endpoints. ``<token>`` is interpolated per call; the file CDN path is a
 # separate host shape (``/file/bot<token>/<file_path>``).

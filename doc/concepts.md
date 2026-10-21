@@ -110,8 +110,8 @@ Both seats share one **fallback chain** (`llm/router.py:fallback_chain()`, confi
 `ProviderNotConfigured` or `BudgetExceeded`, the chain is walked in order, skipping any CLI
 whose binary isn't installed (`shutil.which`) and never retrying the same provider kind
 twice. This is the concrete meaning of "subscriptions before APIs": `opencode → claude →
-codex → cloud`: and it's the same chain `core/step.py`'s judgment path and the Telegram
-inbound bridge (`notify/telegram_inbound.py`) both walk.
+codex → cloud`: and it's the same chain `core/step.py`'s judgment path and the chat
+engine's tool-less think (`chat/think.py`, behind the Telegram poller) both walk.
 
 A **budget soft-limit** (`router.decide()`, `config.budget_soft_pct`, default `0.8`) sits
 in front of both seats: once today's spend crosses 80% of the daily token budget, `hard`

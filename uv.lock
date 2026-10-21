@@ -16,6 +16,7 @@ members = [
     "lhassa-calendar",
     "lhassa-cv",
     "lhassa-research",
+    "lhassa-telegram",
     "lhassa-tui",
     "lhassa-voice",
 ]
@@ -1208,6 +1209,21 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [{ name = "lhassa", editable = "." }]
+
+[[package]]
+name = "lhassa-telegram"
+version = "0.8.0"
+source = { editable = "packages/lhassa-telegram" }
+dependencies = [
+    { name = "httpx" },
+    { name = "lhassa" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "httpx", specifier = ">=0.27.0" },
+    { name = "lhassa", editable = "." },
+]
 
 [[package]]
 name = "lhassa-tui"

@@ -17,11 +17,18 @@ This module defines:
   a plugin can drop in a new channel **without editing core**;
 * :func:`active_channels`: resolves ``config.notify_channels`` (a comma-separated
   order) into the registered **and configured** channels, in that order; unknown
-  names are skipped with a warning, unconfigured channels are skipped silently.
+  names are skipped with a warning, unconfigured channels are skipped silently;
+* the optional FILE capability: a channel that can put a file in front of the
+  owner also has ``async send_document(path, *, caption="", config=None) ->
+  bool``. :func:`document_channel` picks the one to use and
+  :func:`deliver_document` sends through it; only :mod:`lhassa.org.deliver`
+  (the hierarchy's up-direction seam) calls it, and with no file-capable
+  channel registered it is an honest ``(False, "none")``, never a raise.
 
-The built-in channels are registered here (``telegram``, ``log``) and in
+The built-in channels are registered here (``log``) and in
 :mod:`lhassa.notify.desktop` (``desktop``), which this module imports at the end
-so they are all present the moment ``channels`` is imported.
+so they are present the moment ``channels`` is imported. The Telegram channel
+ships in the telegram pack (``lhassa.telegram.pack`` registers it).
 """
 
 from __future__ import annotations
@@ -30,15 +37,16 @@ from typing import Optional, Protocol, runtime_checkable
 
 from loguru import logger
 
-from lhassa.notify import telegram
 from lhassa.registry import Registry
 
 __all__ = [
     "Channel",
     "CHANNELS",
+    "NO_DOCUMENT_CHANNEL",
     "register_channel",
     "active_channels",
-    "TelegramChannel",
+    "document_channel",
+    "deliver_document",
     "LogChannel",
 ]
 
@@ -129,29 +137,58 @@ def active_channels(config) -> list[Channel]:
     return out
 
 
-# ── built-in channels ────────────────────────────────────────────────────────────
+# ── the optional file capability ─────────────────────────────────────────────────
+
+#: The channel name :func:`deliver_document` reports when no registered channel
+#: can deliver a file.
+NO_DOCUMENT_CHANNEL = "none"
 
 
-class TelegramChannel:
-    """The existing credential-gated Telegram adapter, as a :class:`Channel`.
+def _can_send_documents(channel) -> bool:
+    return callable(getattr(channel, "send_document", None))
 
-    Wraps :func:`lhassa.notify.telegram.send` / ``is_configured`` so Telegram joins
-    the registry without changing ``telegram.py`` (its functions still work for any
-    direct caller). ``send`` is defensively wrapped even though the adapter already
-    never raises.
+
+def document_channel(config) -> Optional[Channel]:
+    """The channel a FILE for the owner goes out on, or ``None`` if none can.
+
+    Preference: the first file-capable channel in ``config.notify_channels``
+    order that is configured; else the first registered file-capable channel
+    even if unconfigured (its own credential gate then declines, honestly, the
+    way it always has). Never raises.
     """
+    try:
+        for channel in active_channels(config):
+            if _can_send_documents(channel):
+                return channel
+        for channel in CHANNELS.all():
+            if _can_send_documents(channel):
+                return channel
+    except Exception as exc:
+        logger.warning(f"notify: resolving a file channel failed: {exc}")
+    return None
 
-    name = "telegram"
 
-    def is_configured(self, config) -> bool:
-        return telegram.is_configured(config)
+async def deliver_document(path, *, caption: str = "", config=None) -> tuple[bool, str]:
+    """Send the file at ``path`` to the owner. Returns ``(delivered, channel_name)``.
 
-    async def send(self, text: str, *, level: str = "info", config=None, **kwargs) -> bool:
-        try:
-            return await telegram.send(text, config=config, **kwargs)
-        except Exception as exc:  # the adapter shouldn't, but a Channel never raises
-            logger.warning(f"notify: telegram channel raised: {exc}")
-            return False
+    The primitive behind :func:`lhassa.org.deliver.deliver`; nothing else calls
+    it (``tests/test_deliver.py`` guards that). With no file-capable channel
+    registered (the telegram pack absent) it returns
+    ``(False, NO_DOCUMENT_CHANNEL)`` with a warning. Never raises.
+    """
+    channel = document_channel(config)
+    if channel is None:
+        logger.warning("notify: no channel can deliver files; the file was not sent")
+        return False, NO_DOCUMENT_CHANNEL
+    name = getattr(channel, "name", "?")
+    try:
+        return bool(await channel.send_document(path, caption=caption, config=config)), name
+    except Exception as exc:  # a Channel never raises, but be sure
+        logger.warning(f"notify: channel {name!r} raised sending a file: {exc}")
+        return False, name
+
+
+# ── built-in channels ────────────────────────────────────────────────────────────
 
 
 # loguru level names keyed by the advisory severity strings the dispatcher uses.
@@ -189,7 +226,6 @@ class LogChannel:
         return True
 
 
-register_channel("telegram", TelegramChannel())
 register_channel("log", LogChannel())
 
 # Import the desktop channel last so ``desktop`` is registered the moment this

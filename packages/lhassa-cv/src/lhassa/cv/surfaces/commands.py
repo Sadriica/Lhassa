@@ -3,7 +3,7 @@
 
 Plain string-returning handlers for the notify ``COMMANDS`` registry. The ``/cv``
 command itself replies with a file, so it is an inbound hook
-(:mod:`lhassa.cv.surfaces.telegram`), not a registry command.
+(:mod:`lhassa.cv.surfaces.chat`), not a registry command.
 """
 
 from __future__ import annotations

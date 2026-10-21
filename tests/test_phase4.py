@@ -354,11 +354,11 @@ async def test_telegram_rule_minting(tmp_path, monkeypatch):
     await _make_db(tmp_path, monkeypatch)
     iid = _iid()
 
-    from lhassa.notify import telegram_inbound
+    from lhassa.chat import rules
 
     monkeypatch.setattr(
-        telegram_inbound,
-        "_load_watch_rules",
+        rules,
+        "load_watch_rules",
         lambda config: [
             {
                 "pattern": re.compile(r"check.*inbox", re.IGNORECASE),
@@ -395,7 +395,7 @@ async def test_telegram_rule_minting(tmp_path, monkeypatch):
         instance_id = iid
         watch_rules_file = str(tmp_path / "rules.json")
 
-    task_id = await telegram_inbound._try_mint_rule_task(
+    task_id = await rules.try_mint_rule_task(
         "please check my inbox now",
         [
             {

@@ -17,7 +17,7 @@ file regardless of nesting), this module INVERTS the seam: ``core.watchlist``
 exposes a small ``register_check`` registry, and THIS module (a shell) registers
 its own sense here, imported from a process entrypoint
 (``actionpack.register_all()``: called from every long-lived entrypoint:
-``main.py``, ``cli/_boot.py``, ``notify/telegram_inbound.py``,
+``main.py``, ``cli/_boot.py``, the telegram pack's poller,
 ``org/watcher.py``). Core stays completely unaware that org exists.
 """
 

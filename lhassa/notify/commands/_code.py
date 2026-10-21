@@ -17,10 +17,10 @@ __all__ = ["_CODE_APPROVAL_MARKER"]
 # or the eventual CLI invocation.
 _CODE_MAX_TASK = 500
 
-# Appended to a successful /code reply, then stripped and parsed by the inbound
-# poller (:mod:`lhassa.notify.telegram_inbound`) to attach the inline Approve/Deny
-# keyboard to THIS reply; the same "hidden marker" discipline as the research/
-# remember markers in that module. Never shown to the owner.
+# Appended to a successful /code reply, then stripped and parsed by the chat
+# engine (:mod:`lhassa.chat.engine`) to attach the Approve/Deny buttons to THIS
+# reply; the same "hidden marker" discipline as the research/remember markers
+# (:mod:`lhassa.chat.markers`). Never shown to the owner.
 _CODE_APPROVAL_MARKER = "[[approval_id: {ap_id}]]"
 
 

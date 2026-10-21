@@ -161,15 +161,22 @@ def _collect_active_config(errors: dict, config: Any) -> dict:
     out["llm_kill_switch"] = bool(getattr(config, "llm_kill_switch", False))
 
     def _telegram() -> dict:
-        from lhassa.notify import telegram
+        # The telegram pack registers the "telegram" channel; ask the channel
+        # registry rather than the pack, so core reports "absent" without it.
+        from lhassa.notify.channels import CHANNELS
 
+        channel = CHANNELS.get_or_none("telegram")
         return {
-            "configured": bool(telegram.is_configured(config)),
+            "installed": channel is not None,
+            "configured": bool(channel is not None and channel.is_configured(config)),
             "poll_enabled": bool(getattr(config, "telegram_poll_enabled", False)),
         }
 
     out["telegram"] = _safe(
-        errors, "telegram", _telegram, {"configured": False, "poll_enabled": False}
+        errors,
+        "telegram",
+        _telegram,
+        {"installed": False, "configured": False, "poll_enabled": False},
     )
 
     def _org() -> dict:
@@ -248,10 +255,13 @@ def collect_capabilities(config: Optional[Any] = None) -> dict:
     errors: dict[str, str] = {}
     cfg = _safe(errors, "config", lambda: _config(config), None)
 
+    # Plugins first: loading them is what registers a pack's channels, commands
+    # and actions, so the registries below report what a pack plugged in.
+    plugins = _collect_plugins(errors, cfg)
     return {
         "registries": _collect_registries(errors, cfg),
         "active_config": _collect_active_config(errors, cfg),
-        "plugins": _collect_plugins(errors, cfg),
+        "plugins": plugins,
         "errors": errors,
     }
 
@@ -349,6 +359,7 @@ def render(data: dict) -> str:
         ("memory layer 4", _mark(active.get("memory_layer4_enabled"))),
         ("voice", _mark(active.get("voice_enabled"))),
         ("llm kill-switch", _mark(active.get("llm_kill_switch"))),
+        ("telegram pack", _mark(tg.get("installed"))),
         ("telegram configured", _mark(tg.get("configured"))),
         ("telegram poll", _mark(tg.get("poll_enabled"))),
     ]

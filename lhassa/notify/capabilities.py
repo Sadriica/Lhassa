@@ -13,7 +13,7 @@ its entry with :func:`register_capability` (no pack installed, no capability,
 every function below degrades to "no match").
 
 The layering is deliberate (see the module's callers in
-:mod:`lhassa.notify.telegram_inbound`): this is a SHELL (``notify/``);
+:mod:`lhassa.chat.engine`): this is a SHELL (``notify/``);
 ``agents.repetition`` is never imported
 FROM here (the dependency runs the other way; the consciousness only ever reads
 episode TEXT this module wrote, via plain SQL, never a Python import). That keeps
@@ -187,7 +187,7 @@ def tag_intent(text: str) -> str:
 # ── is_followup(); the connector / elliptical-fragment detector ────────────
 #
 # Pure $0, no model: this is the deterministic signal the sticky-topic thread-
-# continuity hook (:mod:`lhassa.notify.telegram_inbound`) uses to decide
+# continuity hook (:mod:`lhassa.chat.engine`) uses to decide
 # whether an incoming message is trying to CONTINUE the previous capability's
 # topic rather than opening something new. Two rules, checked on the
 # accent-stripped, lower-cased, punctuation-stripped word list:
@@ -350,7 +350,7 @@ def apply_approved_route(payload: dict, *, config=None) -> bool:
     ->apply connection point.
 
     Called from wherever a ``mint_route`` approval is resolved ``approved=True``
-    (today: :mod:`lhassa.notify.telegram_inbound`'s inline-keyboard callback
+    (today: :mod:`lhassa.chat.callbacks`' Approve/Deny tap
     handler and the ``/approve`` chat command; the SAME two call-sites that
     already special-case ``tipo == "code_run"`` to launch a run post-resolve).
     Reads ``payload["capability"]`` and turns routing on for it via

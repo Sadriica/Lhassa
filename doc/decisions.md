@@ -1,5 +1,30 @@
 # Lhassa; decisions log
 
+## 2026-10-20. The chat engine stays in core; Telegram becomes a pack
+
+`notify/telegram_inbound.py` mixed two things: what to answer (commands,
+shortcuts, the tool-less think and its markers, approval taps) and the wire it
+came over (getUpdates, offsets, the owner-only gate, inline keyboards). The
+first is the brain's conversational door and stays in core as `lhassa/chat/`
+(an `InboundMessage` in, a `Reply` out; buttons are `(label, data)` pairs, a
+reply never carries a file). The second is the `lhassa-telegram` pack
+(`lhassa.telegram.{client,api,channel,poller}`), one transport among the ones
+that could drive the engine.
+
+Core never imports the pack, so the edges that reached into it became seams:
+inbound hooks get `reply()` / `fetch()` instead of calling Telegram (the cv
+bridge is now `cv/surfaces/chat.py` and needs no pack dependency), channels
+gain an optional `send_document` capability and `org/deliver.py` sends a file
+through `notify.channels.deliver_document` (its hops, episodes and attribution
+are unchanged; with no file-capable channel the final episode says
+`(none, failed)`), and `lhassa capabilities` reads the channel registry.
+Episode labels stay `despertar_por="telegram"` because readers key on them.
+
+`python -m lhassa.notify.telegram_inbound` survives one release as a
+deprecated alias that hands the process to the pack by module name
+(`runpy`), so the installed unit keeps running until `make install-telegram`
+rewrites it. Delete the alias after that.
+
 ## 2026-08-30. Strategy: infrastructure and evidence, not a personal assistant for others
 
 Lhassa is no longer positioned as a personal assistant for other people.

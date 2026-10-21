@@ -1,9 +1,12 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Telegram to CV work-flow bridge; the cv pack's inbound hook.
+"""Chat to CV work-flow bridge; the cv pack's inbound hook.
 
 Registered by :mod:`lhassa.cv.pack` through
-:func:`lhassa.notify.inbound_hooks.register_inbound_hook`, so the Telegram poller
-(:mod:`lhassa.notify.telegram_inbound`) never imports the cv pack:
+:func:`lhassa.notify.inbound_hooks.register_inbound_hook`, so the chat engine
+(:mod:`lhassa.chat.engine`) never imports the cv pack, and this module never
+knows the transport: it replies through the hook's ``reply(text)`` and
+downloads an upload through its ``fetch()``. Any chat transport (the telegram
+pack's poller today) drives it:
 
   * ``/cv <job posting>`` tailors the on-disk base CV and replies with the file.
   * An uploaded document is a CV: with a caption (the job posting) it is tailored at
@@ -12,7 +15,7 @@ Registered by :mod:`lhassa.cv.pack` through
   * The tailored file travels UP the org hierarchy (:func:`lhassa.org.deliver.deliver`),
     never a surface-direct send.
 
-Every entry point here never raises into the poll loop.
+Every entry point here never raises into the chat door.
 """
 
 from __future__ import annotations
@@ -24,7 +27,7 @@ from pathlib import Path
 
 from loguru import logger
 
-from lhassa.notify import commands, telegram
+from lhassa.notify import commands
 
 # ── replies and per-chat state ───────────────────────────────────────────────
 # The base CV lives on disk (``cv_largo.tex``) and rarely changes, so a document
@@ -48,7 +51,7 @@ _CV_NO_TEXT = "I couldn't read any text from that document. Send a .tex or a tex
 _CV_ERROR = "Something went wrong tailoring your CV. Nothing was sent."
 
 # A CV held from a caption-less upload, awaiting the job posting in a follow-up
-# message. Keyed by chat id; in-memory (the poller is one long-running process).
+# message. Keyed by chat id; in-memory (the chat door is one long-running process).
 _PENDING_CV: dict = {}
 _PENDING_TTL = 1800.0  # 30 min; an older held CV is treated as stale and dropped.
 
@@ -202,7 +205,7 @@ def _gate_failure_reply(record: dict) -> str:
 
 
 async def _reply_with_cv(
-    record, flow_id: str, company: str | None, *, config, posting: str | None = None
+    record, flow_id: str, company: str | None, *, config, reply, posting: str | None = None
 ) -> None:
     """Turn a CV run record into the owner's reply. Never raises.
 
@@ -216,10 +219,7 @@ async def _reply_with_cv(
     broken record degrades to a clear message. Nothing broken is ever sent.
     """
     if record is None:
-        await telegram.send(
-            f"My CV work-flow ({flow_id}) isn't set up yet, create it first.",
-            config=config,
-        )
+        await reply(f"My CV work-flow ({flow_id}) isn't set up yet, create it first.")
         return
 
     path = _tex_output_path(record)
@@ -257,16 +257,15 @@ async def _reply_with_cv(
             config=config,
         )
         if not delivered:
-            await telegram.send(
-                "I tailored your CV but couldn't send the file, try again.",
-                config=config,
-            )
+            await reply("I tailored your CV but couldn't send the file, try again.")
         return
 
-    await telegram.send(_gate_failure_reply(record), config=config)
+    await reply(_gate_failure_reply(record))
 
 
-async def _answer_document(document: dict, caption, *, config, chat_id: str = "") -> None:
+async def _answer_document(
+    document: dict, caption, *, config, chat_id: str = "", reply, fetch
+) -> None:
     """Handle an uploaded CV document: extract → run the flow → reply. Never raises.
 
     The ``caption`` (falling back to any message text) is the JOB POSTING / target
@@ -277,18 +276,16 @@ async def _answer_document(document: dict, caption, *, config, chat_id: str = ""
     try:
         cap = (str(caption).strip() if caption else "")
 
-        from lhassa.notify import telegram_api
-
-        data = await telegram_api.get_file(document.get("file_id"), config=config)
+        data = await fetch()
         if not data:
-            await telegram.send(_CV_NO_DOWNLOAD, config=config)
+            await reply(_CV_NO_DOWNLOAD)
             return
 
         from lhassa import cv
 
         base_cv = cv.extract_text(data, filename=document.get("file_name") or "")
         if not base_cv.strip():
-            await telegram.send(_CV_NO_TEXT, config=config)
+            await reply(_CV_NO_TEXT)
             return
 
         # ARMED via /cvnewbase → this upload REPLACES the on-disk base CV (any caption is
@@ -296,14 +293,14 @@ async def _answer_document(document: dict, caption, *, config, chat_id: str = ""
         if _consume_armed(chat_id):
             _PENDING_CV.pop(chat_id, None)  # a base replacement supersedes any held CV
             cv.save_base(base_cv)
-            await telegram.send(_CV_BASE_SAVED.format(chars=len(base_cv)), config=config)
+            await reply(_CV_BASE_SAVED.format(chars=len(base_cv)))
             return
 
         if not cap:
             # Not armed, no caption → HOLD the CV; the next plain-text message is the
             # job posting and we tailor a one-off from it.
             _pending_set(chat_id, base_cv, document.get("file_name") or "cv")
-            await telegram.send(_CV_NO_CAPTION.format(chars=len(base_cv)), config=config)
+            await reply(_CV_NO_CAPTION.format(chars=len(base_cv)))
             return
 
         _PENDING_CV.pop(chat_id, None)  # a captioned upload supersedes any held CV
@@ -311,14 +308,14 @@ async def _answer_document(document: dict, caption, *, config, chat_id: str = ""
         record, flow_id = await _run_cv_flow(
             caption=cap, company=company, base_cv=base_cv, config=config
         )
-        await _reply_with_cv(record, flow_id, company, config=config, posting=cap)
-    except Exception as exc:  # never raise into the poll loop
-        logger.warning(f"Telegram inbound: CV document handling failed: {exc}")
+        await _reply_with_cv(record, flow_id, company, config=config, reply=reply, posting=cap)
+    except Exception as exc:  # never raise into the chat door
+        logger.warning(f"chat: CV document handling failed: {exc}")
         with contextlib.suppress(Exception):
-            await telegram.send(_CV_ERROR, config=config)
+            await reply(_CV_ERROR)
 
 
-async def _answer_cv_command(text: str, *, config) -> None:
+async def _answer_cv_command(text: str, *, config, reply) -> None:
     """The optional ``/cv <job posting>`` text command; tailor the on-disk base CV.
 
     No attachment: ``base_cv`` stays ``None`` so :func:`run_flow` loads the base CV
@@ -327,39 +324,34 @@ async def _answer_cv_command(text: str, *, config) -> None:
     try:
         posting = text.strip()[len("/cv"):].strip()
         if not posting:
-            await telegram.send(
-                "Usage: /cv <job posting or target role>, I'll tailor your base CV.",
-                config=config,
-            )
+            await reply("Usage: /cv <job posting or target role>, I'll tailor your base CV.")
             return
         # Preflight ($0): a bare title can't feed a six-brain tailoring run; the
         # first analyst will just ask for the posting and (observed live,
         # 2026-07-30) its QUESTION then cascades downstream as if it were the
         # brief, wasting every turn after it. Ask here, before any brain wakes.
         if len(posting) < 200:
-            await telegram.send(
+            await reply(
                 "That looks like just a title. Paste the FULL job posting after "
                 "/cv (requirements included) and I'll tailor the CV to it, the "
-                "more of the posting I see, the sharper the result.",
-                config=config,
+                "more of the posting I see, the sharper the result."
             )
             return
         company = _parse_company(posting)
         # A tailored run takes a while (a real model turn), ack immediately so the
         # owner knows it's working before the file lands.
         with contextlib.suppress(Exception):
-            await telegram.send(
-                f"Tailoring your CV to {company or 'the role'}… this takes ~2 min.",
-                config=config,
-            )
+            await reply(f"Tailoring your CV to {company or 'the role'}… this takes ~2 min.")
         record, flow_id = await _run_cv_flow(
             caption=posting, company=company, base_cv=None, config=config
         )
-        await _reply_with_cv(record, flow_id, company, config=config, posting=posting)
-    except Exception as exc:  # never raise into the poll loop
-        logger.warning(f"Telegram inbound: /cv command failed: {exc}")
+        await _reply_with_cv(
+            record, flow_id, company, config=config, reply=reply, posting=posting
+        )
+    except Exception as exc:  # never raise into the chat door
+        logger.warning(f"chat: /cv command failed: {exc}")
         with contextlib.suppress(Exception):
-            await telegram.send(_CV_ERROR, config=config)
+            await reply(_CV_ERROR)
 
 
 # ── the inbound hook ──────────────────────────────────────────────────────────
@@ -367,7 +359,7 @@ def _is_cv_command(stripped: str) -> bool:
     return stripped == "/cv" or stripped.startswith("/cv ") or stripped.startswith("/cv\n")
 
 
-async def on_text(text: str, *, config, chat_id: str = "") -> bool:
+async def on_text(text: str, *, config, chat_id: str = "", reply) -> bool:
     """The text hook. Returns ``True`` when the message was the cv pack's to answer.
 
     ``/cv`` replies with a file, so it is handled here rather than through the
@@ -378,7 +370,7 @@ async def on_text(text: str, *, config, chat_id: str = "") -> bool:
     """
     stripped = text.strip()
     if _is_cv_command(stripped):
-        await _answer_cv_command(text, config=config)
+        await _answer_cv_command(text, config=config, reply=reply)
         return True
 
     if not stripped.startswith("/"):
@@ -388,7 +380,9 @@ async def on_text(text: str, *, config, chat_id: str = "") -> bool:
             record, flow_id = await _run_cv_flow(
                 caption=stripped, company=company, base_cv=held["base_cv"], config=config
             )
-            await _reply_with_cv(record, flow_id, company, config=config, posting=stripped)
+            await _reply_with_cv(
+                record, flow_id, company, config=config, reply=reply, posting=stripped
+            )
             return True
         return False
 
@@ -398,9 +392,13 @@ async def on_text(text: str, *, config, chat_id: str = "") -> bool:
     return False
 
 
-async def on_document(document: dict, caption, *, config, chat_id: str = "") -> bool:
+async def on_document(
+    document: dict, caption, *, config, chat_id: str = "", reply, fetch
+) -> bool:
     """The document hook: every uploaded document is treated as a CV."""
-    await _answer_document(document, caption, config=config, chat_id=chat_id)
+    await _answer_document(
+        document, caption, config=config, chat_id=chat_id, reply=reply, fetch=fetch
+    )
     return True
 
 

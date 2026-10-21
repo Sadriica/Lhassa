@@ -596,7 +596,7 @@ class Config:
     )
     # Every this many user turns, the chat system prompt gets one extra line
     # nudging the model to mark a durable fact it learned about the owner with
-    # ``[[remember: ...]]`` (see notify/telegram_inbound.py). Not every turn, so
+    # ``[[remember: ...]]`` (see chat/think.py). Not every turn, so
     # the nudge doesn't dominate the instruction set.
     chat_memory_nudge_turns: int = _safe_int(
         os.getenv("LHASSA_CHAT_MEMORY_NUDGE_TURNS", "6"), 6

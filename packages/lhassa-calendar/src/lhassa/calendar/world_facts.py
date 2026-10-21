@@ -6,7 +6,7 @@ The persisting half of the calendar-derived world model: calls
 + analysis only, never writes) then persists each NEW candidate to the
 grande via :mod:`lhassa.memory.facts`. Dedup reuses the SAME idiom the
 Telegram ``[[remember: …]]`` marker uses
-(:func:`lhassa.notify.telegram_inbound._apply_remember_marker`): a
+(:func:`lhassa.chat.markers.apply_remember_marker`): a
 case-insensitive substring overlap with an existing fact, either direction,
 skips the write; so re-running this action as the calendar reshuffles week
 to week never piles up near-duplicate facts.

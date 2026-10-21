@@ -1,11 +1,12 @@
-"""Tests for the credential-gated Telegram notifier; httpx fully mocked."""
+"""Tests for the credential-gated Telegram client and channel; httpx fully mocked."""
 
 import asyncio
 from types import SimpleNamespace
 
 import httpx
 
-from lhassa.notify import telegram
+import lhassa.telegram.pack  # noqa: F401  (registers the telegram channel)
+from lhassa.telegram import client as telegram
 
 
 class _Resp:
@@ -154,20 +155,3 @@ def test_dispatch_swallows_channel_error(monkeypatch):
     cfg = SimpleNamespace(telegram_bot_token="TOKEN", telegram_chat_id="123")
     # Channel raised → treated as non-delivery, never propagates.
     assert asyncio.run(dispatch.notify("x", config=cfg)) is False
-
-
-def test_the_chat_reply_is_scrubbed_of_em_dashes():
-    """The rule is enforced on the reply, not just asked for in the prompt.
-
-    The chat instruction already says "never use an em dash" and a model still
-    ships one; that is why ``persona.scrub_dashes`` exists and why the notify
-    and digest passes run it. The Telegram door was the last one only asking.
-    """
-    from lhassa import persona
-    from lhassa.notify import telegram_inbound
-
-    import inspect
-
-    assert "\u2014" not in persona.scrub_dashes("listo, jefe \u2014 todo bien")
-    source = inspect.getsource(telegram_inbound._brain_reply)
-    assert "scrub_dashes" in source, "the chat reply must be scrubbed before it is sent"
