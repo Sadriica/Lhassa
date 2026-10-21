@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: AGPL-3.0-or-later */
 /* The Lhassa TUI stylesheet — every rule that used to live in inline Python
  * f-strings (app.py CSS, per-screen DEFAULT_CSS). Colors come in as the
- * `$lh-*` CSS variables from `lhassa.cli.tui.colors` (fed via
+ * `$lh-*` CSS variables from `lhassa.tui.colors` (fed via
  * `App.get_css_variables()`), themselves derived from `cli.theme`'s
  * canonical GOLD/RED/WHITE/GREEN/STONE — no color literal lives here.
  *

@@ -304,7 +304,7 @@ Subcommands (most are offline against the local brain DB, each supports `--json`
 | `beat` | Run one heartbeat tick (deterministic, $0) |
 | `config get/set/list` | Runtime settings → `~/.lhassa/settings.env` (see below) |
 | `setup` / `onboard` | The one-command wizard from a fresh clone; a short questionnaire that seeds the first facts |
-| `tui` | The Textual terminal dashboard (eight tabs, direct DB reads) |
+| `tui` | The Textual terminal dashboard (eight tabs, direct DB reads; the `lhassa-tui` pack) |
 | `org …` | Manage the brain hierarchy (1..N brains) |
 | `skills …` | Manage first-class skills (create/assign/recommend/…) |
 | `flow …` / `flows …` | Author, run and follow work-flows; the flow-templates gallery |

@@ -588,7 +588,7 @@ class Config:
     # ── TUI (lhassa tui) ────────────────────────────────────────────────────
     # dark | light | auto. "auto" detects via COLORFGBG then a short-timeout
     # OSC 11 terminal probe, defaulting to dark on any ambiguity or error; see
-    # cli/tui/colors.py:detect_theme(). A bad value degrades to "auto".
+    # tui/colors.py:detect_theme() (the lhassa-tui pack). A bad value degrades to "auto".
     tui_theme: str = os.getenv("LHASSA_TUI_THEME", "auto").strip().lower() or "auto"
 
     # ── Chat memory (rolling per-chat conversation history) ──────────────────

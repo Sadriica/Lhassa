@@ -8,7 +8,7 @@ monk-robe red / snow white / sage green / stone) from ``lhassa.cli.theme``.
 Three app-wide affordances sit on top of the tabs:
 
 * **Command palette** (``ctrl+p``); Textual's own palette, fed by
-  ``lhassa.cli.tui.palette.LhassaCommands``: jump to any screen, open the help,
+  ``lhassa.tui.palette.LhassaCommands``: jump to any screen, open the help,
   refresh, quit.
 * **Keyboard help** (``?`` / ``F1``); the whole keymap in one modal.
 * **Live refresh**: every table screen re-polls on a timer (see
@@ -26,17 +26,17 @@ from __future__ import annotations
 from textual.app import App, ComposeResult
 from textual.widgets import Footer, Header, TabbedContent, TabPane
 
-from lhassa.cli.tui import colors as tui_colors
-from lhassa.cli.tui.palette import LhassaCommands
-from lhassa.cli.tui.screens.approvals import ApprovalsScreen
-from lhassa.cli.tui.screens.flows import FlowsScreen
-from lhassa.cli.tui.screens.help import HelpScreen
-from lhassa.cli.tui.screens.memory import MemoryScreen
-from lhassa.cli.tui.screens.org import OrgScreen
-from lhassa.cli.tui.screens.overview import OverviewScreen
-from lhassa.cli.tui.screens.projects import ProjectsScreen
-from lhassa.cli.tui.screens.runs import RunsScreen
-from lhassa.cli.tui.screens.skills import SkillsScreen
+from lhassa.tui import colors as tui_colors
+from lhassa.tui.palette import LhassaCommands
+from lhassa.tui.screens.approvals import ApprovalsScreen
+from lhassa.tui.screens.flows import FlowsScreen
+from lhassa.tui.screens.help import HelpScreen
+from lhassa.tui.screens.memory import MemoryScreen
+from lhassa.tui.screens.org import OrgScreen
+from lhassa.tui.screens.overview import OverviewScreen
+from lhassa.tui.screens.projects import ProjectsScreen
+from lhassa.tui.screens.runs import RunsScreen
+from lhassa.tui.screens.skills import SkillsScreen
 
 
 class LhassaTui(App):
@@ -60,9 +60,9 @@ class LhassaTui(App):
     COMMANDS = App.COMMANDS | {LhassaCommands}
 
     #: All styling lives in the stylesheet now (resolved relative to this
-    #: module's directory: ``lhassa/cli/tui/lhassa.tcss``). Colors reach it as
+    #: module's directory: ``lhassa/tui/lhassa.tcss``). Colors reach it as
     #: ``$lh-*`` CSS variables via :meth:`get_css_variables`, sourced from
-    #: ``lhassa.cli.tui.colors``: never a literal hex in this file.
+    #: ``lhassa.tui.colors``: never a literal hex in this file.
     CSS_PATH = "lhassa.tcss"
 
     BINDINGS = [
@@ -90,7 +90,7 @@ class LhassaTui(App):
         self._instance_id = instance_id
 
     def get_css_variables(self) -> dict[str, str]:
-        """Feed the ``$lh-*`` palette (see ``cli/tui/colors.py``) to the stylesheet."""
+        """Feed the ``$lh-*`` palette (see ``tui/colors.py``) to the stylesheet."""
         variables = super().get_css_variables()
         try:
             variables.update(tui_colors.variables(self._theme_name))
@@ -123,7 +123,7 @@ class LhassaTui(App):
     def on_mount(self) -> None:
         """Redirect loguru into Textual's own log for the session's lifetime.
 
-        ``cli/app.py:tui_cmd`` already calls ``_boot.quiet_logging()`` before the
+        ``tui/command.py:tui_cmd`` already calls ``_boot.quiet_logging()`` before the
         app is constructed, which drops the DEBUG→stderr default sink for a
         WARNING+ one. That is still a stderr sink, though, and Textual owns the
         alternate screen from here on. ANY stderr write bleeds through and

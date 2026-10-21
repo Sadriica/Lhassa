@@ -47,8 +47,8 @@ lhassa/cli/org_cmds.py
 lhassa/cli/project_cmds.py
 lhassa/cli/seed_cmds.py
 lhassa/cli/skills_cmds.py
-lhassa/cli/tui/screens/base.py
-lhassa/cli/tui/screens/overview.py
+packages/lhassa-tui/src/lhassa/tui/screens/base.py
+packages/lhassa-tui/src/lhassa/tui/screens/overview.py
 lhassa/cli/utility_cmds.py
 lhassa/legal.py
 lhassa/llm/prompt.py
@@ -71,4 +71,4 @@ scripts/launchd/README.md
 tests/test_kg.py
 tests/test_memory_load.py
 tests/test_setup_cmds.py
-tests/test_tui_screens.py
+packages/lhassa-tui/tests/test_tui_screens.py

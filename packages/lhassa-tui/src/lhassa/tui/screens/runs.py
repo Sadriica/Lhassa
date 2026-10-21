@@ -1,14 +1,14 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """Runs screen; a DataTable of recent durable runs across all entities.
 
-Now a :class:`~lhassa.cli.tui.screens.base.TableScreen`: it gains the ``/``
+Now a :class:`~lhassa.tui.screens.base.TableScreen`: it gains the ``/``
 substring filter and the live re-poll for free, and keeps its direct
 ``core/db.py`` read (works with the API server down).
 """
 
 from __future__ import annotations
 
-from lhassa.cli.tui.screens.base import EMPTY, Row, TableScreen
+from lhassa.tui.screens.base import EMPTY, Row, TableScreen
 
 
 async def _load_runs(instance_id: str) -> list[dict]:

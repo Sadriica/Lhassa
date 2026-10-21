@@ -42,7 +42,10 @@ from typing import Iterator
 # The forbidden directions encode "inner layers must not reach out to shells",
 # the keystone-leaf rule, and the model-vs-harness swap-axis independence.
 
-SHELLS = {"cli", "api", "voice", "notify", "org", "dashboard", "actionpack", "flows"}
+# ``tui`` (the lhassa-tui pack) is a shell end to end: every screen composes
+# core/db, flows, skills and org reads plus the approval/delegate mutations, so
+# it ships as one shell subpackage rather than an inner core plus ``surfaces/``.
+SHELLS = {"cli", "api", "voice", "notify", "org", "dashboard", "actionpack", "flows", "tui"}
 
 
 @dataclass(frozen=True)

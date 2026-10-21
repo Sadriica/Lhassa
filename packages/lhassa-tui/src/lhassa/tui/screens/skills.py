@@ -9,7 +9,7 @@ offline; no API server, no model.
 
 from __future__ import annotations
 
-from lhassa.cli.tui.screens.base import EMPTY, Row, TableScreen
+from lhassa.tui.screens.base import EMPTY, Row, TableScreen
 
 
 def _load_skills() -> list:

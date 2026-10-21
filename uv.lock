@@ -15,6 +15,7 @@ members = [
     "lhassa-calendar",
     "lhassa-cv",
     "lhassa-research",
+    "lhassa-tui",
     "lhassa-voice",
 ]
 
@@ -1099,7 +1100,6 @@ dependencies = [
     { name = "python-dotenv" },
     { name = "rich" },
     { name = "starlette" },
-    { name = "textual" },
     { name = "typer" },
     { name = "uvicorn", extra = ["standard"] },
 ]
@@ -1135,7 +1135,6 @@ requires-dist = [
     { name = "rich", specifier = ">=13.0.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.4.0" },
     { name = "starlette", specifier = "<1.0.0" },
-    { name = "textual", specifier = ">=8.2.8" },
     { name = "tiktoken", marker = "extra == 'tokens'", specifier = ">=0.7.0" },
     { name = "typer", specifier = ">=0.12.0" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.29.0" },
@@ -1193,6 +1192,21 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [{ name = "lhassa", editable = "." }]
+
+[[package]]
+name = "lhassa-tui"
+version = "0.8.0"
+source = { editable = "packages/lhassa-tui" }
+dependencies = [
+    { name = "lhassa" },
+    { name = "textual" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "lhassa", editable = "." },
+    { name = "textual", specifier = ">=8.2.8" },
+]
 
 [[package]]
 name = "lhassa-voice"

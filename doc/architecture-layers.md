@@ -19,7 +19,7 @@ From the bottom (depends on nothing) to the top (the world-facing surfaces):
 | **Interfaces (mid)** | `memory/`, `security/`, `llm/`, `personal/` | Reusable contracts (typed facts, trust/approval, model provider + router, the personal agenda read-model). Usable by any shell; depend on none. |
 | **Adapters (the hands)** | `harness/`, `tools/`, `agents/`, `remote/`, `health/`, `bench/` | The rentable "body": harnesses, MCP/tools, specialist agents, the remote local-agent, the LhassaBench eval harness. |
 | **File-I/O seams** | `cv/`, `calendar/` | Leaf, stdlib-only seams (`.tex` CV, `.ics` calendar) used by shells; never reach into one. |
-| **Shells (outer)** | `cli/`, `api/`, `voice/`, `notify/`, `org/`, `actionpack/`, `flows/`, `dashboard/` (JS) | The user/world surfaces. Allowed to compose everything below them. `flows/` counts as a shell because its engine composes the org layer. |
+| **Shells (outer)** | `cli/`, `api/`, `voice/`, `notify/`, `org/`, `actionpack/`, `flows/`, `tui/`, `dashboard/` (JS) | The user/world surfaces. Allowed to compose everything below them. `flows/` counts as a shell because its engine composes the org layer. `tui/` (the `lhassa-tui` pack) is a shell end to end, so it has no `surfaces/` split. |
 
 Principle: **inner layers never depend on outer shells.** Dependencies point
 "down" only. A shell may import the spine, interfaces and adapters; the spine and
@@ -28,7 +28,7 @@ the interfaces must not import a shell.
 ## Forbidden directions (encoded today)
 
 1. **spine-isolation**: `core/` must not import any shell
-   (`cli`, `api`, `voice`, `notify`, `org`, `actionpack`, `flows`, `dashboard`).
+   (`cli`, `api`, `voice`, `notify`, `org`, `actionpack`, `flows`, `tui`, `dashboard`).
 2. **interface-isolation**: `memory/`, `security/`, `llm/` must not import any
    shell. **personal-isolation** applies the same rule to `personal/`.
 3. **adapter-isolation**: `harness/`, `tools/`, `agents/`, `remote/`, `health/`,
@@ -76,7 +76,7 @@ A capability can leave the core tree and ship as its own distribution under
 module moves into a pack. Packs are discovered as plugins (`lhassa.plugins`
 entry points, loaded by `actionpack.register_all()`), and reach the surfaces
 through `lhassa/extensions.py` (`register_api_router`, `register_cli_app`,
-`register_pack_migrations`, `register_pack`) plus the registries that already
+`register_cli_command`, `register_pack_migrations`, `register_pack`) plus the registries that already
 existed (actions, commands, seeds, channels, senses, providers).
 
 The guard walks `packages/*/src/lhassa` too and adds two rules on top of the

@@ -352,3 +352,23 @@ def test_the_audit_door_is_bindable_and_defaults_to_voice():
     assert current_door() == "cli_tool"
     reset_door(tok)
     assert current_door() == "voice_tool"
+
+
+def test_absent_pack_command_prints_install_hint_not_a_chat():
+    """``lhassa tui`` without the lhassa-tui pack must not become a paid chat turn."""
+    import typer
+    from typer.testing import CliRunner
+
+    from lhassa.cli import app as app_mod
+    from lhassa.extensions import CLI_COMMANDS
+
+    probe = typer.Typer()
+    probe.command("noop")(lambda: None)
+    probe.command("tui")(app_mod._absent_pack_stub("tui", "lhassa-tui"))
+    result = CliRunner().invoke(probe, ["tui"])
+    assert result.exit_code == 1
+    assert "uv sync --package lhassa-tui" in result.output
+    if "tui" not in CLI_COMMANDS:
+        # Core alone: the real CLI routes `tui` to the stub, never to chat.
+        real = CliRunner().invoke(app_mod.app, ["tui"])
+        assert real.exit_code == 1 and "lhassa-tui" in real.output

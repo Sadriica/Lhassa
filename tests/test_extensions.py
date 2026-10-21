@@ -39,6 +39,29 @@ def test_surface_registration_first_wins():
         extensions.CLI_APPS.unregister(name)
 
 
+def test_cli_command_registration_first_wins_and_mounts_as_one_command():
+    import typer
+    from typer.testing import CliRunner
+
+    name = "test-cmd"
+    try:
+        def first() -> None:
+            """First."""
+            typer.echo("first")
+
+        extensions.register_cli_command(name, lambda: first)
+        extensions.register_cli_command(name, lambda: (lambda: None))
+        assert extensions.CLI_COMMANDS.get(name)() is first
+        # Mounted the way cli/app.py mounts it: a top-level command, no subcommand.
+        app = typer.Typer()
+        app.command("noop")(lambda: None)
+        app.command(name)(extensions.CLI_COMMANDS.get(name)())
+        result = CliRunner().invoke(app, [name])
+        assert result.exit_code == 0 and "first" in result.output
+    finally:
+        extensions.CLI_COMMANDS.unregister(name)
+
+
 async def _create_widgets(conn):
     await conn.execute("CREATE TABLE pack_widgets (id INTEGER PRIMARY KEY)")
 

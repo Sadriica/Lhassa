@@ -35,7 +35,9 @@ packages/lhassa-<name>/
    `core.watchlist.register_check`, `notify.channels.register_channel`,
    `llm.provider.register_provider`; and the surface ones in
    `lhassa/extensions.py`: `register_api_router(name, factory)`,
-   `register_cli_app(name, factory)`, `register_pack_migrations(pack, migrations)`.
+   `register_cli_app(name, factory)`, `register_cli_command(name, factory)` (a
+   single top-level command with no subcommands, like `lhassa tui`),
+   `register_pack_migrations(pack, migrations)`.
    Surface factories import their module lazily (inside the factory), so a
    process that never serves the API never imports fastapi through a pack.
    Registration must be idempotent (tests import twice).

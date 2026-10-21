@@ -15,7 +15,7 @@ from __future__ import annotations
 from textual.app import ComposeResult
 from textual.widgets import DataTable, Static
 
-from lhassa.cli.tui.screens.base import EMPTY, Row, TableScreen
+from lhassa.tui.screens.base import EMPTY, Row, TableScreen
 
 
 def _load_flows() -> list:

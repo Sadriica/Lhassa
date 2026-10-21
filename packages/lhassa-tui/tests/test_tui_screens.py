@@ -39,7 +39,7 @@ def brain(tmp_path, monkeypatch):
 
 
 def _app():
-    from lhassa.cli.tui.app import LhassaTui
+    from lhassa.tui.app import LhassaTui
 
     return LhassaTui(instance_id=INSTANCE)
 
@@ -66,7 +66,7 @@ async def test_every_tab_mounts_on_an_empty_brain(brain):
 
 @pytest.mark.asyncio
 async def test_palette_offers_one_entry_per_tab_plus_the_app_actions(brain):
-    from lhassa.cli.tui.palette import LhassaCommands
+    from lhassa.tui.palette import LhassaCommands
 
     app = _app()
     async with app.run_test() as pilot:
@@ -104,7 +104,7 @@ async def test_switch_tab_ignores_an_unknown_id(brain):
 
 @pytest.mark.asyncio
 async def test_help_overlay_opens_and_closes(brain):
-    from lhassa.cli.tui.screens.help import HelpScreen
+    from lhassa.tui.screens.help import HelpScreen
 
     app = _app()
     async with app.run_test() as pilot:
@@ -151,7 +151,7 @@ async def test_filter_narrows_the_rows(brain):
         table = app.query_one("#runs-table", DataTable)
         assert table.row_count == 2
 
-        from lhassa.cli.tui.screens.runs import RunsScreen
+        from lhassa.tui.screens.runs import RunsScreen
 
         screen = app.query_one(RunsScreen)
         screen.action_focus_filter()
@@ -213,7 +213,7 @@ async def test_refresh_is_a_no_op_when_nothing_changed(brain):
     async with app.run_test() as pilot:
         app.query_one(TabbedContent).active = "runs"
         await pilot.pause()
-        from lhassa.cli.tui.screens.runs import RunsScreen
+        from lhassa.tui.screens.runs import RunsScreen
 
         screen = app.query_one(RunsScreen)
         before = screen._signature
