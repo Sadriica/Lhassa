@@ -436,3 +436,16 @@ test('settings is provider-agnostic by default and reveals raw details in advanc
   await expect(page.getByText('opencode_model', { exact: true })).toBeVisible()
   await expect(page.getByText('env LHASSA_OPENCODE_MODEL')).toBeVisible()
 })
+
+test('nav hides the sections whose capability pack is absent', async ({ page }) => {
+  await page.route('**/api/packs', async (route) => {
+    await route.fulfill({ json: { packs: [{ name: 'api', summary: 'Dashboard + API' }, { name: 'cv', summary: 'CV' }] } })
+  })
+  await page.goto('/')
+
+  await expect(page.getByRole('button', { name: /Postulaciones/ }).first()).toBeVisible()
+  await expect(page.getByRole('button', { name: /^Research$/ })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: /^Calendar$/ })).toHaveCount(0)
+  // Core sections never depend on a pack.
+  await expect(page.getByRole('button', { name: /Settings/ }).first()).toBeVisible()
+})
