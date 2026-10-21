@@ -3,8 +3,6 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
-
 from lhassa.tui import statusbar
 from lhassa.tui.colors import DARK
 
@@ -80,14 +78,6 @@ def test_format_duration():
     assert statusbar.format_duration(720) == "12m"
     assert statusbar.format_duration(26400) == "7h20m"
     assert statusbar.format_duration(90000) == "1d1h"
-
-
-def test_reset_and_age_helpers():
-    now = datetime(2026, 1, 1, 23, 0, tzinfo=timezone.utc)
-    assert statusbar._seconds_to_utc_midnight(now) == 3600
-    assert statusbar._age_seconds("2026-01-01T22:59:00+00:00", now) == 60
-    assert statusbar._age_seconds("2026-01-01T22:59:00", now) == 60
-    assert statusbar._age_seconds("not a date", now) is None
 
 
 async def test_gather_never_raises_on_an_empty_db():

@@ -49,6 +49,7 @@ from lhassa.cli import setup_cmds as _setup_cmds  # noqa: E402
 from lhassa.cli import share_cmds as _share_cmds  # noqa: E402
 from lhassa.cli import skills_cmds as _skills_cmds  # noqa: E402
 from lhassa.cli import project_cmds as _project_cmds  # noqa: E402
+from lhassa.cli import repl_ui as _repl_ui  # noqa: E402
 from lhassa.cli import task_cmds as _task_cmds  # noqa: E402
 from lhassa.cli import tools_cmds as _tools_cmds  # noqa: E402
 from lhassa.cli.theme import LHASSA_THEME, cost_markup, prompt_fragments  # noqa: E402
@@ -120,85 +121,131 @@ def _emit(result: "agent.CliResult", json_out: bool) -> None:
     _print_cost(err, result)
 
 
-_REPL_HELP = (
-    "[title]Lhassa[/] [dim]commands:[/]\n"
-    "  [accent]/help[/]    [dim]show this[/]\n"
-    "  [accent]/status[/]  [dim]the brain at a glance (overview)[/]\n"
-    "  [accent]/skills[/]  [dim]installed skills[/]\n"
-    "  [accent]/tools[/]   [dim]self-written tools[/]\n"
-    "  [accent]/usage[/]   [dim]tokens + cost this session[/]\n"
-    "  [accent]/reset[/]   [dim]forget this conversation (start fresh)[/]\n"
-    "  [accent]/clear[/]   [dim]clear the screen[/]\n"
-    "  [accent]/exit[/]    [dim]quit (or Ctrl-D)[/]\n"
-    "[dim]Anything else is a message. For power tools run e.g. "
-    "[/][model]lhassa org tree[/][dim], [/][model]lhassa skills[/][dim], "
-    "[/][model]lhassa capabilities[/][dim].[/]"
-)
+def _repl_status(err: Console) -> dict:
+    """The status snapshot for the toolbar; an empty dict if it cannot be read."""
+    try:
+        return asyncio.run(_repl_ui.status_view.gather())
+    except Exception:
+        return {}
+
+
+def _repl_resolve(err: Console, line: str, approved: bool) -> None:
+    parts = line.split(maxsplit=1)
+    if len(parts) < 2:
+        err.print(f"[dim]usage: {parts[0]} <id>  (ids are in /approvals)[/]")
+        return
+    try:
+        if approved:
+            _commands.approve_cmd(parts[1].strip(), by_actor="duenio", json_out=False)
+        else:
+            _commands.deny_cmd(parts[1].strip(), by_actor="duenio", json_out=False)
+    except (typer.BadParameter, click.ClickException) as e:
+        err.print(f"[error]✗[/] [accent]{e.format_message() if hasattr(e, 'format_message') else e}[/]")
 
 
 def _repl() -> None:
     from prompt_toolkit import PromptSession
-    from prompt_toolkit.history import InMemoryHistory
+    from prompt_toolkit.history import FileHistory, InMemoryHistory
+    from prompt_toolkit.styles import Style, merge_styles
 
     out = _console()
     err = _console(stderr=True)
-    session: PromptSession = PromptSession(history=InMemoryHistory(), multiline=False)
+    try:
+        path = _repl_ui.history_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        hist = FileHistory(str(path))
+    except Exception:  # an unwritable home must not cost the REPL
+        hist = InMemoryHistory()
     prompt_text, prompt_style = prompt_fragments()
+    style = merge_styles([prompt_style, Style.from_dict(_repl_ui.TOOLBAR_STYLE)])
+    snap: dict = {}
+    session: PromptSession = PromptSession(
+        history=hist,
+        multiline=False,
+        completer=_repl_ui.SlashCompleter(),
+        complete_while_typing=True,
+        bottom_toolbar=lambda: _repl_ui.toolbar_fragments(snap) if snap else "",
+        placeholder=[("class:placeholder", "Ask anything, or / for commands")],
+        style=style,
+    )
 
     totals = {"in": 0, "out": 0, "cost": 0.0}
     # The conversation, in process memory only (never written to disk): the REPL is a
     # conversation, not a row of unrelated one-shots. Trimmed to the last N turns in
     # agent._seed_messages, and dropped entirely on /reset.
     history: list[tuple[str, str]] = []
-    # A clean, quiet header (no log spam; see _boot.quiet_logging).
+
+    try:
+        data = asyncio.run(_repl_ui.gather_welcome())
+    except Exception:
+        data = {"status": {}, "agenda": None}
+    snap.update(data.get("status") or {})
     err.print()
-    err.print("  [brand]ᕮ Lhassa[/]  [dim]· quietly awake. Ask me anything.[/]")
-    err.print("  [dim]/help · /exit (Ctrl-D) · /usage[/]")
+    try:
+        from importlib.metadata import version as _version
+
+        ver = f"v{_version('lhassa')}"
+    except Exception:
+        ver = ""
+    try:
+        err.print(_repl_ui.welcome(data, width=err.width, version=ver))
+    except Exception:  # the card is decoration; the REPL must still open
+        err.print("  [brand]ᕮ Lhassa[/]  [dim]· quietly awake. Ask me anything.[/]")
+    err.print(_repl_ui.hints())
     err.print()
 
     while True:
         try:
-            line = session.prompt(prompt_text, style=prompt_style)
+            line = session.prompt(prompt_text)
         except (EOFError, KeyboardInterrupt):
             break
         line = line.strip()
         if not line:
             continue
-        if line in ("/exit", "/quit"):
-            break
-        if line in ("/help", "/?"):
-            err.print(_REPL_HELP)
-            continue
-        if line == "/clear":
-            out.clear()
-            continue
-        if line in ("/reset", "/new"):
-            history.clear()
-            err.print("[dim]conversation reset.[/]")
-            continue
-        if line in ("/status", "/overview"):
-            try:
-                err.print(_extra_cmds.overview_text())
-            except Exception as e:  # a degraded subsystem must not kill the REPL
-                err.print(f"[error]✗[/] [accent]{e}[/]")
-            continue
-        if line == "/skills":
-            try:
-                err.print(_extra_cmds.skills_text())
-            except Exception as e:
-                err.print(f"[error]✗[/] [accent]{e}[/]")
-            continue
-        if line == "/tools":
-            try:
-                err.print(_extra_cmds.tools_text())
-            except Exception as e:
-                err.print(f"[error]✗[/] [accent]{e}[/]")
-            continue
-        if line == "/usage":
-            err.print(
-                f"[dim]session ·[/] [tokens]{totals['in']}+{totals['out']} tok[/] "
-                f"[dim]·[/] [cost]${totals['cost']:.4f}[/]"
-            )
+        head = line.split(maxsplit=1)[0]
+        head = _repl_ui.ALIASES.get(head, head)
+        if head.startswith("/"):
+            if head == "/exit":
+                break
+            if head == "/help":
+                err.print(_repl_ui.help_markup())
+            elif head == "/clear":
+                out.clear()
+            elif head == "/reset":
+                history.clear()
+                err.print("[dim]conversation reset.[/]")
+            elif head == "/status":
+                try:
+                    err.print(_extra_cmds.overview_text())
+                except Exception as e:  # a degraded subsystem must not kill the REPL
+                    err.print(f"[error]✗[/] [accent]{e}[/]")
+            elif head == "/agenda":
+                err.print(_repl_ui.agenda_markup(asyncio.run(_repl_ui._agenda_items())))
+            elif head == "/approvals":
+                try:
+                    _commands.approvals_cmd(json_out=False)
+                except Exception as e:
+                    err.print(f"[error]✗[/] [accent]{e}[/]")
+            elif head in ("/approve", "/deny"):
+                _repl_resolve(err, line, approved=head == "/approve")
+            elif head == "/skills":
+                try:
+                    err.print(_extra_cmds.skills_text())
+                except Exception as e:
+                    err.print(f"[error]✗[/] [accent]{e}[/]")
+            elif head == "/tools":
+                try:
+                    err.print(_extra_cmds.tools_text())
+                except Exception as e:
+                    err.print(f"[error]✗[/] [accent]{e}[/]")
+            elif head == "/usage":
+                err.print(
+                    f"[dim]session ·[/] [tokens]{totals['in']}+{totals['out']} tok[/] "
+                    f"[dim]·[/] [cost]${totals['cost']:.4f}[/]"
+                )
+            else:
+                err.print(f"[dim]unknown command {head}; /help lists them.[/]")
+            snap.update(_repl_status(err) or {})
             continue
         try:
             result = _run_sync(line, history)
@@ -220,6 +267,7 @@ def _repl() -> None:
         totals["out"] += result.output_tokens
         totals["cost"] += result.cost_usd
         _print_cost(err, result)
+        snap.update(_repl_status(err) or {})
 
     err.print("[dim]bye.[/]")
 
