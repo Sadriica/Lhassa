@@ -33,7 +33,9 @@ packages/lhassa-<name>/
    then the existing registries: `core.actions.register_action`,
    `notify.commands.register_command`, `seeds.register_seed`,
    `core.watchlist.register_check`, `notify.channels.register_channel`,
-   `llm.provider.register_provider`; and the surface ones in
+   `llm.provider.register_provider`, `security.allowlist.register_action_spec`
+   (the policy row for each action the pack ships: without one the action is
+   denied, and a pack can never redefine a core row); and the surface ones in
    `lhassa/extensions.py`: `register_api_router(name, factory)`,
    `register_cli_app(name, factory)`, `register_pack_migrations(pack, migrations)`.
    Surface factories import their module lazily (inside the factory), so a

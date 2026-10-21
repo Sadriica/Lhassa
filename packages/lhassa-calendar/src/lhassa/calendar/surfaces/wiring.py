@@ -39,6 +39,19 @@ def register() -> None:
     # rhythm bootstrapped from the calendar feed into durable facts).
     _reg("derive_world_facts", world_facts.derive_world_facts)
 
+    # Policy rows (deny-by-default holds without them). calendar_sync is a
+    # deterministic $0 diff that delivers an .ics per unsynced event and never
+    # writes to any calendar; derive_world_facts reads the calendar and writes
+    # facts. Neither sends anything external, so no approval hop.
+    from lhassa.security.allowlist import WILDCARD, ActionSpec, register_action_spec
+    from lhassa.security.trust import TrustLevel
+
+    for name in ("calendar_sync", "derive_world_facts"):
+        register_action_spec(
+            name,
+            ActionSpec(objetivos=WILDCARD, min_trust=TrustLevel.INTERNO, requires_approval=False),
+        )
+
     capability.register()
     register_reminder_extra("calendar_event", _commands.deliver_calendar_event)
     register_event_source("calendar", agenda_events)

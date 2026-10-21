@@ -13,8 +13,16 @@ def _register_actions() -> None:
     from lhassa.core.actions import _REGISTRY, register_action
     from lhassa.cv.actions import compile_cv
 
+    from lhassa.security.allowlist import WILDCARD, ActionSpec, register_action_spec
+    from lhassa.security.trust import TrustLevel
+
     if _REGISTRY.get_or_none("compile_cv") is None:
         register_action("compile_cv", compile_cv)
+    # Compiles the on-disk .tex with tectonic; local file work, no send.
+    register_action_spec(
+        "compile_cv",
+        ActionSpec(objetivos=WILDCARD, min_trust=TrustLevel.INTERNO, requires_approval=False),
+    )
 
 
 # ── chat commands ─────────────────────────────────────────────────────────────

@@ -32,12 +32,27 @@ def _register_actions() -> None:
     from lhassa.research.note import draft_research_note
     from lhassa.research.surfaces.intake import research_intake
 
+    from lhassa.security.allowlist import WILDCARD, ActionSpec, register_action_spec
+    from lhassa.security.trust import TrustLevel
+
     for name, fn in (
         ("draft_research_note", draft_research_note),
         ("research_intake", research_intake),
     ):
         if name not in ACTIONS:
             register_action(name, fn)
+    # Policy rows (deny-by-default holds without them). Drafting: local
+    # instrument reads + ONE routine-model pass + a write confined to
+    # doc/notes/drafts, never published by the brain. Intake: the owner's
+    # explicit /idea, so HUMANO trust; source reads + a review-only draft.
+    register_action_spec(
+        "draft_research_note",
+        ActionSpec(objetivos=WILDCARD, min_trust=TrustLevel.INTERNO, requires_approval=False),
+    )
+    register_action_spec(
+        "research_intake",
+        ActionSpec(objetivos=WILDCARD, min_trust=TrustLevel.HUMANO, requires_approval=False),
+    )
 
 
 def _register_verifiers() -> None:

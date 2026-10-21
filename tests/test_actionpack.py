@@ -88,7 +88,7 @@ def test_allowlist_has_all_15_actions():
         "run_command", "system_snapshot", "power_mode",
         "add_fact", "backup_memory", "consolidate_memory",
         "notify", "add_task", "set_task_state", "list_approvals",
-        "check_health", "git_status_repos", "compile_cv",
+        "check_health", "git_status_repos",
     }
     for name in phase3_actions:
         assert name in al, f"Action {name!r} missing from allowlist"
@@ -109,7 +109,7 @@ def test_other_actions_do_not_require_approval():
         "web_fetch", "ping_url", "system_snapshot", "power_mode",
         "add_fact", "backup_memory", "consolidate_memory",
         "notify", "add_task", "set_task_state", "list_approvals",
-        "check_health", "git_status_repos", "compile_cv",
+        "check_health", "git_status_repos",
     }
     for name in no_approval:
         assert not al[name].requires_approval, f"{name!r} should not require approval"

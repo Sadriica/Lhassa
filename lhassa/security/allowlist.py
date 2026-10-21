@@ -58,8 +58,8 @@ def _config_repos() -> "set[str] | str":
     return Config.allowlist_repos
 
 
-def build_allowlist(repos: "set[str] | str | None" = None) -> dict[str, ActionSpec]:
-    """Build the action policy table. ``repos`` overrides the ``sync_repo`` targets.
+def _core_allowlist(repos: "set[str] | str | None" = None) -> dict[str, ActionSpec]:
+    """Build core's action policy table. ``repos`` overrides the ``sync_repo`` targets.
 
     Phase-0 entry: ``sync_repo`` (the first typed task, §2.5).
     Phase-3 entries: the 15 actionpack actions.
@@ -109,11 +109,6 @@ def build_allowlist(repos: "set[str] | str | None" = None) -> dict[str, ActionSp
             objetivos=WILDCARD,
             min_trust=TrustLevel.INTERNO,
             requires_approval=True,   # high-risk: execute arbitrary shell code
-        ),
-        "compile_cv": ActionSpec(
-            objetivos=WILDCARD,
-            min_trust=TrustLevel.INTERNO,
-            requires_approval=False,
         ),
         "backup_memory": ActionSpec(
             objetivos=WILDCARD,
@@ -210,11 +205,6 @@ def build_allowlist(repos: "set[str] | str | None" = None) -> dict[str, ActionSp
             min_trust=TrustLevel.INTERNO,
             requires_approval=False,  # read-only web search + a chat message
         ),
-        "research_intake": ActionSpec(
-            objetivos=WILDCARD,
-            min_trust=TrustLevel.HUMANO,
-            requires_approval=False,  # explicit /idea: source reads + review-only draft
-        ),
         "send_reminder": ActionSpec(
             objetivos=WILDCARD,
             min_trust=TrustLevel.INTERNO,
@@ -231,13 +221,6 @@ def build_allowlist(repos: "set[str] | str | None" = None) -> dict[str, ActionSp
         ),
         # ── Etapa 2; operative day via Telegram ─────────────────────────────
         "send_digest": ActionSpec(
-            objetivos=WILDCARD,
-            min_trust=TrustLevel.INTERNO,
-            requires_approval=False,
-        ),
-        # ── Master calendar reconcile; deterministic $0 diff + a delivered
-        # .ics per unsynced event; never writes to any calendar directly.
-        "calendar_sync": ActionSpec(
             objetivos=WILDCARD,
             min_trust=TrustLevel.INTERNO,
             requires_approval=False,
@@ -274,18 +257,10 @@ def build_allowlist(repos: "set[str] | str | None" = None) -> dict[str, ActionSp
             min_trust=TrustLevel.INTERNO,
             requires_approval=False,
         ),
-        # ── Calendar-derived world model; read-only calendar derivation +
-        # a fact write, no external send, no HITL-worthy surface (mirrors
-        # calendar_sync/add_fact, both also requires_approval=False).
-        "derive_world_facts": ActionSpec(
-            objetivos=WILDCARD,
-            min_trust=TrustLevel.INTERNO,
-            requires_approval=False,
-        ),
         # ── Document perception; index the owner's opt-in knowledge roots ───
         # Read-only filesystem scan + a local write to the grande; no external
         # send, empty roots by default (nothing runs until the owner sets
-        # LHASSA_KNOWLEDGE_ROOTS). Mirrors calendar_sync/distill_memory.
+        # LHASSA_KNOWLEDGE_ROOTS). Mirrors distill_memory.
         "ingest_knowledge": ActionSpec(
             objetivos=WILDCARD,
             min_trust=TrustLevel.INTERNO,
@@ -316,14 +291,6 @@ def build_allowlist(repos: "set[str] | str | None" = None) -> dict[str, ActionSp
         # Knowledge-graph sync; read-only fact/episode scan + local graph
         # write; same $0 hygiene tier as ingest_knowledge.
         "kg_sync": ActionSpec(
-            objetivos=WILDCARD,
-            min_trust=TrustLevel.INTERNO,
-            requires_approval=False,
-        ),
-        # Research-note drafting: local instrument reads + ONE routine-model
-        # pass + a write confined to doc/notes/drafts (a draft is never
-        # published by the brain; the header says review-before-publishing).
-        "draft_research_note": ActionSpec(
             objetivos=WILDCARD,
             min_trust=TrustLevel.INTERNO,
             requires_approval=False,
@@ -362,6 +329,44 @@ def build_allowlist(repos: "set[str] | str | None" = None) -> dict[str, ActionSp
         ),
     }
 
+
+# Policy rows declared by capability packs for their OWN actions (see
+# ``register_action_spec``). Kept apart so ``build_allowlist`` can rebuild the
+# table without losing them, and so a pack can never shadow a core row.
+PACK_SPECS: dict[str, ActionSpec] = {}
+
+
+def register_action_spec(name: str, spec: ActionSpec) -> ActionSpec:
+    """Declare the policy row for an action a capability pack ships.
+
+    Deny-by-default is unchanged: an action with no row (a pack that declares
+    none, or a pack not installed) is still refused by :func:`allow`. A pack
+    may only describe its own actions: a name that core's table already owns
+    raises, so installing a pack can never relax or replace core policy.
+    Re-registering the same name with an equal spec is a no-op (tests and
+    reloads import packs twice); a different spec for it raises.
+    """
+    if name in _CORE_NAMES:
+        raise ValueError(f"action {name!r} is core policy; a pack cannot redefine it")
+    existing = PACK_SPECS.get(name)
+    if existing is not None:
+        if existing != spec:
+            raise ValueError(f"action {name!r} already has a different pack policy")
+        return existing
+    PACK_SPECS[name] = spec
+    ALLOWLIST[name] = spec
+    return spec
+
+
+def build_allowlist(repos: "set[str] | str | None" = None) -> dict[str, ActionSpec]:
+    """The full policy table: core rows plus every installed pack's own rows."""
+    table = _core_allowlist(repos)
+    for name, spec in PACK_SPECS.items():
+        table.setdefault(name, spec)
+    return table
+
+
+_CORE_NAMES: frozenset[str] = frozenset(_core_allowlist(WILDCARD))
 
 # The canonical policy table. Rebuild via ``build_allowlist`` if config changes.
 ALLOWLIST: dict[str, ActionSpec] = build_allowlist()

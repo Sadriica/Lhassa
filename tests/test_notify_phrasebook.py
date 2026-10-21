@@ -25,11 +25,25 @@ from lhassa.notify import phrasebook, voice
 from lhassa.security.allowlist import build_allowlist
 
 
+# Actions a capability pack ships, with their policy row declared by the pack
+# (``allowlist.register_action_spec``). Their phrasing stays in core's
+# phrasebook as name-only data, so with the pack absent (``make test-core``)
+# the entry is dormant, not an orphan.
+PACK_ACTIONS = frozenset(
+    {"compile_cv", "research_intake", "draft_research_note", "calendar_sync", "derive_world_facts"}
+)
+
+
 def _reachable_actions() -> set[str]:
     """Every action that can reach the owner as an action-result: the closed
     allowlist union'd with the temple's closed wrapper set (temple_run fronts
     these, but the underlying action name is what a real phrasing needs)."""
     return set(build_allowlist(repos="*").keys()) | set(TEMPLE_ACTIONS)
+
+
+def _known_actions() -> set[str]:
+    """Reachable actions plus pack actions whose pack may not be installed."""
+    return _reachable_actions() | PACK_ACTIONS
 
 
 def test_every_allowlisted_action_has_a_phrasing():
@@ -44,13 +58,13 @@ def test_every_allowlisted_action_has_a_phrasing():
 def test_phrasebook_has_no_orphan_entries():
     """Every phrasebook entry names a real, currently-allowlisted (or temple)
     action; no stale phrasing left behind after an action is retired."""
-    reachable = _reachable_actions()
+    reachable = _known_actions()
     orphans = sorted(set(phrasebook.PHRASES) - reachable)
     assert not orphans, f"phrasebook entries for actions that no longer exist: {orphans}"
 
 
 def test_intent_overrides_only_name_known_actions():
-    reachable = _reachable_actions()
+    reachable = _known_actions()
     unknown = sorted(
         (phrasebook.LEARNED_ACTIONS | phrasebook.ATTENTION_ACTIONS) - reachable
     )
