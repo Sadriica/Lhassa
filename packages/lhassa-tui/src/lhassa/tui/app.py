@@ -13,6 +13,9 @@ Three app-wide affordances sit on top of the tabs:
 * **Keyboard help** (``?`` / ``F1``); the whole keymap in one modal.
 * **Live refresh**: every table screen re-polls on a timer (see
   ``screens/base.py``); ``r`` forces it now.
+* **Status bar** (``statusbar.py``): two lines above the footer on every tab;
+  seat, model, today's budget as a bar with its reset, cost, and the mode line
+  (org live, approvals, tasks, last beat, health).
 
 All data access is DIRECT reads off ``lhassa.core.db`` / ``flows.store`` /
 ``skills.store`` / ``org.topology`` (see each screen module); the TUI works with
@@ -37,6 +40,7 @@ from lhassa.tui.screens.overview import OverviewScreen
 from lhassa.tui.screens.projects import ProjectsScreen
 from lhassa.tui.screens.runs import RunsScreen
 from lhassa.tui.screens.skills import SkillsScreen
+from lhassa.tui.statusbar import StatusBar
 
 
 class LhassaTui(App):
@@ -117,6 +121,7 @@ class LhassaTui(App):
                 yield MemoryScreen(self._instance_id)
             with TabPane("Org", id="org"):
                 yield OrgScreen(self._instance_id)
+        yield StatusBar(self._instance_id, theme=self._theme_name, id="statusbar")
         yield Footer()
 
     # ── logging: nothing may paint over the running UI ─────────────────────────

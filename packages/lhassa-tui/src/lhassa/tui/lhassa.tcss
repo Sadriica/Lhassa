@@ -31,6 +31,14 @@ TabbedContent {
     height: 1fr;
 }
 
+/* Status bar: two lines above the footer, no fill of its own. */
+StatusBar {
+    height: 3;
+    padding: 0 1;
+    background: $lh-bg;
+    border-top: solid $lh-border;
+}
+
 Tabs {
     background: $lh-bg;
 }
