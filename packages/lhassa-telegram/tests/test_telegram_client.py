@@ -1,11 +1,12 @@
-"""Tests for the credential-gated Telegram notifier; httpx fully mocked."""
+"""Tests for the credential-gated Telegram client and channel; httpx fully mocked."""
 
 import asyncio
 from types import SimpleNamespace
 
 import httpx
 
-from lhassa.notify import telegram
+import lhassa.telegram.pack  # noqa: F401  (registers the telegram channel)
+from lhassa.telegram import client as telegram
 
 
 class _Resp:

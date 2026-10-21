@@ -27,7 +27,7 @@ guard test (`tests/test_architecture.py`) fails on any new layer-crossing import
 | Interfaces | `memory/`, `security/`, `llm/`, `settings.py`, `personal/` | Reusable contracts: typed facts, trust/approval, `ModelProvider` + router, the editable-settings service, the personal agenda read-model |
 | Adapters (hands) | `harness/`, `tools/`, `agents/`, `skills/`, `remote/`, `health/`, `bench/` | The rentable body: harnesses, MCP/tools, specialist agents, first-class skills, the check-in local agent, the LhassaBench eval harness |
 | File-I/O seams | `cv/`, `calendar/` | Leaf, stdlib-only seams (`.tex` CV, `.ics` calendar) used by shells; never reach into one |
-| Shells (outer) | `cli/`, `api/`, `voice/`, `notify/`, `org/`, `actionpack/`, `flows/`, `tui/` (the `lhassa-tui` pack), dashboard (JS) | World-facing surfaces; compose everything below |
+| Shells (outer) | `cli/`, `api/`, `voice/`, `notify/`, `chat/` (the transport-agnostic chat engine), `org/`, `actionpack/`, `flows/`, `tui/` (the `lhassa-tui` pack), `telegram/` (the `lhassa-telegram` pack: the transport that drives `chat/`), dashboard (JS) | World-facing surfaces; compose everything below |
 
 The two swap axes are kept **independent**: `harness/` (agentic body) must not
 import `llm/` (think-directly providers). The reverse edge; `llm/router.py`

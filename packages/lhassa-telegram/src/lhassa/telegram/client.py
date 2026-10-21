@@ -8,7 +8,9 @@ touching the network. On any HTTP/transport error it logs and returns ``False``;
 it never raises, so a notification failure can never break a caller.
 
 This is the adapter only; callers reach it through ``notify.dispatch.notify()``
-(the watcher, actions, the scheduled digest).
+(the watcher, actions, the scheduled digest) via the ``telegram`` channel
+(:mod:`lhassa.telegram.channel`), and the chat poller
+(:mod:`lhassa.telegram.poller`) replies through it.
 """
 
 from __future__ import annotations

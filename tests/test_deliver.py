@@ -305,7 +305,7 @@ def test_send_document_is_reachable_only_through_deliver():
     allowed = {
         "org/deliver.py",  # the seam
         "notify/channels.py",  # deliver_document: the channel-level primitive
-        "notify/telegram_channel.py",  # the Telegram channel wraps its Bot API upload
+        "telegram/channel.py",  # the telegram pack's channel wraps its Bot API upload
     }
     offenders = []
     for root in roots:

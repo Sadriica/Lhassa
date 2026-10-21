@@ -211,14 +211,14 @@ def pick_model(provider: ModelProvider, *, hard: bool, config: "Config") -> str:
     return config.model_smart if hard else config.model_cheap
 
 
-# ── Fallback provider CHAIN (moved from notify/telegram_inbound.py) ───────────
+# ── Fallback provider CHAIN (moved from the Telegram poller) ──────────────────
 #
-# Originally telegram_inbound-only; the heartbeat's judgment path (core/step.py
+# Originally Telegram-only; the heartbeat's judgment path (core/step.py
 # ``_judge``) needs the exact same "walk the owner's CLI subscriptions before
 # paying for cloud" behavior on a ProviderNotConfigured/BudgetExceeded, so this
-# lives in the interface layer (llm/) where both a shell (notify/) and the spine
-# (core/) can reach it. ``notify/telegram_inbound.py`` keeps a thin re-export so
-# existing imports/tests are unaffected.
+# lives in the interface layer (llm/) where both a shell (the chat engine,
+# ``chat/think.py``, which imports it as ``_fallback_chain``) and the spine
+# (core/) can reach it.
 
 # Provider names that are backed by a local CLI binary; skipped from the chain
 # when that binary is not installed (``shutil.which``), so the chain degrades
@@ -269,7 +269,7 @@ def fallback_chain(config: "Config", primary: Optional[ModelProvider]) -> list[t
 
     # Local (not module-level) import so a caller/test that monkeypatches
     # ``lhassa.llm.provider.get_model_provider`` is picked up fresh on every
-    # call; mirrors the original telegram_inbound._fallback_chain behaviour.
+    # call; mirrors the original chat-door _fallback_chain behaviour.
     from lhassa.llm.provider import get_model_provider
 
     primary_name = getattr(primary, "name", "")

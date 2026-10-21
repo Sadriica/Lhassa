@@ -2,9 +2,9 @@
 """research_reply; fetch live web results and answer the owner over Telegram.
 
 The Telegram chat think is deliberately TOOL-LESS (fast, cheap); it cannot see
-the web. When the owner asks for live information, the inbound poller mints THIS
+the web. When the owner asks for live information, the chat engine mints THIS
 action instead (the ``[[research: …]]`` marker protocol in
-:mod:`lhassa.notify.telegram_inbound`) and the next heartbeat runs it: one web
+:mod:`lhassa.chat.markers`) and the next heartbeat runs it: one web
 search (Brave → DuckDuckGo fallback; the same seam the voice tool uses), a
 compact deterministic summary with sources, delivered back through the Telegram
 channel. No LLM call: the results speak for themselves, with their links. $0.

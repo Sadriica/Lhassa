@@ -1,0 +1,24 @@
+[project]
+name = "lhassa-telegram"
+version = "0.8.0"
+description = "Lhassa Telegram pack: the Bot API client, the getUpdates poller that drives the chat engine, and the telegram notify channel"
+license = "AGPL-3.0-or-later"
+requires-python = ">=3.13"
+dependencies = [
+    "lhassa",
+    "httpx>=0.27.0",
+]
+
+[project.entry-points."lhassa.plugins"]
+telegram = "lhassa.telegram.pack"
+
+[tool.uv.sources]
+lhassa = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+# Ship only the pack's own subpackage: core owns lhassa/__init__.py.
+packages = ["src/lhassa"]

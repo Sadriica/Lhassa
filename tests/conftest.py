@@ -186,11 +186,9 @@ def _reset_seen_telegram_updates():
     from lhassa import chat
 
     def _reset() -> None:
-        for name in ("lhassa.telegram.poller", "lhassa.notify.telegram_inbound"):
-            poller = sys.modules.get(name)
-            reset = getattr(poller, "reset_seen_updates", None)
-            if reset is not None:
-                reset()
+        poller = sys.modules.get("lhassa.telegram.poller")
+        if poller is not None:
+            poller.reset_seen_updates()
         chat.reset_conversation_state()
 
     _reset()

@@ -232,6 +232,3 @@ register_channel("log", LogChannel())
 # module is imported (it imports :func:`register_channel` from here). Done at the
 # bottom to avoid an import cycle.
 from lhassa.notify import desktop as _desktop  # noqa: E402,F401
-from lhassa.notify import telegram_channel as _telegram_channel  # noqa: E402
-
-_telegram_channel.register()

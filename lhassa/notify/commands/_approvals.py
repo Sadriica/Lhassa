@@ -75,7 +75,7 @@ async def _resolve_from_chat(args: str, *, config, approved: bool) -> str:
 
         # A resolved mint_route approval TURNS ON that capability's route;
         # same approval->apply connection as the inline-keyboard callback path
-        # in lhassa.notify.telegram_inbound._handle_callback_query.
+        # in lhassa.chat.callbacks.handle_callback.
         if approved and existing.get("tipo") == "mint_route":
             from lhassa.notify import capabilities as _capabilities
 

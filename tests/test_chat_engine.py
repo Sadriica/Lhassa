@@ -952,3 +952,23 @@ def test_the_chat_reply_is_scrubbed_of_em_dashes():
     assert "\u2014" not in persona.scrub_dashes("listo, jefe \u2014 todo bien")
     source = inspect.getsource(think.brain_reply)
     assert "scrub_dashes" in source, "the chat reply must be scrubbed before it is sent"
+
+
+def test_the_deprecated_poller_alias_degrades_without_the_telegram_pack(monkeypatch):
+    """``python -m lhassa.notify.telegram_inbound`` (one-release alias) exits
+    non-zero with an install hint when the telegram pack is absent; importing
+    it never imports the pack."""
+    import runpy
+
+    from lhassa import actionpack
+    from lhassa.extensions import PACKS
+    from lhassa.notify import telegram_inbound
+
+    monkeypatch.setattr(actionpack, "register_all", lambda *a, **k: None)
+    monkeypatch.setattr(PACKS, "_items", {k: v for k, v in PACKS.items().items() if k != "telegram"})
+
+    def _boom(*a, **k):
+        raise AssertionError("must not run the poller without its pack")
+
+    monkeypatch.setattr(runpy, "run_module", _boom)
+    assert telegram_inbound.main() == 1

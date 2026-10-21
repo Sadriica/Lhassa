@@ -82,7 +82,10 @@ def test_collect_reports_known_registry_names(tmp_path):
     assert set(reg["harnesses"]["registered"]) >= {"opencode", "claude", "codex"}
     assert set(reg["verifiers"]["registered"]) >= {"command", "tests", "metric"}
     assert "optimization" in reg["specialists"]["registered"]
-    assert "telegram" in reg["channels"]["registered"]
+    # The telegram channel is the telegram pack's; ask the pack registry.
+    from lhassa.extensions import PACKS
+
+    assert ("telegram" in reg["channels"]["registered"]) == ("telegram" in PACKS)
     assert reg["commands"]["registered"]  # /start, /help, /status ...
     assert "sync_repo" in reg["actions"]["registered"]
     assert "optimization" in reg["departments"]["registered"]

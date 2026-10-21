@@ -13,7 +13,7 @@
     <string>run</string>
     <string>python</string>
     <string>-m</string>
-    <string>lhassa.notify.telegram_inbound</string>
+    <string>lhassa.telegram.poller</string>
   </array>
 
   <key>WorkingDirectory</key>

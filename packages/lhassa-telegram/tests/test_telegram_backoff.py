@@ -11,7 +11,7 @@ import asyncio
 
 import pytest
 
-from lhassa.notify import telegram_inbound
+from lhassa.telegram import poller
 
 
 def _cfg():
@@ -40,8 +40,8 @@ class _BoomClient:
 
 
 def test_poll_cycle_reports_transport_failure(monkeypatch):
-    monkeypatch.setattr(telegram_inbound.httpx, "AsyncClient", _BoomClient)
-    offset, ok = asyncio.run(telegram_inbound.poll_cycle(_cfg(), offset=7))
+    monkeypatch.setattr(poller.httpx, "AsyncClient", _BoomClient)
+    offset, ok = asyncio.run(poller.poll_cycle(_cfg(), offset=7))
     assert offset == 7  # cursor preserved; updates are not skipped
     assert ok is False
 
@@ -55,8 +55,8 @@ def test_poll_cycle_reports_http_error(monkeypatch):
         async def get(self, *a, **k):
             return _Resp()
 
-    monkeypatch.setattr(telegram_inbound.httpx, "AsyncClient", _Client)
-    offset, ok = asyncio.run(telegram_inbound.poll_cycle(_cfg(), offset=3))
+    monkeypatch.setattr(poller.httpx, "AsyncClient", _Client)
+    offset, ok = asyncio.run(poller.poll_cycle(_cfg(), offset=3))
     assert offset == 3
     assert ok is False
 
@@ -76,16 +76,16 @@ def test_poll_cycle_reports_success_on_an_idle_long_poll(monkeypatch):
         async def get(self, *a, **k):
             return _Resp()
 
-    monkeypatch.setattr(telegram_inbound.httpx, "AsyncClient", _Client)
-    offset, ok = asyncio.run(telegram_inbound.poll_cycle(_cfg(), offset=9))
+    monkeypatch.setattr(poller.httpx, "AsyncClient", _Client)
+    offset, ok = asyncio.run(poller.poll_cycle(_cfg(), offset=9))
     assert offset == 9
     assert ok is True
 
 
 def test_poll_once_keeps_its_offset_only_contract(monkeypatch):
     """The public wrapper still returns a bare offset for existing callers."""
-    monkeypatch.setattr(telegram_inbound.httpx, "AsyncClient", _BoomClient)
-    assert asyncio.run(telegram_inbound.poll_once(_cfg(), offset=7)) == 7
+    monkeypatch.setattr(poller.httpx, "AsyncClient", _BoomClient)
+    assert asyncio.run(poller.poll_once(_cfg(), offset=7)) == 7
 
 
 def test_run_forever_backs_off_instead_of_hot_looping(monkeypatch):
@@ -102,17 +102,17 @@ def test_run_forever_backs_off_instead_of_hot_looping(monkeypatch):
     async def _fake_sleep(secs):
         slept.append(secs)
 
-    monkeypatch.setattr(telegram_inbound, "poll_cycle", _fake_poll_cycle)
-    monkeypatch.setattr(telegram_inbound.asyncio, "sleep", _fake_sleep)
-    monkeypatch.setattr(telegram_inbound, "_enabled", lambda cfg: True)
+    monkeypatch.setattr(poller, "poll_cycle", _fake_poll_cycle)
+    monkeypatch.setattr(poller.asyncio, "sleep", _fake_sleep)
+    monkeypatch.setattr(poller, "_enabled", lambda cfg: True)
 
     with pytest.raises(KeyboardInterrupt):
-        asyncio.run(telegram_inbound.run_forever(_cfg()))
+        asyncio.run(poller.run_forever(_cfg()))
 
     assert len(slept) == 5, "every failed cycle must sleep"
     assert slept == sorted(slept), "the delay must be non-decreasing"
     assert slept[-1] > slept[0], "the backoff must actually grow"
-    assert max(slept) <= telegram_inbound._BACKOFF_MAX
+    assert max(slept) <= poller._BACKOFF_MAX
 
 
 def test_run_forever_resets_backoff_after_recovery(monkeypatch):
@@ -131,15 +131,15 @@ def test_run_forever_resets_backoff_after_recovery(monkeypatch):
     async def _fake_sleep(secs):
         slept.append(secs)
 
-    monkeypatch.setattr(telegram_inbound, "poll_cycle", _fake_poll_cycle)
-    monkeypatch.setattr(telegram_inbound.asyncio, "sleep", _fake_sleep)
-    monkeypatch.setattr(telegram_inbound, "_enabled", lambda cfg: True)
+    monkeypatch.setattr(poller, "poll_cycle", _fake_poll_cycle)
+    monkeypatch.setattr(poller.asyncio, "sleep", _fake_sleep)
+    monkeypatch.setattr(poller, "_enabled", lambda cfg: True)
 
     with pytest.raises(KeyboardInterrupt):
-        asyncio.run(telegram_inbound.run_forever(_cfg()))
+        asyncio.run(poller.run_forever(_cfg()))
 
     # Three failures grow the delay; the success resets it, so the fourth
     # failure sleeps the starting amount again.
-    assert slept[0] == telegram_inbound._BACKOFF_START
+    assert slept[0] == poller._BACKOFF_START
     assert slept[2] > slept[0]
-    assert slept[3] == telegram_inbound._BACKOFF_START
+    assert slept[3] == poller._BACKOFF_START

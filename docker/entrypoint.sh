@@ -49,7 +49,7 @@ case "$mode" in
 
     telegram)
         echo "lhassa: starting Telegram inbound poller"
-        exec python -m lhassa.notify.telegram_inbound
+        exec python -m lhassa.telegram.poller
         ;;
 
     monitor)

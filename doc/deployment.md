@@ -38,7 +38,8 @@ Key facts:
   voice pack's speaker, the `tools/handlers/*.py` type hints, `main.py`'s load of
   `lhassa.voice.pipeline`) is guarded
   (lazy import or `TYPE_CHECKING`), so `lhassa.api.server`, `lhassa.core.step`,
-  `lhassa.notify.telegram_inbound` and `lhassa.org.watcher`: everything the
+  `lhassa.telegram.poller` (the telegram pack, which the image installs with
+  every other pack) and `lhassa.org.watcher`: everything the
   container roles need; import cleanly with no voice pack installed. This is
   the fix for the size/cost blocker previously logged in `doc/portability.md`;
   the image no longer needs `libportaudio2`/`libgomp1`/`libsndfile1` either.

@@ -3,8 +3,8 @@
 
 Shared by every surface that launches an agentic coding task through a local AI
 CLI (:mod:`lhassa.agents.local_cli`): the dashboard's Run section
-(``POST /api/code`` in the api pack) and the Telegram ``/code`` approval
-(:mod:`lhassa.notify.telegram_inbound`). A run launched from either is
+(``POST /api/code`` in the api pack) and the chat ``/code`` approval
+(:mod:`lhassa.chat.callbacks`). A run launched from either is
 indistinguishable from the other.
 
 ``LocalCliAgent.run`` mints its own id internally and only returns the final

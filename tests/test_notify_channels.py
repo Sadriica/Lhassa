@@ -57,9 +57,15 @@ def _cfg(channels):
 
 
 def test_builtin_channels_registered():
-    # The three built-ins are present the moment the package is imported.
-    for name in ("telegram", "desktop", "log"):
+    # The two built-ins are present the moment the package is imported; the
+    # telegram channel comes from the telegram pack, registered with it.
+    from lhassa import actionpack
+    from lhassa.extensions import PACKS
+
+    actionpack.register_all()
+    for name in ("desktop", "log"):
         assert name in ch.CHANNELS
+    assert ("telegram" in ch.CHANNELS) == ("telegram" in PACKS)
     assert ch.CHANNELS.get("log").name == "log"
 
 

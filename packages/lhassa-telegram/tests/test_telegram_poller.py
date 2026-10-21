@@ -11,7 +11,8 @@ acknowledgments, inline keyboards, and document hand-off.
 import asyncio
 from types import SimpleNamespace
 
-from lhassa.notify import telegram, telegram_inbound
+from lhassa.telegram import client
+from lhassa.telegram import poller
 
 
 def _cfg(**over):
@@ -114,7 +115,7 @@ def _patch_send(monkeypatch):
         sent.append(text)
         return True
 
-    monkeypatch.setattr(telegram, "send", _fake_send)
+    monkeypatch.setattr(client, "send", _fake_send)
     return sent
 
 
@@ -122,20 +123,20 @@ def test_poll_once_disabled_no_network(monkeypatch):
     def _boom(*a, **k):
         raise AssertionError("no network when poll disabled")
 
-    monkeypatch.setattr(telegram_inbound.httpx, "AsyncClient", _boom)
+    monkeypatch.setattr(poller.httpx, "AsyncClient", _boom)
 
     cfg = _cfg(telegram_poll_enabled=False)
-    assert asyncio.run(telegram_inbound.poll_once(cfg, offset=5)) == 5
+    assert asyncio.run(poller.poll_once(cfg, offset=5)) == 5
 
 
 def test_poll_once_unconfigured_no_network(monkeypatch):
     def _boom(*a, **k):
         raise AssertionError("no network when unconfigured")
 
-    monkeypatch.setattr(telegram_inbound.httpx, "AsyncClient", _boom)
+    monkeypatch.setattr(poller.httpx, "AsyncClient", _boom)
 
     cfg = _cfg(telegram_bot_token="")  # enabled but no token
-    assert asyncio.run(telegram_inbound.poll_once(cfg, offset=None)) is None
+    assert asyncio.run(poller.poll_once(cfg, offset=None)) is None
 
 
 def test_poll_once_answers_allowed_chat_and_advances_offset(monkeypatch):
@@ -149,12 +150,12 @@ def test_poll_once_answers_allowed_chat_and_advances_offset(monkeypatch):
         ],
     }
     monkeypatch.setattr(
-        telegram_inbound.httpx, "AsyncClient", _client_returning(payload)
+        poller.httpx, "AsyncClient", _client_returning(payload)
     )
     provider = _patch_brain(monkeypatch, reply="It is noon.")
     sent = _patch_send(monkeypatch)
 
-    new_offset = asyncio.run(telegram_inbound.poll_once(_cfg(), offset=None))
+    new_offset = asyncio.run(poller.poll_once(_cfg(), offset=None))
 
     # Answered via the tool-less brain think (provider.complete), not the agent.
     assert len(provider.calls) == 1
@@ -164,12 +165,12 @@ def test_poll_once_answers_allowed_chat_and_advances_offset(monkeypatch):
 
 
 def test_poll_once_passes_offset_in_params(monkeypatch):
-    client = _client_returning({"ok": True, "result": []})
-    monkeypatch.setattr(telegram_inbound.httpx, "AsyncClient", client)
+    http_client = _client_returning({"ok": True, "result": []})
+    monkeypatch.setattr(poller.httpx, "AsyncClient", http_client)
 
-    out = asyncio.run(telegram_inbound.poll_once(_cfg(), offset=42))
+    out = asyncio.run(poller.poll_once(_cfg(), offset=42))
     assert out == 42  # nothing new
-    assert client.last["params"]["offset"] == 42
+    assert http_client.last["params"]["offset"] == 42
 
 
 def test_poll_once_ignores_other_chat_ids(monkeypatch):
@@ -183,12 +184,12 @@ def test_poll_once_ignores_other_chat_ids(monkeypatch):
         ],
     }
     monkeypatch.setattr(
-        telegram_inbound.httpx, "AsyncClient", _client_returning(payload)
+        poller.httpx, "AsyncClient", _client_returning(payload)
     )
     provider = _patch_brain(monkeypatch)
     sent = _patch_send(monkeypatch)
 
-    new_offset = asyncio.run(telegram_inbound.poll_once(_cfg(), offset=None))
+    new_offset = asyncio.run(poller.poll_once(_cfg(), offset=None))
 
     # Foreign chat → never answered, but the offset still advances past it.
     assert provider.calls == []
@@ -207,12 +208,12 @@ def test_poll_once_malformed_update_does_not_raise(monkeypatch):
         ],
     }
     monkeypatch.setattr(
-        telegram_inbound.httpx, "AsyncClient", _client_returning(payload)
+        poller.httpx, "AsyncClient", _client_returning(payload)
     )
     provider = _patch_brain(monkeypatch, reply="done")
     sent = _patch_send(monkeypatch)
 
-    new_offset = asyncio.run(telegram_inbound.poll_once(_cfg(), offset=None))
+    new_offset = asyncio.run(poller.poll_once(_cfg(), offset=None))
 
     # Only the one well-formed, owner message is answered; offset clears the batch.
     assert len(provider.calls) == 1
@@ -235,8 +236,8 @@ def test_poll_once_http_error_keeps_offset(monkeypatch):
         async def get(self, url, params=None):
             return _Resp(status=500, payload={"ok": False}, text="server error")
 
-    monkeypatch.setattr(telegram_inbound.httpx, "AsyncClient", _ErrClient)
-    assert asyncio.run(telegram_inbound.poll_once(_cfg(), offset=9)) == 9
+    monkeypatch.setattr(poller.httpx, "AsyncClient", _ErrClient)
+    assert asyncio.run(poller.poll_once(_cfg(), offset=9)) == 9
 
 
 def test_poll_once_transport_error_keeps_offset(monkeypatch):
@@ -253,19 +254,19 @@ def test_poll_once_transport_error_keeps_offset(monkeypatch):
         async def get(self, url, params=None):
             raise RuntimeError("connection refused")
 
-    monkeypatch.setattr(telegram_inbound.httpx, "AsyncClient", _RaisingClient)
-    assert asyncio.run(telegram_inbound.poll_once(_cfg(), offset=3)) == 3
+    monkeypatch.setattr(poller.httpx, "AsyncClient", _RaisingClient)
+    assert asyncio.run(poller.poll_once(_cfg(), offset=3)) == 3
 
 
 def test_run_forever_returns_immediately_when_disabled(monkeypatch):
     def _boom(*a, **k):
         raise AssertionError("no network when disabled")
 
-    monkeypatch.setattr(telegram_inbound.httpx, "AsyncClient", _boom)
+    monkeypatch.setattr(poller.httpx, "AsyncClient", _boom)
 
     cfg = _cfg(telegram_poll_enabled=False)
     # Must return (not loop); a plain await that completes proves it.
-    asyncio.run(telegram_inbound.run_forever(cfg))
+    asyncio.run(poller.run_forever(cfg))
 
 
 async def _init_approval_db(tmp_path, monkeypatch):
@@ -283,7 +284,7 @@ def _patch_answer_callback(monkeypatch):
         calls.append({"id": callback_query_id, "text": text})
         return True
 
-    from lhassa.notify import telegram_api
+    from lhassa.telegram import api as telegram_api
 
     monkeypatch.setattr(telegram_api, "answer_callback_query", _fake_answer)
     return calls
@@ -310,12 +311,12 @@ def test_callback_query_approve_resolves_and_acks(tmp_path, monkeypatch):
             }
         ],
     }
-    monkeypatch.setattr(telegram_inbound.httpx, "AsyncClient", _client_returning(payload))
+    monkeypatch.setattr(poller.httpx, "AsyncClient", _client_returning(payload))
     ack_calls = _patch_answer_callback(monkeypatch)
     sent = _patch_send(monkeypatch)
 
     new_offset = asyncio.run(
-        telegram_inbound.poll_once(_cfg(instance_id="inst_personal"), offset=None)
+        poller.poll_once(_cfg(instance_id="inst_personal"), offset=None)
     )
 
     assert new_offset == 201
@@ -343,11 +344,11 @@ def test_callback_query_deny_resolves_and_acks(tmp_path, monkeypatch):
             }
         ],
     }
-    monkeypatch.setattr(telegram_inbound.httpx, "AsyncClient", _client_returning(payload))
+    monkeypatch.setattr(poller.httpx, "AsyncClient", _client_returning(payload))
     ack_calls = _patch_answer_callback(monkeypatch)
     _patch_send(monkeypatch)
 
-    asyncio.run(telegram_inbound.poll_once(_cfg(instance_id="inst_personal"), offset=None))
+    asyncio.run(poller.poll_once(_cfg(instance_id="inst_personal"), offset=None))
 
     assert "Denied" in ack_calls[0]["text"]
     remaining = asyncio.run(db.load_pending_approvals("inst_personal"))
@@ -371,10 +372,10 @@ def test_callback_query_from_foreign_chat_is_ignored_but_acked(tmp_path, monkeyp
             }
         ],
     }
-    monkeypatch.setattr(telegram_inbound.httpx, "AsyncClient", _client_returning(payload))
+    monkeypatch.setattr(poller.httpx, "AsyncClient", _client_returning(payload))
     ack_calls = _patch_answer_callback(monkeypatch)
 
-    asyncio.run(telegram_inbound.poll_once(_cfg(instance_id="inst_personal"), offset=None))
+    asyncio.run(poller.poll_once(_cfg(instance_id="inst_personal"), offset=None))
 
     # Acked (so the tapper's spinner clears) but NOT resolved.
     assert len(ack_calls) == 1
@@ -398,11 +399,11 @@ def test_callback_query_malformed_data_never_crashes(tmp_path, monkeypatch):
             }
         ],
     }
-    monkeypatch.setattr(telegram_inbound.httpx, "AsyncClient", _client_returning(payload))
+    monkeypatch.setattr(poller.httpx, "AsyncClient", _client_returning(payload))
     ack_calls = _patch_answer_callback(monkeypatch)
 
     new_offset = asyncio.run(
-        telegram_inbound.poll_once(_cfg(instance_id="inst_personal"), offset=None)
+        poller.poll_once(_cfg(instance_id="inst_personal"), offset=None)
     )
     assert new_offset == 204  # offset still advances
     assert len(ack_calls) == 1  # still acked, just with an "unrecognised" note
@@ -412,7 +413,7 @@ async def _poll_and_drain(cfg, *, offset=None):
     """Run one poll_once cycle AND await any fire-and-forget tasks it scheduled
     (e.g. ``_launch_code_run`` via ``asyncio.ensure_future``) before the event
     loop this call owns goes away."""
-    new_offset = await telegram_inbound.poll_once(cfg, offset=offset)
+    new_offset = await poller.poll_once(cfg, offset=offset)
     pending = [t for t in asyncio.all_tasks() if t is not asyncio.current_task()]
     if pending:
         await asyncio.gather(*pending)
@@ -443,15 +444,15 @@ def test_code_reply_carries_inline_keyboard_no_leaked_marker(tmp_path, monkeypat
         sent.append({"text": text, "reply_markup": reply_markup})
         return True
 
-    monkeypatch.setattr(telegram, "send", _fake_send)
+    monkeypatch.setattr(client, "send", _fake_send)
     monkeypatch.setattr(
-        telegram_inbound.httpx,
+        poller.httpx,
         "AsyncClient",
         _client_returning(_text_update(300, "/code fix the flaky test")),
     )
 
     new_offset = asyncio.run(
-        telegram_inbound.poll_once(_cfg(instance_id="inst_personal"), offset=None)
+        poller.poll_once(_cfg(instance_id="inst_personal"), offset=None)
     )
 
     assert new_offset == 301
@@ -500,7 +501,7 @@ def test_callback_query_approve_code_run_launches_and_reports(tmp_path, monkeypa
             }
         ],
     }
-    monkeypatch.setattr(telegram_inbound.httpx, "AsyncClient", _client_returning(payload))
+    monkeypatch.setattr(poller.httpx, "AsyncClient", _client_returning(payload))
     _patch_answer_callback(monkeypatch)
     sent = _patch_send(monkeypatch)
 
@@ -517,10 +518,10 @@ def test_callback_query_missing_fields_does_not_raise(monkeypatch):
         "ok": True,
         "result": [{"update_id": 204, "callback_query": {}}],
     }
-    monkeypatch.setattr(telegram_inbound.httpx, "AsyncClient", _client_returning(payload))
+    monkeypatch.setattr(poller.httpx, "AsyncClient", _client_returning(payload))
 
     new_offset = asyncio.run(
-        telegram_inbound.poll_once(_cfg(instance_id="inst_personal"), offset=None)
+        poller.poll_once(_cfg(instance_id="inst_personal"), offset=None)
     )
     assert new_offset == 205
 
@@ -543,10 +544,10 @@ def test_tap_is_acknowledged_before_the_chat_message(tmp_path, monkeypatch):
         order.append(("send", text))
         return True
 
-    from lhassa.notify import telegram_api
+    from lhassa.telegram import api as telegram_api
 
     monkeypatch.setattr(telegram_api, "answer_callback_query", _fake_answer)
-    monkeypatch.setattr(telegram, "send", _fake_send)
+    monkeypatch.setattr(client, "send", _fake_send)
     payload = {
         "ok": True,
         "result": [
@@ -560,9 +561,9 @@ def test_tap_is_acknowledged_before_the_chat_message(tmp_path, monkeypatch):
             }
         ],
     }
-    monkeypatch.setattr(telegram_inbound.httpx, "AsyncClient", _client_returning(payload))
+    monkeypatch.setattr(poller.httpx, "AsyncClient", _client_returning(payload))
 
-    asyncio.run(telegram_inbound.poll_once(_cfg(instance_id="inst_personal"), offset=None))
+    asyncio.run(poller.poll_once(_cfg(instance_id="inst_personal"), offset=None))
 
     assert [kind for kind, _ in order] == ["ack", "send"]
     assert order[0][1] == order[1][1] == f"Approved {ap_id}."
@@ -570,7 +571,8 @@ def test_tap_is_acknowledged_before_the_chat_message(tmp_path, monkeypatch):
 
 def test_uploaded_document_reaches_document_hooks_with_a_getfile_fetch(monkeypatch):
     """A document update becomes an InboundDocument whose fetch() is getFile."""
-    from lhassa.notify import inbound_hooks, telegram_api
+    from lhassa.notify import inbound_hooks
+    from lhassa.telegram import api as telegram_api
 
     seen = {}
 
@@ -600,9 +602,9 @@ def test_uploaded_document_reaches_document_hooks_with_a_getfile_fetch(monkeypat
             }
         ],
     }
-    monkeypatch.setattr(telegram_inbound.httpx, "AsyncClient", _client_returning(payload))
+    monkeypatch.setattr(poller.httpx, "AsyncClient", _client_returning(payload))
 
-    assert asyncio.run(telegram_inbound.poll_once(_cfg(), offset=None)) == 241
+    assert asyncio.run(poller.poll_once(_cfg(), offset=None)) == 241
     assert seen == {
         "document": {"file_id": "FID", "file_name": "cv.tex"},
         "caption": "Backend @ Acme",

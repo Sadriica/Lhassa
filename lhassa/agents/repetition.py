@@ -202,7 +202,7 @@ def is_excluded(accion: str, decision: str = "") -> bool:
     Excludes any pattern whose:
 
       - candidate ``accion`` is exactly ``"responder"``: the tool-less
-        Telegram/chat think (see ``notify.telegram_inbound``'s fallback reply).
+        Telegram/chat think (see ``chat.think``'s fallback reply).
       - candidate ``accion`` matches ``"dept:<name> think"``: an org
         department's judgment (see ``org.coordinator``/``org.executor``).
       - recorded ``decision`` text starts with ``"think"``: a second, more
@@ -584,7 +584,7 @@ async def detect_routable(
     """The self-routing consciousness: capabilities that keep paying for a
     think/research that a $0 deterministic handler could already serve.
 
-    :mod:`lhassa.notify.telegram_inbound` (the SHELL) tags an episode's
+    :mod:`lhassa.chat.think` (the SHELL) tags an episode's
     ``decision`` with ``"[routable:<capability>]"`` (see
     :func:`lhassa.notify.capabilities.tag_intent`) whenever a message a
     capability recognises still fell through to a real think or the research
