@@ -103,6 +103,29 @@ def register_channel(name: str, item: Optional[Channel] = None, *, override: boo
     return _store(item)
 
 
+# Channels a capability pack provides (name-only data; core imports none of
+# them). With that pack absent the name in ``notify_channels`` is expected, not
+# a typo, so it is noted once at debug level instead of warned on every send.
+_PACK_CHANNELS = {"telegram": "lhassa-telegram"}
+_NOTED_MISSING: set[str] = set()
+
+
+def _note_missing_channel(name: str) -> None:
+    if name in _NOTED_MISSING:
+        return
+    _NOTED_MISSING.add(name)
+    if name in _PACK_CHANNELS:
+        logger.debug(
+            f"notify: channel {name!r} comes from the {_PACK_CHANNELS[name]} pack, "
+            "which is not installed (skipped)"
+        )
+        return
+    logger.warning(
+        f"notify: unknown channel {name!r} (skipped); "
+        f"known: {', '.join(CHANNELS.names()) or '<none>'}"
+    )
+
+
 def active_channels(config) -> list[Channel]:
     """Resolve ``config.notify_channels`` into the live channels to fan out over.
 
@@ -120,10 +143,7 @@ def active_channels(config) -> list[Channel]:
     for name in names:
         channel = CHANNELS.get_or_none(name)
         if channel is None:
-            logger.warning(
-                f"notify: unknown channel {name!r} (skipped); "
-                f"known: {', '.join(CHANNELS.names()) or '<none>'}"
-            )
+            _note_missing_channel(name)
             continue
         try:
             configured = channel.is_configured(config)
