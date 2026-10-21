@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useMemo } from 'react'
 import OverviewPanel from './components/OverviewPanel'
 import InboxPanel from './components/InboxPanel'
 import WatchlistPanel from './components/WatchlistPanel'
@@ -36,13 +36,17 @@ import CommandPalette from './components/CommandPalette'
 import PanelShell from './components/layout/PanelShell'
 import useWebSocketEvents from './hooks/useWebSocketEvents'
 import useSectionRouting from './hooks/useSectionRouting'
-import { SECTIONS } from './lib/sections'
+import usePacks from './hooks/usePacks'
+import { SECTIONS, visibleSections } from './lib/sections'
 import './index.css'
 
 export default function App() {
   // Live state from the `/ws` fan-out, and the active section ↔ URL hash routing.
   const { connected, voiceActive, metrics, agents, agentList, scheduledTick, auditEvents } = useWebSocketEvents()
   const { section, subRoute, goToSection, onFlowRoute } = useSectionRouting()
+  // Hide the sections whose capability pack is absent (null packs = show all).
+  const packs = usePacks()
+  const sections = useMemo(() => visibleSections(SECTIONS, packs), [packs])
 
   // Mobile drawer state lives here so both the nav chrome and the command palette
   // navigation close it. `navigate` = switch section (+ clear sub-route) and close.
@@ -56,7 +60,7 @@ export default function App() {
       <PanelShell
         connected={connected}
         voiceActive={voiceActive}
-        sections={SECTIONS}
+        sections={sections}
         section={section}
         onNavigate={navigate}
         navOpen={navOpen}
@@ -65,7 +69,7 @@ export default function App() {
         overlays={
           <>
             <ToastHost />
-            <CommandPalette sections={SECTIONS} onNavigate={navigate} />
+            <CommandPalette sections={sections} onNavigate={navigate} />
           </>
         }
       >

@@ -55,7 +55,13 @@ os.environ["LHASSA_KNOWLEDGE_ROOTS"] = ""
 import httpx  # noqa: E402
 import pytest  # noqa: E402
 import pytest_asyncio  # noqa: E402,F401  (registers asyncio mode)
-import fastapi.testclient as fastapi_testclient  # noqa: E402
+
+# fastapi ships with the api pack (lhassa-api); core alone has none, and then
+# there is no TestClient to swap.
+try:
+    import fastapi.testclient as fastapi_testclient  # noqa: E402
+except ImportError:  # core alone
+    fastapi_testclient = None
 
 
 class ASGISyncTestClient:
@@ -133,7 +139,8 @@ class _SnapshotWebSocket:
         return json.dumps(self._payload)
 
 
-fastapi_testclient.TestClient = ASGISyncTestClient
+if fastapi_testclient is not None:
+    fastapi_testclient.TestClient = ASGISyncTestClient
 
 
 @pytest.fixture

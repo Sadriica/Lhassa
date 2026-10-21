@@ -1,33 +1,29 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Fleet routes; the multi-machine fleet view (Phase-6, read-only).
+"""The multi-machine fleet read-model (Phase-6, read-only).
 
-``/api/fleet`` derives the known machines from existing reads: check-in episodes
+Derives the known machines from existing reads: check-in episodes
 (``despertar_por`` = ``checkin:<machine>``) carry the last-seen time and
 ``desired_state`` carries the reconciliation target per machine. Read-only and
-instance-scoped.
+instance-scoped; served by ``GET /api/fleet`` (api pack) and the Telegram
+``/fleet`` command alike.
 
-``Config`` is read through the ``lhassa.config`` MODULE (``lhassa_config.Config``)
-rather than a bound name, so a config reload (some endpoint tests reload it) is
-picked up live; the same seam ``runtime_routes`` uses.
-
-Mounted by the integrator with ``app.include_router(fleet_routes.router)``.
+``Config`` is read through the ``lhassa.config`` MODULE so a config reload (some
+endpoint tests reload it) is picked up live.
 """
 
-from fastapi import APIRouter
+from __future__ import annotations
 
 import lhassa.config as lhassa_config
 from lhassa.core import db
 
-router = APIRouter()
+__all__ = ["list_fleet"]
 
 
-@router.get("/api/fleet")
-async def get_fleet():
-    """Known machines with their last check-in and desired_state.
+async def list_fleet() -> list[dict]:
+    """Known machines with their last check-in and desired_state, sorted by id.
 
-    Derived from existing reads: check-in episodes (``despertar_por`` =
-    ``checkin:<machine>``) carry the last-seen time; ``desired_state`` carries the
-    reconciliation target per machine. A small inline query unions the two."""
+    A small inline query unions the check-in episodes and the ``desired_state``
+    rows; each machine then gets its full desired state attached."""
     from lhassa._vendor import aiosqlite
 
     await db.init_db()

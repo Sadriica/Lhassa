@@ -5,7 +5,6 @@ Fully offline: ``parse_ccusage`` is exercised on inline sample fixtures, and
 FileNotFoundError (binary absent). No real ccusage / npx / network is invoked.
 """
 
-import httpx
 import pytest
 import pytest_asyncio  # noqa: F401  (registers asyncio mode)
 
@@ -131,21 +130,3 @@ async def test_read_ccusage_bad_json_is_unavailable(monkeypatch):
 
     out = await read_ccusage()
     assert out["available"] is False
-
-
-# ── /api/llm/ccusage endpoint ─────────────────────────────────────────────────
-
-
-async def test_ccusage_endpoint_defensive(monkeypatch):
-    from lhassa.api import server
-
-    async def fake_read(timeout=None, allow_npx=True):
-        return {"available": False, "by_harness": {}, "total_cost_usd": 0.0, "source": "ccusage"}
-
-    monkeypatch.setattr("lhassa.llm.ccusage.read_ccusage", fake_read)
-
-    transport = httpx.ASGITransport(app=server.app)
-    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-        r = await client.get("/api/llm/ccusage")
-        assert r.status_code == 200
-        assert r.json()["available"] is False

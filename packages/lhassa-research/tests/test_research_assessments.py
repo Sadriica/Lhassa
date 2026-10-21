@@ -3,10 +3,9 @@ from __future__ import annotations
 import asyncio
 
 import pytest
-from fastapi import FastAPI
-from fastapi.testclient import TestClient
 
-from lhassa.research.surfaces import api as research_routes
+from lhassa import actionpack
+from lhassa.extensions import PACKS
 from lhassa.config import Config
 from lhassa.core import db
 from lhassa.research import assessments as ideas
@@ -121,6 +120,15 @@ async def test_creation_is_idempotent_by_evidence_digest():
 
 
 def test_research_api_returns_projection_with_complete_event_log():
+    # The research router is served by the api pack (it brings fastapi).
+    actionpack.register_all()
+    if "api" not in PACKS:
+        pytest.skip("needs the api pack (lhassa-api)")
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from lhassa.research.surfaces import api as research_routes
+
     async def seed():
         await db.init_db()
         row = await ideas.create(

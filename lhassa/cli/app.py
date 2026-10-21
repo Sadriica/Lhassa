@@ -365,7 +365,6 @@ _ABSENT_PACK_COMMANDS = {
     "tui": "lhassa-tui",
 }
 
-
 def _absent_pack_stub(cmd: str, dist: str):
     def _stub() -> None:
         _console(stderr=True).print(

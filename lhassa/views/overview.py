@@ -1,34 +1,31 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Overview routes; one defensive aggregate for the dashboard home.
+"""The overview read-model: one defensive aggregate of the whole brain.
 
-A single read-only digest for the dashboard's "home" surface and ``lhassa
-status``: brains, skills, pending approvals, today's cost, health, recent
-activity, and tool states; everything the owner needs to see (and approve) at a
-glance. Each sub-section is gathered INDEPENDENTLY and DEFENSIVELY: a failing
-subsystem is reported under ``errors`` and replaced with a safe default, so the
-response is always complete and NEVER 500s. LLM-free (no provider is constructed,
-no model is called). ``build_overview`` is the in-process function the CLI's
-``lhassa status`` reuses directly (it does not HTTP back to localhost).
+A single read-only digest for the dashboard's "home" surface (``GET /api/overview``
+in the api pack) and ``lhassa status``: brains, skills, pending approvals, today's
+cost, health, recent activity, and tool states; everything the owner needs to see
+(and approve) at a glance. Each sub-section is gathered INDEPENDENTLY and
+DEFENSIVELY: a failing subsystem is reported under ``errors`` and replaced with a
+safe default, so the result is always complete and never raises. LLM-free (no
+provider is constructed, no model is called).
 
 ``Config`` is read through the ``lhassa.config`` MODULE (``lhassa_config.Config``)
 rather than a bound name, so a config reload (some endpoint tests reload it) is
-picked up live; the same seam ``runtime_routes`` uses.
-
-Mounted by the integrator with ``app.include_router(overview_routes.router)``.
+picked up live.
 """
+
+from __future__ import annotations
 
 import asyncio
 import time
 from datetime import datetime, timedelta, timezone
-
-from fastapi import APIRouter
 
 import lhassa.config as lhassa_config
 from lhassa.core import db
 from lhassa.security import approval
 from lhassa.state import state
 
-router = APIRouter()
+__all__ = ["build_overview"]
 
 
 async def _overview_brains() -> dict:
@@ -341,16 +338,3 @@ async def build_overview() -> dict:
     sections["instance_id"] = lhassa_config.Config.instance_id
     sections["generated_at"] = int(time.time())
     return sections
-
-
-@router.get("/api/overview")
-async def get_overview():
-    """One defensive aggregate for the dashboard home / ``lhassa status``.
-
-    Sections: ``brains``, ``skills``, ``approvals`` (with the pending list so the
-    owner can approve from here), ``cost`` (today + budget + kill-switch),
-    ``health`` (worst level + ok), ``activity`` (recent episodes) and ``tools``
-    (count by estado). Each is gathered independently; any failure lands in
-    ``errors`` instead of taking the response down. Never 500s; LLM-free.
-    """
-    return await build_overview()

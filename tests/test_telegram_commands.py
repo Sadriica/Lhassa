@@ -549,9 +549,9 @@ def test_code_parks_approval_with_expected_payload(tmp_path, monkeypatch):
     from lhassa.agents import local_cli
 
     monkeypatch.setattr(local_cli, "detect_ai_cli", lambda: "claude")
-    from lhassa.api import code_routes
+    from lhassa.agents import code_run
 
-    monkeypatch.setattr(code_routes, "_agent_cwd", lambda: tmp_path)
+    monkeypatch.setattr(code_run, "agent_cwd", lambda: tmp_path)
 
     reply = asyncio.run(
         commands.dispatch(
@@ -854,9 +854,9 @@ def test_fleet_lists_known_machines(monkeypatch):
             {"machine_id": "laptop-01", "last_checkin": "2026-07-01T00:00:00Z", "desired_state": {"mode": "on"}},
         ]
 
-    import lhassa.api.fleet_routes as fleet_routes
+    from lhassa.core import fleet
 
-    monkeypatch.setattr(fleet_routes, "get_fleet", _fake_get_fleet)
+    monkeypatch.setattr(fleet, "list_fleet", _fake_get_fleet)
     reply = asyncio.run(commands.dispatch("/fleet", config=_cfg()))
     assert "laptop-01" in reply
     assert "mode=on" in reply
@@ -866,9 +866,9 @@ def test_fleet_empty_reports_none(monkeypatch):
     async def _fake_get_fleet():
         return []
 
-    import lhassa.api.fleet_routes as fleet_routes
+    from lhassa.core import fleet
 
-    monkeypatch.setattr(fleet_routes, "get_fleet", _fake_get_fleet)
+    monkeypatch.setattr(fleet, "list_fleet", _fake_get_fleet)
     reply = asyncio.run(commands.dispatch("/fleet", config=_cfg()))
     assert "No machines known yet." in reply
 
@@ -877,9 +877,9 @@ def test_fleet_degrades_on_failure(monkeypatch):
     async def _boom():
         raise RuntimeError("db unreachable")
 
-    import lhassa.api.fleet_routes as fleet_routes
+    from lhassa.core import fleet
 
-    monkeypatch.setattr(fleet_routes, "get_fleet", _boom)
+    monkeypatch.setattr(fleet, "list_fleet", _boom)
     reply = asyncio.run(commands.dispatch("/fleet", config=_cfg()))
     assert "couldn't" in reply
 

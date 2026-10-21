@@ -131,6 +131,9 @@ export const getStatus = () => request('/api/status', { label: 'Status' })
 /** @returns {Promise<any>} the composite overview (signals, approvals, runs, …) */
 export const getOverview = () => request('/api/overview', { label: 'Overview' })
 
+/** @returns {Promise<{packs: {name: string, summary: string}[]}>} the loaded capability packs */
+export const getPacks = () => request('/api/packs', { label: 'Packs' })
+
 /** @returns {Promise<any>} the health digest */
 export const getHealth = () => request('/api/health', { label: 'Health' })
 

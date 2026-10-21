@@ -19,7 +19,7 @@ From the bottom (depends on nothing) to the top (the world-facing surfaces):
 | **Interfaces (mid)** | `memory/`, `security/`, `llm/`, `personal/` | Reusable contracts (typed facts, trust/approval, model provider + router, the personal agenda read-model). Usable by any shell; depend on none. |
 | **Adapters (the hands)** | `harness/`, `tools/`, `agents/`, `remote/`, `health/`, `bench/` | The rentable "body": harnesses, MCP/tools, specialist agents, the remote local-agent, the LhassaBench eval harness. |
 | **File-I/O seams** | `cv/`, `calendar/` | Leaf, stdlib-only seams (`.tex` CV, `.ics` calendar) used by shells; never reach into one. |
-| **Shells (outer)** | `cli/`, `api/`, `voice/`, `notify/`, `org/`, `actionpack/`, `flows/`, `tui/`, `dashboard/` (JS) | The user/world surfaces. Allowed to compose everything below them. `flows/` counts as a shell because its engine composes the org layer. `tui/` (the `lhassa-tui` pack) is a shell end to end, so it has no `surfaces/` split. |
+| **Shells (outer)** | `cli/`, `api/`, `voice/`, `notify/`, `org/`, `actionpack/`, `flows/`, `views/`, `tui/`, `dashboard/` (JS) | The user/world surfaces. Allowed to compose everything below them. `flows/` counts as a shell because its engine composes the org layer. `views/` holds the shell-level read-models the surfaces render (the overview aggregate behind `lhassa status` and `/api/overview`): they read the org chart and the flow store, so no inner layer may import them. `api/` ships in the api pack (`packages/lhassa-api`). `tui/` (the `lhassa-tui` pack) is a shell end to end, so it has no `surfaces/` split. |
 
 Principle: **inner layers never depend on outer shells.** Dependencies point
 "down" only. A shell may import the spine, interfaces and adapters; the spine and
@@ -28,7 +28,7 @@ the interfaces must not import a shell.
 ## Forbidden directions (encoded today)
 
 1. **spine-isolation**: `core/` must not import any shell
-   (`cli`, `api`, `voice`, `notify`, `org`, `actionpack`, `flows`, `tui`, `dashboard`).
+   (`cli`, `api`, `voice`, `notify`, `org`, `actionpack`, `flows`, `views`, `tui`, `dashboard`).
 2. **interface-isolation**: `memory/`, `security/`, `llm/` must not import any
    shell. **personal-isolation** applies the same rule to `personal/`.
 3. **adapter-isolation**: `harness/`, `tools/`, `agents/`, `remote/`, `health/`,
@@ -88,6 +88,12 @@ layer rules (which still apply to a pack by its subpackage name):
 
 A pack's `surfaces/` subpackage is its shell slice (router, CLI sub-app, chat
 commands), so the shell-isolation rules do not apply to files under it.
+A pack whose subpackage IS a shell (`api`, `voice`) needs no `surfaces/`: the
+shell rules never restrict a shell's own imports. Core still never imports it:
+what core needed from `lhassa.api` moved into core (the overview read-model to
+`views/overview.py`, the fleet read-model to `core/fleet.py`, the agentic run door
+to `agents/code_run.py`), and `lhassa serve` is mounted through
+`extensions.register_cli_command`.
 `make test-core` runs the root suite in an environment with no pack installed.
 
 ## How to evolve the rules

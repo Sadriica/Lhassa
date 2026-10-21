@@ -11,6 +11,7 @@ resolution-markers = [
 [manifest]
 members = [
     "lhassa",
+    "lhassa-api",
     "lhassa-bench",
     "lhassa-calendar",
     "lhassa-cv",
@@ -1088,7 +1089,6 @@ source = { editable = "." }
 dependencies = [
     { name = "anthropic" },
     { name = "ddgs" },
-    { name = "fastapi" },
     { name = "httpx" },
     { name = "loguru" },
     { name = "mcp" },
@@ -1098,10 +1098,9 @@ dependencies = [
     { name = "psutil" },
     { name = "pypdf" },
     { name = "python-dotenv" },
+    { name = "pyyaml" },
     { name = "rich" },
-    { name = "starlette" },
     { name = "typer" },
-    { name = "uvicorn", extra = ["standard"] },
 ]
 
 [package.optional-dependencies]
@@ -1119,7 +1118,6 @@ tokens = [
 requires-dist = [
     { name = "anthropic", specifier = ">=0.50.0" },
     { name = "ddgs", specifier = ">=9.0.0" },
-    { name = "fastapi", specifier = ">=0.110.0" },
     { name = "httpx", specifier = ">=0.27.0" },
     { name = "loguru", specifier = ">=0.7.0" },
     { name = "mcp", specifier = ">=1.0.0" },
@@ -1132,14 +1130,32 @@ requires-dist = [
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.23.0" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=5.0.0" },
     { name = "python-dotenv", specifier = ">=1.0.0" },
+    { name = "pyyaml", specifier = ">=6.0" },
     { name = "rich", specifier = ">=13.0.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.4.0" },
-    { name = "starlette", specifier = "<1.0.0" },
     { name = "tiktoken", marker = "extra == 'tokens'", specifier = ">=0.7.0" },
     { name = "typer", specifier = ">=0.12.0" },
-    { name = "uvicorn", extras = ["standard"], specifier = ">=0.29.0" },
 ]
 provides-extras = ["dev", "tokens"]
+
+[[package]]
+name = "lhassa-api"
+version = "0.8.0"
+source = { editable = "packages/lhassa-api" }
+dependencies = [
+    { name = "fastapi" },
+    { name = "lhassa" },
+    { name = "starlette" },
+    { name = "uvicorn", extra = ["standard"] },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "fastapi", specifier = ">=0.110.0" },
+    { name = "lhassa", editable = "." },
+    { name = "starlette", specifier = "<1.0.0" },
+    { name = "uvicorn", extras = ["standard"], specifier = ">=0.29.0" },
+]
 
 [[package]]
 name = "lhassa-bench"

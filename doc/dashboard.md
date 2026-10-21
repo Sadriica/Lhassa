@@ -1,6 +1,6 @@
 # Dashboard
 
-The Lhassa dashboard is the brain's real-time control surface: the org chart, work-flow editor, skills, an agentic run panel, watchlist/approvals for the trust loop, analytics, fleet health, and the full activity/episode log; not just a voice-status monitor. It is one of the world-facing shells composed on top of the API (`api/server.py` + domain routers), alongside the CLI, Telegram, and voice.
+The Lhassa dashboard is the brain's real-time control surface: the org chart, work-flow editor, skills, an agentic run panel, watchlist/approvals for the trust loop, analytics, fleet health, and the full activity/episode log; not just a voice-status monitor. It is one of the world-facing shells composed on top of the API (`api/server.py` + domain routers), alongside the CLI, Telegram, and voice. The API ships in the **api pack** (`packages/lhassa-api`, `uv sync --package lhassa-api`; `make install` installs every pack); the dashboard source stays at the checkout root in `dashboard/`.
 
 ---
 
@@ -81,6 +81,13 @@ Notes on names that don't match their id: the `tools` section is labelled
 **Actions** in the sidebar (it's the self-written-tool quarantine/graduation
 view, not the voice-tool catalog in `doc/tools.md`); `fleet` is labelled
 **Readiness**; `reports` is labelled **Analytics**.
+
+**Pack-aware nav.** A section may name the capability pack it needs (the optional
+`pack` field in `sections.js`): `research` needs the research pack, `calendar` the
+calendar pack, `postulaciones` the cv pack. On load the dashboard asks
+`GET /api/packs` (the loaded `PACKS` manifests, `{"packs": [{name, summary}]}`) and
+hides the sections whose pack is absent, in the nav rail and the command palette
+alike. If `/api/packs` fails (an older backend, a network error) every section shows.
 
 ### Status Bar (top)
 
@@ -224,7 +231,7 @@ make dashboard
 cd dashboard && npm run build
 ```
 
-The compiled output lands in `dashboard/dist/` and is served directly by FastAPI.
+The compiled output lands in `dashboard/dist/` and is served directly by FastAPI. The api pack finds it from the checkout (the nearest ancestor of `lhassa/api/_shared.py` holding a `dashboard/` directory, else `./dashboard/dist`); set `LHASSA_DASHBOARD_DIST` to serve a build from anywhere else.
 
 If the dashboard hasn't been built, visiting `http://localhost:7766` returns a JSON message:
 

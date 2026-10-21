@@ -970,13 +970,13 @@ def test_callback_query_approve_code_run_launches_and_reports(tmp_path, monkeypa
     monkeypatch.setattr(local_cli, "is_installed", lambda cli: True)
     monkeypatch.setattr(local_cli, "make_agent", lambda cli=None: object())
 
-    from lhassa.api import code_routes
+    from lhassa.agents import code_run
 
     async def _fake_stream_run(agent, run_id, run, task):
         run.output = "did the fix\nall good"
         run.status = "done"
 
-    monkeypatch.setattr(code_routes, "_stream_run", _fake_stream_run)
+    monkeypatch.setattr(code_run, "stream_run", _fake_stream_run)
 
     payload = {
         "ok": True,
@@ -1012,14 +1012,14 @@ def test_callback_query_deny_code_run_does_not_launch(tmp_path, monkeypatch):
         )
     )
 
-    from lhassa.api import code_routes
+    from lhassa.agents import code_run
 
     launched = []
 
     async def _fake_stream_run(agent, run_id, run, task):
         launched.append(run_id)
 
-    monkeypatch.setattr(code_routes, "_stream_run", _fake_stream_run)
+    monkeypatch.setattr(code_run, "stream_run", _fake_stream_run)
 
     payload = {
         "ok": True,

@@ -6,7 +6,7 @@ drives the brain through the REST surface. Lhassa is a brain that orchestrates
 models and tools; this is one of its world-facing surfaces (alongside CLI and
 Telegram).
 
-In production the FastAPI app (`lhassa/api/server.py`) serves the built assets from
+In production the FastAPI app (`lhassa/api/server.py`, shipped by the api pack in `packages/lhassa-api`) serves the built assets from
 `dashboard/dist/` at `http://127.0.0.1:7766`. In development the app runs standalone
 on the Vite dev server and proxies the API + WebSocket to that same backend.
 

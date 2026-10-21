@@ -61,13 +61,13 @@ async def _cmd_org(args: str, *, config=None) -> str:
 async def _cmd_fleet(args: str, *, config=None) -> str:
     """``/fleet``: known machines, last check-in and desired state, LLM-free.
 
-    Reuses :func:`lhassa.api.fleet_routes.get_fleet` directly; the exact same
-    read ``/api/fleet`` serves; rather than re-deriving the fleet from episodes.
+    Reuses :func:`lhassa.core.fleet.list_fleet`, the exact same read
+    ``/api/fleet`` serves, rather than re-deriving the fleet from episodes.
     """
     try:
-        from lhassa.api.fleet_routes import get_fleet
+        from lhassa.core import fleet
 
-        rows = await get_fleet()
+        rows = await fleet.list_fleet()
         if not rows:
             return "No machines known yet."
         lines = [f"Fleet ({len(rows)}):"]

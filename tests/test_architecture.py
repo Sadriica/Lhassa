@@ -45,7 +45,10 @@ from typing import Iterator
 # ``tui`` (the lhassa-tui pack) is a shell end to end: every screen composes
 # core/db, flows, skills and org reads plus the approval/delegate mutations, so
 # it ships as one shell subpackage rather than an inner core plus ``surfaces/``.
-SHELLS = {"cli", "api", "voice", "notify", "org", "dashboard", "actionpack", "flows", "tui"}
+# ``views`` holds the shell-level read-models (the overview aggregate ``lhassa
+# status`` and ``/api/overview`` render): they compose the org chart and the flow
+# store read-only, so they sit at the shell level and no inner layer may use them.
+SHELLS = {"cli", "api", "voice", "notify", "org", "dashboard", "actionpack", "flows", "views", "tui"}
 
 
 @dataclass(frozen=True)
