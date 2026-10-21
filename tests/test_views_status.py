@@ -26,21 +26,33 @@ SNAP = {
 
 
 def test_plain_two_lines():
-    first, second = status.plain(SNAP).split("\n")
-    assert first == (
-        "inst_test  beat claude  chat some-model  budget [" + "█" * 10 + "] 12% 7h20m  $0.0412"
+    first, second = status.plain(SNAP, "en").split("\n")
+    sep = status.SEP
+    assert first == sep.join(
+        ["inst_test", "beat claude", "chat some-model", "●○○○○○○○○○ 12% ↻ 7h20m", "$0.0412"]
     )
-    assert second == "▸▸ org live · 3 approvals · 1 tasks · last beat 6m ago · health ok"
+    assert second == sep.join(
+        ["☸ the wheel turns", "3 await your word", "1 queued", "♥ 6m ago", "all calm"]
+    )
+
+
+def test_spanish_follows_the_owner_language():
+    text = status.plain(SNAP, "es")
+    assert "latido claude" in text and "3 esperan tu palabra" in text
+    assert "la rueda gira" in text and "todo en calma" in text and "♥ hace 6m" in text
+    assert set(status.WORDS["en"]) == set(status.WORDS["es"])
 
 
 def test_roles_are_closed():
     for snap in (SNAP, {**SNAP, "budget": 0, "health_failing": ("disk",), "org_live": False}):
-        assert {r for r, _ in status.segments(snap) if r} <= status.ROLES
+        for lang in ("en", "es"):
+            assert {r for r, _ in status.segments(snap, lang) if r} <= status.ROLES
 
 
 def test_bar_level_follows_the_soft_limit():
     def level(pct):
-        return {r for r, _ in status.seat_segments({**SNAP, "pct_used": pct}) if r.startswith("bar-")}
+        segs = status.seat_segments({**SNAP, "pct_used": pct}, "en")
+        return {r for r, _ in segs if r.startswith("bar-")}
 
     assert level(0.1) == {"bar-ok", "bar-empty"}
     assert level(0.85) == {"bar-warn", "bar-empty"}
@@ -48,17 +60,18 @@ def test_bar_level_follows_the_soft_limit():
 
 
 def test_any_spend_shows_one_cell():
-    filled = "".join(t for r, t in status.seat_segments({**SNAP, "pct_used": 0.001}) if r == "bar-ok")
-    assert filled.count("█") == 1
+    segs = status.seat_segments({**SNAP, "pct_used": 0.001}, "en")
+    filled = "".join(t for r, t in segs if r == "bar-ok")
+    assert filled == status.BEAD_FULL
 
 
 def test_unknown_fields_render_as_question_marks():
     snap = {**SNAP, "budget": 0, "approvals": None, "tasks": None, "beat_age": None,
             "health_failing": None, "org_live": False}
-    text = status.plain(snap)
-    assert "budget unlimited" in text and "[" not in text
-    assert "approvals ?" in text and "? tasks" in text
-    assert "last beat ? ago" in text and "health ?" in text and "org offline" in text
+    text = status.plain(snap, "en")
+    assert "today, no cap" in text and status.BEAD_FULL not in text
+    assert "approvals ?" in text and "? queued" in text
+    assert "♥ ? ago" in text and "health ?" in text and "the org rests" in text
 
 
 def test_time_helpers():

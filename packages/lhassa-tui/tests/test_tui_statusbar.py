@@ -23,53 +23,37 @@ BASE = {
 }
 
 
-def _bar_style(text, char="█"):
+def _style_of(text, needle):
     for span in text.spans:
-        if text.plain[span.start : span.end].startswith(char):
+        if text.plain[span.start : span.end].startswith(needle):
             return str(span.style)
     return ""
 
 
-def test_render_two_lines_with_seat_budget_and_mode():
-    plain = statusbar.render(BASE, DARK).plain
-    first, second = plain.split("\n")
-    assert first.startswith("inst_test")
-    assert "beat claude" in first and "chat some-model" in first
-    assert "12%" in first and "7h20m" in first and "$0.0412" in first
-    assert second == "▸▸ org live · 3 approvals · 1 tasks · last beat 6m ago · health ok"
+def test_render_is_the_core_read_model():
+    from lhassa.views import status
+
+    for lang in ("en", "es"):
+        assert statusbar.render(BASE, DARK, lang).plain == status.plain(BASE, lang)
 
 
-def test_bar_color_follows_soft_limit():
-    assert DARK["lh-green"] in _bar_style(statusbar.render(BASE, DARK))
-    assert DARK["lh-gold"] in _bar_style(statusbar.render({**BASE, "pct_used": 0.85}, DARK))
-    assert DARK["lh-red"] in _bar_style(statusbar.render({**BASE, "pct_used": 1.2}, DARK))
+def test_beads_take_the_palette_color_of_their_level():
+    full = "●"
+    assert DARK["lh-green"] in _style_of(statusbar.render(BASE, DARK, "en"), full)
+    assert DARK["lh-gold"] in _style_of(statusbar.render({**BASE, "pct_used": 0.85}, DARK, "en"), full)
+    assert DARK["lh-red"] in _style_of(statusbar.render({**BASE, "pct_used": 1.2}, DARK, "en"), full)
+    assert DARK["lh-faint"] in _style_of(statusbar.render(BASE, DARK, "en"), "○")
 
 
-def test_bar_width_is_fixed_and_any_spend_shows():
-    plain = statusbar.render({**BASE, "pct_used": 0.001}, DARK).plain
-    inner = plain[plain.index("[") + 1 : plain.index("]")]
-    assert len(inner) == statusbar.BAR_WIDTH
+def test_every_role_has_a_style():
+    from lhassa.views import status
+
+    assert set(statusbar._styles(DARK)) == set(status.ROLES)
 
 
-def test_unlimited_budget_and_unknown_fields_degrade():
-    snap = {
-        **BASE,
-        "budget": 0,
-        "org_live": False,
-        "approvals": None,
-        "tasks": None,
-        "beat_age": None,
-        "health_failing": None,
-    }
-    plain = statusbar.render(snap, DARK).plain
-    assert "budget unlimited" in plain and "[" not in plain
-    assert "org offline" in plain and "approvals ?" in plain
-    assert "last beat ? ago" in plain and "health ?" in plain
-
-
-def test_failing_health_is_named():
-    plain = statusbar.render({**BASE, "health_failing": ("disk", "temp")}, DARK).plain
-    assert "health: disk, temp" in plain
+def test_failing_health_is_red():
+    text = statusbar.render({**BASE, "health_failing": ("disk",)}, DARK, "en")
+    assert DARK["lh-red"] in _style_of(text, "heads up: disk")
 
 
 def test_format_duration():

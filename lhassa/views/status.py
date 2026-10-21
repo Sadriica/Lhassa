@@ -32,7 +32,7 @@ ROLES = frozenset(
     }
 )
 
-SEP = " · "
+SEP = "  ∙  "
 
 
 def seconds_to_utc_midnight(now: "datetime | None" = None) -> int:
@@ -135,68 +135,121 @@ async def gather(instance_id: "str | None" = None) -> dict:
     return snap
 
 
-def _bar(pct: float, soft: float) -> list[tuple[str, str]]:
+#: The budget meter is a string of mala beads, not a progress bar.
+BEAD_FULL = "●"
+BEAD_EMPTY = "○"
+#: The dharma wheel marks the mode line: turning when the org runs live.
+WHEEL = "☸"
+
+
+def _beads(pct: float, soft: float) -> list[tuple[str, str]]:
     pct = max(0.0, pct)
     level = "alert" if pct >= 1.0 else "warn" if pct >= soft else "ok"
     filled = min(BAR_WIDTH, round(pct * BAR_WIDTH))
     if pct > 0 and filled == 0:
         filled = 1  # any spend shows
-    cells = [(f"bar-{level}", "█" * filled), ("bar-empty", "█" * (BAR_WIDTH - filled))]
-    return [(f"bar-{level}", "[")] + [c for c in cells if c[1]] + [(f"bar-{level}", "]")]
+    cells = [(f"bar-{level}", BEAD_FULL * filled), ("bar-empty", BEAD_EMPTY * (BAR_WIDTH - filled))]
+    return [c for c in cells if c[1]]
 
 
-def seat_segments(snap: dict) -> list[tuple[str, str]]:
+#: What the status line says, English and Spanish (``digest_language`` picks).
+WORDS: dict[str, dict[str, str]] = {
+    "en": {
+        "beat": "beat ", "chat": "chat ", "no_cap": " today, no cap",
+        "live": "the wheel turns", "rests": "the org rests",
+        "await": "{n} await your word", "none": "nothing awaits you",
+        "queued": "{n} queued", "ago": "♥ {age} ago",
+        "calm": "all calm", "heads_up": "heads up: ", "approvals_unknown": "approvals ?",
+        "health_unknown": "health ?",
+    },
+    "es": {
+        "beat": "latido ", "chat": "chat ", "no_cap": " hoy, sin tope",
+        "live": "la rueda gira", "rests": "la org descansa",
+        "await": "{n} esperan tu palabra", "none": "nada te espera",
+        "queued": "{n} en cola", "ago": "♥ hace {age}",
+        "calm": "todo en calma", "heads_up": "ojo: ", "approvals_unknown": "aprobaciones ?",
+        "health_unknown": "salud ?",
+    },
+}
+
+
+def language() -> str:
+    """``es`` when the owner's ``digest_language`` is Spanish, else ``en``."""
+    try:
+        from lhassa.config import Config
+
+        lang = str(getattr(Config, "digest_language", "") or "")
+    except Exception:
+        lang = ""
+    return "es" if lang.strip().lower().startswith("es") else "en"
+
+
+def _words(lang: "str | None") -> dict[str, str]:
+    return WORDS.get(lang or language(), WORDS["en"])
+
+
+def seat_segments(snap: dict, lang: "str | None" = None) -> list[tuple[str, str]]:
     """Line one: instance, seats, today's budget and cost."""
+    w = _words(lang)
     out: list[tuple[str, str]] = [
         ("brand", str(snap.get("instance_id") or "?")),
-        ("label", "  beat "),
+        ("muted", SEP),
+        ("label", w["beat"]),
         ("value", str(snap.get("heartbeat_seat") or "auto")),
-        ("label", "  chat "),
+        ("muted", SEP),
+        ("label", w["chat"]),
         ("model", str(snap.get("model") or "?")),
-        ("label", "  budget "),
+        ("muted", SEP),
     ]
     budget = int(snap.get("budget") or 0)
     if budget > 0:
         pct = float(snap.get("pct_used") or 0.0)
-        out += _bar(pct, float(snap.get("soft_pct") or 0.8))
+        out += _beads(pct, float(snap.get("soft_pct") or 0.8))
         out.append(("value", f" {round(pct * 100)}%"))
-        out.append(("ok", f" {format_duration(snap.get('reset_seconds'))}"))
-    else:
-        out.append(("value", "unlimited"))
-    out.append(("ok", f"  ${float(snap.get('cost_usd') or 0.0):.4f}"))
+        out.append(("label", f" ↻ {format_duration(snap.get('reset_seconds'))}"))
+        out.append(("muted", SEP))
+    out.append(("ok", f"${float(snap.get('cost_usd') or 0.0):.4f}"))
+    if budget <= 0:
+        out.append(("label", w["no_cap"]))
     return out
 
 
-def mode_segments(snap: dict) -> list[tuple[str, str]]:
-    """Line two: org mode, what waits on the owner, last beat, health."""
+def mode_segments(snap: dict, lang: "str | None" = None) -> list[tuple[str, str]]:
+    """Line two: org mode, what waits on the owner, queue, last beat, health."""
+    w = _words(lang)
     out: list[tuple[str, str]] = []
-    out.append(("model", "▸▸ org live") if snap.get("org_live") else ("muted", "▸▸ org offline"))
+    if snap.get("org_live"):
+        out.append(("model", f"{WHEEL} {w['live']}"))
+    else:
+        out.append(("muted", f"{WHEEL} {w['rests']}"))
     approvals = snap.get("approvals")
     out.append(("muted", SEP))
     if approvals is None:
-        out.append(("muted", "approvals ?"))
+        out.append(("muted", w["approvals_unknown"]))
+    elif approvals:
+        out.append(("model", w["await"].format(n=approvals)))
     else:
-        out.append(("model" if approvals else "muted", f"{approvals} approvals"))
+        out.append(("muted", w["none"]))
     tasks = snap.get("tasks")
     out.append(("muted", SEP))
-    out.append(("muted", f"{'?' if tasks is None else tasks} tasks"))
+    out.append(("muted", w["queued"].format(n="?" if tasks is None else tasks)))
     out.append(("muted", SEP))
-    out.append(("muted", f"last beat {format_duration(snap.get('beat_age'))} ago"))
+    out.append(("muted", w["ago"].format(age=format_duration(snap.get("beat_age")))))
     out.append(("muted", SEP))
     failing = snap.get("health_failing")
     if failing is None:
-        out.append(("muted", "health ?"))
+        out.append(("muted", w["health_unknown"]))
     elif failing:
-        out.append(("alert", "health: " + ", ".join(failing)))
+        out.append(("alert", w["heads_up"] + ", ".join(failing)))
     else:
-        out.append(("ok", "health ok"))
+        out.append(("ok", w["calm"]))
     return out
 
 
-def segments(snap: dict) -> list[tuple[str, str]]:
+def segments(snap: dict, lang: "str | None" = None) -> list[tuple[str, str]]:
     """Both lines, separated by a ``("", "\\n")`` pair."""
-    return seat_segments(snap) + [("", "\n")] + mode_segments(snap)
+    return seat_segments(snap, lang) + [("", "\n")] + mode_segments(snap, lang)
 
 
-def plain(snap: dict) -> str:
-    return "".join(text for _, text in segments(snap))
+def plain(snap: dict, lang: "str | None" = None) -> str:
+    return "".join(text for _, text in segments(snap, lang))

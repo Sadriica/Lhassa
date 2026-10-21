@@ -165,7 +165,7 @@ def _repl() -> None:
         completer=_repl_ui.SlashCompleter(),
         complete_while_typing=True,
         bottom_toolbar=lambda: _repl_ui.toolbar_fragments(snap) if snap else "",
-        placeholder=[("class:placeholder", "Ask anything, or / for commands")],
+        placeholder=[("class:placeholder", _repl_ui.voice()["placeholder"])],
         style=style,
     )
 
@@ -269,7 +269,7 @@ def _repl() -> None:
         _print_cost(err, result)
         snap.update(_repl_status(err) or {})
 
-    err.print("[dim]bye.[/]")
+    err.print(f"[dim]{_repl_ui.voice()['bye']}[/]")
 
 
 def _chat_entry(prompt_text: str, json_out: bool) -> None:

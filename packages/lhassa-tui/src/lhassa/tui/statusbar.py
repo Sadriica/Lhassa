@@ -3,7 +3,7 @@
 
 The content is core's status read-model (``lhassa.views.status``), the same one
 the REPL's bottom toolbar shows: line one is the seat and spend (instance,
-heartbeat seat, chat model, today's token budget as a bar that turns gold past
+heartbeat seat, chat model, today's token budget as mala beads that turn gold past
 ``budget_soft_pct`` and red when spent, time to the UTC reset, today's cost);
 line two is the mode line (org live, approvals, tasks, last beat, health). This
 module only maps the read-model's roles onto the TUI palette.
@@ -24,12 +24,6 @@ gather = status_view.gather
 
 
 def _styles(palette: dict) -> dict[str, str]:
-    def empty(fill: str) -> str:
-        try:
-            return tui_colors._mix(fill, palette["lh-bg"], 0.72)
-        except Exception:
-            return palette["lh-faint"]
-
     return {
         "brand": f"bold {palette['lh-gold']}",
         "label": palette["lh-faint"],
@@ -42,15 +36,15 @@ def _styles(palette: dict) -> dict[str, str]:
         "bar-ok": palette["lh-green"],
         "bar-warn": palette["lh-gold"],
         "bar-alert": palette["lh-red"],
-        "bar-empty": empty(palette["lh-green"]),
+        "bar-empty": palette["lh-faint"],
     }
 
 
-def render(snap: dict, palette: dict) -> Text:
-    """The two status lines for ``snap`` in ``palette``. Pure."""
+def render(snap: dict, palette: dict, lang: "str | None" = None) -> Text:
+    """The two status lines for ``snap`` in ``palette`` (owner's language by default)."""
     styles = _styles(palette)
     out = Text(no_wrap=True, overflow="ellipsis")
-    for role, text in status_view.segments(snap):
+    for role, text in status_view.segments(snap, lang):
         out.append(text, style=styles.get(role, ""))
     return out
 

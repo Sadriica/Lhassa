@@ -22,16 +22,20 @@ an API provider (groq/anthropic/openai/openrouter/cerebras; needs its key in
 `lhassa config set llm_provider claude`. This is separate from the background
 **heartbeat** model (`heartbeat_provider`).
 
-The bare `lhassa` REPL opens on a **welcome card**: the two model seats, today's
-spend, the working directory, and what is waiting on you in the next 24 hours
-(calendar events, approvals, reminders; Lhassa's own upkeep tasks stay out). Type
-`/` for a menu of the REPL commands (`/status`, `/agenda`, `/approvals`,
-`/approve <id>`, `/deny <id>`, `/skills`, `/tools`, `/usage`, `/reset`, `/clear`,
-`/exit`). Input history persists in `repl_history` next to the brain DB (`↑`).
-Under the prompt sits the same two-line status the TUI shows at its bottom
-(`lhassa/views/status.py`): instance, heartbeat seat, chat model, today's token
-budget as a bar with its UTC reset, cost, then org mode, approvals, tasks, last
-beat and health. All of it is local reads, $0.
+The bare `lhassa` REPL opens with Lhassa introducing itself, in the first
+person and in the owner's language (`digest_language`, English or Spanish): the
+stupa mark, a greeting by the local hour, its last heartbeat and today's cost,
+the two model seats, the org mode and the working directory; then a line of
+prayer flags and what waits on your word in the next 24 hours (calendar events,
+approvals, reminders; Lhassa's own upkeep tasks stay out). Type `/` for a menu of
+the REPL commands (`/status`, `/agenda`, `/approvals`, `/approve <id>`,
+`/deny <id>`, `/skills`, `/tools`, `/usage`, `/reset`, `/clear`, `/exit`). Input
+history persists in `repl_history` next to the brain DB (`↑`). Under the prompt
+sits the same two-line status the TUI shows at its bottom
+(`lhassa/views/status.py`): instance, heartbeat seat, chat model, today's budget
+as mala beads (gold past the soft limit, red when spent) with its UTC reset and
+cost; then the dharma wheel (turning when the org runs live), approvals waiting,
+the queue, the last heartbeat and health. All of it is local reads, $0.
 
 The CLI is themed in the **Lhasa palette**: temple gold, monk-robe red (sparing),
 snow white, sage green. Override the REPL's log verbosity with
