@@ -372,3 +372,18 @@ def test_absent_pack_command_prints_install_hint_not_a_chat():
         # Core alone: the real CLI routes `tui` to the stub, never to chat.
         real = CliRunner().invoke(app_mod.app, ["tui"])
         assert real.exit_code == 1 and "lhassa-tui" in real.output
+
+
+def test_absent_pack_sub_app_with_arguments_still_gets_the_hint():
+    """``lhassa calendar list`` with the calendar pack absent: hint, not usage error or chat."""
+    from typer.testing import CliRunner
+
+    from lhassa.cli import app as app_mod
+    from lhassa.extensions import CLI_APPS, CLI_COMMANDS
+
+    for cmd in app_mod._ABSENT_PACK_COMMANDS:
+        if cmd in CLI_APPS or cmd in CLI_COMMANDS:
+            continue
+        result = CliRunner().invoke(app_mod.app, [cmd, "list", "--all"])
+        assert result.exit_code == 1, (cmd, result.output)
+        assert app_mod._ABSENT_PACK_COMMANDS[cmd] in result.output

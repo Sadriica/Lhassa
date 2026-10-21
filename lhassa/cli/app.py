@@ -357,7 +357,13 @@ for _pack_cmd_name, _pack_cmd_factory in _CLI_COMMANDS.items().items():
 
 # A pack command that is not installed must not fall through to the implicit
 # chat (a paid think on the word "tui"): mount a hidden stub naming the pack.
-_ABSENT_PACK_COMMANDS = {"tui": "lhassa-tui"}
+# Name-only data: core imports nothing from these distributions.
+_ABSENT_PACK_COMMANDS = {
+    "bench": "lhassa-bench",
+    "calendar": "lhassa-calendar",
+    "research": "lhassa-research",
+    "tui": "lhassa-tui",
+}
 
 
 def _absent_pack_stub(cmd: str, dist: str):
@@ -373,7 +379,13 @@ def _absent_pack_stub(cmd: str, dist: str):
 
 for _absent_cmd, _absent_dist in _ABSENT_PACK_COMMANDS.items():
     if _absent_cmd not in _CLI_COMMANDS and _absent_cmd not in _CLI_APPS:
-        app.command(_absent_cmd, hidden=True)(_absent_pack_stub(_absent_cmd, _absent_dist))
+        # Accept any trailing words (``lhassa calendar list``) so the hint, not
+        # a usage error, is what the owner sees.
+        app.command(
+            _absent_cmd,
+            hidden=True,
+            context_settings={"allow_extra_args": True, "ignore_unknown_options": True},
+        )(_absent_pack_stub(_absent_cmd, _absent_dist))
 
 
 def main() -> None:
