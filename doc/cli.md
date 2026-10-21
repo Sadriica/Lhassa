@@ -124,7 +124,8 @@ approval gate that guards the attach.
 
 ## `lhassa tui`: the brain in a terminal
 
-`lhassa tui` launches a Textual terminal app with eight tabs (Overview / Projects /
+`lhassa tui` (the `lhassa-tui` pack, `packages/lhassa-tui`, module `lhassa.tui`;
+absent when the pack is not installed) launches a Textual terminal app with eight tabs (Overview / Projects /
 Runs / Approvals / Flows / Skills / Memory / Org), reading `lhassa/core/db/`,
 `flows/store.py`, `skills/store.py` and `org/topology.py` **directly**: it works
 with the API server down. Approve/deny on the Approvals tab go through the

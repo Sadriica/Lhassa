@@ -6,14 +6,14 @@ helper (never bare ids), with in-place approve/deny.
 (the SAME seam the CLI/API use; never bypassed). A confirmation line renders
 in the screen's status line and the queue reloads after every resolution.
 
-A :class:`~lhassa.cli.tui.screens.base.TableScreen`, so the queue also gets the
+A :class:`~lhassa.tui.screens.base.TableScreen`, so the queue also gets the
 ``/`` filter and the live re-poll (a new approval parked by the heartbeat shows
 up without a keypress).
 """
 
 from __future__ import annotations
 
-from lhassa.cli.tui.screens.base import EMPTY, Row, TableScreen
+from lhassa.tui.screens.base import EMPTY, Row, TableScreen
 
 
 async def _load_approvals(instance_id: str) -> list[dict]:

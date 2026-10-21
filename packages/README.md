@@ -37,7 +37,9 @@ packages/lhassa-<name>/
    (the policy row for each action the pack ships: without one the action is
    denied, and a pack can never redefine a core row); and the surface ones in
    `lhassa/extensions.py`: `register_api_router(name, factory)`,
-   `register_cli_app(name, factory)`, `register_pack_migrations(pack, migrations)`.
+   `register_cli_app(name, factory)`, `register_cli_command(name, factory)` (a
+   single top-level command with no subcommands, like `lhassa tui`),
+   `register_pack_migrations(pack, migrations)`.
    Surface factories import their module lazily (inside the factory), so a
    process that never serves the API never imports fastapi through a pack.
    Registration must be idempotent (tests import twice).

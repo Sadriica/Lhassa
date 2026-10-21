@@ -22,7 +22,7 @@ from __future__ import annotations
 from textual.app import ComposeResult
 from textual.widgets import DataTable, Static
 
-from lhassa.cli.tui.screens.base import EMPTY, Row, TableScreen
+from lhassa.tui.screens.base import EMPTY, Row, TableScreen
 
 # Keys in a node's opaque ``limits`` mapping that are actually LIMIT-shaped
 # (budget/token/cost/rate/max_* caps). Anything else stashed there (e.g. a

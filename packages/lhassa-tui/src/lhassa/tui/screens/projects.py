@@ -6,7 +6,7 @@ used to scope ``runs`` to a project (see ``core/projects.py``). The evidence
 column renders through ``lhassa.memory.evidence.evidence_state``: the same
 humblest-first claim ladder used elsewhere.
 
-A :class:`~lhassa.cli.tui.screens.base.TableScreen`, so the project list gains
+A :class:`~lhassa.tui.screens.base.TableScreen`, so the project list gains
 the ``/`` filter and the live re-poll; the runs pane refreshes with it.
 """
 
@@ -15,7 +15,7 @@ from __future__ import annotations
 from textual.app import ComposeResult
 from textual.widgets import DataTable, Static
 
-from lhassa.cli.tui.screens.base import EMPTY, Row, TableScreen
+from lhassa.tui.screens.base import EMPTY, Row, TableScreen
 
 
 async def _load_projects(instance_id: str) -> list[dict]:

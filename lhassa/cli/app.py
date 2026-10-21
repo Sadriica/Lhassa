@@ -341,6 +341,7 @@ _memory_cmds.register(app)
 # failing factory is skipped so one broken pack never breaks the CLI.
 from lhassa import actionpack as _actionpack  # noqa: E402
 from lhassa.extensions import CLI_APPS as _CLI_APPS  # noqa: E402
+from lhassa.extensions import CLI_COMMANDS as _CLI_COMMANDS  # noqa: E402
 
 _actionpack.register_all()
 for _pack_cli_name, _pack_cli_factory in _CLI_APPS.items().items():
@@ -348,20 +349,31 @@ for _pack_cli_name, _pack_cli_factory in _CLI_APPS.items().items():
         app.add_typer(_pack_cli_factory(), name=_pack_cli_name)
     except Exception as _exc:  # noqa: BLE001
         print(f"lhassa: pack command {_pack_cli_name!r} failed to load: {_exc}", file=sys.stderr)
+for _pack_cmd_name, _pack_cmd_factory in _CLI_COMMANDS.items().items():
+    try:
+        app.command(_pack_cmd_name)(_pack_cmd_factory())
+    except Exception as _exc:  # noqa: BLE001
+        print(f"lhassa: pack command {_pack_cmd_name!r} failed to load: {_exc}", file=sys.stderr)
+
+# A pack command that is not installed must not fall through to the implicit
+# chat (a paid think on the word "tui"): mount a hidden stub naming the pack.
+_ABSENT_PACK_COMMANDS = {"tui": "lhassa-tui"}
 
 
-@app.command("tui")
-def tui_cmd() -> None:
-    """Launch the Textual terminal dashboard (offline, direct DB reads)."""
-    # Belt-and-suspenders: this module already calls quiet_logging() at import
-    # (line 33), but the call is idempotent and cheap, and the TUI must NEVER
-    # run with loguru's noisy default sink live even if something reaches this
-    # command without that import having happened first.
-    quiet_logging()
-    # Lazy import: importing the CLI must never pay Textual's import cost.
-    from lhassa.cli.tui.app import run_tui
+def _absent_pack_stub(cmd: str, dist: str):
+    def _stub() -> None:
+        _console(stderr=True).print(
+            f"[error]x[/] `lhassa {cmd}` comes from the {dist} pack, which is not installed. "
+            f"Install it with `uv sync --package {dist}` (or `uv sync --all-packages`)."
+        )
+        raise typer.Exit(code=1)
 
-    run_tui()
+    return _stub
+
+
+for _absent_cmd, _absent_dist in _ABSENT_PACK_COMMANDS.items():
+    if _absent_cmd not in _CLI_COMMANDS and _absent_cmd not in _CLI_APPS:
+        app.command(_absent_cmd, hidden=True)(_absent_pack_stub(_absent_cmd, _absent_dist))
 
 
 def main() -> None:

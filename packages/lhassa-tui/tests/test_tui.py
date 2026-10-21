@@ -29,7 +29,7 @@ def brain(tmp_path, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_app_mounts_on_empty_db(brain):
-    from lhassa.cli.tui.app import LhassaTui
+    from lhassa.tui.app import LhassaTui
 
     app = LhassaTui(instance_id=INSTANCE)
     async with app.run_test() as pilot:
@@ -39,7 +39,7 @@ async def test_app_mounts_on_empty_db(brain):
 
 @pytest.mark.asyncio
 async def test_overview_switches_tabs_without_error(brain):
-    from lhassa.cli.tui.app import LhassaTui
+    from lhassa.tui.app import LhassaTui
 
     app = LhassaTui(instance_id=INSTANCE)
     async with app.run_test() as pilot:
@@ -53,7 +53,7 @@ async def test_overview_switches_tabs_without_error(brain):
 
 @pytest.mark.asyncio
 async def test_projects_screen_lists_project_row(brain, tmp_path):
-    from lhassa.cli.tui.app import LhassaTui
+    from lhassa.tui.app import LhassaTui
     from lhassa.core import projects
 
     await projects.create_project(INSTANCE, "lhassa", kind="code", path=str(tmp_path))
@@ -70,7 +70,7 @@ async def test_projects_screen_lists_project_row(brain, tmp_path):
 
 @pytest.mark.asyncio
 async def test_runs_screen_lists_run_row(brain):
-    from lhassa.cli.tui.app import LhassaTui
+    from lhassa.tui.app import LhassaTui
 
     await brain.record_run(
         {
@@ -95,7 +95,7 @@ async def test_runs_screen_lists_run_row(brain):
 
 @pytest.mark.asyncio
 async def test_approvals_screen_renders_via_describe(brain):
-    from lhassa.cli.tui.app import LhassaTui
+    from lhassa.tui.app import LhassaTui
 
     await brain.add_approval(
         INSTANCE,
@@ -126,7 +126,7 @@ async def test_no_loguru_sink_targets_stderr_while_mounted(brain):
     (off-screen) log, and ``on_unmount`` must restore a stderr sink afterward
     so a plain CLI session behaves normally again."""
     from loguru import logger as _loguru
-    from lhassa.cli.tui.app import LhassaTui
+    from lhassa.tui.app import LhassaTui
 
     def _handler_ids() -> set:
         return set(getattr(_loguru._core, "handlers", {}).keys())
@@ -151,7 +151,7 @@ async def test_no_loguru_sink_targets_stderr_while_mounted(brain):
 
 @pytest.mark.asyncio
 async def test_approvals_screen_approve_key_resolves(brain):
-    from lhassa.cli.tui.app import LhassaTui
+    from lhassa.tui.app import LhassaTui
 
     await brain.add_approval(
         INSTANCE,
@@ -188,7 +188,7 @@ async def test_overview_rows_actually_have_height():
     tests passed while the screen was visibly empty; this is the assertion
     that would have caught it.
     """
-    from lhassa.cli.tui.app import LhassaTui
+    from lhassa.tui.app import LhassaTui
 
     app = LhassaTui()
     async with app.run_test(size=(120, 40)) as pilot:
