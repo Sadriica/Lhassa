@@ -2,8 +2,9 @@
 
 Offline + $0: a tmp brain DB (monkeypatched ``db.DB_PATH``), a seeded topology
 (lhassa → general → interns, mirroring tests/test_org_delegate.py), and FAKE send
-seams (``telegram_api.send_document`` / ``notify.dispatch.notify``) so nothing
-touches the network. Covers:
+seams (a fake file-capable ``telegram`` channel behind
+``notify.channels.deliver_document`` / ``notify.dispatch.notify``) so nothing
+touches the network and core needs no telegram pack. Covers:
 
   * a document delivery through the full chain; one Episode per brain on the
     path plus the final root outcome episode, the artifact row, and the actual
@@ -23,6 +24,7 @@ import pytest_asyncio  # noqa: F401
 from lhassa.core import artifacts, db
 from lhassa.org import deliver
 from lhassa.org.topology import BrainNode, Topology
+from tests.chat_fakes import FileChannel, install_channel
 
 
 # ── fixtures / builders ───────────────────────────────────────────────────────────
@@ -72,8 +74,6 @@ async def test_deliver_document_logs_one_episode_per_brain(tmp_path, monkeypatch
 
     monkeypatch.setattr(topo_mod, "load_topology", lambda config=None: _topology())
 
-    from lhassa.notify import telegram_api
-
     sent = {}
 
     async def fake_send_document(path, *, caption="", config=None):
@@ -81,7 +81,7 @@ async def test_deliver_document_logs_one_episode_per_brain(tmp_path, monkeypatch
         sent["caption"] = caption
         return True
 
-    monkeypatch.setattr(telegram_api, "send_document", fake_send_document)
+    install_channel(monkeypatch, FileChannel(on_document=fake_send_document))
 
     cv_pdf = tmp_path / "cv_sezzle.pdf"
     cv_pdf.write_text("pdf")
@@ -229,12 +229,10 @@ async def test_deliver_survives_artifact_registration_failure(tmp_path, monkeypa
 
     monkeypatch.setattr(artifacts, "register", _boom_register)
 
-    from lhassa.notify import telegram_api
-
     async def fake_send_document(path, *, caption="", config=None):
         return True
 
-    monkeypatch.setattr(telegram_api, "send_document", fake_send_document)
+    install_channel(monkeypatch, FileChannel(on_document=fake_send_document))
 
     doc = tmp_path / "report.pdf"
     doc.write_text("pdf")
@@ -263,12 +261,10 @@ async def test_deliver_reports_send_failure(tmp_path, monkeypatch):
 
     monkeypatch.setattr(topo_mod, "load_topology", lambda config=None: _topology())
 
-    from lhassa.notify import telegram_api
-
     async def fake_send_document(path, *, caption="", config=None):
         return False
 
-    monkeypatch.setattr(telegram_api, "send_document", fake_send_document)
+    install_channel(monkeypatch, FileChannel(on_document=fake_send_document))
 
     doc = tmp_path / "cv.pdf"
     doc.write_text("pdf")
@@ -292,34 +288,74 @@ async def test_deliver_reports_send_failure(tmp_path, monkeypatch):
 
 def test_send_document_is_reachable_only_through_deliver():
     """The enforcement behind the standing principle: an artifact (a file) may
-    reach the owner ONLY through org/deliver.py. A future flow or brain that
-    calls telegram_api.send_document directly; bypassing the per-brain
-    delivery ledger; fails this test. Documentation is not enforcement; this is.
+    reach the owner ONLY through org/deliver.py. A future flow, brain or pack
+    that sends a file itself (a channel's ``send_document``, or the channel
+    seam's ``deliver_document``), bypassing the per-brain delivery ledger,
+    fails this test. Documentation is not enforcement; this is.
+
+    Walks core AND every pack's source tree. The allowed callers are the seam
+    itself, the channel-level primitive it calls, and the one channel that
+    wraps its transport's file upload.
     """
     import ast
     import pathlib
 
-    root = pathlib.Path(__file__).resolve().parent.parent / "lhassa"
+    repo = pathlib.Path(__file__).resolve().parent.parent
+    roots = [repo / "lhassa", *sorted((repo / "packages").glob("*/src/lhassa"))]
+    allowed = {
+        "org/deliver.py",  # the seam
+        "notify/channels.py",  # deliver_document: the channel-level primitive
+        "notify/telegram_channel.py",  # the Telegram channel wraps its Bot API upload
+    }
     offenders = []
-    for py in root.rglob("*.py"):
-        rel = py.relative_to(root).as_posix()
-        if rel in ("org/deliver.py", "notify/telegram_api.py"):
-            continue  # the seam itself and the primitive it wraps
-        try:
-            tree = ast.parse(py.read_text(encoding="utf-8"))
-        except SyntaxError:
-            continue
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Call):
-                fn = node.func
-                name = fn.attr if isinstance(fn, ast.Attribute) else getattr(fn, "id", "")
-                if name == "send_document":
-                    offenders.append(f"{rel}:{node.lineno}")
+    for root in roots:
+        for py in root.rglob("*.py"):
+            rel = py.relative_to(root).as_posix()
+            if rel in allowed:
+                continue
+            try:
+                tree = ast.parse(py.read_text(encoding="utf-8"))
+            except SyntaxError:
+                continue
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Call):
+                    fn = node.func
+                    name = fn.attr if isinstance(fn, ast.Attribute) else getattr(fn, "id", "")
+                    if name in ("send_document", "deliver_document"):
+                        offenders.append(f"{rel}:{node.lineno}")
     assert not offenders, (
-        "send_document called outside org/deliver.py; a file reaching the owner "
+        "a file sent outside org/deliver.py; a file reaching the owner "
         "must bubble UP through the hierarchy (see doc/architecture.md standing "
         f"principle). Offenders: {offenders}"
     )
+
+
+@pytest.mark.asyncio
+async def test_deliver_without_a_file_channel_fails_honestly(tmp_path, monkeypatch):
+    """No channel can carry a file (core alone, no telegram pack): the hops are
+    still logged, nothing raises, and the final episode says so plainly."""
+    monkeypatch.setattr(db, "DB_PATH", tmp_path / "brain.db")
+    await db.init_db()
+
+    from lhassa.notify.channels import CHANNELS
+    from lhassa.org import topology as topo_mod
+
+    monkeypatch.setattr(topo_mod, "load_topology", lambda config=None: _topology())
+    for name, channel in list(CHANNELS.items().items()):
+        if callable(getattr(channel, "send_document", None)):
+            monkeypatch.delitem(CHANNELS._items, name)
+
+    doc = tmp_path / "cv.pdf"
+    doc.write_text("pdf")
+    delivered, artifact_id = await deliver.deliver(
+        document=str(doc), origin_department="interns", config=_cfg(tmp_path)
+    )
+
+    assert delivered is False
+    assert artifact_id is not None
+    eps = await _episodes("inst_personal")
+    assert [e["dominio"] for e in eps] == ["interns", "general", "lhassa", "lhassa"]
+    assert eps[-1]["resultado"] == "delivered: cv.pdf → owner (none, failed)"
 
 
 @pytest.mark.asyncio
@@ -345,8 +381,7 @@ async def test_deliver_walks_arbitrary_depth(tmp_path, monkeypatch):
         sent.append(path)
         return True
 
-    import lhassa.notify.telegram_api as _tapi
-    monkeypatch.setattr(_tapi, "send_document", fake_send_document)
+    install_channel(monkeypatch, FileChannel(on_document=fake_send_document))
 
     ok, art = await deliver_mod.deliver(
         document=str(tmp_path / "r.pdf"),

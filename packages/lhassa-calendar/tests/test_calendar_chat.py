@@ -1,28 +1,15 @@
-"""The calendar pack through the Telegram poller: the always-on calendar
+"""The calendar pack through the chat engine: the always-on calendar
 shortcut, the ``[routable:calendar_view]`` marker and the sticky-topic
-follow-up. Split from core's ``tests/test_telegram_inbound.py`` (which tests
-the same seams against a stand-in capability). No network, no LLM.
+follow-up. Split from core's ``tests/test_chat_engine.py`` (which tests the
+same seams against a stand-in capability). Played through
+``tests.chat_fakes.FakeTransport``: no transport, no network, no LLM.
 """
 
 import asyncio
 from datetime import timedelta
 from types import SimpleNamespace
 
-import pytest
-
-from lhassa.notify import telegram, telegram_inbound
-
-
-@pytest.fixture(autouse=True)
-def _fresh_chat_state():
-    """Module-level chat history/turn counters never leak between tests."""
-    telegram_inbound._CHAT_HISTORY.clear()
-    telegram_inbound._CHAT_TURNS.clear()
-    telegram_inbound._CHAT_TOPIC.clear()
-    yield
-    telegram_inbound._CHAT_HISTORY.clear()
-    telegram_inbound._CHAT_TURNS.clear()
-    telegram_inbound._CHAT_TOPIC.clear()
+from tests.chat_fakes import FakeTransport
 
 
 def _cfg(**over):
@@ -33,38 +20,6 @@ def _cfg(**over):
     )
     base.update(over)
     return SimpleNamespace(**base)
-
-
-class _Resp:
-    def __init__(self, status=200, payload=None, text="ok"):
-        self.status_code = status
-        self._payload = payload if payload is not None else {"ok": True, "result": []}
-        self.text = text
-
-    def json(self):
-        return self._payload
-
-
-def _client_returning(payload):
-    """An httpx.AsyncClient stand-in whose GET returns ``payload``."""
-
-    class _Client:
-        last = None
-
-        def __init__(self, *a, **k):
-            pass
-
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, *a):
-            return False
-
-        async def get(self, url, params=None):
-            _Client.last = {"url": url, "params": params}
-            return _Resp(payload=payload)
-
-    return _Client
 
 
 class _FakeProvider:
@@ -119,46 +74,21 @@ def _patch_brain(monkeypatch, *, reply="brain reply", raise_exc=None):
 
 
 def _patch_send(monkeypatch):
-    sent = []
-
-    async def _fake_send(text, *, config=None):
-        sent.append(text)
-        return True
-
-    monkeypatch.setattr(telegram, "send", _fake_send)
-    return sent
+    """A fresh recording transport; returns it (its ``sent`` holds the replies)."""
+    return FakeTransport()
 
 
-def _payload_for(text, update_id=500):
-    return {
-        "ok": True,
-        "result": [
-            {"update_id": update_id, "message": {"chat": {"id": 123}, "text": text}}
-        ],
-    }
+def _say(transport, text, cfg=None):
+    asyncio.run(transport.say(text, config=cfg or _cfg()))
 
 
 def test_calendar_query_answered_without_provider(monkeypatch):
     """A calendar question is answered from lhassa.calendar.query; deterministic,
     $0; and NEVER reaches the tool-less brain think (no provider.complete call).
     An episode is logged through the calendar seam."""
-    payload = {
-        "ok": True,
-        "result": [
-            {
-                "update_id": 400,
-                "message": {
-                    "chat": {"id": 123},
-                    "text": "¿qué hay en mi calendario el viernes?",
-                },
-            }
-        ],
-    }
-    monkeypatch.setattr(
-        telegram_inbound.httpx, "AsyncClient", _client_returning(payload)
-    )
     provider = _patch_brain(monkeypatch)
-    sent = _patch_send(monkeypatch)
+    transport = _patch_send(monkeypatch)
+    sent = transport.sent
 
     from lhassa.calendar import feed as feed_mod
     from lhassa.calendar import query as query_mod
@@ -190,7 +120,7 @@ def test_calendar_query_answered_without_provider(monkeypatch):
 
     monkeypatch.setattr(episode_mod.Episode, "append", _capture_append)
 
-    asyncio.run(telegram_inbound.poll_once(_cfg(), offset=None))
+    _say(transport, "¿qué hay en mi calendario el viernes?")
 
     assert provider.calls == []  # never reached the tool-less think
     assert sent and sent[0].startswith("El viernes")
@@ -208,20 +138,9 @@ def test_calendar_query_answered_without_provider(monkeypatch):
 def test_calendar_query_falls_through_for_normal_message(monkeypatch):
     """A normal message (no calendar keyword, no time reference) is unaffected;
     it still reaches the tool-less brain think exactly as before."""
-    payload = {
-        "ok": True,
-        "result": [
-            {
-                "update_id": 401,
-                "message": {"chat": {"id": 123}, "text": "cómo estás?"},
-            }
-        ],
-    }
-    monkeypatch.setattr(
-        telegram_inbound.httpx, "AsyncClient", _client_returning(payload)
-    )
     provider = _patch_brain(monkeypatch, reply="Muy bien, gracias.")
-    sent = _patch_send(monkeypatch)
+    transport = _patch_send(monkeypatch)
+    sent = transport.sent
 
     from lhassa.calendar import feed as feed_mod
 
@@ -230,7 +149,7 @@ def test_calendar_query_falls_through_for_normal_message(monkeypatch):
 
     monkeypatch.setattr(feed_mod, "upcoming", _boom)
 
-    asyncio.run(telegram_inbound.poll_once(_cfg(), offset=None))
+    _say(transport, "cómo estás?")
 
     assert len(provider.calls) == 1
     assert sent == ["Muy bien, gracias."]
@@ -241,20 +160,9 @@ def test_recognized_but_unrouted_capability_tags_the_think_episode(monkeypatch):
     the calendar seam itself can't resolve it) still falls through to the brain
     think, but the episode's decision is tagged '[routable:calendar_view]' so
     the consciousness (agents.repetition.detect_routable) can find it later."""
-    payload = {
-        "ok": True,
-        "result": [
-            {
-                "update_id": 402,
-                "message": {"chat": {"id": 123}, "text": "any events on my calendar?"},
-            }
-        ],
-    }
-    monkeypatch.setattr(
-        telegram_inbound.httpx, "AsyncClient", _client_returning(payload)
-    )
     provider = _patch_brain(monkeypatch, reply="Nothing pinned down yet.")
-    sent = _patch_send(monkeypatch)
+    transport = _patch_send(monkeypatch)
+    sent = transport.sent
 
     from lhassa.calendar import query as query_mod
 
@@ -273,7 +181,7 @@ def test_recognized_but_unrouted_capability_tags_the_think_episode(monkeypatch):
 
     monkeypatch.setattr(episode_mod.Episode, "append", _capture_append)
 
-    asyncio.run(telegram_inbound.poll_once(_cfg(), offset=None))
+    _say(transport, "any events on my calendar?")
 
     assert len(provider.calls) == 1  # it DID reach the think; no route is on
     assert sent == ["Nothing pinned down yet."]
@@ -287,7 +195,8 @@ def test_calendar_followup_served_from_calendar_without_provider(monkeypatch):
     calendar seam; the provider is NEVER called for the follow-up turn, and
     the episode is tagged 'thread-continue: calendar_view' at $0."""
     provider = _patch_brain(monkeypatch)
-    sent = _patch_send(monkeypatch)
+    transport = _patch_send(monkeypatch)
+    sent = transport.sent
 
     from lhassa.calendar import feed as feed_mod
     from lhassa.calendar import query as query_mod
@@ -332,24 +241,14 @@ def test_calendar_followup_served_from_calendar_without_provider(monkeypatch):
     cfg = _cfg()
 
     # Turn 1: the calendar question; answered directly, sets the topic.
-    monkeypatch.setattr(
-        telegram_inbound.httpx,
-        "AsyncClient",
-        _client_returning(_payload_for("¿qué hay en mi calendario el viernes?", 500)),
-    )
-    asyncio.run(telegram_inbound.poll_once(cfg, offset=None))
+    _say(transport, "¿qué hay en mi calendario el viernes?", cfg)
     assert provider.calls == []
     assert len(sent) == 1
     assert "Algorithms 201" in sent[0]
 
     # Turn 2: the elliptical follow-up; must be served from the calendar too,
     # NOT the tool-less think.
-    monkeypatch.setattr(
-        telegram_inbound.httpx,
-        "AsyncClient",
-        _client_returning(_payload_for("Y el sabado?", 501)),
-    )
-    asyncio.run(telegram_inbound.poll_once(cfg, offset=None))
+    _say(transport, "Y el sabado?", cfg)
 
     assert provider.calls == []  # still never reached the brain think
     assert len(sent) == 2
@@ -367,7 +266,8 @@ def test_connector_message_that_is_not_really_a_followup_falls_through(monkeypat
     returns None) and falls through to the normal think; it must not force a
     wrong calendar answer."""
     provider = _patch_brain(monkeypatch, reply="Got it, noted.")
-    sent = _patch_send(monkeypatch)
+    transport = _patch_send(monkeypatch)
+    sent = transport.sent
 
     from lhassa.calendar import feed as feed_mod
     from lhassa.calendar import query as query_mod
@@ -401,20 +301,10 @@ def test_connector_message_that_is_not_really_a_followup_falls_through(monkeypat
 
     cfg = _cfg()
 
-    monkeypatch.setattr(
-        telegram_inbound.httpx,
-        "AsyncClient",
-        _client_returning(_payload_for("¿qué hay en mi calendario el viernes?", 503)),
-    )
-    asyncio.run(telegram_inbound.poll_once(cfg, offset=None))
+    _say(transport, "¿qué hay en mi calendario el viernes?", cfg)
     assert provider.calls == []
 
-    monkeypatch.setattr(
-        telegram_inbound.httpx,
-        "AsyncClient",
-        _client_returning(_payload_for("y además necesito comprar leche", 504)),
-    )
-    asyncio.run(telegram_inbound.poll_once(cfg, offset=None))
+    _say(transport, "y además necesito comprar leche", cfg)
 
     assert len(provider.calls) == 1  # the continuation declined; fell through
     assert sent[-1] == "Got it, noted."

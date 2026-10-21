@@ -74,9 +74,21 @@ def _send_name(document: Optional[Union[str, Path]], paths: list) -> str:
 
 
 def _channel_for(document: Optional[Union[str, Path]], config: Config) -> str:
-    """The delivery channel name used in the episode narration."""
+    """The delivery channel name used in the episode narration.
+
+    A document goes out on the file-capable channel
+    (:func:`lhassa.notify.channels.document_channel`: ``telegram`` when the
+    telegram pack is installed, ``none`` when no channel can carry a file); a
+    text fans out over every active channel.
+    """
     if document:
-        return "telegram"
+        try:
+            from lhassa.notify.channels import NO_DOCUMENT_CHANNEL, document_channel
+
+            channel = document_channel(config)
+            return getattr(channel, "name", "?") if channel is not None else NO_DOCUMENT_CHANNEL
+        except Exception:
+            return "none"
     try:
         from lhassa.notify.channels import active_channels
 
@@ -247,7 +259,9 @@ async def deliver(
          empty/unknown ``origin_department``) degrades to a single
          root-attributed hop; it never blocks the send.
       3. **Send**: a ``document`` goes out via
-         :func:`lhassa.notify.telegram_api.send_document`, its ``caption``
+         :func:`lhassa.notify.channels.deliver_document` (the file-capable
+         channel, Telegram when its pack is installed; with none an honest
+         failure, never a raise), its ``caption``
          routed through :func:`lhassa.notify.voice.revoice` first (the
          document path used to bypass the voice layer entirely; closed); a
          plain ``text`` (no document) fans out via
@@ -299,8 +313,8 @@ async def deliver(
     delivered = False
     try:
         if document:
-            from lhassa.notify import telegram_api
             from lhassa.notify import voice as _voice
+            from lhassa.notify.channels import deliver_document
 
             # Close the voice bypass: a document's caption used to reach the
             # owner raw, skipping revoice entirely; the ONE surface where
@@ -308,7 +322,7 @@ async def deliver(
             # $0 voice layer text-only deliveries already get.
             voice_kind = kind if kind in _voice.KINDS else None
             voiced_caption = await _voice.revoice(caption, kind=voice_kind, config=config)
-            delivered = await telegram_api.send_document(
+            delivered, _channel = await deliver_document(
                 document, caption=voiced_caption, config=config
             )
         else:

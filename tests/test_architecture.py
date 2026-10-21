@@ -48,7 +48,13 @@ from typing import Iterator
 # ``views`` holds the shell-level read-models (the overview aggregate ``lhassa
 # status`` and ``/api/overview`` render): they compose the org chart and the flow
 # store read-only, so they sit at the shell level and no inner layer may use them.
-SHELLS = {"cli", "api", "voice", "notify", "org", "dashboard", "actionpack", "flows", "views", "tui"}
+# ``chat`` is the transport-agnostic chat engine (the brain's conversational
+# door): it composes notify (commands, hooks, capabilities), org (deliver) and
+# actionpack, so it is a shell; a transport (the telegram pack) drives it.
+SHELLS = {
+    "cli", "api", "voice", "notify", "org", "dashboard", "actionpack", "flows", "views", "tui",
+    "chat",
+}
 
 
 @dataclass(frozen=True)

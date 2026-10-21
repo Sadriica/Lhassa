@@ -383,9 +383,9 @@ def test_watch_rejects_invalid_regex_and_writes_nothing(tmp_path):
     reply = asyncio.run(commands.dispatch("/watch [unterminated -> backup_memory", config=cfg))
     assert "Invalid regex" in reply
 
-    from lhassa.notify import telegram_inbound as _ti
+    from lhassa.chat import rules as _rules
 
-    assert _ti._load_raw_watch_rules(cfg) == []
+    assert _rules.load_raw_watch_rules(cfg) == []
 
 
 def test_watch_rejects_unknown_accion(tmp_path):
@@ -393,9 +393,9 @@ def test_watch_rejects_unknown_accion(tmp_path):
     reply = asyncio.run(commands.dispatch("/watch hello -> not_a_real_action", config=cfg))
     assert "Unknown accion" in reply
 
-    from lhassa.notify import telegram_inbound as _ti
+    from lhassa.chat import rules as _rules
 
-    assert _ti._load_raw_watch_rules(cfg) == []
+    assert _rules.load_raw_watch_rules(cfg) == []
 
 
 def test_watch_accepts_judgment_accion(tmp_path):
