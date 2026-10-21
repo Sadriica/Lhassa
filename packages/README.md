@@ -35,7 +35,11 @@ packages/lhassa-<name>/
    `core.watchlist.register_check`, `notify.channels.register_channel`,
    `llm.provider.register_provider`, `security.allowlist.register_action_spec`
    (the policy row for each action the pack ships: without one the action is
-   denied, and a pack can never redefine a core row); and the surface ones in
+   denied, and a pack can never redefine a core row),
+   `config.register_config_knob` (a `Config` attribute read from its env var;
+   declare these in a `knobs.py` the package `__init__` imports, so the knob
+   exists wherever the pack is used) and `settings.register_editable` (its row
+   in the settings panel); and the surface ones in
    `lhassa/extensions.py`: `register_api_router(name, factory)`,
    `register_cli_app(name, factory)` (a sub-app, `lhassa <name> ...`),
    `register_cli_command(name, factory)` (one top-level command, `lhassa <name>`),

@@ -21,6 +21,7 @@ The pack's own surfaces deliver the resulting files via
 :func:`lhassa.org.deliver.deliver`: the leaf modules never send anything.
 """
 
+from lhassa.calendar import knobs as _knobs  # noqa: F401  (declares Config.calendar_*)
 from lhassa.calendar.ics import build_event, write_ics
 from lhassa.calendar.paths import calendar_dir, events_dir
 

@@ -21,6 +21,7 @@ file-I/O infrastructure; it never imports an outer shell (see
 :mod:`lhassa.cv.surfaces`.
 """
 
+from lhassa.cv import knobs as _knobs  # noqa: F401  (declares Config.cv_flow_id/tectonic_bin)
 from lhassa.cv.compile import compile_pdf
 from lhassa.cv.paths import base_path, cv_dir, out_dir
 from lhassa.cv.store import (

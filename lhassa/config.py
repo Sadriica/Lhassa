@@ -3,6 +3,7 @@ import os
 import platform
 import shutil
 from pathlib import Path
+from typing import Any, Callable
 
 from dotenv import load_dotenv
 
@@ -397,20 +398,9 @@ class Config:
     ms_tenant_id: str = os.getenv("MS_TENANT_ID", "")
     ms_client_id: str = os.getenv("MS_CLIENT_ID", "")
 
-    # ── Calendar ICS feed (read-only, no admin/API) ──────────────────────────
-    # A published calendar's secret ICS URL; subscribing makes /today and the
-    # briefing show your real events. Read-only; needs no app registration
-    # (works for institutional calendars an admin would otherwise gate). SECRET.
-    calendar_ics_url: str = os.getenv("LHASSA_CALENDAR_ICS_URL", "")
-    # How long a fetched feed is cached before re-download (seconds; 1h default).
-    calendar_feed_ttl: float = _safe_float(os.getenv("LHASSA_CALENDAR_FEED_TTL", "3600"), 3600.0)
-    # Multiple NAMED calendars (institutional/personal/project/...); a JSON list
-    # of {"name", "url"} at this path; see lhassa/calendar/store.py. The single
-    # LHASSA_CALENDAR_ICS_URL above stays a convenience shortcut merged in as an
-    # implicit "default" feed; the store is for anyone with MORE than one.
-    calendars_file: str = os.getenv(
-        "LHASSA_CALENDARS_FILE", str(Path.home() / ".lhassa" / "calendars.json")
-    )
+    # Calendar knobs (LHASSA_CALENDAR_ICS_URL, LHASSA_CALENDAR_FEED_TTL,
+    # LHASSA_CALENDARS_FILE) are declared by the calendar pack
+    # (lhassa/calendar/knobs.py) through register_config_knob below.
 
     # ── Web search ────────────────────────────────────────────────────────────
     # Brave Search API key; optional, falls back to DuckDuckGo if not set.
@@ -645,10 +635,6 @@ class Config:
     # foreign model from the router (e.g. a groq name) falls back to this.
     claude_bin: str = os.getenv("LHASSA_CLAUDE_BIN", "claude")
     claude_model: str = os.getenv("LHASSA_CLAUDE_MODEL", "")
-    # LaTeX engine used to compile a tailored CV ``.tex`` into a PDF before sending it
-    # over Telegram. ``tectonic`` by default (self-contained, non-interactive); resolved
-    # via ``shutil.which`` so a machine without it degrades to sending the raw ``.tex``.
-    tectonic_bin: str = os.getenv("LHASSA_TECTONIC_BIN", "tectonic")
 
     # Fallback provider CHAIN for chat/think when the routine provider flakes
     # (opencode boots a runtime per call and is flaky under a long-running poller).
@@ -694,10 +680,8 @@ class Config:
     flows_file: str = os.getenv(
         "LHASSA_FLOWS_FILE", str(Path.home() / ".lhassa" / "flows.json")
     )
-    # The stored work-flow id the Telegram → CV bridge runs when the owner sends a CV
-    # document (the "Impossible-to-reject CV" work-flow). Looked up via FlowStore; a
-    # missing flow degrades to a "not set up yet" reply, never a crash.
-    cv_flow_id: str = os.getenv("LHASSA_CV_FLOW_ID", "flow-zvzpry")
+    # The CV pack's knobs (LHASSA_CV_FLOW_ID, LHASSA_TECTONIC_BIN) are declared
+    # in lhassa/cv/knobs.py through register_config_knob below.
 
     # ── Skills (first-class, SKILL.md format) ─────────────────────────────────
     # Skills live as folders here, each with a SKILL.md (YAML frontmatter
@@ -1023,3 +1007,50 @@ class Config:
                 "Vision tools disabled; no vision-capable API key found. "
                 "Set ANTHROPIC_API_KEY or OPENAI_API_KEY to enable analyze_screen / analyze_image."
             )
+
+
+
+# Pack knobs survive ``importlib.reload(config)``: reload re-runs this module in
+# the same namespace, so the registry is kept and re-applied to the new class.
+_PACK_KNOBS: "dict[str, tuple[str, Any, Callable[[str], Any] | None]]" = globals().get(
+    "_PACK_KNOBS", {}
+)
+
+
+def _apply_knob(attr: str, env_var: str, default: Any, parse: "Callable[[str], Any] | None") -> Any:
+    raw = os.getenv(env_var)
+    value = default
+    if raw is not None:
+        try:
+            value = parse(raw) if parse is not None else raw
+        except (TypeError, ValueError):
+            value = default
+    setattr(Config, attr, value)
+    return value
+
+
+def register_config_knob(
+    attr: str,
+    env_var: str,
+    default: Any,
+    parse: "Callable[[str], Any] | None" = None,
+) -> Any:
+    """Add a capability pack's own knob to :class:`Config`; return its value.
+
+    Packs cannot edit this class body, so a pack declares its knobs here at
+    import time: ``Config.<attr>`` is read from ``env_var`` (``.env`` and
+    ``settings.env`` are already loaded) and parsed with ``parse``; on a parse
+    error the default wins, like every knob above. An attribute core already
+    defines is refused, so a pack can never override a core setting; declaring
+    the same pack knob again is a no-op.
+    """
+    if attr in _PACK_KNOBS:
+        return getattr(Config, attr)
+    if hasattr(Config, attr):
+        raise ValueError(f"Config.{attr} is a core setting; a pack cannot redefine it")
+    _PACK_KNOBS[attr] = (env_var, default, parse)
+    return _apply_knob(attr, env_var, default, parse)
+
+
+for _attr, (_env, _default, _parse) in _PACK_KNOBS.items():
+    _apply_knob(_attr, _env, _default, _parse)

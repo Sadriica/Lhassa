@@ -539,34 +539,6 @@ EDITABLE: list[dict] = [
         "restart": RESTART_NONE,
     },
     {
-        "key": "calendar_ics_url",
-        "attr": "calendar_ics_url",
-        "env_var": "LHASSA_CALENDAR_ICS_URL",
-        "type": "str",
-        "secret": True,
-        "label": "Calendar ICS feed URL (read-only)",
-        "help": (
-            "A published calendar's secret .ics URL. Subscribing makes /today and "
-            "the briefing show your real events; read-only, no admin/API. Get it "
-            "from your calendar (Outlook: Settings → Calendar → Shared calendars → "
-            "Publish → ICS link). Kept secret (it grants read access)."
-        ),
-        "group": "Surfaces",
-        "default": "",
-        "restart": RESTART_TELEGRAM,
-    },
-    {
-        "key": "calendar_feed_ttl",
-        "attr": "calendar_feed_ttl",
-        "env_var": "LHASSA_CALENDAR_FEED_TTL",
-        "type": "float",
-        "label": "Calendar feed cache (seconds)",
-        "help": "How long a fetched calendar feed is cached before re-download (default 3600).",
-        "group": "Surfaces",
-        "default": 3600.0,
-        "restart": RESTART_TELEGRAM,
-    },
-    {
         "key": "notify_channels",
         "attr": "notify_channels",
         "env_var": "LHASSA_NOTIFY_CHANNELS",
@@ -726,6 +698,27 @@ class SettingsError(ValueError):
     """Raised internally on a bad set; never propagated to callers (turned into an
     error result instead). Subclasses :class:`ValueError` so the API maps it to 400.
     """
+
+
+def register_editable(entry: dict) -> dict:
+    """Let a capability pack expose one of its own knobs in the settings panel.
+
+    ``entry`` has the same shape as the rows of :data:`EDITABLE` (key, attr,
+    env_var, type, label, help, group, default, restart; ``secret`` when it
+    is one). A key core already owns is refused, so a pack cannot change a
+    core setting's rules; registering the same key again is a no-op.
+    """
+    key = entry.get("key")
+    if not key or not entry.get("attr") or not entry.get("env_var"):
+        raise ValueError("an editable setting needs key, attr and env_var")
+    for existing in EDITABLE:
+        if existing["key"] == key:
+            if existing.get("pack") and existing.get("pack") == entry.get("pack"):
+                return existing
+            raise ValueError(f"setting {key!r} is already defined")
+    EDITABLE.append(entry)
+    _BY_KEY[key] = entry
+    return entry
 
 
 # ── secret masking ───────────────────────────────────────────────────────────────
