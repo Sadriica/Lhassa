@@ -21,6 +21,7 @@ executing anything.
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
 from typing import List, Optional
 
 import typer
@@ -105,6 +106,32 @@ def bench_run(
     failed = [r for r in rows if not r.get("passed")]
     if failed:
         out.print(f"[dim]{len(failed)}/{len(rows)} rows failed; see `lhassa bench history` for detail.[/dim]")
+
+
+@bench_app.command("ingest")
+def bench_ingest(
+    paths: List[Path] = typer.Argument(
+        ..., help="JSONL result files (e.g. research/results/*.jsonl) to map into bench_runs."
+    ),
+) -> None:
+    """Ingest experiment result files into ``bench_runs`` (idempotent; see bench/ingest.py)."""
+    from lhassa.bench.ingest import ingest_files
+    from lhassa.core import db
+
+    missing = [str(p) for p in paths if not p.is_file()]
+    if missing:
+        _err().print(f"[error]not a file: {', '.join(missing)}[/error]")
+        raise typer.Exit(code=2)
+
+    async def _run() -> dict:
+        await db.init_db()
+        return await ingest_files(paths, _config().instance_id)
+
+    t = asyncio.run(_run())
+    _out().print(
+        f"ingested {t['inserted']} new rows from {t['files']} files "
+        f"({t['duplicates']} already present, {t['skipped']} unreadable lines)"
+    )
 
 
 @bench_app.command("history")

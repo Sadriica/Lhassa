@@ -72,6 +72,7 @@ lhassa code "refactor the parser" --cli codex
 | `tools` | List the self-written tools and their gate/usage state | `lhassa tools` |
 | `tools propose <name>` | Have the routine model author a candidate tool, run it through quarantine + the gates, and park a graduation approval on a full pass | `lhassa tools propose clean_downloads --desc "sort ~/Downloads by type"` |
 | `bench run` | Score one or more subjects against the LhassaBench fixtures, printing a pass-rate table | `lhassa bench run --subject claude --subject codex` |
+| `bench ingest` | Map experiment result files (the blackbox `research/results/*.jsonl`) into `bench_runs`; idempotent, rows are flagged `pre-audit` or `post-audit` in `detail` | `lhassa bench ingest research/results/*.jsonl` |
 | `bench history` | Recent `bench_runs` rows for a fixture/subject | `lhassa bench history --fixture codegen_fibonacci --limit 20` |
 | `utility survey` | Which capabilities still SERVE the owner; owner-driven vs self-driven use per registered action, least-earned first | `lhassa utility survey --all --json` |
 | `utility docket` | The retirement docket: unused or self-driven, unpinned, past the grace period | `lhassa utility docket` |
