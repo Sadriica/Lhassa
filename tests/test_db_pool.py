@@ -235,3 +235,35 @@ async def test_threaded_mode_rollback_on_checkin(tmp_path, monkeypatch):
     row = await (await c2.execute("SELECT count(*) FROM t")).fetchone()
     assert row[0] == 0
     await c2.close()
+
+
+@pytest.mark.asyncio
+async def test_threaded_writers_do_not_starve_the_executor(tmp_path, monkeypatch):
+    # More concurrent writers than the loop's default executor has threads. If
+    # the busy wait happened inside those threads, every thread would sleep in
+    # sqlite waiting for the write lock and the holder could never get one to
+    # commit: the run would end in "database is locked" after the timeout.
+    # This is what a 4-core CI runner (8 threads) did to 16 workers.
+    from concurrent.futures import ThreadPoolExecutor
+
+    monkeypatch.setattr(aiosqlite, "_threaded", lambda: True)
+    asyncio.get_running_loop().set_default_executor(ThreadPoolExecutor(max_workers=2))
+    path = tmp_path / "starve.db"
+    c0 = await aiosqlite.connect(path)
+    await c0.execute("CREATE TABLE t(a)")
+    await c0.commit()
+    await c0.close()
+
+    async def worker(n: int) -> None:
+        conn = await aiosqlite.connect(path)
+        try:
+            await conn.execute("INSERT INTO t VALUES(?)", (n,))
+            await conn.commit()
+        finally:
+            await conn.close()
+
+    await asyncio.wait_for(asyncio.gather(*(worker(i) for i in range(8))), timeout=4.5)
+    check = await aiosqlite.connect(path)
+    rows = await (await check.execute("SELECT count(*) FROM t")).fetchone()
+    await check.close()
+    assert rows[0] == 8

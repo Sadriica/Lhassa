@@ -33,6 +33,7 @@ import asyncio
 import os
 import sqlite3
 import threading
+import time
 from pathlib import Path
 from typing import Any
 
@@ -92,10 +93,48 @@ async def _call_threaded(lock: threading.Lock, fn, *args):
     return await asyncio.to_thread(_locked)
 
 
+_DEFAULT_BUSY_BUDGET = 5.0  # sqlite3.connect's own default ``timeout``
+
+
+def _is_busy(exc: sqlite3.OperationalError) -> bool:
+    text = str(exc).lower()
+    return "locked" in text or "busy" in text
+
+
+async def _call_threaded_retry(lock: threading.Lock, budget: float, fn, *args):
+    """``_call_threaded`` that waits out a busy database on the event loop.
+
+    In threaded mode sqlite's own busy handler would sleep *inside* a worker
+    thread of the loop's default executor. With at least as many contenders as
+    that executor has threads (``cpu_count + 4``, so 8 on a 4-core runner) the
+    waiters fill every thread and the one holding the write lock can never get
+    a thread to commit: nothing moves until the timeout expires. The
+    connection therefore runs with ``timeout=0`` and the wait happens here,
+    where it does not hold a thread.
+    """
+    deadline = time.monotonic() + budget
+    delay = 0.002
+    while True:
+        try:
+            return await _call_threaded(lock, fn, *args)
+        except sqlite3.OperationalError as exc:
+            if not _is_busy(exc) or time.monotonic() >= deadline:
+                raise
+        await asyncio.sleep(delay)
+        delay = min(delay * 2, 0.05)
+
+
 class Cursor:
-    def __init__(self, cursor: sqlite3.Cursor, *, lock: threading.Lock | None = None):
+    def __init__(
+        self,
+        cursor: sqlite3.Cursor,
+        *,
+        lock: threading.Lock | None = None,
+        budget: float = _DEFAULT_BUSY_BUDGET,
+    ):
         self._cursor = cursor
         self._lock = lock
+        self._budget = budget
 
     @property
     def lastrowid(self) -> int | None:
@@ -108,12 +147,12 @@ class Cursor:
     async def fetchone(self):
         if self._lock is None:
             return self._cursor.fetchone()
-        return await _call_threaded(self._lock, self._cursor.fetchone)
+        return await _call_threaded_retry(self._lock, self._budget, self._cursor.fetchone)
 
     async def fetchall(self):
         if self._lock is None:
             return self._cursor.fetchall()
-        return await _call_threaded(self._lock, self._cursor.fetchall)
+        return await _call_threaded_retry(self._lock, self._budget, self._cursor.fetchall)
 
     async def close(self) -> None:
         if self._lock is None:
@@ -139,7 +178,7 @@ class _ExecuteProxy:
     async def _run(self) -> Cursor:
         if self._cursor is None:
             raw = await self._conn._run_raw(self._sql, self._params, self._many)
-            self._cursor = Cursor(raw, lock=self._conn._lock)
+            self._cursor = Cursor(raw, lock=self._conn._lock, budget=self._conn._busy_budget)
         return self._cursor
 
     def __await__(self):
@@ -155,8 +194,10 @@ class _ExecuteProxy:
 
 class Connection:
     def __init__(self, path: str | Path, *, uri: bool = False, **kwargs: Any):
+        self._busy_budget = float(kwargs.get("timeout", _DEFAULT_BUSY_BUDGET))
         if _threaded():
             kwargs.setdefault("check_same_thread", False)
+            kwargs["timeout"] = 0  # the busy wait is done by _call_threaded_retry
         self._conn = sqlite3.connect(path, uri=uri, **kwargs)
         self._lock = threading.Lock() if _threaded() else None
         self._pool_key: str | None = None
@@ -196,7 +237,7 @@ class Connection:
                 return self._conn.executemany(sql, params)
             return self._conn.execute(sql, params)
 
-        return await _call_threaded(self._lock, _locked)
+        return await _call_threaded_retry(self._lock, self._busy_budget, _locked)
 
     def _reset_raw(self) -> None:
         """Restore 'fresh connection' state before returning to the pool."""
@@ -236,7 +277,7 @@ class Connection:
         if self._lock is None:
             self._conn.commit()
         else:
-            await _call_threaded(self._lock, self._conn.commit)
+            await _call_threaded_retry(self._lock, self._busy_budget, self._conn.commit)
 
     async def rollback(self) -> None:
         if self._lock is None:

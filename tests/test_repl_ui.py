@@ -3,8 +3,10 @@
 
 from __future__ import annotations
 
+import time
 from datetime import date, datetime, timedelta, timezone
 
+import pytest
 from prompt_toolkit.document import Document
 from rich.console import Console
 
@@ -18,6 +20,20 @@ STATUS = {
 }
 TZ = timezone(timedelta(hours=-5))
 NOW = datetime(2026, 1, 7, 13, 30, tzinfo=TZ)  # a Wednesday; e13 is under way
+
+
+@pytest.fixture(autouse=True)
+def _pin_local_zone(monkeypatch):
+    """The card prints times in the machine's local zone, so pin it to UTC-5.
+
+    The fixtures above are built in UTC-5; without this the clock times shift
+    on any runner whose zone is not -05 (CI runs in UTC).
+    """
+    monkeypatch.setenv("TZ", "Etc/GMT+5")
+    time.tzset()
+    yield
+    monkeypatch.undo()
+    time.tzset()
 
 
 def _ev(day, hour, summary, location="", minutes=60):
