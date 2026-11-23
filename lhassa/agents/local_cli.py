@@ -287,6 +287,7 @@ class LocalCliAgent:
         # Track the live subprocess so POST /api/code/{id}/stop can find and kill it.
         _register_proc(run_id, proc)
         stderr_lines: list[str] = []
+        recorder = _open_run_recorder(self.cli, run_id)
 
         async def _drain_stdout():
             while True:
@@ -295,6 +296,8 @@ class LocalCliAgent:
                     break
                 line = _ANSI.sub("", line_bytes.decode(errors="replace"))
                 run.output += line
+                if recorder is not None:
+                    recorder.record_line(line)
                 if self._on_line is not None:
                     try:
                         self._on_line(line)
@@ -332,6 +335,38 @@ class LocalCliAgent:
             return run.output.strip()
         finally:
             _unregister_proc(run_id)
+            if recorder is not None:
+                recorder.close(f"exit {proc.returncode}" if proc.returncode is not None else "")
+
+
+def _open_run_recorder(cli: str, run_id: str):
+    """A line recorder for this CLI's stream, or ``None`` (recording off, unknown CLI).
+
+    The stream is parsed with the CLI's own harness adapter, so a run started here
+    leaves the same history as a job launched through ``harness/runner.py``.
+    """
+    try:
+        from lhassa.config import Config
+        from lhassa.harness.adapter import ADAPTERS
+        from lhassa.harness.recorder import open_recorder
+
+        adapter = ADAPTERS.get_or_none(cli)
+        rec = open_recorder(Config.instance_id, run_id, cli) if adapter is not None else None
+        if rec is None:
+            return None
+
+        class _LineRecorder:
+            def record_line(self, line: str) -> None:
+                ev = adapter.parse_line(line)
+                if ev is not None:
+                    rec.record(ev)
+
+            def close(self, estado: str = "") -> None:
+                rec.close(estado)
+
+        return _LineRecorder()
+    except Exception:
+        return None
 
 
 def make_agent(cli: str | None = None, on_line=None, context_pack_dir=None) -> LocalCliAgent:

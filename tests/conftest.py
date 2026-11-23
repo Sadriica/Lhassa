@@ -11,6 +11,9 @@ import json
 
 os.environ.setdefault("LHASSA_NO_RUNTIME_OVERRIDES", "1")
 os.environ.setdefault("LHASSA_QUARANTINE_ISOLATION", "none")
+# Harness runs write a history log under ~/.lhassa/records; the suite never does.
+# Tests of the recorder switch it on explicitly with a tmp dir.
+os.environ.setdefault("LHASSA_RECORD_RUNS", "0")
 # Hermetic embeddings: a LIVE local Ollama must never change test behavior or
 # speed; the whole suite runs on the offline hashing embedder unless a test
 # explicitly opts a config double into a remote backend.

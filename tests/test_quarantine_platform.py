@@ -163,3 +163,37 @@ async def test_an_explicit_opt_out_is_honoured_on_every_platform(tmp_path, monke
     assert result.ok
     assert "opted-out" in result.stdout
     assert result.isolation == "none"
+
+
+def test_a_uv_style_alias_dir_is_bound_so_the_interpreter_resolves(tmp_path, monkeypatch):
+    """venv/bin/python -> alias/bin/python3, where alias is a symlink to the real install."""
+    import sys
+
+    from lhassa.security import quarantine
+
+    real = tmp_path / "cpython-3.13.12"
+    (real / "bin").mkdir(parents=True)
+    (real / "bin" / "python3").write_text("")
+    alias = tmp_path / "cpython-3.13"
+    alias.symlink_to(real)
+    venv = tmp_path / "venv"
+    (venv / "bin").mkdir(parents=True)
+    exe = venv / "bin" / "python"
+    exe.symlink_to(alias / "bin" / "python3")
+
+    monkeypatch.setattr(sys, "executable", str(exe))
+    monkeypatch.setattr(sys, "prefix", str(venv))
+    monkeypatch.setattr(sys, "base_prefix", str(real))
+    binds = quarantine._python_runtime_binds()
+    pairs = list(zip(binds[0::3], binds[1::3], binds[2::3]))
+    assert ("--ro-bind", str(real), str(alias)) in pairs  # the alias path is covered
+    assert ("--ro-bind", str(real), str(real)) in pairs
+
+
+def test_a_plain_interpreter_adds_no_alias_binds(monkeypatch):
+    import sys
+
+    from lhassa.security import quarantine
+
+    monkeypatch.setattr(sys, "executable", "/usr/bin/python3")
+    assert quarantine._executable_alias_binds() == []
