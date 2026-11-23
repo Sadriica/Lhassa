@@ -138,3 +138,9 @@ Remove the matcher group to uninstall.
   line with one; list such files in `emdash_ignore_paths`.
 - The engine cannot see a commit made with `--no-verify`, or a push that never
   reaches the hook.
+
+## Deliberate fake secrets (test fixtures)
+
+A line that carries the marker `review:allow-secret` (in a comment) is skipped by the
+secret rules, that one line only. Every other rule still applies to it. Use it for fake
+keys in tests; the marker shows up in the diff, so a reviewer sees each use.

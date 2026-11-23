@@ -175,6 +175,12 @@ def _secret_findings(line: str, cfg: ReviewConfig) -> list[tuple[str, str]]:
     return hits
 
 
+# A line carrying this marker is a deliberate fake secret (a test fixture): the secret
+# rules skip that one line. Every other rule still applies to it, and the marker is
+# visible in the diff, so a reviewer sees each use.
+ALLOW_SECRET_MARK = "review:allow-secret"
+
+
 def check_text(
     text: str,
     *,
@@ -199,8 +205,9 @@ def check_text(
             continue
         if EM_DASH in line and not skip_dash:
             out.append(Finding("emdash", "warn", subject, "em dash (U+2014)", file, no))
-        for rule, sev in _secret_findings(line, cfg):
-            out.append(Finding(rule, sev, subject, "secret-shaped value (not shown)", file, no))
+        if ALLOW_SECRET_MARK not in line:
+            for rule, sev in _secret_findings(line, cfg):
+                out.append(Finding(rule, sev, subject, "secret-shaped value (not shown)", file, no))
         for rx in names:
             if rx.search(line):
                 out.append(Finding("name.forbidden", "warn", subject,

@@ -24,8 +24,8 @@ from lhassa.review.rules import ReviewConfig, check_identity, check_text, load_c
 EM = chr(0x2014)
 ROOT = Path(__file__).resolve().parent.parent
 HOOKS = ROOT / "scripts" / "hooks"
-FAKE_GH = "ghp" + "_" + "A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8"
-FAKE_LONG = "Zq8" + "Xv2Lm9" * 6 + "Pa7"  # 32+ chars, mixed case and digits
+FAKE_GH = "ghp" + "_" + "A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8"  # review:allow-secret
+FAKE_LONG = "Zq8" + "Xv2Lm9" * 6 + "Pa7"  # review:allow-secret (32+ chars, mixed case and digits)
 ASSISTANT_TRAILER = "Co-Authored-By: " + "Claude" + " <noreply@" + "anthropic.com>"
 
 
@@ -90,6 +90,16 @@ def test_secrets_prefixed_critical_long_token_warn_and_values_never_echoed():
     assert all(FAKE_GH not in f.detail and FAKE_LONG not in f.detail for f in out)
     cfg = ReviewConfig(secret_ignore=(r"^ghp_",))
     assert "secret.prefixed" not in rules_of(check_text(FAKE_GH, subject="s", cfg=cfg))
+
+
+def test_the_allow_secret_marker_skips_only_secrets_on_that_line():
+    cfg = ReviewConfig()
+    line = f'x = "{FAKE_GH}"  # review:allow-secret'
+    assert check_text(line, subject="s", cfg=cfg) == []
+    other = f'x = "{FAKE_GH}"'
+    assert check_text(other, subject="s", cfg=cfg)  # without the marker it still fires
+    dashed = line + EM
+    assert [f.rule for f in check_text(dashed, subject="s", cfg=cfg)] == ["emdash"]
 
 
 def test_private_key_header():
