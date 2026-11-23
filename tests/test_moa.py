@@ -20,6 +20,8 @@ from lhassa.llm.moa import MoaResult, moa
 from lhassa.llm.provider import Completion
 from lhassa.notify import commands
 
+from tests._forge_marks import needs_system_pytest
+
 HAS_GIT = shutil.which("git") is not None
 needs_git = pytest.mark.skipif(not HAS_GIT, reason="git not installed")
 
@@ -311,6 +313,7 @@ async def brain(tmp_path, monkeypatch):
 
 
 @needs_git
+@needs_system_pytest
 @pytest.mark.asyncio
 async def test_moa_verdict_false_leaves_approval_unchanged(brain, monkeypatch):
     from lhassa.agents import author as author_mod
@@ -344,6 +347,7 @@ async def test_moa_verdict_false_leaves_approval_unchanged(brain, monkeypatch):
 
 
 @needs_git
+@needs_system_pytest
 @pytest.mark.asyncio
 async def test_moa_verdict_true_attaches_review_to_approval(brain, monkeypatch):
     from lhassa.agents import author as author_mod
@@ -383,6 +387,7 @@ async def test_moa_verdict_true_attaches_review_to_approval(brain, monkeypatch):
 
 
 @needs_git
+@needs_system_pytest
 @pytest.mark.asyncio
 async def test_moa_verdict_true_degrades_without_blocking_graduation(brain, monkeypatch):
     """A failing MoA review is advisory-only; it must never block graduation."""

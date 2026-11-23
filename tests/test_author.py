@@ -14,6 +14,8 @@ import pytest_asyncio  # noqa: F401
 
 from lhassa.agents.author import author_candidate, propose_tool
 
+from tests._forge_marks import needs_system_pytest
+
 HAS_GIT = shutil.which("git") is not None
 needs_git = pytest.mark.skipif(not HAS_GIT, reason="git not installed")
 
@@ -117,6 +119,7 @@ async def test_author_candidate_degrades_on_malformed_reply():
 
 
 @needs_git
+@needs_system_pytest
 @pytest.mark.asyncio
 async def test_propose_tool_graduates_a_correct_candidate(brain):
     provider = FakeProvider(files_json=_files_payload("doubler"))
