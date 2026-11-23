@@ -51,6 +51,10 @@ the interfaces must not import a shell.
    its hook adapters, stdlib-only so a git hook starts fast) must not import any
    shell; its CLI sub-app lives in `cli/review_cmds.py`.
 
+9. **observe-isolation**: the observers pack (`observe/`, outside
+   `observe/surfaces/`) must not import any shell; its `lhassa observe` CLI lives
+   in `observe/surfaces/`. It writes only through `record/` (see `doc/observe.md`).
+
 ## Allowed exceptions
 
 Precise, intentional edges that are whitelisted in the test (keyed on the exact
