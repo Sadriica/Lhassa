@@ -275,6 +275,7 @@ El contrato está en [`packages/README.md`](packages/README.md).
 | `lhassa-api` | servidor FastAPI REST/WebSocket, `lhassa serve`, el host del dashboard | 140 |
 | `lhassa-bench` | fixtures y runner de LhassaBench, `lhassa bench` | 14 |
 | `lhassa-calendar` | feeds ICS, el reconcile del calendario maestro, `lhassa calendar`, `calendar_sync` | 177 |
+| `lhassa-observe` | observadores de solo lectura (sistema, sway, shell, archivos) que escriben al historial, `lhassa observe` | 62 |
 | `lhassa-ledger` | libro mayor de auditoría de agentes, independiente y solo stdlib: CLI `ledger`, política de no guardar, adaptadores de Claude Code y Hermes | 93 |
 | `lhassa-cv` | el work-flow del CV, `/cv`, el panel Postulaciones, `lhassa seed apply cv` | 65 |
 | `lhassa-research` | intake `/idea`, custodia de evidencia, borradores de notas, `lhassa research` | 35 |

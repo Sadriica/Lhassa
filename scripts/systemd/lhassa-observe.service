@@ -1,0 +1,40 @@
+# Lhassa: the read-only OBSERVERS (system samples, sway focus, shell metadata, files).
+#
+# `lhassa observe run` starts only what is enabled: with no `enabled` list in
+# ~/.lhassa/observe.json (or LHASSA_OBSERVE_CONFIG) and no flag it observes nothing
+# and exits. Observers only read; they write daily JSONL files under
+# $LHASSA_RECORDS_DIR/<instance>/observe/. See doc/observe.md.
+#
+# Example only: nothing installs or enables this for you. To install it as a USER
+# unit, from the checkout:
+#   mkdir -p ~/.config/systemd/user
+#   cp scripts/systemd/lhassa-observe.service ~/.config/systemd/user/
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now lhassa-observe.service
+#   lhassa observe status                        # what is alive
+#   journalctl --user -u lhassa-observe -f       # watch it
+#
+# %h is your home. The paths below are the Witara umbrella layout
+# (~/Code/witara/products/lhassa/app); change them if your checkout or venv live
+# elsewhere. The sway observer needs SWAYSOCK: import it into the user manager
+# from your sway config (`systemctl --user import-environment SWAYSOCK`) or add an
+# Environment=SWAYSOCK=... line. Without it the sway observer stays inactive.
+[Unit]
+Description=Lhassa observers (read-only: system, sway, shell, files)
+After=graphical-session.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/Code/witara/products/lhassa/app
+ExecStart=%h/Code/witara/products/lhassa/app/.venv/bin/lhassa observe run
+Restart=on-failure
+RestartSec=10
+# Observers only read. Keep the unit from gaining anything else.
+NoNewPrivileges=true
+PrivateNetwork=true
+ProtectSystem=strict
+ReadWritePaths=%h/.lhassa
+PrivateTmp=false
+
+[Install]
+WantedBy=default.target

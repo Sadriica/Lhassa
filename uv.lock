@@ -16,6 +16,7 @@ members = [
     "lhassa-calendar",
     "lhassa-cv",
     "lhassa-ledger",
+    "lhassa-observe",
     "lhassa-research",
     "lhassa-telegram",
     "lhassa-tui",
@@ -1204,6 +1205,17 @@ requires-dist = [{ name = "lhassa", editable = "." }]
 name = "lhassa-ledger"
 version = "0.8.0"
 source = { editable = "packages/lhassa-ledger" }
+
+[[package]]
+name = "lhassa-observe"
+version = "0.1.0"
+source = { editable = "packages/lhassa-observe" }
+dependencies = [
+    { name = "lhassa" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "lhassa", editable = "." }]
 
 [[package]]
 name = "lhassa-research"

@@ -123,6 +123,10 @@ RULES: tuple[Rule, ...] = (
         frozenset({"record"}),
         frozenset(SHELLS) | {"harness", "llm", "agents", "tools", "core"},
     ),
+    # The observers (system, sway, shell, files) read the machine and write to the
+    # history through ``record``; they never act. Only their ``observe/surfaces/``
+    # slice (the ``lhassa observe`` CLI) may compose a shell.
+    Rule("observe-isolation", frozenset({"observe"}), frozenset(SHELLS)),
     # The review engine (deterministic pre-flight rules and the hook adapters) is a
     # stdlib-only tool that must start fast inside a git hook; the `lhassa review`
     # CLI sub-app lives in cli/review_cmds.py, so the engine never imports a shell.

@@ -41,6 +41,7 @@ you are trying to do, not by subsystem.
 
 ## Operate it
 
+- [`observe.md`](observe.md); the read-only observers (system, sway, shell, files) and the shell hook.
 - [`install.md`](install.md); the always-on Linux install (systemd user units, boot lingering).
 - [`configuration.md`](configuration.md); providers, voice, tools, agents and the main settings (the README's configuration table lists the `LHASSA_*` knobs by group).
 - [`coverage.md`](coverage.md); the coverage baseline and what is deliberately left out.

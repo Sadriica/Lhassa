@@ -78,6 +78,14 @@ never imports it, and `tests/test_architecture.py` needs no entry for it (the
 guard only walks `packages/*/src/lhassa`). Its tests still re-export core's
 `conftest.py` (rule 8). See `packages/lhassa-ledger/README.md`.
 
+## A pack that observes
+
+`lhassa-observe` follows the layout above and owns no tables: its observers
+(system, sway, shell, files) are read-only and write daily JSONL logs through
+`lhassa.record.EventLog`, every event gated by the never-keep policy. Its inner
+modules never import a shell; only `observe/surfaces/` (the `lhassa observe` CLI)
+does. See [`doc/observe.md`](../doc/observe.md).
+
 ## Installing
 
 ```bash
