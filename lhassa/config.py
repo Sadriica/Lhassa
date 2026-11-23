@@ -381,6 +381,14 @@ class Config:
         os.getenv("LHASSA_DEFERRED_MAX_RETRIES", "3"), 3
     )
 
+    # ── Approval queue hygiene ────────────────────────────────────────────────
+    # A self-proposal (retire_capability, mint_*) nobody answered in this many days
+    # is closed as ``rechazada`` with ``resolution: rejected-by-timeout``; 0 disables.
+    approval_expiry_days: int = _safe_int(os.getenv("LHASSA_APPROVAL_EXPIRY_DAYS", "30"), 30)
+    # At most this many pending approvals per self-proposal type; the oldest beyond
+    # it are closed as ``rejected-by-cap``; 0 disables the cap.
+    approval_pending_cap: int = _safe_int(os.getenv("LHASSA_APPROVAL_PENDING_CAP", "20"), 20)
+
     # ── Dashboard API ─────────────────────────────────────────────────────────
     # Bind to localhost only by default. If you expose the API beyond loopback,
     # set LHASSA_API_TOKEN; unauthenticated non-loopback requests are rejected.

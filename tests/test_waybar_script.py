@@ -193,3 +193,31 @@ def test_script_is_stdlib_only_and_executable():
     assert "import lhassa" not in text and "from lhassa" not in text
     assert SCRIPT.stat().st_mode & 0o111
     assert chr(0x2014) not in text
+
+
+# ── the click: which dashboard section opens ─────────────────────────────────
+
+def _section(tmp_path, payload=None, section=None):
+    path = tmp_path / "waybar.json"
+    if payload is not None:
+        path.write_text(json.dumps(payload))
+    return wb.section_url(str(path), section)
+
+
+def test_the_click_opens_approvals_by_default(tmp_path):
+    assert _section(tmp_path, state(approvals=3)) == "http://127.0.0.1:7766/#approvals"
+    assert _section(tmp_path, state()) == "http://127.0.0.1:7766/#approvals"
+
+
+def test_the_click_opens_health_when_only_a_check_is_failing(tmp_path):
+    assert _section(tmp_path, state(health_failing=["disk"])) == "http://127.0.0.1:7766/#fleet"
+    assert _section(tmp_path, state(approvals=2, health_failing=["disk"])).endswith("#approvals")
+
+
+def test_an_explicit_known_section_wins_and_an_unknown_one_is_ignored(tmp_path):
+    assert _section(tmp_path, state(), "integrity").endswith("#integrity")
+    assert _section(tmp_path, state(), "../evil").endswith("#approvals")  # never a free-form fragment
+
+
+def test_the_click_without_a_state_file_still_gives_a_local_url(tmp_path):
+    assert _section(tmp_path) == "http://127.0.0.1:7766/#approvals"

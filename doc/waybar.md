@@ -62,6 +62,7 @@ tooltip lists spend, budget used, approvals, queued tasks and failing checks.
   "interval": 15,
   "signal": 14,
   "on-click": "~/.local/bin/lhassa-waybar open",
+  "on-click-right": "~/.local/bin/lhassa-waybar open fleet",
   "tooltip": true
 },
 "group/lhassa": {
@@ -87,6 +88,14 @@ tooltip lists spend, budget used, approvals, queued tasks and failing checks.
 4. Reload Waybar (`pkill -SIGUSR2 waybar`). `signal` is optional: with it,
    `pkill -RTMIN+14 waybar` forces an immediate redraw. Pick a number not used by
    your other modules.
+
+The click opens the dashboard on the section that needs you: `#approvals` when
+approvals wait or nothing is wrong, `#fleet` (Readiness, the health view) when only a
+health check is failing. `lhassa-waybar open <section>` forces one of `approvals`,
+`fleet`, `integrity`, `overview`, `activity` or `settings` (the right click above opens
+`fleet`); an unknown name falls back to the default, never to a free-form fragment.
+There is no single administration section yet; a policies view will join approvals and
+health when policies exist.
 
 The click action runs `xdg-open` on the dashboard URL the writer recorded
 (`http://127.0.0.1:7766` by default, from `LHASSA_API_HOST`/`LHASSA_API_PORT`).

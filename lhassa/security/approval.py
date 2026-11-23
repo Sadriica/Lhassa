@@ -647,3 +647,87 @@ async def _stamp_english_brief(instance_id: str, approval_id: str, tipo: str, pa
         )
         await db.commit()
 
+
+
+# ── queue hygiene: self-proposals nobody answered ────────────────────────────
+
+# Approvals Lhassa raises about ITSELF (retire a capability, mint a script or a
+# memory). Nothing waits on them, so leaving them unanswered costs nothing but
+# queue noise, and closing them is safe. Anything else (a parked task, a flow
+# gate, a high-risk action) has something waiting on it and is never expired.
+SELF_PROPOSAL_TIPOS = ("retire_capability", "mint_script", "mint_memory", "mint_schedule", "mint_action")
+
+
+def _expirable(row: dict) -> bool:
+    if row.get("tipo") not in SELF_PROPOSAL_TIPOS:
+        return False
+    payload = row.get("payload") or {}
+    return not (payload.get("task_id") or payload.get("run_id"))
+
+
+def _age_days(created: str, now) -> Optional[float]:
+    from datetime import datetime, timezone
+
+    try:
+        when = datetime.fromisoformat(created)
+    except (TypeError, ValueError):
+        return None
+    if when.tzinfo is None:
+        when = when.replace(tzinfo=timezone.utc)
+    return (now - when).total_seconds() / 86400.0
+
+
+async def expire_stale(
+    instance_id: str,
+    *,
+    days: Optional[int] = None,
+    cap: Optional[int] = None,
+    now=None,
+    dry_run: bool = False,
+) -> dict:
+    """Close unanswered self-proposals: too old, or beyond the per-type cap.
+
+    * older than ``days`` (default ``Config.approval_expiry_days``, 0 disables):
+      closed ``rechazada`` with ``resolution: rejected-by-timeout``;
+    * more than ``cap`` still pending of one type (default
+      ``Config.approval_pending_cap``, 0 disables): the OLDEST beyond the cap are
+      closed with ``resolution: rejected-by-cap``.
+
+    A closure is NOT a human decision: it does not touch the autonomy streaks, the
+    feedback signals or any parked task (only task-free self-proposals qualify, see
+    :func:`_expirable`). Returns ``{"timeout": [...], "cap": [...], "kept": n}``
+    with the closed ids; with ``dry_run`` nothing is written.
+    """
+    from datetime import datetime, timezone
+
+    days = Config.approval_expiry_days if days is None else days
+    cap = Config.approval_pending_cap if cap is None else cap
+    now = now or datetime.now(timezone.utc)
+    rows = [r for r in await db.load_pending_approvals(instance_id) if _expirable(r)]
+    closed: dict[str, list[str]] = {"timeout": [], "cap": []}
+
+    async def _close(row: dict, why: str) -> None:
+        if dry_run or await db.close_approval(instance_id, row["id"], f"rejected-by-{why}"):
+            closed[why].append(row["id"])
+
+    survivors: list[dict] = []
+    for row in rows:  # oldest first
+        age = _age_days(row.get("creado_en") or "", now)
+        if days > 0 and age is not None and age > days:
+            await _close(row, "timeout")
+        else:
+            survivors.append(row)
+    if cap > 0:
+        by_tipo: dict[str, list[dict]] = {}
+        for row in survivors:
+            by_tipo.setdefault(row["tipo"], []).append(row)
+        for tipo_rows in by_tipo.values():
+            for row in tipo_rows[: max(0, len(tipo_rows) - cap)]:
+                await _close(row, "cap")
+    kept = len(rows) - len(closed["timeout"]) - len(closed["cap"])
+    return {**closed, "kept": kept}
+
+
+async def pending_count(instance_id: str, tipo: str) -> int:
+    """How many approvals of ``tipo`` are pending (the creation-side cap reads this)."""
+    return sum(1 for r in await db.load_pending_approvals(instance_id) if r.get("tipo") == tipo)
