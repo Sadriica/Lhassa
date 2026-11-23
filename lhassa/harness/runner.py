@@ -30,6 +30,7 @@ from loguru import logger
 from lhassa.config import Config
 from lhassa.core import db
 from lhassa.harness.adapter import HarnessAdapter
+from lhassa.harness.recorder import open_recorder
 from lhassa.state import AgentRun, state
 
 # Default wall-clock cap for a single delegated run; override with LHASSA_HARNESS_TIMEOUT.
@@ -58,6 +59,9 @@ class _RunningJob:
     # Bounded ring of the most recent stderr lines; diagnostics for a failed/
     # timed-out run without ever growing unbounded (§ stderr-drain fix).
     stderr_tail: deque = field(default_factory=lambda: deque(maxlen=_STDERR_TAIL_LINES))
+    # True once the stream reported a quota / rate / session limit (a ``limit``
+    # event). Kept on the handle so a later relay can tell a limit from a crash.
+    limit_hit: bool = False
 
 
 # Module-level registry of live jobs (apuntadores vivos; §2.3). supervise() reaps
@@ -153,6 +157,7 @@ async def _stream(adapter: HarnessAdapter, rj: _RunningJob, timeout: int) -> Non
     Draining both concurrently avoids that deadlock.
     """
     proc = rj.proc
+    recorder = open_recorder(rj.instance_id, rj.job_id, adapter.name)
 
     async def _drain_stdout() -> None:
         while True:
@@ -163,11 +168,15 @@ async def _stream(adapter: HarnessAdapter, rj: _RunningJob, timeout: int) -> Non
             ev = adapter.parse_line(raw)
             if ev is None:
                 continue
+            if recorder is not None:
+                recorder.record(ev)
             if ev.cost_usd is not None:
                 rj.cost_usd += ev.cost_usd
             if ev.payload:
                 rj.run.output += ev.payload + "\n"
-            if ev.kind == "error":
+            if ev.kind == "limit":
+                rj.limit_hit = True
+            if ev.kind in ("error", "limit"):
                 rj.estado = "error"
             await state.broadcast({
                 "type": "agent_token", "run_id": rj.job_id,
@@ -213,6 +222,9 @@ async def _stream(adapter: HarnessAdapter, rj: _RunningJob, timeout: int) -> Non
         if rj.stderr_tail:
             rj.run.output += "\n(stderr) " + "\n".join(rj.stderr_tail)
         logger.error(f"[harness/{rj.harness}] job {rj.job_id} stream error: {exc}")
+    finally:
+        if recorder is not None:
+            recorder.close("limit" if rj.limit_hit else rj.estado)
 
 
 def _kill(proc) -> None:

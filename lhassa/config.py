@@ -428,6 +428,24 @@ class Config:
     adoption_dir: str = os.getenv(
         "LHASSA_ADOPTION_DIR", str(Path.home() / ".lhassa" / "adoptions")
     )
+    # ── Run history (lhassa.record, harness/recorder.py) ──────────────────────
+    # One append-only JSONL log per harness run under ``records_dir/<instance>/``.
+    # Observation only. Metadata by default (kind, tool, target, cost); the event
+    # text is kept only with record_content, scrubbed and truncated. A path on the
+    # never-keep list is always withheld. ``record_ledger`` mirrors tool calls,
+    # costs, errors and limits into agent-ledger when that package is importable.
+    record_runs: bool = os.getenv("LHASSA_RECORD_RUNS", "1").strip().lower() not in (
+        "0", "false", "off", "no",
+    )
+    record_content: bool = os.getenv("LHASSA_RECORD_CONTENT", "0").strip().lower() in (
+        "1", "true", "on", "yes",
+    )
+    record_ledger: bool = os.getenv("LHASSA_RECORD_LEDGER", "0").strip().lower() in (
+        "1", "true", "on", "yes",
+    )
+    records_dir: str = os.getenv(
+        "LHASSA_RECORDS_DIR", str(Path.home() / ".lhassa" / "records")
+    )
     research_assessment_flow_id: str = os.getenv(
         "LHASSA_RESEARCH_ASSESSMENT_FLOW_ID", "flow-idea-assessment"
     )

@@ -35,14 +35,21 @@ _ANSI = re.compile(r"\x1b\[[0-9;]*[mGKHF]")
 class RunEvent:
     """One parsed unit of harness output.
 
-    ``kind``    : "text" | "tool" | "cost" | "done" | "error".
+    ``kind``    : "text" | "tool" | "cost" | "done" | "error" | "limit".
+                  ``limit`` is an ``error`` whose text says the CLI ran out of
+                  quota or hit a rate/session limit (see :func:`_looks_like_limit`).
     ``payload`` : the human-readable text for the event (may be empty).
     ``cost_usd``: set only when the line reports a cost (``stream-json`` result).
+    ``tool``    : the tool a line invoked, when the line carries a ``tool_use``
+                  (it can ride on a ``text`` event, whose ``kind`` is unchanged).
+    ``target``  : what that tool acted on (a path, command, url or pattern).
     """
 
     kind: str
     payload: str = ""
     cost_usd: Optional[float] = None
+    tool: str = ""
+    target: str = ""
 
 
 @runtime_checkable
@@ -103,11 +110,78 @@ def _extract_text(obj: dict) -> str:
     return ""
 
 
+# Limit detection is [SUPUESTO]: the wording below comes from the CLIs' public
+# behaviour, not from captured streams (a real limit cannot be provoked on
+# demand). A miss degrades to a plain ``error``/``text`` event, never breaks
+# streaming; the fixtures in tests/test_harness_limit.py pin what is covered.
+_LIMIT_ERROR = re.compile(
+    r"usage limit|rate[ -]?limit|session limit|quota (?:exceeded|exhausted|reached)"
+    r"|too many requests|\b429\b|limit reached|hit your (?:usage )?limit",
+    re.IGNORECASE,
+)
+# A plain (non-JSON) stdout line is only a limit when the whole line is a short
+# notice that starts like one: assistant prose that merely mentions "rate limit"
+# must not trip it.
+_LIMIT_PLAIN = re.compile(
+    r"^\s*(?:error:\s*)?(?:claude(?: ai)? (?:usage )?limit reached"
+    r"|you(?:'ve| have) (?:hit|reached) your (?:usage |session |rate )?limit"
+    r"|(?:usage|rate|session) limit (?:reached|exceeded)"
+    r"|429\b|quota (?:exceeded|exhausted))",
+    re.IGNORECASE,
+)
+_PLAIN_LIMIT_MAX = 200
+
+
+def _looks_like_limit(text: str, *, plain: bool) -> bool:
+    """True when ``text`` reads as a quota / rate / session limit notice."""
+    if plain:
+        return len(text) <= _PLAIN_LIMIT_MAX and bool(_LIMIT_PLAIN.search(text))
+    return bool(_LIMIT_ERROR.search(text))
+
+
+_TARGET_KEYS = ("file_path", "path", "filePath", "command", "cmd", "url", "pattern", "query")
+
+
+def _tool_use_of(obj: dict) -> tuple[str, str]:
+    """``(tool, target)`` of the first ``tool_use`` in a stream-json object, or ``("", "")``."""
+    blocks = []
+    if obj.get("type") in ("tool_use", "tool"):
+        blocks.append(obj)
+    msg = obj.get("message")
+    if isinstance(msg, dict) and isinstance(msg.get("content"), list):
+        blocks.extend(
+            b for b in msg["content"] if isinstance(b, dict) and b.get("type") == "tool_use"
+        )
+    for blk in blocks:
+        name = blk.get("name")
+        if not isinstance(name, str) or not name:
+            continue
+        args = blk.get("input")
+        target = ""
+        if isinstance(args, dict):
+            for key in _TARGET_KEYS:
+                val = args.get(key)
+                if isinstance(val, str) and val:
+                    target = val[:300]
+                    break
+        return name, target
+    return "", ""
+
+
 def _event_from_json(obj: dict, raw: str) -> RunEvent:
     """Map a parsed stream-json object to a RunEvent."""
     kind = obj.get("type")
     cost = obj.get("total_cost_usd", obj.get("cost_usd"))
 
+    if obj.get("is_error") or kind == "error":
+        msg = str(obj.get("error") or obj.get("result") or obj.get("message") or raw.strip())
+        if _looks_like_limit(msg, plain=False):
+            # A result line that is also a limit notice keeps its cost.
+            try:
+                lim_cost = float(cost) if cost is not None else None
+            except (TypeError, ValueError):
+                lim_cost = None
+            return RunEvent(kind="limit", payload=msg, cost_usd=lim_cost)
     if kind == "result" or cost is not None:
         try:
             cost_val = float(cost) if cost is not None else None
@@ -116,11 +190,16 @@ def _event_from_json(obj: dict, raw: str) -> RunEvent:
         return RunEvent(kind="cost", payload=str(obj.get("subtype", "result")),
                         cost_usd=cost_val)
     if kind == "error" or obj.get("is_error"):
-        msg = obj.get("error") or obj.get("message") or raw.strip()
-        return RunEvent(kind="error", payload=str(msg))
+        msg = str(obj.get("error") or obj.get("message") or raw.strip())
+        if _looks_like_limit(msg, plain=False):
+            return RunEvent(kind="limit", payload=msg)
+        return RunEvent(kind="error", payload=msg)
+    tool, target = _tool_use_of(obj)
     if kind in ("tool_use", "tool", "tool_result"):
-        return RunEvent(kind="tool", payload=str(obj.get("name", obj.get("type", ""))))
-    return RunEvent(kind="text", payload=_extract_text(obj) or raw.strip())
+        return RunEvent(kind="tool", payload=str(obj.get("name", obj.get("type", ""))),
+                        tool=tool, target=target)
+    return RunEvent(kind="text", payload=_extract_text(obj) or raw.strip(),
+                    tool=tool, target=target)
 
 
 class _BaseAdapter:
@@ -141,6 +220,8 @@ class _BaseAdapter:
         obj = _try_json(clean)
         if obj is not None:
             return _event_from_json(obj, clean)
+        if _looks_like_limit(clean.strip(), plain=True):
+            return RunEvent(kind="limit", payload=clean.strip())
         return RunEvent(kind="text", payload=clean.strip())
 
     def build_command(self, prompt: str, **opts) -> list[str]:  # pragma: no cover

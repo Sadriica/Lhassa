@@ -115,6 +115,14 @@ RULES: tuple[Rule, ...] = (
     # /idea intake, chat command, seed, API, CLI, integrity hooks) lives in
     # ``research/surfaces/``.
     Rule("research-isolation", frozenset({"research"}), frozenset(SHELLS)),
+    # ``record`` is the history contract (append-only event log, never-keep
+    # policy): leaf infrastructure that sources write through. It must never
+    # know a shell, a harness or a model.
+    Rule(
+        "record-isolation",
+        frozenset({"record"}),
+        frozenset(SHELLS) | {"harness", "llm", "agents", "tools", "core"},
+    ),
 )
 
 # Keystone leaf-infrastructure files: pure generic infrastructure that must not
