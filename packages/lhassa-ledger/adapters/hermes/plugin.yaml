@@ -1,0 +1,16 @@
+name: agent-ledger
+version: "0.1.0"
+description: >-
+  Writes every metered model call and every tool call into a host-neutral
+  append-only ledger shared with other agent hosts (Claude Code, Orca, OMP),
+  so one query answers what all of the owner's agents spent and touched.
+  No credentials, no network, no tool output stored. Inert until enabled.
+author: Witara
+kind: standalone
+platforms:
+  - linux
+  - macos
+hooks:
+  - post_api_request
+  - pre_tool_call
+  - post_tool_call
