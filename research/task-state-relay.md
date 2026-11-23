@@ -2,7 +2,7 @@
 
 > Draft research note; not yet reviewed by the owner. Part of Lhassa's research
 > line (`doc/research.md`): Plan 2, "la caja negra (task recorder + relay)".
-> Fed by Fase 0.1 of the Plan 2 plan (`/home/w/.claude/plans/…keen-finch.md`).
+> Fed by Fase 0.1 of the Plan 2 plan (kept outside the repository).
 
 ## The idea in one sentence
 
@@ -401,7 +401,7 @@ recall-based state) are exactly what a deterministic recorder would fix.
   https://mem0.ai/blog/state-of-ai-agent-memory-2026; paper arXiv:2504.19413
 - [S16] Lhassa Plan 2 (Fase 0.1 brief): the wire-level premise that transcripts
   are re-sent per request and ~90% re-derivable from disk
-  (`/home/w/.claude/plans/realiza-un-plan-donde-keen-finch.md`, §PLAN 2)
+  (Plan 2 plan, kept outside the repository, §PLAN 2)
 - [S17] Claude Code, "Auto-Compaction", code.claude.com docs (mirror):
   https://brewpirate.github.io/claude-code-docs/sessions/auto-compaction/
   (trigger formula, SummaryMessage, restore budget, circuit breaker),
@@ -527,7 +527,7 @@ Verified against Lhassa's codebase and Plan 2 [S16]:
  ; that is Lhassa-specific and unproven until Fase 2; (c) the 90%-re-derivable
   claim remains a hypothesis: Fase 0.2's own-transcript anatomy is the first
   measurement (earlier pilot on this machine: witara 94.5% tool_result by
-  chars, agentsprint 78.1%, lhassa 35.9%; a wide spread to explain before
+  chars, a second project 78.1%, lhassa 35.9%; a wide spread to explain before
   betting the relay); (d) the claim must be narrowed post-[S30]: the relay's
   cost edge is real only in the **cache-cold / cross-harness / post-limit**
   case, not in a warm same-harness resume (where caching makes re-send cheap).
