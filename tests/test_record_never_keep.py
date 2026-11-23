@@ -89,3 +89,9 @@ def test_a_path_inside_free_text_is_found(home):
     assert withheld_rule_in_text("export $(cat .env)") is not None
     assert withheld_rule_in_text("run the tests in src/app/main.py") is None
     assert withheld_rule_in_text("") is None
+
+
+def test_the_source_package_named_personal_is_code_not_data(home):
+    assert withheld_rule(str(home / "Code/lhassa/app/lhassa/personal/agenda.py")) is None
+    assert withheld_rule(str(home / "Code/x/packages/p/src/lhassa/personal/a.py")) is None
+    assert withheld_rule(str(home / "Code/lhassa/personal/audit.json")) is not None

@@ -34,7 +34,9 @@ _DIR_RULES = (
     "~/.config/Bitwarden",
     "~/.config/1Password",
 )
-# A ``personal`` directory directly under a ``lhassa`` directory.
+# A ``personal`` directory directly under a ``lhassa`` directory: the private data
+# folder. The source package ``lhassa/personal`` (reached through ``app`` or
+# ``src``) is code and stays recordable.
 _LHASSA_PERSONAL = ("lhassa", "personal")
 # File-name globs.
 _NAME_RULES = (".env", ".env.*", "*.kdbx", "*.kdb")
@@ -82,7 +84,11 @@ def withheld_rule(raw: str) -> Optional[str]:
                     return rule
             parts = form.parts
             for i in range(len(parts) - 1):
-                if parts[i] == _LHASSA_PERSONAL[0] and parts[i + 1] == _LHASSA_PERSONAL[1]:
+                if (
+                    parts[i] == _LHASSA_PERSONAL[0]
+                    and parts[i + 1] == _LHASSA_PERSONAL[1]
+                    and (i == 0 or parts[i - 1] not in ("app", "src"))
+                ):
                     return "lhassa/personal"
             for pat in _NAME_RULES:
                 if fnmatch.fnmatch(form.name, pat):
