@@ -218,6 +218,43 @@ def _python_runtime_binds() -> list[str]:
         seen.add(real)
         if os.path.isdir(real):
             binds += ["--ro-bind", real, real]
+    return binds + _executable_alias_binds()
+
+
+def _executable_alias_binds() -> list[str]:
+    """Bind a uv-style alias dir that ``sys.executable`` reaches through a symlink.
+
+    uv points a venv's ``bin/python`` at ``.../python/cpython-3.13-<plat>/bin/python3.13``,
+    and that directory is itself a symlink to the patch-versioned install
+    (``cpython-3.13.12-<plat>``). Binding only the resolved install leaves the alias
+    path dangling inside the sandbox ("execvp: No such file"), so the candidate cannot
+    start Python at all after a venv is recreated. Each symlink hop whose directory
+    differs from its real path is bound read-only at the alias path too.
+    """
+    import sys
+
+    binds: list[str] = []
+    seen: set[str] = set()
+    path = sys.executable
+    for _ in range(8):  # bounded: a symlink loop must not hang the sandbox setup
+        try:
+            target = os.readlink(path)
+        except OSError:
+            break
+        if not os.path.isabs(target):
+            target = os.path.join(os.path.dirname(path), target)
+        target = os.path.normpath(target)
+        alias = os.path.dirname(os.path.dirname(target))
+        real_alias = os.path.realpath(alias)
+        if (
+            alias != real_alias
+            and alias not in seen
+            and not alias.startswith(("/usr/", "/etc/"))
+            and os.path.isdir(real_alias)
+        ):
+            seen.add(alias)
+            binds += ["--ro-bind", real_alias, alias]
+        path = target
     return binds
 
 
