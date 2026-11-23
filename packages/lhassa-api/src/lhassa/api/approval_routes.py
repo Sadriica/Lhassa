@@ -93,6 +93,9 @@ async def resolve_approval_endpoint(approval_id: str, payload: dict, request: Re
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except approval.ApprovalAuthorizationError as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
+    from lhassa.views import waybar_state
+
+    waybar_state.request_refresh()  # the status-bar widget follows the queue
     return {
         "ok": True,
         "approval_id": approval_id,
