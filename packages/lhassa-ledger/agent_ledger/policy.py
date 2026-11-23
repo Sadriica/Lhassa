@@ -72,7 +72,9 @@ DEFAULT_NAME_RULES: tuple[tuple[str, str], ...] = (
     ("keepass-db", "*.kdbx"),
 )
 
-# A directory named `lhassa` with a `personal` component anywhere below it.
+# A `personal` directory directly under a directory named `lhassa` (the owner's
+# private data folder). The source package `lhassa/personal/` of the code repo
+# (reached through `app` or `src`) is code, not data, and stays recordable.
 RULE_LHASSA_PERSONAL = "lhassa/personal"
 
 _MAX_DEPTH = 24
@@ -272,8 +274,12 @@ class Policy:
                 if fnmatch.fnmatchcase(vbase, pattern):
                     return f"name:{pattern}"
             parts = variant.split("/")
-            for i, part in enumerate(parts):
-                if part == "lhassa" and "personal" in parts[i + 1:]:
+            for i, part in enumerate(parts[:-1]):
+                if (
+                    part == "lhassa"
+                    and parts[i + 1] == "personal"
+                    and (i == 0 or parts[i - 1] not in ("app", "src"))
+                ):
                     return f"path:{RULE_LHASSA_PERSONAL}"
             for rule in self._path_rules:
                 if rule.is_glob:

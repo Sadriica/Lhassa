@@ -63,7 +63,6 @@ def test_default_name_rules_withhold_anywhere(policy, name):
     [
         "/work/lhassa/personal/notes.md",
         "/work/products/lhassa/personal",
-        "/a/lhassa/app/lhassa/personal/secretary.py",
     ],
 )
 def test_lhassa_personal_component_rule(policy, path):
@@ -224,3 +223,14 @@ def test_do_not_keep_host_stores_a_bare_trace(tmp_path, home):
     row = store.query("SELECT target, detail FROM events")[0]
     assert row["target"] == WITHHELD_TARGET
     assert json.loads(row["detail"])["reason"] == "host:claude-code"
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/a/lhassa/app/lhassa/personal/secretary.py",
+        "/a/packages/lhassa-x/src/lhassa/personal/agenda.py",
+    ],
+)
+def test_the_source_package_named_personal_is_code_not_data(policy, path):
+    assert policy.evaluate(_event(path)) is None
