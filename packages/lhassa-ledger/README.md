@@ -8,6 +8,9 @@ knows the others'. The ledger is a host-neutral SQLite file plus thin adapters
 that ride each host's own hook surface. It records. It has no opinion about how
 you run agents.
 
+The ledger began as the standalone agent-ledger prototype and is now part of
+Lhassa; the name survives only in the module (`agent_ledger`) and the store path.
+
 This pack is a **standalone** distribution. Unlike the other packs it does not
 depend on `lhassa` and ships no `lhassa.*` module, no entry point and no
 registration: the library (`agent_ledger`) must load inside other people's

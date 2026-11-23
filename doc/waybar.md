@@ -60,7 +60,7 @@ tooltip lists spend, budget used, approvals, queued tasks and failing checks.
   "exec": "~/.local/bin/lhassa-waybar status",
   "return-type": "json",
   "interval": 15,
-  "signal": 11,
+  "signal": 14,
   "on-click": "~/.local/bin/lhassa-waybar open",
   "tooltip": true
 },
@@ -85,7 +85,7 @@ tooltip lists spend, budget used, approvals, queued tasks and failing checks.
 ```
 
 4. Reload Waybar (`pkill -SIGUSR2 waybar`). `signal` is optional: with it,
-   `pkill -RTMIN+11 waybar` forces an immediate redraw. Pick a number not used by
+   `pkill -RTMIN+14 waybar` forces an immediate redraw. Pick a number not used by
    your other modules.
 
 The click action runs `xdg-open` on the dashboard URL the writer recorded
