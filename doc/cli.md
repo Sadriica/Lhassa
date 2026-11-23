@@ -189,6 +189,7 @@ skip the redraw when nothing changed. The palette follows `LHASSA_TUI_THEME`
 | Command | Purpose | Example |
 |---|---|---|
 | `approvals` | List the pending approval queue (oldest first) | `lhassa approvals` |
+| `approvals expire` | Close unanswered self-proposals (`retire_capability`, `mint_*`): older than `--days` (default 30, `LHASSA_APPROVAL_EXPIRY_DAYS`) become `rechazada` with `resolution: rejected-by-timeout`; more than `--cap` pending of one type (default 20, `LHASSA_APPROVAL_PENDING_CAP`) close the oldest as `rejected-by-cap`. Anything a task or flow waits on is never touched, and a closure is not a human decision (it does not move the autonomy streaks). The heartbeat runs it once a day | `lhassa approvals expire --dry-run` |
 | `approve <id>` | Approve a pending item (feeds the autonomy streak knob) | `lhassa approve 42` |
 | `deny <id>` | Deny a pending item (resets its autonomy streak) | `lhassa deny 42` |
 

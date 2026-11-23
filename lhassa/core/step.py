@@ -585,6 +585,40 @@ async def _delegate(
     return job_id
 
 
+async def _expire_approvals_daily(instance_id: str) -> int:
+    """Once per UTC day, close unanswered self-proposals (see ``approval.expire_stale``).
+
+    Idempotent per day through ``watch_state``; never raises into the tick. Returns
+    how many approvals it closed.
+    """
+    try:
+        from datetime import datetime, timezone
+
+        from lhassa.security import approval
+
+        today = datetime.now(timezone.utc).date().isoformat()
+        if await db.get_watch_state(instance_id, "approvals_expiry_day") == today:
+            return 0
+        out = await approval.expire_stale(instance_id)
+        await db.set_watch_state(instance_id, "approvals_expiry_day", today)
+        n = len(out["timeout"]) + len(out["cap"])
+        if n:
+            ep = Episode.begin(despertar_por="approvals-expiry", instance_id=instance_id)
+            ep.finish(
+                decision="close unanswered self-proposals",
+                accion="expire_approvals",
+                resultado=(
+                    f"closed {len(out['timeout'])} by timeout and {len(out['cap'])} by cap; "
+                    f"{out['kept']} stay pending"
+                ),
+            )
+            await ep.append()
+        return n
+    except Exception as exc:
+        logger.warning("step: approval expiry failed: {}", exc)
+        return 0
+
+
 async def step(
     instance_id: Optional[str] = None,
     *,
@@ -648,9 +682,13 @@ async def step(
     except Exception as exc:
         logger.warning("step: deferred retry sweep failed: {}", exc)
 
+    n_expired = await _expire_approvals_daily(instance_id)
+
     triggers = await watchlist.check(instance_id)
     if not triggers:
         summary = {"triggers": 0}
+        if n_expired:
+            summary["expired"] = n_expired
         if reaped:
             summary["reaped"] = len(reaped)
         if n_rejected:

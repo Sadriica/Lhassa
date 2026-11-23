@@ -3,7 +3,8 @@
 """Waybar widget for Lhassa: prints one Waybar JSON object, or opens the dashboard.
 
     lhassa-waybar [status]   print {"text","tooltip","class"} (for "exec")
-    lhassa-waybar open       open the local dashboard in the browser (for "on-click")
+    lhassa-waybar open [section]  open the dashboard on a section (default: approvals,
+                                  or health when only a check is failing; for "on-click")
 
 It only READS the state file that the running Lhassa process keeps fresh (see
 lhassa/views/waybar_state.py and doc/waybar.md); it never imports Lhassa, never
@@ -163,6 +164,32 @@ def dashboard_url(path):
     return DEFAULT_URL
 
 
+# Dashboard sections the click may open (ids of dashboard/src/lib/sections.js). There
+# is no single "administration" section yet: approvals and health (Readiness, id
+# "fleet") are the closest, policies will join them when they exist.
+OPEN_SECTIONS = ("approvals", "fleet", "integrity", "overview", "activity", "settings")
+
+
+def section_url(path, section=None):
+    """The dashboard URL with a ``#<section>`` hash.
+
+    ``section`` must be one of :data:`OPEN_SECTIONS`; without one the click picks
+    what needs attention: approvals when any wait, else health (Readiness) when a
+    check is failing, else approvals.
+    """
+    base = dashboard_url(path).rstrip("/")
+    if section not in OPEN_SECTIONS:
+        section = "approvals"
+        try:
+            with open(path, encoding="utf-8") as fh:
+                data = json.load(fh)
+            if not data.get("approvals") and data.get("health_failing"):
+                section = "fleet"
+        except (OSError, ValueError, AttributeError):
+            pass
+    return base + "/#" + section
+
+
 def main(argv, env=None):
     env = os.environ if env is None else env
     command = argv[1] if len(argv) > 1 else "status"
@@ -173,14 +200,14 @@ def main(argv, env=None):
     if command == "open":
         try:
             subprocess.Popen(
-                ["xdg-open", dashboard_url(path)],
+                ["xdg-open", section_url(path, argv[2] if len(argv) > 2 else None)],
                 stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                 start_new_session=True,
             )
         except OSError:
             return 1
         return 0
-    print("usage: lhassa-waybar [status|open]", file=sys.stderr)
+    print("usage: lhassa-waybar [status|open [section]]", file=sys.stderr)
     return 2
 
 

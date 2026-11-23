@@ -428,7 +428,6 @@ def register(app: "typer.Typer") -> None:
     GROUP in :mod:`lhassa.cli.memory_cmds` (search + ``add``), which reuses
     ``memory_cmd`` (below) as its hidden default ``search`` subcommand.
     """
-    app.command("approvals")(approvals_cmd)
     app.command("approve")(approve_cmd)
     app.command("deny")(deny_cmd)
     app.command("report")(report_cmd)

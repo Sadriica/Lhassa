@@ -43,6 +43,7 @@ from lhassa.cli import integrity_cmds as _integrity_cmds  # noqa: E402
 from lhassa.cli import utility_cmds as _utility_cmds  # noqa: E402
 from lhassa.cli import knowledge_cmds as _knowledge_cmds  # noqa: E402
 from lhassa.cli import memory_cmds as _memory_cmds  # noqa: E402
+from lhassa.cli import approvals_cmds as _approvals_cmds  # noqa: E402
 from lhassa.cli import org_cmds as _org_cmds  # noqa: E402
 from lhassa.cli import seed_cmds as _seed_cmds  # noqa: E402
 from lhassa.cli import setup_cmds as _setup_cmds  # noqa: E402
@@ -345,6 +346,7 @@ app.command("doctor")(_capabilities.capabilities_cmd)
 
 # Attach the `lhassa org` management sub-app (topology: 1..N brains + hierarchy).
 app.add_typer(_org_cmds.org_app, name="org")
+app.add_typer(_approvals_cmds.approvals_app, name="approvals")
 app.add_typer(_skills_cmds.skills_app, name="skills")
 
 # Attach the `lhassa flows` sub-app (stored work-flows + the flow-templates gallery).

@@ -186,6 +186,29 @@ async def resolve_approval(instance_id: str, approval_id: str, estado: str) -> b
     return cur.rowcount == 1
 
 
+async def close_approval(
+    instance_id: str, approval_id: str, resolution: str, now: Optional[str] = None
+) -> bool:
+    """CAS a pending approval to ``rechazada`` and stamp WHY in its payload.
+
+    Used when nobody decided (``rejected-by-timeout``, ``rejected-by-cap``): the row
+    closes like a rejection, but ``payload.resolution`` says it was not a human
+    answer, so nothing downstream may count it as one. Returns whether this call
+    closed it.
+    """
+    stamp = now or _pkg()._now()
+    async with aiosqlite.connect(_pkg().DB_PATH) as db:
+        cur = await db.execute(
+            """UPDATE approvals
+               SET estado = 'rechazada', resuelto_en = ?,
+                   payload = json_set(COALESCE(NULLIF(payload, ''), '{}'), '$.resolution', ?)
+               WHERE instance_id = ? AND id = ? AND estado = 'pendiente'""",
+            (stamp, resolution, instance_id, approval_id),
+        )
+        await db.commit()
+    return cur.rowcount == 1
+
+
 # ── autonomy (the friction knob; consecutive human approvals) ──────────────────
 
 async def get_autonomy_streak(instance_id: str, accion: str, actor_id: str) -> int:
