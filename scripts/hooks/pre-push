@@ -1,0 +1,17 @@
+#!/bin/sh
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# lhassa review: pre-push hook (warn mode; exit 0 unless LHASSA_REVIEW_STRICT=1).
+# Always logs the push it saw, then delegates to the repo's own pre-push hook.
+. "$(dirname "$(readlink -f "$0")")/_common.sh"
+tmp="$(mktemp 2>/dev/null)" || tmp=""
+if [ -n "$tmp" ]; then
+  cat > "$tmp"
+  trap 'rm -f "$tmp"' EXIT
+fi
+review_rc=0
+if [ -n "$tmp" ]; then
+  lhassa_review hook pre-push "$@" --repo "$PWD" < "$tmp" || review_rc=$?
+fi
+[ "$review_rc" -eq 1 ] || review_rc=0
+LHASSA_STDIN_FILE="$tmp" lhassa_delegate pre-push "$@" || exit $?
+exit "$review_rc"

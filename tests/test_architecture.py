@@ -115,6 +115,10 @@ RULES: tuple[Rule, ...] = (
     # /idea intake, chat command, seed, API, CLI, integrity hooks) lives in
     # ``research/surfaces/``.
     Rule("research-isolation", frozenset({"research"}), frozenset(SHELLS)),
+    # The review engine (deterministic pre-flight rules and the hook adapters) is a
+    # stdlib-only tool that must start fast inside a git hook; the `lhassa review`
+    # CLI sub-app lives in cli/review_cmds.py, so the engine never imports a shell.
+    Rule("review-isolation", frozenset({"review"}), frozenset(SHELLS)),
 )
 
 # Keystone leaf-infrastructure files: pure generic infrastructure that must not

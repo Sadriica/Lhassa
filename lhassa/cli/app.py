@@ -50,6 +50,7 @@ from lhassa.cli import share_cmds as _share_cmds  # noqa: E402
 from lhassa.cli import skills_cmds as _skills_cmds  # noqa: E402
 from lhassa.cli import project_cmds as _project_cmds  # noqa: E402
 from lhassa.cli import repl_ui as _repl_ui  # noqa: E402
+from lhassa.cli import review_cmds as _review_cmds  # noqa: E402
 from lhassa.cli import task_cmds as _task_cmds  # noqa: E402
 from lhassa.cli import tools_cmds as _tools_cmds  # noqa: E402
 from lhassa.cli.theme import LHASSA_THEME, cost_markup, prompt_fragments  # noqa: E402
@@ -374,6 +375,9 @@ app.add_typer(_task_cmds.task_app, name="task")
 app.add_typer(_project_cmds.project_app, name="project")
 
 app.add_typer(_integrity_cmds.integrity_app, name="integrity")
+
+# Attach the `lhassa review` sub-app (deterministic pre-flight review, no LLM).
+app.add_typer(_review_cmds.review_app, name="review")
 
 # ── lhassa utility … (the tribunal: which capabilities still SERVE the owner) ──
 app.add_typer(_utility_cmds.utility_app, name="utility")

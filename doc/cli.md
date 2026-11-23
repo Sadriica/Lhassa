@@ -179,6 +179,7 @@ skip the redraw when nothing changed. The palette follows `LHASSA_TUI_THEME`
 | `share publish/unpublish/grant/revoke/offerings/subscribe/unsubscribe/subscriptions` | Cross-instance sharing of skills, flows, templates and knowledge, deny-by-default | `lhassa share publish skill code-review` |
 | `research draft/list/assessments/assessment/propose-change/build-change/apply-change` | The research line: evidence-cited note drafts (`draft <topic> --lang en\|es`) and the idea-assessment pipeline | `lhassa research draft earned-autonomy` |
 | `integrity check/status/findings/contracts` | Run and inspect the deterministic conformance contracts (`doc/integrity.md`) | `lhassa integrity status` |
+| `review commit-range/message/text` | Deterministic pre-flight review: authorship, AI attribution, em dashes, secrets, configured names (`doc/review.md`) | `lhassa review commit-range origin/main..HEAD` |
 | `setup` | One wizard from a fresh clone: profile, scopes, seeds, services (`--yes`, `--profile`, `--dry-run`, `--no-services`) | `lhassa setup --yes --profile personal` |
 | `onboard` | Interactive questionnaire (~5 questions) that seeds the first owner facts | `lhassa onboard` |
 
