@@ -3,7 +3,7 @@
 // a one-line hint, and the default `config` a freshly-dropped node starts with.
 //
 // Colors stay on the Lhasa palette: trigger = sage green (the entry / "go"),
-// task = temple gold (the brand — the working brains), gate = monk-robe red (a
+// task = temple gold (the brand; the working brains), gate = monk-robe red (a
 // checkpoint, used sparingly), output = muted stone (a quiet sink), branch = a
 // muted plum (a fork). Each kind exposes an `rgb` triple so a node can tint its
 // border/fill at several opacities without hard-coding colors twice.
@@ -16,7 +16,7 @@ export const KINDS = {
     label: 'Trigger',
     glyph: '▷',
     rgb: '124,154,91', // sage green
-    hint: 'the single entry point — manual, schedule, or event',
+    hint: 'the single entry point; manual, schedule, or event',
     hasTarget: false, // nothing may point back into the trigger
     hasSource: true,
     defaultConfig: { type: 'manual' },
@@ -26,7 +26,7 @@ export const KINDS = {
     label: 'Task',
     glyph: '◇',
     rgb: '217,165,33', // temple gold
-    hint: 'work a brain does — auto by skill, or pin a brain',
+    hint: 'work a brain does; auto by skill, or pin a brain',
     hasTarget: true,
     hasSource: true,
     defaultConfig: {},
@@ -36,7 +36,7 @@ export const KINDS = {
     label: 'Gate',
     glyph: '⛉',
     rgb: '162,62,52', // monk-robe red
-    hint: 'a checkpoint — verify an artifact or park for approval',
+    hint: 'a checkpoint; verify an artifact or park for approval',
     hasTarget: true,
     hasSource: true,
     defaultConfig: { type: 'verify', spec: {} },
@@ -46,7 +46,7 @@ export const KINDS = {
     label: 'Output',
     glyph: '⤓',
     rgb: '138,130,118', // muted stone
-    hint: 'a sink — notify, write a doc, or log',
+    hint: 'a sink; notify, write a doc, or log',
     hasTarget: true,
     hasSource: false,
     defaultConfig: { type: 'log' },
@@ -56,7 +56,7 @@ export const KINDS = {
     label: 'Branch',
     glyph: '⑂',
     rgb: '150,112,164', // muted plum
-    hint: 'a fork — the condition lives on each outgoing edge (when)',
+    hint: 'a fork; the condition lives on each outgoing edge (when)',
     hasTarget: true,
     hasSource: true,
     defaultConfig: {},

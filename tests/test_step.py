@@ -1,5 +1,5 @@
 """
-Tests for the Phase 0 "hace y duerme" loop — step + watchlist + actions.
+Tests for the Phase 0 "hace y duerme" loop; step + watchlist + actions.
 
 Fully offline (replay): a tmp brain DB via monkeypatched ``db.DB_PATH`` and a
 monkeypatched git subprocess. No live network, LLM, or git.
@@ -114,11 +114,11 @@ async def test_step_respects_instance_isolation(tmp_path, monkeypatch):
     assert len(await db.load_pending_tasks("inst_other")) == 1
 
 
-# ── judgment branch — offline fake provider ──────────────────────────────────────
+# ── judgment branch; offline fake provider ──────────────────────────────────────
 
 
 class FakeProvider:
-    """Offline ModelProvider double — records calls, returns a canned Completion."""
+    """Offline ModelProvider double; records calls, returns a canned Completion."""
 
     def __init__(self, *, name="fake", zero_retention=False, text="judged it",
                  cost_usd=0.0012, raises=None):
@@ -167,7 +167,7 @@ async def test_step_unknown_action_is_deferred_safely(tmp_path, monkeypatch):
     assert summary2 == {"triggers": 0}
 
 
-# ── judgment branch — fake provider runs, records decision + cost ─────────────────
+# ── judgment branch; fake provider runs, records decision + cost ─────────────────
 
 @pytest.mark.asyncio
 async def test_step_judgment_runs_provider_and_records(tmp_path, monkeypatch):
@@ -217,7 +217,7 @@ async def test_step_judgment_budget_exceeded_degrades(tmp_path, monkeypatch):
     assert "BudgetExceeded" in eps[0]["resultado"]
 
 
-# ── judgment branch with a verify spec — records result, escalates via cascade ───
+# ── judgment branch with a verify spec; records result, escalates via cascade ───
 
 
 class ModelAwareProvider:
@@ -264,7 +264,7 @@ async def test_step_verify_passes_on_cheap_no_escalation(tmp_path, monkeypatch):
     summary = await step.step("inst_personal", provider=prov, config=_cascade_config())
     assert summary["judged"] == 1
 
-    # Only the cheap model was called — verify accepted it.
+    # Only the cheap model was called; verify accepted it.
     assert prov.calls == ["cheap-m"]
     ep = (await db.load_recent_episodes("inst_personal"))[0]
     assert "verificado: passed" in ep["decision"]
@@ -285,7 +285,7 @@ async def test_step_verify_fails_cheap_escalates_to_smart(tmp_path, monkeypatch)
     summary = await step.step("inst_personal", provider=prov, config=_cascade_config())
     assert summary["judged"] == 1
 
-    # Cheap then smart — escalated exactly once.
+    # Cheap then smart; escalated exactly once.
     assert prov.calls == ["cheap-m", "smart-m"]
     ep = (await db.load_recent_episodes("inst_personal"))[0]
     assert "verificado: passed" in ep["decision"]  # smart answer passes
@@ -419,7 +419,7 @@ async def test_step_kill_switch_in_fallback_chain_stops_later_providers(
 async def test_step_judgment_budget_exceeded_only_tries_cli_providers_in_chain(
     tmp_path, monkeypatch
 ):
-    """On BudgetExceeded only the $0 CLI providers in the chain are tried —
+    """On BudgetExceeded only the $0 CLI providers in the chain are tried;
     retrying the same exhausted cloud budget through another cloud entry is
     pointless, so a non-CLI chain entry must be skipped."""
     db = await _init(tmp_path, monkeypatch)
@@ -459,7 +459,7 @@ async def test_step_judgment_budget_exceeded_only_tries_cli_providers_in_chain(
 async def test_step_judgment_explicit_provider_pin_skips_fallback_chain(
     tmp_path, monkeypatch
 ):
-    """The offline injection seam (``provider=``) must be honored exactly —
+    """The offline injection seam (``provider=``) must be honored exactly;
     it must never silently fall through to the config-driven chain."""
     db = await _init(tmp_path, monkeypatch)
     from lhassa.core import step
@@ -481,7 +481,7 @@ async def test_step_judgment_explicit_provider_pin_skips_fallback_chain(
     assert chain_called["n"] == 0  # the pinned provider seam skips the chain entirely
 
 
-# ── delegate branch — launches a harness job, never blocks ───────────────────────
+# ── delegate branch; launches a harness job, never blocks ───────────────────────
 
 
 class _FakeStream:
@@ -559,7 +559,7 @@ async def test_step_delegate_launches_job_and_records_episode(tmp_path, monkeypa
     assert jobs[0]["harness"] == "opencode"
     assert jobs[0]["estado"] == "running"
 
-    # The task is marked done (the delegation happened — the job is tracked apart).
+    # The task is marked done (the delegation happened; the job is tracked apart).
     assert await db.load_pending_tasks("inst_personal") == []
 
     # Next tick supervises: the finished job is reaped to done with its cost.

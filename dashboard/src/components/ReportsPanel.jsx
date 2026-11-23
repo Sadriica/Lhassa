@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 
-// Phase 6 "madurez" — reports + cost projections. Pulls /api/reports (recent
+// Phase 6 "madurez"; reports + cost projections. Pulls /api/reports (recent
 // episodes + outcome counts) and /api/projections (spend so far today + a simple
 // linear projection off the same ledger the LLM panels use). Read-only.
 function fmtUsd(v) {

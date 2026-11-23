@@ -1,4 +1,4 @@
-"""Tests for the (unwired, build-and-shelve) TOON encoder — lhassa/llm/toon.py."""
+"""Tests for the (unwired, build-and-shelve) TOON encoder; lhassa/llm/toon.py."""
 
 import json
 
@@ -79,7 +79,7 @@ def test_from_toon_never_raises_on_garbage():
 
 
 def test_token_savings_over_json_on_bulk_tabular_fixture():
-    # 50 rows x 6 fields, uniform, string-and-number mix — a stand-in for a
+    # 50 rows x 6 fields, uniform, string-and-number mix; a stand-in for a
     # bulk graph-expansion result table, TOON's intended first consumer.
     rows = [
         {

@@ -5,13 +5,53 @@ from pathlib import Path
 from loguru import logger
 
 from lhassa.config import Config
-from lhassa.voice.pipeline import run as run_voice_pipeline
 from lhassa.memory.session import close_session
 from lhassa.memory.store import init_db
-from lhassa.api.server import run_api_server
 from lhassa.state import state
 
 LOG_DIR = Path.home() / ".lhassa"
+
+VOICE_INSTALL_HINT = "uv sync --package lhassa-voice --extra runtime"
+API_INSTALL_HINT = "uv sync --package lhassa-api"
+
+
+def _load_api_server():
+    """Return the api pack's ``run_api_server`` or ``None`` with a clear log line.
+
+    The dashboard + REST API ship in the ``lhassa-api`` pack; without it the voice
+    pipeline still runs, just with no dashboard alongside.
+    """
+    try:
+        from lhassa.api.server import run_api_server
+    except ImportError as exc:
+        logger.warning(
+            f"The api pack (lhassa-api) is not installed ({exc}); running without the "
+            f"dashboard. Install it with: {API_INSTALL_HINT}"
+        )
+        return None
+    return run_api_server
+
+
+def _load_voice_pipeline():
+    """Return the voice pipeline's ``run`` or ``None`` with a clear log line.
+
+    The pipeline ships in the ``lhassa-voice`` pack and needs its ``runtime``
+    extra (pipecat, torch, pyaudio). Core alone has neither, so this entrypoint
+    says which piece is missing instead of crashing on an import.
+    """
+    try:
+        import lhassa.voice  # noqa: F401
+    except ImportError:
+        logger.error(f"The voice pack (lhassa-voice) is not installed. Install it with: {VOICE_INSTALL_HINT}")
+        return None
+    try:
+        from lhassa.voice.pipeline import run
+    except ImportError as exc:
+        logger.error(
+            f"The voice runtime is not installed ({exc}). Install it with: {VOICE_INSTALL_HINT}"
+        )
+        return None
+    return run
 
 
 def setup_logging(level: str):
@@ -78,7 +118,7 @@ async def _periodic_memory_snapshot(interval_s: int):
             logger.warning(f"Periodic memory snapshot failed: {e}")
 
 
-async def _run_all(config: Config):
+async def _run_all(config: Config, run_voice_pipeline):
     """
     Run voice pipeline as the primary task, with the API server as a background
     service that is cancelled cleanly when the voice pipeline exits. Saves
@@ -103,14 +143,21 @@ async def _run_all(config: Config):
     except Exception as exc:
         logger.warning(f"Legacy reminder migration failed: {exc}")
 
-    api_task = asyncio.create_task(
-        run_api_server(host=config.api_host, port=config.api_port),
-        name="api-server",
-    )
+    run_api_server = _load_api_server()
+    background = []
+    if run_api_server is not None:
+        background.append(
+            asyncio.create_task(
+                run_api_server(host=config.api_host, port=config.api_port),
+                name="api-server",
+            )
+        )
     snapshot_interval = max(60, int(os.getenv("LHASSA_MEMORY_SNAPSHOT_INTERVAL", "1800")))
-    snapshot_task = asyncio.create_task(
-        _periodic_memory_snapshot(snapshot_interval),
-        name="memory-snapshot",
+    background.append(
+        asyncio.create_task(
+            _periodic_memory_snapshot(snapshot_interval),
+            name="memory-snapshot",
+        )
     )
 
     messages: list = []
@@ -127,9 +174,9 @@ async def _run_all(config: Config):
     finally:
         await state.set_voice_active(False)
         state.pipeline_task = None
-        api_task.cancel()
-        snapshot_task.cancel()
-        await asyncio.gather(api_task, snapshot_task, return_exceptions=True)
+        for task in background:
+            task.cancel()
+        await asyncio.gather(*background, return_exceptions=True)
         await _close_http_clients()
 
     if messages:
@@ -146,8 +193,13 @@ def main():
     setup_logging(config.log_level)
     logger.info("Starting Lhassa...")
 
+    run_voice_pipeline = _load_voice_pipeline()
+    if run_voice_pipeline is None:
+        logger.info("For the headless roles use the CLI (`lhassa`) or docker/run_api.py.")
+        sys.exit(1)
+
     try:
-        asyncio.run(_run_all(config))
+        asyncio.run(_run_all(config, run_voice_pipeline))
     except KeyboardInterrupt:
         print()  # newline after ^C
         logger.info("Lhassa shutting down.")

@@ -4,7 +4,7 @@ from lhassa.persona import PERSONA_BLOCK
 BASE_PROMPT = PERSONA_BLOCK + """
 
 You operate primarily through voice. Keep responses concise and natural for speech:
-- No markdown, bullet points, or formatting — this is spoken audio
+- No markdown, bullet points, or formatting; this is spoken audio
 - Sentences should be short and clear
 - When you don't know something, say so directly
 
@@ -26,7 +26,7 @@ Available tools:
 - watch_file: tail a file and notify when a pattern appears or it changes
 - watch_command: poll a shell command until it succeeds or matches output, then notify
 
-When using tools, don't narrate — just do it and report the result in 1–3 sentences.
+When using tools, don't narrate; just do it and report the result in 1–3 sentences.
 For long or autonomous tasks, delegate to an agent and tell the user you'll notify them when done."""
 
 

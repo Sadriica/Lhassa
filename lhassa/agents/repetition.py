@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """
-Repeated-think detector — the $0 sense that spots automatable patterns (§2.8).
+Repeated-think detector; the $0 sense that spots automatable patterns (§2.8).
 
 The self-improvement pipeline (quarantine -> gates -> versioning) has always had
 a missing FIRST step: nothing ever noticed that the brain was judging (spending
@@ -10,12 +10,12 @@ Detection is a PURE SQL aggregation over the episodes table (the append-only
 grande): group recent episodes by (despertar_por, accion), count occurrences and
 sum cost. A pattern that repeats often AND cost real money is a strong signal a
 deterministic action could replace the judgment entirely. This never calls an
-LLM and never writes anything — see :mod:`lhassa.actionpack._selfimprove` for the
+LLM and never writes anything; see :mod:`lhassa.actionpack._selfimprove` for the
 action that turns a finding into a parked approval + notification.
 
 **A judgment is never a valid candidate.** The detector's first five real
 proposals were "make 'responder' automatic" (the Telegram chat turn itself) and
-four "make 'dept:<x> think' automatic" (an org department's judgment) — the
+four "make 'dept:<x> think' automatic" (an org department's judgment); the
 owner denied all five, because neither can EVER be a deterministic action: a
 chat reply and a department's "think" are, by definition, the judgment the
 self-improvement loop exists to relieve, not something downstream of it.
@@ -23,10 +23,10 @@ self-improvement loop exists to relieve, not something downstream of it.
 finding this module returns.
 
 This module also finds a second, complementary signal: repeated MECHANICAL
-ACTION CHAINS (:func:`detect_mechanical_chains`) — an ordered sequence of ≥2
+ACTION CHAINS (:func:`detect_mechanical_chains`); an ordered sequence of ≥2
 distinct deterministic actions recurring under the same trigger. That is not a
 "mint one action" candidate; it is a Programmatic Tool Calling (PTC, see
-:mod:`lhassa.agents.ptc`) candidate — collapse the chain into one script a
+:mod:`lhassa.agents.ptc`) candidate; collapse the chain into one script a
 human reviews once instead of N separate fixed-action episodes.
 """
 
@@ -52,24 +52,24 @@ DEFAULT_THRESHOLD = 5
 DEFAULT_CHAIN_THRESHOLD = 3
 DEFAULT_CHAIN_MAX_LEN = 4
 
-# detect_recurring defaults — a much lower bar than detect_repetition's cost
+# detect_recurring defaults; a much lower bar than detect_repetition's cost
 # threshold: a pattern is worth noticing just for repeating, regardless of cost.
 DEFAULT_RECURRING_THRESHOLD = 3
 # A cadence needs at least this many occurrences before gaps mean anything.
 CADENCE_MIN_OCCURRENCES = 3
 # Coefficient of variation (stdev/mean of the gaps, in days) at or below this
-# is treated as a "regular" cadence — a HEURISTIC, not exact schedule
+# is treated as a "regular" cadence; a HEURISTIC, not exact schedule
 # detection: a human still reviews the resulting schedule proposal.
 CADENCE_MAX_CV = 0.35
 # A mean gap below this (in days) is just "close together in a burst", not a
-# cadence worth scheduling — floors out sub-day noise (e.g. a rapid retry loop).
+# cadence worth scheduling; floors out sub-day noise (e.g. a rapid retry loop).
 CADENCE_MIN_INTERVAL_DAYS = 0.5
 
-# The floor every adaptive threshold relaxes toward (see effective_threshold) —
+# The floor every adaptive threshold relaxes toward (see effective_threshold);
 # a single or double occurrence is still coincidence, never a "pattern" worth
 # surfacing, no matter how small the window's population is.
 ADAPTIVE_THRESHOLD_FLOOR = 2
-# tipos the denied-patterns query recognizes — every self-improvement proposal
+# tipos the denied-patterns query recognizes; every self-improvement proposal
 # kind this module (and actionpack._selfimprove) can park an approval for.
 _PROPOSAL_TIPOS = (
     "mint_action",
@@ -80,18 +80,18 @@ _PROPOSAL_TIPOS = (
     "mint_route",
 )
 
-# detect_routable defaults — how many times a `[routable:<cap>]`-tagged episode
+# detect_routable defaults; how many times a `[routable:<cap>]`-tagged episode
 # (a message a deterministic capability recognises, that STILL paid for a
 # think/research) must repeat before it is worth proposing a route.
 DEFAULT_ROUTABLE_THRESHOLD = 5
 
 # The exact marker lhassa.notify.capabilities.tag_intent writes onto an
-# episode's `decision` text — read back here with a plain regex, never a
+# episode's `decision` text; read back here with a plain regex, never a
 # Python import of notify/ (agents/ stays shell-free; see the module docstring
 # and lhassa.notify.capabilities's own docstring for the layering rationale).
 _ROUTABLE_RE = re.compile(r"\[routable:([a-z0-9_]+)\]", re.IGNORECASE)
 
-# Candidate action names that are ALWAYS a judgment, never automatable — see the
+# Candidate action names that are ALWAYS a judgment, never automatable; see the
 # module docstring for the real denied proposals this encodes.
 _EXCLUDED_ACCIONES = {"responder"}
 # An org department's judgment think, e.g. "dept:interns think".
@@ -103,13 +103,13 @@ _DEPT_THINK_RE = re.compile(r"^dept:.+ think$")
 # automating. It must NOT find Lhassa's own deterministic scheduled/org
 # machinery: the org delegation+delivery hops and the maintenance-seed beats
 # fire every heartbeat, always $0, and "optimizing" them is the snake eating
-# its own tail — the chain detector would even propose collapsing chains that
+# its own tail; the chain detector would even propose collapsing chains that
 # CONTAIN detect_repetition itself. Left unfiltered this floods the owner with
 # near-duplicate mint_script proposals (every rotation of the same 3-4 hygiene
 # actions is a distinct "chain"). Keyed on despertar_por: every real infra
 # episode carries an infra wake (an org hop, the monitor, or a scheduled
-# maintenance `task:<action>`). Owner-driven wakes — telegram, a
-# reminder/research/goal/org_run task — are deliberately absent, so genuine
+# maintenance `task:<action>`). Owner-driven wakes; telegram, a
+# reminder/research/goal/org_run task; are deliberately absent, so genuine
 # repeated owner work still surfaces.
 _INFRA_WAKE = {
     "org-deliver", "org-delegate", "temple-execute", "templo-execute", "monitor",
@@ -122,7 +122,7 @@ _INFRA_TASK_WAKES = {
 
 
 def is_infrastructure(despertar_por: str, accion: str = "") -> bool:
-    """True when an episode is Lhassa's OWN scheduled/org machinery — never an
+    """True when an episode is Lhassa's OWN scheduled/org machinery; never an
     intervention target (see the block comment above). Keyed on the wake source;
     ``accion`` is accepted for signature parity but not required. Never raises."""
     dp = (despertar_por or "").strip()
@@ -137,7 +137,7 @@ def pattern_key(despertar_por: str, accion: str) -> str:
 def effective_threshold(
     base: int, population: int, *, floor: int = ADAPTIVE_THRESHOLD_FLOOR
 ) -> int:
-    """The adaptive repeat threshold — sensitivity that SCALES with data volume.
+    """The adaptive repeat threshold; sensitivity that SCALES with data volume.
 
     A YOUNG brain (few episodes total) has no chance of ever hitting a static
     ``base`` threshold (e.g. 5 repeats) inside a 7-day window; a MATURE brain
@@ -149,17 +149,17 @@ def effective_threshold(
 
     Read as: treat ``base`` as this pattern's own natural denominator. The
     threshold only reaches its full, strict ``base`` value once ``population``
-    is at least ``base`` groups' worth of ``base`` occurrences each — i.e.
+    is at least ``base`` groups' worth of ``base`` occurrences each; i.e.
     ``population >= base * base``. Below that the window is sparse/young and
     the bar relaxes proportionally (``ceil(population / base)``), down to
     ``floor``. ``floor`` guards the other end: the threshold never drops below
     it, because a single or double occurrence is still coincidence, not a
     pattern (mirrors :data:`CADENCE_MIN_OCCURRENCES`'s own floor of 2 for
-    cadence detection — a cadence needs at least 2 gaps to mean anything).
+    cadence detection; a cadence needs at least 2 gaps to mean anything).
 
     Monotonic (non-decreasing) in ``population`` by construction: ``ceil`` is
     non-decreasing in its argument, and clamping with fixed constants
-    (``min``/``max``) preserves monotonicity — a bigger window NEVER makes
+    (``min``/``max``) preserves monotonicity; a bigger window NEVER makes
     detection stricter than a smaller one.
 
     Defensive, never raises: a non-numeric/zero/negative ``base`` degrades to
@@ -194,18 +194,18 @@ def chain_pattern_key(despertar_por: str, chain: list[str]) -> str:
 
 
 def is_excluded(accion: str, decision: str = "") -> bool:
-    """True when a pattern can NEVER become a deterministic action — never propose it.
+    """True when a pattern can NEVER become a deterministic action; never propose it.
 
     A judgment (a chat reply, an org department's "think") cannot be minted as a
     $0 fixed action by definition: doing so would just hide an LLM call behind a
     fake deterministic name, defeating the point of the self-improvement loop.
     Excludes any pattern whose:
 
-      - candidate ``accion`` is exactly ``"responder"`` — the tool-less
-        Telegram/chat think (see ``notify.telegram_inbound``'s fallback reply).
-      - candidate ``accion`` matches ``"dept:<name> think"`` — an org
+      - candidate ``accion`` is exactly ``"responder"``: the tool-less
+        Telegram/chat think (see ``chat.think``'s fallback reply).
+      - candidate ``accion`` matches ``"dept:<name> think"``: an org
         department's judgment (see ``org.coordinator``/``org.executor``).
-      - recorded ``decision`` text starts with ``"think"`` — a second, more
+      - recorded ``decision`` text starts with ``"think"``: a second, more
         general net that catches any other judgment shape that doesn't happen
         to be spelled "responder" or "dept:* think" (e.g. a future chat/org
         think renamed or phrased differently).
@@ -225,14 +225,14 @@ async def denied_patterns(instance_id: str) -> set[str]:
     """Patterns whose most recent self-improvement proposal was DENIED.
 
     Covers every proposal kind this module (and ``actionpack._selfimprove``) can
-    park — ``mint_action``, ``mint_script``, and the consciousness's ``mint_memory``
+    park; ``mint_action``, ``mint_script``, and the consciousness's ``mint_memory``
     / ``mint_schedule`` / ``seed_cache`` kinds (see :func:`recommend_intervention`).
 
     ``watch_state`` (see ``actionpack._selfimprove._SEEN_PREFIX``) only stops a
     pattern from being re-proposed while its approval is still PENDING; once a
     human resolves it ``rechazada`` it falls out of that dedup path entirely, and
     the pattern would otherwise be proposed again on the very next run. A denial
-    is a human decision, not a queue timeout — this reads the approvals table
+    is a human decision, not a queue timeout; this reads the approvals table
     directly (``core.db`` exposes no "list denied" helper) so the owner is never
     asked twice for an automation they already said no to. Pure SQL, $0, never
     raises (degrades to an empty set).
@@ -270,15 +270,15 @@ async def detect_repetition(
 ) -> list[dict[str, Any]]:
     """Find (despertar_por, accion) patterns repeated >= an effective threshold.
 
-    Pure SQL aggregation over the last ``days`` of episodes for ``instance_id`` —
+    Pure SQL aggregation over the last ``days`` of episodes for ``instance_id``;
     no LLM, no cost, never raises destructively. Only patterns that both repeat
     enough times AND have spent real money (``total_cost_usd > 0``) are
-    returned — a pattern that already costs nothing is not worth automating
+    returned; a pattern that already costs nothing is not worth automating
     further. Sorted by repeat count descending.
 
     An explicit ``threshold`` (or ``Config.repetition_threshold``, when set)
     ALWAYS wins unchanged. Otherwise the base (:data:`DEFAULT_THRESHOLD`)
-    adapts to the window's population — see :func:`effective_threshold` — so a
+    adapts to the window's population; see :func:`effective_threshold`: so a
     young brain with few episodes still gets real findings instead of "no
     repeated patterns found" forever.
 
@@ -320,7 +320,7 @@ async def detect_repetition(
             ) as cur:
                 rows = [dict(r) for r in await cur.fetchall()]
     except Exception:
-        # A missing/corrupt table degrades to "nothing detected" — this is a
+        # A missing/corrupt table degrades to "nothing detected": this is a
         # cheap sense, not a critical path; it must never crash a caller.
         return []
 
@@ -332,7 +332,7 @@ async def detect_repetition(
         if is_excluded(accion, str(row.get("decision_sample") or "")):
             continue  # a judgment can never become a deterministic action
         if is_infrastructure(despertar_por, accion):
-            continue  # Lhassa's own scheduled/org machinery — not owner work
+            continue  # Lhassa's own scheduled/org machinery; not owner work
         pattern = pattern_key(despertar_por, accion)
         if pattern in denied:
             continue  # the owner already said no to this exact automation
@@ -352,20 +352,20 @@ async def detect_repetition(
 def _cadence_stats(
     timestamps: list[str], *, min_occurrences: int = CADENCE_MIN_OCCURRENCES
 ) -> Optional[dict[str, Any]]:
-    """Gaps-between-occurrences cadence check — a HEURISTIC, not a real scheduler.
+    """Gaps-between-occurrences cadence check; a HEURISTIC, not a real scheduler.
 
     Parses ``timestamps`` (ISO-8601, any order), sorts them, and computes the
     gaps between consecutive occurrences in days. With fewer than
     ``min_occurrences`` timestamps there aren't enough gaps to say anything
     about regularity, so this returns ``None``. ``min_occurrences`` defaults to
     :data:`CADENCE_MIN_OCCURRENCES` but callers may relax it (down to a floor of
-    2 — see :func:`effective_threshold`) for a small window; a single
+    2; see :func:`effective_threshold`) for a small window; a single
     occurrence is never a cadence, no matter how sparse the window. Otherwise
     it returns
     ``{"interval_days", "cv", "occurrences"}`` when the coefficient of variation
     (population stdev / mean of the gaps) is at or below :data:`CADENCE_MAX_CV`
-    — "low variance" meaning the gaps cluster tightly around one interval (e.g.
-    ~daily, ~weekly). **Limits, stated honestly**: this is exact-count blind —
+   ; "low variance" meaning the gaps cluster tightly around one interval (e.g.
+    ~daily, ~weekly). **Limits, stated honestly**: this is exact-count blind;
     it cannot distinguish "every Friday" from "every 7 days starting Tuesday",
     and a handful of points can look regular by chance. It is a proposal for a
     human to review, never an automatic schedule change. Never raises
@@ -392,7 +392,7 @@ def _cadence_stats(
         mean = statistics.mean(gaps_days)
         if mean < CADENCE_MIN_INTERVAL_DAYS:
             # Sub-floor gaps (e.g. a burst of episodes seconds apart) are not a
-            # "cadence" in any useful sense — they are just close together.
+            # "cadence" in any useful sense; they are just close together.
             return None
         stdev = statistics.pstdev(gaps_days) if len(gaps_days) > 1 else 0.0
         cv = stdev / mean
@@ -413,7 +413,7 @@ async def detect_recurring(
     days: int = DEFAULT_DAYS,
     min_count: Optional[int] = None,
 ) -> list[dict[str, Any]]:
-    """Find patterns that repeat OFTEN, regardless of cost — the broader sense.
+    """Find patterns that repeat OFTEN, regardless of cost; the broader sense.
 
     :func:`detect_repetition` only flags patterns that both repeated AND spent
     real money; a $0 pattern (a question asked many times, a trigger firing on
@@ -426,20 +426,20 @@ async def detect_recurring(
     Each finding also tries a cadence check (see :func:`_cadence_stats`) once it
     has enough occurrences, and is tagged ``"judgment": True`` when the
     candidate action is one of the judgment shapes :func:`is_excluded` knows
-    about (a chat reply, an org department's think) — a judgment pattern can
+    about (a chat reply, an org department's think); a judgment pattern can
     never become a ``mint_action`` tool, but it CAN be the subject of a memory
     fact / cache seed proposal (see :func:`recommend_intervention`), so it is
     NOT dropped here the way :func:`detect_repetition` drops it.
 
     On top of the episodes-based patterns, this also surfaces entries from the
     answer cache (:mod:`lhassa.memory.answer_cache`) that have been hit at
-    least the effective ``min_count`` times — a REAL repeated question with
+    least the effective ``min_count`` times; a REAL repeated question with
     REAL text (``question``/``answer`` keys on the finding), already served
     for $0. These are tagged ``"in_cache": True``.
 
     An explicit ``min_count`` ALWAYS wins unchanged. Otherwise the base
     (:data:`DEFAULT_RECURRING_THRESHOLD`) adapts to the window's population
-    (total episodes in the window) via :func:`effective_threshold` — same
+    (total episodes in the window) via :func:`effective_threshold`: same
     reasoning as :func:`detect_repetition`. The cadence minimum
     (:data:`CADENCE_MIN_OCCURRENCES`) adapts the same way, floored at 2 (a
     single occurrence is never a cadence).
@@ -507,7 +507,7 @@ async def detect_recurring(
                     r["creado_en"] for r in ts_rows
                 ]
     except Exception:
-        # A missing/corrupt table degrades to "nothing detected" — this is a
+        # A missing/corrupt table degrades to "nothing detected": this is a
         # cheap sense, not a critical path; it must never crash a caller.
         return []
 
@@ -517,7 +517,7 @@ async def detect_recurring(
         despertar_por = row.get("despertar_por") or ""
         accion = row.get("accion") or ""
         if is_infrastructure(despertar_por, accion):
-            continue  # Lhassa's own scheduled/org machinery — not owner work
+            continue  # Lhassa's own scheduled/org machinery; not owner work
         pattern = pattern_key(despertar_por, accion)
         if pattern in denied:
             continue
@@ -540,14 +540,14 @@ async def detect_recurring(
         )
 
     # A second, REAL source of repeated-question findings: the answer cache
-    # already stores actual question/answer text and a hit counter — no
+    # already stores actual question/answer text and a hit counter; no
     # heuristic needed here, hits IS the repeat count.
     try:
         cache_rows = await _db.list_answer_cache(instance_id, limit=500)
     except Exception:
         cache_rows = []
     for row in cache_rows:
-        # hits starts at 0 on the row that was actually stored — +1 counts the
+        # hits starts at 0 on the row that was actually stored; +1 counts the
         # original turn that seeded the cache as one occurrence too.
         count = int(row.get("hits") or 0) + 1
         if count < used_min_count:
@@ -584,7 +584,7 @@ async def detect_routable(
     """The self-routing consciousness: capabilities that keep paying for a
     think/research that a $0 deterministic handler could already serve.
 
-    :mod:`lhassa.notify.telegram_inbound` (the SHELL) tags an episode's
+    :mod:`lhassa.chat.think` (the SHELL) tags an episode's
     ``decision`` with ``"[routable:<capability>]"`` (see
     :func:`lhassa.notify.capabilities.tag_intent`) whenever a message a
     capability recognises still fell through to a real think or the research
@@ -592,7 +592,7 @@ async def detect_routable(
     window's tagged episodes by capability, count them, and sum their cost.
 
     Only capabilities seen at least the effective ``min_count`` times are
-    returned (a single miss isn't a pattern) — cost is NOT required to be
+    returned (a single miss isn't a pattern); cost is NOT required to be
     positive here (unlike :func:`detect_repetition`): even a $0
     deferred/free-provider think that still went through the judgment path is
     worth routing away, since the point is to stop spending JUDGMENT (tokens,
@@ -601,7 +601,7 @@ async def detect_routable(
     adapts to the window's population (the tagged episodes already scanned,
     before grouping by capability) via :func:`effective_threshold`. Each item:
     ``{"pattern", "capability", "count", "total_cost_usd", "threshold_used"}``.
-    Pure SQL + regex, $0, never raises (degrades to ``[]``) — this NEVER
+    Pure SQL + regex, $0, never raises (degrades to ``[]``); this NEVER
     imports :mod:`lhassa.notify` (agents/ stays shell-free); it only reads the
     plain text another layer already wrote.
     """
@@ -623,12 +623,12 @@ async def detect_routable(
             ) as cur:
                 rows = [dict(r) for r in await cur.fetchall()]
     except Exception:
-        # A missing/corrupt table degrades to "nothing detected" — this is a
+        # A missing/corrupt table degrades to "nothing detected": this is a
         # cheap sense, not a critical path; it must never crash a caller.
         return []
 
     # Population = the tagged episodes already scanned above, before grouping
-    # by capability — the same "candidates it already scans" rule the other
+    # by capability; the same "candidates it already scans" rule the other
     # two detectors use.
     used_min_count = (
         base_min_count if explicit else effective_threshold(base_min_count, len(rows))
@@ -668,33 +668,33 @@ async def detect_routable(
 def recommend_intervention(finding: dict[str, Any]) -> dict[str, Any]:
     """The "consciousness" reasoning: pick the CHEAPEST fix for one finding.
 
-    Deterministic, $0 — no model call. ``finding`` is one item from
+    Deterministic, $0; no model call. ``finding`` is one item from
     :func:`detect_repetition`, :func:`detect_recurring`, or
     :func:`detect_mechanical_chains`; this looks only at its SHAPE (never at
     outside state) to decide which intervention is cheapest, in priority order:
 
       0. a ``capability`` key (a :func:`detect_routable` finding) →
-         ``kind="route"`` — a deterministic $0 handler for this class of
+         ``kind="route"``: a deterministic $0 handler for this class of
          message ALREADY EXISTS (see :mod:`lhassa.notify.capabilities`); the fix
          is not to mint anything new, just to switch its route on.
-      1. a ``chain`` key → ``kind="script"`` — the existing PTC path
+      1. a ``chain`` key → ``kind="script"``: the existing PTC path
          (:func:`draft_script_for_chain`) collapses a mechanical action chain.
       2. a ``cadence`` key (regular gaps, see :func:`_cadence_stats`) →
-         ``kind="schedule"`` — propose a recurring $0 action instead of
+         ``kind="schedule"``: propose a recurring $0 action instead of
          re-deriving the same judgment on a rhythm.
-      3. ``judgment=True`` (a chat reply / org think — never automatable as a
+      3. ``judgment=True`` (a chat reply / org think; never automatable as a
          tool, see :func:`is_excluded`) →
            - ``in_cache=True`` → ``kind="cache_seed"``: it is ALREADY being
-             served for $0 from the answer cache — nothing further to mint,
+             served for $0 from the answer cache; nothing further to mint,
              the rationale just names the savings.
            - otherwise → ``kind="memory_fact"``: the brain keeps re-deriving
              the same answer; propose storing it as a durable fact instead.
       4. anything else (a genuinely costly, non-judgment, non-chain pattern
-         with no cheaper fix available) → ``kind="tool"`` — the original
+         with no cheaper fix available) → ``kind="tool"``: the original
          ``mint_action`` path.
 
     Returns ``{"kind", "rationale", "payload"}``. ``rationale`` names the
-    tokens/cost/repeats it would save, in plain text. Never raises — a
+    tokens/cost/repeats it would save, in plain text. Never raises; a
     malformed ``finding`` degrades to a ``"tool"`` recommendation with a
     best-effort rationale.
     """
@@ -712,7 +712,7 @@ def recommend_intervention(finding: dict[str, Any]) -> dict[str, Any]:
                 "rationale": (
                     f"'{capability}' questions went to a think/research ×{count} "
                     f"(${cost:.4f} spent) even though a $0 deterministic handler "
-                    "already exists — approving routes them there for good"
+                    "already exists; approving routes them there for good"
                 ),
                 "payload": {
                     "pattern": pattern,
@@ -729,7 +729,7 @@ def recommend_intervention(finding: dict[str, Any]) -> dict[str, Any]:
             return {
                 "kind": "script",
                 "rationale": (
-                    f"mechanical chain {label} repeated ×{count} — collapsing it "
+                    f"mechanical chain {label} repeated ×{count}; collapsing it "
                     "into one reviewed script (PTC) replaces N fixed-action "
                     "episodes with one $0 run"
                 ),
@@ -749,7 +749,7 @@ def recommend_intervention(finding: dict[str, Any]) -> dict[str, Any]:
                 "kind": "schedule",
                 "rationale": (
                     f"'{despertar_por}' fires on a ~{interval}-day cadence "
-                    f"(×{count}, cv={cadence.get('cv')}) — a scheduled $0 action "
+                    f"(×{count}, cv={cadence.get('cv')}); a scheduled $0 action "
                     "beats re-deriving the same judgment on a rhythm"
                 ),
                 "payload": {
@@ -767,7 +767,7 @@ def recommend_intervention(finding: dict[str, Any]) -> dict[str, Any]:
                 return {
                     "kind": "cache_seed",
                     "rationale": (
-                        f"already answered from the cache ×{count} — this is "
+                        f"already answered from the cache ×{count}; this is "
                         "already $0, nothing further to mint"
                     ),
                     "payload": {
@@ -781,7 +781,7 @@ def recommend_intervention(finding: dict[str, Any]) -> dict[str, Any]:
                 "kind": "memory_fact",
                 "rationale": (
                     f"'{despertar_por}' keeps re-deriving the same answer ×{count} "
-                    f"(${cost:.4f} spent so far) — a durable fact removes the "
+                    f"(${cost:.4f} spent so far); a durable fact removes the "
                     "re-derivation entirely"
                 ),
                 "payload": {
@@ -797,7 +797,7 @@ def recommend_intervention(finding: dict[str, Any]) -> dict[str, Any]:
             "kind": "tool",
             "rationale": (
                 f"'{accion}' repeated ×{count} costing ${cost:.4f} with no cheaper "
-                "fix available — mint it as a deterministic $0 action"
+                "fix available; mint it as a deterministic $0 action"
             ),
             "payload": {
                 "pattern": pattern,
@@ -822,7 +822,7 @@ def _ident(accion: str) -> str:
 
 
 def draft_script_for_chain(chain: list[str]) -> str:
-    """A DETERMINISTIC draft PTC script for a repeated action chain — no model call.
+    """A DETERMINISTIC draft PTC script for a repeated action chain; no model call.
 
     The draft is what the owner reviews in the ``mint_script`` approval: the
     chain's actions called in order through the ``lhassa_actions`` stub, params
@@ -852,13 +852,13 @@ async def detect_mechanical_chains(
     threshold: int = DEFAULT_CHAIN_THRESHOLD,
     max_len: int = DEFAULT_CHAIN_MAX_LEN,
 ) -> list[dict[str, Any]]:
-    """Repeated MECHANICAL action chains — the PTC (``run_script``) candidates.
+    """Repeated MECHANICAL action chains; the PTC (``run_script``) candidates.
 
     Reads the window's NON-think episodes (a judgment never enters a chain) in
     time order per ``despertar_por``, slides windows of length 2..``max_len``
     over each trigger's action sequence, and reports every exact chain (≥2
     DISTINCT actions) recurring ≥ ``threshold`` times. v1 limitation, stated
-    honestly: windows may overlap, so a dense run can over-count — the finding
+    honestly: windows may overlap, so a dense run can over-count; the finding
     is a proposal for a HUMAN to review, never an automatic act. Pure SQL +
     Python, $0, never raises (degrades to ``[]``).
     """
@@ -883,7 +883,7 @@ async def detect_mechanical_chains(
         accion = str(row.get("accion") or "")
         despertar_por = str(row.get("despertar_por") or "")
         if is_excluded(accion) or is_infrastructure(despertar_por, accion):
-            continue  # a judgment, or Lhassa's own $0 machinery — never a chain
+            continue  # a judgment, or Lhassa's own $0 machinery; never a chain
         sequences.setdefault(despertar_por, []).append(accion)
 
     counts: dict[tuple[str, tuple[str, ...]], int] = {}

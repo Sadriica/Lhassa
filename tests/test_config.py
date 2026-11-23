@@ -1,4 +1,4 @@
-"""Tests for lhassa.config — provider detection, model defaults, validation."""
+"""Tests for lhassa.config; provider detection, model defaults, validation."""
 
 import pytest
 
@@ -115,7 +115,7 @@ def test_wake_timeout_custom(clean_env):
 
 def test_max_agent_iterations_default(clean_env):
     _reload_config()
-    # MAX_ITERATIONS is at module level in base.py, not Config — just check it parses
+    # MAX_ITERATIONS is at module level in base.py, not Config; just check it parses
     clean_env.setenv("LHASSA_MAX_AGENT_ITERATIONS", "10")
     import importlib
     import lhassa.agents.base as base_mod
@@ -131,7 +131,7 @@ def test_max_agent_iterations_custom(clean_env):
     assert base_mod.MAX_ITERATIONS == 20
 
 
-# ── validate() — required keys ─────────────────────────────────────────────────
+# ── validate(); required keys ─────────────────────────────────────────────────
 
 def test_validate_raises_on_missing_deepgram(clean_env):
     clean_env.setenv("GROQ_API_KEY", "gsk_test")

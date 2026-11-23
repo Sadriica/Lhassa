@@ -1,0 +1,167 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+"""Reports / projections routes. Phase-6 read-only dashboard surfaces.
+
+Rich dashboard surfaces for "madurez": what the brain has been doing
+(``/api/reports``: episodes summary) and where cost is trending
+(``/api/projections``: a linear projection off the same ledger/ccusage as
+``/api/llm/*``). Both read-only and instance-scoped.
+
+``Config`` is read through the ``lhassa.config`` MODULE (``lhassa_config.Config``)
+rather than a bound name, so a config reload (some endpoint tests reload it) is
+picked up live; the same seam ``runtime_routes`` uses.
+
+Mounted by the integrator with ``app.include_router(reports_routes.router)``.
+"""
+
+from datetime import datetime, timezone
+
+from fastapi import APIRouter, Query
+
+import lhassa.config as lhassa_config
+from lhassa.core import db
+
+router = APIRouter()
+
+
+def _report_voice(*, count: int, total: int, by_despertar: dict[str, int], by_decision: dict[str, int]) -> dict:
+    """A deterministic first-person summary for dashboard report surfaces.
+
+    This is intentionally $0 copy: no model, no inference, just the episode
+    counts shaped in Lhassa's own register.
+    """
+    if total <= 0:
+        return {
+            "headline": "I have not recorded an episode yet.",
+            "detail": "The brain is quiet. When the heartbeat has work to note, it will appear here.",
+        }
+
+    routine = sum(
+        n
+        for key, n in by_decision.items()
+        if key.startswith("step") or key.startswith("monitor: offline")
+    )
+    trigger = max(by_despertar.items(), key=lambda kv: kv[1])[0] if by_despertar else "episode"
+    if routine >= count and count > 0:
+        detail = "Most of this window was routine work. That is the point: watch, act, sleep, spend $0."
+    else:
+        detail = f"The busiest trigger was {trigger}. I am keeping the episode trail auditable."
+    return {
+        "headline": f"I reviewed {count} recent episode(s), out of {total} recorded.",
+        "detail": detail,
+    }
+
+
+@router.get("/api/reports")
+async def get_reports(n: int = Query(default=50, ge=0, le=10000)):
+    """Recent episodes + an outcomes summary.
+
+    ``n=0`` returns every episode for the instance (bounded only by the DB), used by
+    the Activity log where the user can filter/sort locally.
+    """
+    await db.init_db()
+    total = await db.count_episodes(lhassa_config.Config.instance_id)
+    rows = await db.load_recent_episodes(
+        lhassa_config.Config.instance_id,
+        total if n == 0 else n,
+    )
+
+    by_despertar: dict[str, int] = {}
+    by_decision: dict[str, int] = {}
+    for r in rows:
+        trigger = str(r.get("despertar_por") or "?").split(":", 1)[0]
+        by_despertar[trigger] = by_despertar.get(trigger, 0) + 1
+        decision = str(r.get("decision") or "?")
+        by_decision[decision] = by_decision.get(decision, 0) + 1
+
+    recent = [
+        {
+            "id": r.get("id"),
+            "creado_en": r.get("creado_en"),
+            "despertar_por": r.get("despertar_por"),
+            "decision": r.get("decision"),
+            "accion": r.get("accion"),
+            "resultado": r.get("resultado"),
+            "dominio": r.get("dominio"),
+            "costo_usd": r.get("costo_usd"),
+        }
+        for r in rows
+    ]
+    return {
+        "count": len(rows),
+        "total": total,
+        "limit": n,
+        "by_despertar": by_despertar,
+        "by_decision": by_decision,
+        "voice": _report_voice(
+            count=len(rows),
+            total=total,
+            by_despertar=by_despertar,
+            by_decision=by_decision,
+        ),
+        "recent": recent,
+    }
+
+
+@router.get("/api/episodes/search")
+async def search_episodes(
+    q: str = Query(default=""),
+    n: int = Query(default=20, ge=1, le=200),
+):
+    """Full-text search over the episode log (Fase 1 "Recall"); $0, deterministic.
+
+    Thin wrapper over :func:`lhassa.core.db.search_episodes` (BM25-ranked FTS5,
+    automation episodes demoted). An empty/blank ``q`` returns no results.
+    """
+    await db.init_db()
+    results = await db.search_episodes(lhassa_config.Config.instance_id, q, n)
+    return {"query": q, "count": len(results), "results": results}
+
+
+@router.get("/api/projections")
+async def get_projections():
+    """Cost projection from the gateway ledger (same data as /api/llm/*).
+
+    Spend so far today + a simple linear projection to day/month end. Pricing is
+    NOT duplicated; the ledger already carries per-call ``cost_usd``. The
+    cross-harness ccusage read is included (defensive; never blocks)."""
+    from lhassa.llm.ccusage import read_ccusage
+    from lhassa.llm.gateway import gateway
+
+    config = lhassa_config.Config()
+    rows = await gateway.ledger_rows()
+
+    now = datetime.now(timezone.utc)
+    today = now.strftime("%Y-%m-%d")
+    today_cost = 0.0
+    today_in = 0
+    today_out = 0
+    for r in rows:
+        if str(r.get("ts") or "").startswith(today):
+            today_cost += float(r.get("cost_usd") or 0.0)
+            today_in += int(r.get("input_tokens") or 0)
+            today_out += int(r.get("output_tokens") or 0)
+
+    seconds_elapsed = now.hour * 3600 + now.minute * 60 + now.second
+    day_fraction = max(seconds_elapsed / 86400.0, 1e-6)
+    projected_today = round(today_cost / day_fraction, 6)
+
+    return {
+        "today": {
+            "date": today,
+            "cost_usd": round(today_cost, 6),
+            "input_tokens": today_in,
+            "output_tokens": today_out,
+        },
+        "budget": {
+            "daily_token_budget": gateway.effective_daily_budget(config),
+            "output_tokens_today": await gateway.daily_output_tokens(),
+        },
+        "projection": {
+            "day_fraction_elapsed": round(day_fraction, 4),
+            "projected_today_cost_usd": projected_today,
+            "projected_month_cost_usd": round(projected_today * 30, 6),
+        },
+        # Bounded budget on a dashboard auto-load: enough for the ~3-4s offline ccusage
+        # read (real data), but never the slow npx cold-start; degrade fast if absent.
+        "ccusage": await read_ccusage(timeout=6.0, allow_npx=False),
+    }

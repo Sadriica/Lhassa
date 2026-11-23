@@ -10,7 +10,7 @@ cp .env.example .env
 
 ## LLM Provider
 
-Lhassa supports seven LLM providers. **You only need to set one API key** — Lhassa auto-detects the provider from whichever key is present, and that same provider is used for the voice pipeline, the built-in agent tool loop, and vision tools.
+Lhassa supports seven LLM providers. **You only need to set one API key**: Lhassa auto-detects the provider from whichever key is present, and that same provider is used for the voice pipeline, the built-in agent tool loop, and vision tools.
 
 ### API keys and auto-detection
 
@@ -23,12 +23,12 @@ Set one (or more) of these keys. The first one found is used:
 | `GROQ_API_KEY` | `groq` | `llama-3.3-70b-versatile` | [console.groq.com](https://console.groq.com) |
 | `OPENROUTER_API_KEY` | `openrouter` | `anthropic/claude-haiku-4-5-20251001` | [openrouter.ai/keys](https://openrouter.ai/keys) |
 | `CEREBRAS_API_KEY` | `cerebras` | `llama3.3-70b` | [cloud.cerebras.ai](https://cloud.cerebras.ai) |
-| `DEEPSEEK_API_KEY` | `deepseek` | `deepseek-v4-flash` | [platform.deepseek.com](https://platform.deepseek.com) — the metered cloud seat (subscription CLIs are still tried first in the fallback chain) |
-| `OLLAMA_BASE_URL` | `ollama` | `llama3.2` | No key needed — set URL if Ollama isn't on localhost |
+| `DEEPSEEK_API_KEY` | `deepseek` | `deepseek-v4-flash` | [platform.deepseek.com](https://platform.deepseek.com); the metered cloud seat (subscription CLIs are still tried first in the fallback chain) |
+| `OLLAMA_BASE_URL` | `ollama` | `llama3.2` | No key needed; set URL if Ollama isn't on localhost |
 
-Auto-detection priority: `ANTHROPIC_API_KEY` → `OPENAI_API_KEY` → `GROQ_API_KEY` → `OPENROUTER_API_KEY` → `CEREBRAS_API_KEY` → `DEEPSEEK_API_KEY`.
+Auto-detection priority: `ANTHROPIC_API_KEY` → `OPENAI_API_KEY` → `GROQ_API_KEY` → `DEEPSEEK_API_KEY` → `OPENROUTER_API_KEY` → `CEREBRAS_API_KEY`.
 
-Note on DeepSeek: V4 Flash spends reasoning tokens as output tokens — a very
+Note on DeepSeek: V4 Flash spends reasoning tokens as output tokens; a very
 small `max_tokens` budget can yield an empty reply; 512-768 tokens is a safe
 floor.
 
@@ -76,7 +76,7 @@ LHASSA_MODEL=meta-llama/llama-3.3-70b-instruct   # or any OpenRouter model
 
 **Ollama (fully local):**
 ```dotenv
-LHASSA_LLM_PROVIDER=ollama   # required — no key to auto-detect from
+LHASSA_LLM_PROVIDER=ollama   # required; no key to auto-detect from
 LHASSA_MODEL=llama3.3
 # OLLAMA_BASE_URL=http://localhost:11434   # default
 ```
@@ -100,7 +100,7 @@ ANTHROPIC_API_KEY=sk-ant-...   # Groq wins provider detection; Anthropic is used
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
-| `DEEPGRAM_API_KEY` | **Yes** | — | Deepgram API key for live speech recognition. Get one at [console.deepgram.com](https://console.deepgram.com). |
+| `DEEPGRAM_API_KEY` | **Yes** |; | Deepgram API key for live speech recognition. Get one at [console.deepgram.com](https://console.deepgram.com). |
 | `LHASSA_STT_LANGUAGE` | No | `en` | BCP-47 language code for speech recognition. See supported languages below. |
 
 Deepgram is configured with the `nova-3-general` model and a keyterm boost for "Lhassa" to improve wake word recognition.
@@ -128,7 +128,7 @@ Full list: [developers.deepgram.com/docs/languages](https://developers.deepgram.
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
-| `CARTESIA_API_KEY` | **Yes** | — | Cartesia API key. Get one at [console.cartesia.ai](https://console.cartesia.ai). |
+| `CARTESIA_API_KEY` | **Yes** |; | Cartesia API key. Get one at [console.cartesia.ai](https://console.cartesia.ai). |
 | `LHASSA_VOICE_ID` | No | `a0e99841-438c-4a64-b679-ae501e7d6091` | Cartesia voice ID used for Lhassa's speech output. |
 
 ### Changing Lhassa's voice
@@ -165,9 +165,9 @@ Then set `LHASSA_MIC_NAME` to a substring of the device name you want.
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
-| `BRAVE_API_KEY` | No | — | Brave Search API key. When set, `web_search` uses the Brave Search API instead of DuckDuckGo. Get one at [api.search.brave.com](https://api.search.brave.com). |
+| `BRAVE_API_KEY` | No |; | Brave Search API key. When set, `web_search` uses the Brave Search API instead of DuckDuckGo. Get one at [api.search.brave.com](https://api.search.brave.com). |
 
-Brave Search is generally faster and more reliable than DuckDuckGo. If `BRAVE_API_KEY` is not set, Lhassa falls back to DuckDuckGo automatically — no configuration needed.
+Brave Search is generally faster and more reliable than DuckDuckGo. If `BRAVE_API_KEY` is not set, Lhassa falls back to DuckDuckGo automatically; no configuration needed.
 
 ---
 
@@ -199,7 +199,7 @@ When `LHASSA_VISION_PROVIDER=auto` (the default), Lhassa resolves the provider i
 
 ### Common setups
 
-**Using Anthropic for everything** — vision works automatically (no extra config):
+**Using Anthropic for everything**: vision works automatically (no extra config):
 ```dotenv
 ANTHROPIC_API_KEY=sk-ant-...
 # provider auto-detected as anthropic; vision uses the same key
@@ -207,8 +207,9 @@ ANTHROPIC_API_KEY=sk-ant-...
 
 **Groq for voice, Anthropic for vision:**
 ```dotenv
-GROQ_API_KEY=gsk_...           # Groq wins auto-detection → voice uses Groq
-ANTHROPIC_API_KEY=sk-ant-...   # picked up automatically by vision auto-detection
+GROQ_API_KEY=gsk_...
+ANTHROPIC_API_KEY=sk-ant-...   # Anthropic wins auto-detection (see the priority list above)
+LHASSA_LLM_PROVIDER=groq       # pin Groq explicitly so voice uses it; vision auto-detection still finds the Anthropic key
 ```
 
 **Explicit OpenRouter vision model:**
@@ -222,16 +223,16 @@ LHASSA_VISION_MODEL=google/gemini-flash-1.5
 
 `analyze_screen` needs a screenshot utility. Lhassa tries each in order until one works:
 
-**Linux** — install one of:
+**Linux**: install one of:
 ```bash
-sudo pacman -S scrot        # Arch — recommended
+sudo pacman -S scrot        # Arch; recommended
 sudo apt install scrot       # Debian/Ubuntu
 # alternatives: maim, imagemagick (provides `import`), gnome-screenshot, spectacle (KDE)
 ```
 
-**macOS** — `screencapture` is built-in. No installation needed.
+**macOS**: `screencapture` is built-in. No installation needed.
 
-**Windows** — PowerShell screenshot is built-in. For better results, install Pillow:
+**Windows**: PowerShell screenshot is built-in. For better results, install Pillow:
 ```
 pip install Pillow
 ```
@@ -271,19 +272,19 @@ Or set LHASSA_AGENT_BACKEND=builtin to use the built-in LLM tool loop.
 
 When `agent_backend=claude_code`, all three agent types run through `claude --print`:
 
-- **No separate API key** — uses your Claude Code subscription (Pro/Max)
-- **Full Claude Code toolset** — agents can read, edit, and write files (`Read`, `Edit`, `Write`, `Bash`, `Glob`, `Grep`)
-- **Best available Claude model** — whichever model your subscription provides
+- **No separate API key**: uses your Claude Code subscription (Pro/Max)
+- **Full Claude Code toolset**: agents can read, edit, and write files (`Read`, `Edit`, `Write`, `Bash`, `Glob`, `Grep`)
+- **Best available Claude model**: whichever model your subscription provides
 
 Requirements: `claude` CLI installed and authenticated (`claude` works in your terminal).
 
-Recommended setup — Groq (fast, free) for voice, Claude subscription for agents:
+Recommended setup. Groq (fast, free) for voice, Claude subscription for agents:
 
 ```dotenv
-# Voice pipeline — Groq auto-detected from the key
+# Voice pipeline. Groq auto-detected from the key
 GROQ_API_KEY=gsk_...
 
-# Agents — set your project directory (or leave unset to use cwd)
+# Agents; set your project directory (or leave unset to use cwd)
 LHASSA_AGENT_DIR=/home/yourname/code/myproject
 ```
 
@@ -293,7 +294,7 @@ When `agent_backend=builtin`, agents use the same provider as the voice pipeline
 
 ```dotenv
 LHASSA_AGENT_BACKEND=builtin
-# Uses LHASSA_LLM_PROVIDER and LHASSA_MODEL — no extra config needed
+# Uses LHASSA_LLM_PROVIDER and LHASSA_MODEL; no extra config needed
 ```
 
 Output streams line by line to the dashboard's Agents panel regardless of which backend is active.
@@ -304,7 +305,7 @@ Output streams line by line to the dashboard's Agents panel regardless of which 
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
-| `GITHUB_TOKEN` | No | — | GitHub personal access token. Required for the GitHub tools (`github_list_repos`, `github_list_issues`, `github_get_issue`, `github_list_prs`, `github_get_pr`, `github_comment`, `github_notifications`). |
+| `GITHUB_TOKEN` | No |; | GitHub personal access token. Required for the GitHub tools (`github_list_repos`, `github_list_issues`, `github_get_issue`, `github_list_prs`, `github_get_pr`, `github_comment`, `github_notifications`). |
 
 Create a token at [github.com/settings/tokens](https://github.com/settings/tokens). The token needs `repo` scope for private repositories, or no scope for public-only access.
 
@@ -316,8 +317,8 @@ If `GITHUB_TOKEN` is not set, calling any GitHub tool will return an error messa
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
-| `MS_TENANT_ID` | No | — | Azure Active Directory tenant ID. Use `consumers` for personal Microsoft accounts, or your organisation's tenant UUID for work/school accounts. |
-| `MS_CLIENT_ID` | No | — | Azure app registration client ID (Application ID). |
+| `MS_TENANT_ID` | No |; | Azure Active Directory tenant ID. Use `consumers` for personal Microsoft accounts, or your organisation's tenant UUID for work/school accounts. |
+| `MS_CLIENT_ID` | No |; | Azure app registration client ID (Application ID). |
 
 Both must be set to use email and calendar tools. See [outlook.md](outlook.md) for full setup instructions.
 
@@ -340,7 +341,7 @@ Both must be set to use email and calendar tools. See [outlook.md](outlook.md) f
 | Variable | Required | Default | Description |
 |---|---|---|---|
 | `LHASSA_LOG_LEVEL` | No | `INFO` | Console log verbosity. Options: `DEBUG`, `INFO`, `WARNING`, `ERROR`. |
-| `LHASSA_DEBUG` | No | `0` | Set to `1` to enable WakeDebug mode — shows live STT transcriptions in the terminal. Useful for diagnosing wake word recognition problems. |
+| `LHASSA_DEBUG` | No | `0` | Set to `1` to enable WakeDebug mode; shows live STT transcriptions in the terminal. Useful for diagnosing wake word recognition problems. |
 
 ### Log file
 
@@ -403,21 +404,26 @@ In debug mode, every STT frame is printed to the terminal:
 | `LHASSA_BUDGET_SOFT_PCT` | No | `0.8` | Fraction of the daily token budget past which the router refuses the smart model and prefers $0 providers. |
 | `LHASSA_DEFERRED_RETRY_BACKOFF` / `LHASSA_DEFERRED_MAX_RETRIES` | No | backoff / `3` | Deferred-task re-queue sweep: retry window (seconds) and cap (then `rechazada`). |
 | `LHASSA_DIGEST_HOUR_MORNING` / `LHASSA_DIGEST_HOUR_EVENING` | No | `8` / `21` | Local hours the `digest` seed schedules the daily $0 Telegram digest at. |
+| `LHASSA_DIGEST_HOUR_MIDDAY` | No | `-1` (off) | An optional THIRD digest between the two, for the day reported while it is still the day. The `digest` seed is self-healing per slot, so setting this and re-applying it mints only the missing one. |
 | `LHASSA_DIGEST_STYLE` | No | `plain` | `plain` keeps the deterministic $0 first-person template; `persona` adds one cheap re-voice pass over the same facts. |
 | `LHASSA_DIGEST_LANGUAGE` | No | *(empty)* | Language hint for the persona pass; also localizes the deterministic personal check-in when enabled (`es`, `en`, ...). |
+| `LHASSA_NOTIFY_STYLE` | No | `template` | The notification voice: `plain` sends the machine-built line, `template` reshapes it deterministically ($0), `persona` adds one cheap re-voice pass (degrades to `template`, so the message always arrives). |
+| `LHASSA_NOTIFY_LANGUAGE` | No | *(empty)* | Pins the language of EVERY model-written owner-facing message (`es`, `en`, ...). Falls back to `LHASSA_DIGEST_LANGUAGE`; with neither set the model mirrors the input, which lets it drift off the owner's language. |
+| `LHASSA_DEEPSEEK_REASONING` | No | `auto` | DeepSeek V4 thinks into a separate `reasoning_content` field and a bounded call spends its whole budget there, returning an EMPTY message. `auto` turns reasoning off below `LHASSA_DEEPSEEK_REASONING_MIN_TOKENS` and keeps it above; `off` never reasons; `on` restores the raw provider behaviour. |
+| `LHASSA_DEEPSEEK_REASONING_MIN_TOKENS` | No | `2048` | The `auto` threshold above: a call with at least this many output tokens can afford to reason AND answer. |
 | `LHASSA_DIGEST_PERSONAL_CHECKIN` | No | `0` | Adds the $0 personal agenda/check-in section to the digest and captures the next Telegram reply as a daily check-in for six hours. |
 | `LHASSA_MONITOR_DELEGATE` | No | `0` | When on, the watcher converts monitor findings into minted `org_run` tasks (fingerprint-deduped). |
 | `LHASSA_REPETITION_THRESHOLD` | No | `5` | Occurrences (with real cost) before `detect_repetition` proposes minting a deterministic action. |
-| `LHASSA_KNOWLEDGE_ROOTS` | No | *(empty)* | CSV of directories (`~`-relative allowed) the `list_dir`/`read_file` actions and document perception (see `doc/memory.md`) may touch — opt-in, empty means nothing is reachable. |
-| `LHASSA_PROTECTED_ROOTS` | No | *(empty)* | A SECOND, stricter tier of roots (may overlap `LHASSA_KNOWLEDGE_ROOTS`): a file action whose `path` resolves inside one of these ALWAYS parks a per-access approval, fail-closed, never lowered by the autonomy knob — see `doc/security.md`. |
+| `LHASSA_KNOWLEDGE_ROOTS` | No | *(empty)* | CSV of directories (`~`-relative allowed) the `list_dir`/`read_file` actions and document perception (see `doc/memory.md`) may touch; opt-in, empty means nothing is reachable. |
+| `LHASSA_PROTECTED_ROOTS` | No | *(empty)* | A SECOND, stricter tier of roots (may overlap `LHASSA_KNOWLEDGE_ROOTS`): a file action whose `path` resolves inside one of these ALWAYS parks a per-access approval, fail-closed, never lowered by the autonomy knob; see `doc/security.md`. |
 | `LHASSA_EMBEDDER_BACKEND` | No | `auto` | Layer-4/knowledge embedder backend: `auto` (probe local Ollama, else hashing), `ollama` (force native Ollama, degrade to hashing if unreachable), `hash` (always the offline embedder). |
 | `LHASSA_EMBEDDER_MODEL` | No | `nomic-embed-text` | Ollama model name used by the native embedder backend. |
-| `LHASSA_KIND_TEMPLATES` | No | *(empty — `code:code-review` built in)* | CSV `kind:template,kind:template` overriding/extending which `org.templates` preset a project's `kind` auto-attaches (the standing-brains reflex, `actionpack/_standing.py`). A malformed entry is skipped, never crashes the reflex. |
-| `LHASSA_MEMORY_GRAPH` | No | `0` | Opt-in switch for the persisted knowledge graph (`kg_entities`/`kg_edges`) — gates both the `kg_sync` feeder and `memory/load.py`'s graph-augmented context layer. See `doc/memory.md`. |
+| `LHASSA_KIND_TEMPLATES` | No | *(empty; `code:code-review` built in)* | CSV `kind:template,kind:template` overriding/extending which `org.templates` preset a project's `kind` auto-attaches (the standing-brains reflex, `actionpack/_standing.py`). A malformed entry is skipped, never crashes the reflex. |
+| `LHASSA_MEMORY_GRAPH` | No | `0` | Opt-in switch for the persisted knowledge graph (`kg_entities`/`kg_edges`); gates both the `kg_sync` feeder and `memory/load.py`'s graph-augmented context layer. See `doc/memory.md`. |
 | `LHASSA_KG_TRIPLES` | No | `0` | Opt-in switch for cheap-model triple extraction on top of `kg_sync` (batched over new rows only, `asserts` edges) and for fuzzy-pair judging in `kg_resolve`. Unset keeps `kg_sync` byte-identical to the $0 co-occurrence-only path. See `doc/memory.md`. |
 | `LHASSA_MEMORY_DISTILL_ENABLED` | No | `1` | Independent spend boundary for episode-to-fact distillation. Set to `0` to stop scheduled, CLI and future callers before provider selection. Editable live as `memory_distill_enabled`; see `doc/memory.md`. |
 
-See `lhassa config list` for the live view — these are also editable at runtime via the settings service where marked `EDITABLE`.
+See `lhassa config list` for the live view; these are also editable at runtime via the settings service where marked `EDITABLE`.
 
 ---
 
@@ -428,7 +434,7 @@ See `lhassa config list` for the live view — these are also editable at runtim
 DEEPGRAM_API_KEY=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 CARTESIA_API_KEY=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
 
-# ── LLM: set ONE key — provider and model are auto-detected ───────────────────
+# ── LLM: set ONE key; provider and model are auto-detected ───────────────────
 #
 # Groq (free tier, good for getting started):
 GROQ_API_KEY=gsk_xxxxxxxxxxxxxxxxxxxx
@@ -442,12 +448,12 @@ GROQ_API_KEY=gsk_xxxxxxxxxxxxxxxxxxxx
 # OpenRouter (access many models with one key):
 # OPENROUTER_API_KEY=sk-or-xxxxxxxxxxxx
 #
-# Ollama (local — no key, but must set provider explicitly):
+# Ollama (local; no key, but must set provider explicitly):
 # LHASSA_LLM_PROVIDER=ollama
 # LHASSA_MODEL=llama3.3
 # OLLAMA_BASE_URL=http://localhost:11434
 
-# ── Model override (optional — auto-set to provider default if not given) ─────
+# ── Model override (optional; auto-set to provider default if not given) ─────
 # LHASSA_MODEL=llama-3.3-70b-versatile
 
 # ── STT language ──────────────────────────────────────────────────────────────

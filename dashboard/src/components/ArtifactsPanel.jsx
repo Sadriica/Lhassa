@@ -3,7 +3,7 @@ import { getArtifact, getArtifacts } from '../lib/api'
 import { shortWhen } from '../lib/format'
 import { EmptyState, ErrorState, SectionHeader } from './ui/common'
 
-// The "Artifacts" section — the UP-direction of the hierarchy made visible.
+// The "Artifacts" section; the UP-direction of the hierarchy made visible.
 // Every result that reaches the owner is registered as an artifact
 // (GET /api/artifacts, GET /api/artifacts/{id}); this panel is the read surface
 // for that registry. Read-only: an artifact is BORN on the delivery path, never

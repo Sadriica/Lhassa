@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """
-dispatch.py — close the judgment loop (Phase 2).
+dispatch.py; close the judgment loop (Phase 2).
 
 After the model replies to a judgment trigger, this module parses the response
 for a structured JSON payload and turns it into concrete effects: facts written
@@ -8,18 +8,18 @@ to the grande and tasks minted through the existing security machinery.
 
 Design principles:
   - ``apply()`` NEVER raises. Any parse/validation error returns a "none" summary
-    and changes NOTHING — today's behavior is preserved on any failure path.
+    and changes NOTHING; today's behavior is preserved on any failure path.
   - The judgment origin is INTERNO with contagion degradation: a minted task is
     only as trusted as the trigger that caused the judgment. MUNDO begets MUNDO.
   - Only actions in the ACTIONS registry may be minted (see SECURITY INVARIANT
     comment in the task-minting loop). This is the key termination guarantee.
   - A ``delegate`` key mints a task with accion="org_run" through the SAME
-    mint_task security path as new_tasks — dispatch.py never imports org (core is
+    mint_task security path as new_tasks; dispatch.py never imports org (core is
     spine, org is a shell; see tests/test_architecture.py). The org_run action
     itself (a shell-layer actionpack module) lazily imports
     org.coordinator.run_goal at the NEXT tick, offline/$0 unless LHASSA_ORG_LIVE.
   - A ``script`` key is pure sugar for ``new_tasks: [{"accion": "run_script",
-    "params": {"script": ...}}]`` — it mints through the IDENTICAL mint_task
+    "params": {"script": ...}}]``: it mints through the IDENTICAL mint_task
     path, so ``run_script``'s own ``requires_approval=True`` (see
     ``security.allowlist``) always parks a human approval ticket before the
     script runs; there is no bespoke execution path here.
@@ -51,7 +51,7 @@ from lhassa.security.trust import Origin, TrustLevel, degrade
 # Per-judgment write caps (each judgment may produce at most this many rows).
 _MAX_FACTS = 5
 _MAX_TASKS = 5
-_MAX_DELEGATES = 3  # mirrors _MAX_TASKS's spirit — a small, bounded write cap
+_MAX_DELEGATES = 3  # mirrors _MAX_TASKS's spirit; a small, bounded write cap
 _MAX_SCRIPTS = 1  # a judgment reply may request at most ONE PTC script
 _SCRIPT_MAX_LEN = 20_000  # characters; an oversized "script" value is ignored
 _FACT_CONTENT_MAX = 500   # characters; truncate, do not reject
@@ -80,7 +80,7 @@ def _extract_json(raw_text: str) -> Optional[dict]:
     if not raw_text:
         return None
 
-    # 1. Fenced code block — try the explicit ```json ... ``` form first.
+    # 1. Fenced code block; try the explicit ```json ... ``` form first.
     fenced = re.search(r"```(?:json)?\s*(\{[\s\S]*?\})\s*```", raw_text)
     if fenced:
         try:
@@ -117,7 +117,7 @@ def _extract_json(raw_text: str) -> Optional[dict]:
 def clean_tags(raw_tags: Any) -> list[str]:
     """Validate and normalise tags: at most ``_TAGS_MAX_COUNT`` short strings.
 
-    Public since Phase 3 — actionpack actions reuse this helper to normalise
+    Public since Phase 3; actionpack actions reuse this helper to normalise
     tags without duplicating the length/count logic.
     """
     if not isinstance(raw_tags, list):
@@ -157,7 +157,7 @@ async def mint_task(
     Returns ``(task_id, estado)`` on success. If ``accion`` is not in the
     ``ACTIONS`` registry AND ``judgment`` is False, returns
     ``("", "refused: unknown accion '<accion>'")``. When ``judgment=True`` any
-    accion is allowed — the brain thinks about it on the next tick instead of
+    accion is allowed; the brain thinks about it on the next tick instead of
     running a fixed deterministic action. Token cost applies.
 
     ``due_at`` is an ISO 8601 UTC timestamp; the task is not returned by
@@ -240,12 +240,12 @@ async def run_task_now(
     *,
     despertar_por: str = "chat",
 ) -> bool:
-    """Run one already-minted PENDING task immediately — the heartbeat's runner, early.
+    """Run one already-minted PENDING task immediately; the heartbeat's runner, early.
 
     The chat surfaces use this so a no-approval task (e.g. ``research_reply``)
     answers in seconds instead of waiting for the next beat. Semantics are
     IDENTICAL to a beat-run fixed action: the same ``actions.run`` dispatcher, a
-    structured Episode, and the same ``hecha`` state transition — observability
+    structured Episode, and the same ``hecha`` state transition; observability
     cannot tell an early run from a beat run. Only call it for a task minted
     ``estado == "pendiente"`` (an approval-parked task must wait for its human).
     Any failure leaves the task pending so the heartbeat retries it on schedule.
@@ -286,7 +286,7 @@ async def run_task_now(
         await ep.append()
         await _db.set_task_state(instance_id, task_id, "hecha")
         return True
-    except Exception as exc:  # leave the task for the heartbeat — never raise
+    except Exception as exc:  # leave the task for the heartbeat; never raise
         logger.warning(f"run_task_now: {accion!r} failed, left pending: {exc}")
         return False
 
@@ -306,7 +306,7 @@ async def apply(
     Parse a judgment reply and apply its structured effects.
 
     Returns a short human-readable summary intended to be appended to the
-    episode resultado by ``step._judge``. NEVER raises — any unhandled error
+    episode resultado by ``step._judge``. NEVER raises; any unhandled error
     degrades to ``"dispatch: none (error)"``.
 
     Accepted JSON schema (all keys optional):
@@ -326,7 +326,7 @@ async def apply(
     approval). See the "delegate" section below.
 
     ``script`` is PURE SUGAR for ``new_tasks: [{"accion": "run_script", "params":
-    {"script": ...}}]`` — it mints through the exact same ``mint_task`` path (no
+    {"script": ...}}]``: it mints through the exact same ``mint_task`` path (no
     bespoke execution here). At most ``_MAX_SCRIPTS`` (1) is honored per reply; a
     non-string, empty, or oversized value is ignored. See the "script" section
     below.
@@ -380,7 +380,7 @@ async def _apply_inner(
 
     parts: list[str] = []
 
-    # ── "say" — verbal answer, echoed into the dispatch summary ──────────────
+    # ── "say": verbal answer, echoed into the dispatch summary ──────────────
     say = payload.get("say")
     if say and isinstance(say, str):
         snippet = say.strip()[:80].replace("\n", " ")
@@ -393,7 +393,7 @@ async def _apply_inner(
         facts_raw = []
 
     # Memory hygiene: skip an exact (casefolded) content duplicate against what
-    # is already in the grande — the same dedup discipline as
+    # is already in the grande; the same dedup discipline as
     # memory.consolidate.distill_episodes. Loaded once, lazily (only when there
     # is at least one candidate fact), and updated as new facts are written so
     # two duplicates in the SAME payload don't both slip through.
@@ -418,7 +418,7 @@ async def _apply_inner(
             continue
         tags = clean_tags(item.get("tags"))
         # SECURITY: tipo is FORCED to "dato". A model may NEVER write a
-        # "directiva" or a pinned fact — those shape identity and standing
+        # "directiva" or a pinned fact; those shape identity and standing
         # instructions, and their authority belongs to a human author only.
         await _facts.add_fact(
             instance_id,
@@ -501,7 +501,7 @@ async def _apply_inner(
     # ── script ────────────────────────────────────────────────────────────────
     # PURE SUGAR for new_tasks: [{"accion": "run_script", "params": {"script": ...}}].
     # Routed through the IDENTICAL mint_task path used by new_tasks/delegate above
-    # — no bespoke execution here. run_script's own requires_approval=True (see
+    #; no bespoke execution here. run_script's own requires_approval=True (see
     # security.allowlist) means a human always approves the ticket before the
     # script actually runs. At most _MAX_SCRIPTS (1) per reply; a list, a
     # non-string, an empty, or an oversized value is ignored defensively.
@@ -534,7 +534,7 @@ async def _apply_inner(
 
     # ── delegate ──────────────────────────────────────────────────────────────
     # A well-formed delegate request mints a TASK (accion="org_run"), NOT an
-    # inline execution — dispatch.py stays spine-only (no org import). The task
+    # inline execution; dispatch.py stays spine-only (no org import). The task
     # runs through the SAME mint_task security path as new_tasks (signing +
     # approval frontier + DB write); the org_run action (a shell) resolves it at
     # the next tick. Accepts a single dict or a list of dicts (bounded).
@@ -562,7 +562,7 @@ async def _apply_inner(
             delegate_params["high_risk"] = True
 
         # "org_run" is registered by actionpack at process start (same invariant
-        # as every other action new_tasks mints) — see actionpack/_org.py.
+        # as every other action new_tasks mints); see actionpack/_org.py.
         task_id, estado = await mint_task(
             instance_id,
             "org_run",

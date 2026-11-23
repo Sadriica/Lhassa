@@ -1,4 +1,4 @@
-"""Context packs (Wave B — "Inteligencia" plan). Fully offline, $0, no model calls.
+"""Context packs (Wave B; "Inteligencia" plan). Fully offline, $0, no model calls.
 
 Covers: pack generation (4 files + digest headers), VISION pulling a seeded
 fact, MEMORY's TRIED/OPEN sections, freshness skip on unchanged inputs, staleness
@@ -26,7 +26,7 @@ def brain(tmp_path, monkeypatch):
 
 
 class _Cfg:
-    """Minimal config stand-in — only the attrs context_pack reads defensively."""
+    """Minimal config stand-in; only the attrs context_pack reads defensively."""
 
     def __init__(self, projects_dir, instance_id="inst_personal"):
         self.projects_dir = str(projects_dir)
@@ -159,10 +159,10 @@ def test_architecture_scan_detects_a_manifest(brain, tmp_path):
 
 
 def test_launch_wiring_carries_pack_pointer_when_project_matches(brain, tmp_path, monkeypatch):
-    """POST /api/code resolves a project from the run's cwd and threads the pack
+    """The run door (POST /api/code) resolves a project from the run's cwd and threads the pack
     pointer into the CLI prompt; with no matching project the prompt is untouched.
     """
-    import lhassa.api.code_routes as code_routes
+    from lhassa.agents import code_run
     import lhassa.config as lhassa_config
     from lhassa.agents import local_cli
 
@@ -185,7 +185,7 @@ def test_launch_wiring_carries_pack_pointer_when_project_matches(brain, tmp_path
     monkeypatch.setattr(local_cli, "detect_ai_cli", lambda: "claude")
 
     async def _run():
-        pack_dir = await code_routes._resolve_context_pack(tmp_path)
+        pack_dir = await code_run.resolve_context_pack(tmp_path)
         agent = local_cli.make_agent("claude", context_pack_dir=pack_dir)
         result = await agent._invoke("r1", None, "do the thing", tmp_path)
         return result
@@ -197,14 +197,14 @@ def test_launch_wiring_carries_pack_pointer_when_project_matches(brain, tmp_path
 
 
 def test_launch_wiring_untouched_when_no_project_matches(brain, tmp_path, monkeypatch):
-    import lhassa.api.code_routes as code_routes
+    from lhassa.agents import code_run
     import lhassa.config as lhassa_config
     from lhassa.agents import local_cli
 
     monkeypatch.setattr(lhassa_config.Config, "instance_id", "inst_personal", raising=False)
 
     async def _run():
-        pack_dir = await code_routes._resolve_context_pack(tmp_path / "nowhere")
+        pack_dir = await code_run.resolve_context_pack(tmp_path / "nowhere")
         agent = local_cli.make_agent("claude", context_pack_dir=pack_dir)
         return local_cli.context_pack_hint(agent.context_pack_dir)
 

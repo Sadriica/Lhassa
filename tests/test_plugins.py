@@ -9,8 +9,14 @@ from lhassa import plugins
 
 
 @pytest.fixture(autouse=True)
-def _isolate_plugin_state():
-    """Reset the loaded-plugin tracker around each test so they don't bleed."""
+def _isolate_plugin_state(monkeypatch):
+    """Reset the loaded-plugin tracker around each test so they don't bleed.
+
+    Installed capability packs advertise real ``lhassa.plugins`` entry points;
+    hide them so these tests see only the source each one sets up. A test that
+    exercises entry points patches ``_iter_entry_points`` itself.
+    """
+    monkeypatch.setattr(plugins, "_iter_entry_points", lambda: [])
     saved = set(plugins._LOADED)
     plugins._LOADED.clear()
     try:

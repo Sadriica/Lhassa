@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """
-``step()`` — one turn of "hace y duerme" (§2.1).
+``step()``: one turn of "hace y duerme" (§2.1).
 
 The brain is *state + step()*. A heartbeat (systemd timer) or an API call wakes
 it; ``step()`` advances it one tick and returns. It checks the watchlist (ZERO
@@ -9,14 +9,14 @@ Episode (observability from the first commit), runs the fixed action when the
 trigger maps to one, records the episode, and marks the originating task done.
 
 Two paths per trigger:
-  • **fixed action** — deterministic, LLM-free (§2.4): run it and record.
-  • **judgment** — the trigger needs *criteria*, so the model wakes (Phase 2): the
+  • **fixed action**: deterministic, LLM-free (§2.4): run it and record.
+  • **judgment**: the trigger needs *criteria*, so the model wakes (Phase 2): the
     router picks a provider+model, the layered memory is loaded within a token
     budget, and the provider thinks directly. Guarded: if no provider is usable
     (``ProviderNotConfigured``) or the daily budget is spent (``BudgetExceeded``),
-    the episode degrades to "deferred" — never a crash.
+    the episode degrades to "deferred": never a crash.
 
-Long work is NOT done inline — when the router decides to **delegate** code work
+Long work is NOT done inline; when the router decides to **delegate** code work
 to a harness, ``step()`` LAUNCHES it as a separate process (recording "job PID X")
 and returns immediately. A later tick's ``runner.supervise()`` reaps it via disk;
 ``step()`` never blocks on a job ("hace y duerme", §2.1).
@@ -43,7 +43,7 @@ from lhassa.security.trust import Origin, TrustLevel
 # Marker for an episode that needed judgment but could not run the model.
 DEFERRED_DECISION = "deferred: needs judgment"
 
-# Cap on the judgment answer — raised from 512 to 768 to accommodate JSON dispatch
+# Cap on the judgment answer; raised from 512 to 768 to accommodate JSON dispatch
 # payloads (new_facts / new_tasks objects add meaningful token overhead).
 _JUDGMENT_MAX_TOKENS = 768
 
@@ -67,6 +67,34 @@ def _persisted_task(trigger: "watchlist.Trigger", instance_id: str) -> Optional[
         firma=trigger.firma,
         creado_en=trigger.creado_en,
     )
+
+
+def _rejection_resultado(trigger: "watchlist.Trigger", reason: str) -> str:
+    """The episode text for a task refused at the signature gate.
+
+    Refusing is correct (deny-by-default) but for a RECURRING task refusing is
+    also terminal in a way a one-shot refusal is not: the next occurrence is
+    minted only when a task completes, so a rejected recurring task takes its
+    whole schedule with it, permanently and with nothing in the log saying so.
+    That is how four daily hygiene routines went quiet without a word.
+
+    So the episode names the consequence and the remedy. It stays deterministic
+    and $0, and it is deliberately NOT a direct notification: ``core/`` must not
+    import a shell, and ``org/watcher.py`` already elevates failure episodes to
+    the owner. Never raises; a broken trigger degrades to the bare reason.
+    """
+    try:
+        if not getattr(trigger, "recurrence", None):
+            return reason
+        action = getattr(trigger, "action", "") or "task"
+        return (
+            f"{reason}; this task RECURS, so its schedule stops here: no next "
+            f"occurrence is minted. Re-create it through a trusted seam "
+            f"(`lhassa seed apply …` for a seeded routine) rather than editing "
+            f"the row; action={action}"
+        )
+    except Exception:
+        return reason
 
 
 def _verify_task_trigger(trigger: "watchlist.Trigger", instance_id: str) -> Optional[str]:
@@ -126,7 +154,7 @@ def _build_messages(trigger: "watchlist.Trigger", ctx: "memory_load.Context") ->
     Feedback-threading seam (Wave A, TASK A2): when this turn belongs to a
     verify-terminated loop (``trigger.params["_loop_id"]``) and the PREVIOUS
     turn's verifier failed, ``_judge`` stamps that verdict's ``detail`` onto
-    ``trigger.params["_loop_feedback"]`` before minting the next recurrence — the
+    ``trigger.params["_loop_feedback"]`` before minting the next recurrence; the
     SAME trigger.params dict the recurrence-mint block in ``step()`` copies
     forward. This is the ONE place that text is read back into the prompt.
     """
@@ -143,7 +171,7 @@ def _build_messages(trigger: "watchlist.Trigger", ctx: "memory_load.Context") ->
         '"script":"codigo python que llama lhassa_actions"}\n'
         "Restricciones: accion debe estar en el registro fijo de acciones; "
         "new_facts son solo tipo dato, nunca directiva ni pinned; máx 5 facts, 5 tasks. "
-        "script: SOLO para cadenas de ≥3 acciones deterministas del registro — se "
+        "script: SOLO para cadenas de ≥3 acciones deterministas del registro; se "
         "convierte en una tarea run_script que un humano aprueba antes de correr; "
         "máx 1 por respuesta. Sin efectos: texto plano es válido."
     )
@@ -169,19 +197,19 @@ def _judgment_query(trigger: "watchlist.Trigger") -> str:
 
 
 def next_recurrence_due(old_due, now, interval_seconds: int):
-    """The next occurrence of a recurring task — ADVANCED IN WHOLE INTERVALS.
+    """The next occurrence of a recurring task. ADVANCED IN WHOLE INTERVALS.
 
     A bare ``max(now, old_due + interval)`` looks equivalent and is not: on a
     machine that suspends (a laptop), any downtime longer than one interval
     makes every overdue recurrence re-anchor to the WAKE INSTANT instead of its
     wall-clock slot. An 08:00 daily digest then walks to whenever the lid was
-    opened — and because every overdue task re-anchors to the SAME instant,
+    opened; and because every overdue task re-anchors to the SAME instant,
     schedules that were deliberately apart (08:00 + 21:00) collapse onto each
     other and fire as duplicates from then on. That is not hypothetical: it is
     how the owner's twice-daily digest ended up arriving twice, seconds apart.
 
     Stepping by whole intervals keeps 08:00 at 08:00 across any downtime.
-    Occurrences missed while suspended stay MISSED — they are deliberately not
+    Occurrences missed while suspended stay MISSED; they are deliberately not
     replayed in a catch-up burst, which would be a notification storm on wake.
 
     A non-positive ``interval_seconds`` degrades to ``now`` rather than looping.
@@ -198,7 +226,7 @@ def next_recurrence_due(old_due, now, interval_seconds: int):
 
 
 async def _notify_loop_capped(instance_id: str, loop_id: str, goal: str) -> None:
-    """Notify the owner once via the existing notify path — the registered
+    """Notify the owner once via the existing notify path; the registered
     ``notify`` fixed action (``actionpack/_brain.py:notify``), so ``core/``
     (spine) never imports ``notify/`` (shell) directly; the registry indirection
     is the seam. Best-effort: a delivery failure must never break the tick.
@@ -245,7 +273,7 @@ async def _judge(
 ) -> bool:
     """Run the think-path for a non-fixed trigger. Returns True if the model ran.
 
-    ``context_tier`` ("minimal" or "full", from the deterministic policy layer —
+    ``context_tier`` ("minimal" or "full", from the deterministic policy layer;
     ``core/policy.py``) sizes the memory load: "minimal" uses
     ``config.context_token_budget_minimal`` and fewer recent episodes; "full" uses
     the standard ``config.context_token_budget``. The load always passes a
@@ -253,12 +281,12 @@ async def _judge(
     fire) and ``active_tags=[trigger.kind]``.
 
     On ``ProviderNotConfigured`` / ``BudgetExceeded`` the router's fallback CHAIN
-    (``lhassa.llm.router.fallback_chain`` — the owner's CLI subscriptions before
+    (``lhassa.llm.router.fallback_chain``: the owner's CLI subscriptions before
     cloud) is walked before giving up; only if every entry in the chain also
     fails does the episode finish as ``DEFERRED_DECISION`` and False is returned
     (the caller counts it as deferred).
 
-    **Loop runtime (Wave A, TASK A2)** — when ``trigger.params["_loop_id"]`` is
+    **Loop runtime (Wave A, TASK A2)**: when ``trigger.params["_loop_id"]`` is
     set (stamped by ``/goal --verify ...``, see ``notify/commands.py:_cmd_goal``),
     this turn is one iteration of a bounded, verifier-terminated loop
     (``core/db.py``'s ``loops`` table):
@@ -267,15 +295,15 @@ async def _judge(
         recurrence is stopped (``trigger.recurrence`` cleared so ``step()``'s
         recurrence-mint block below is a no-op), and the model never runs.
       - Otherwise the turn proceeds as normal, and AFTER the model answers, the
-        loop's ``verifier_spec`` (``agents/verify.py`` — deterministic, $0-first,
+        loop's ``verifier_spec`` (``agents/verify.py``: deterministic, $0-first,
         never an LLM) checks the reply text: a PASS marks the loop ``"done"`` and
         stops recurrence (goal reached); a FAIL marks it ``"iterate"`` (turn
         bumped) and threads the verifier's ``detail`` into
-        ``trigger.params["_loop_feedback"]`` — the SAME trigger object the
+        ``trigger.params["_loop_feedback"]``: the SAME trigger object the
         recurrence-mint block below copies into the next occurrence's params, so
         the next turn's prompt (see ``_build_messages``) reads the previous
         verdict. A missing/broken loop row degrades to a normal, unbounded
-        judgment turn — this feature must never break a plain ``/goal``.
+        judgment turn; this feature must never break a plain ``/goal``.
     """
     loop_id = (getattr(trigger, "params", None) or {}).get("_loop_id")
     loop_row: Optional[dict] = None
@@ -287,7 +315,7 @@ async def _judge(
             loop_row = None
 
         if loop_row is not None and loop_row.get("status") in ("done", "capped", "failed"):
-            # Terminal already (e.g. a stray extra recurrence) — stop it here too.
+            # Terminal already (e.g. a stray extra recurrence); stop it here too.
             trigger.recurrence = None
             ep.finish(
                 decision=f"loop {loop_id} already {loop_row.get('status')}",
@@ -300,7 +328,7 @@ async def _judge(
             max_turns = int(loop_row.get("max_turns") or 10)
             turn = int(loop_row.get("turn") or 0)
             if turn >= max_turns:
-                # Cap enforced BEFORE any work — the model never runs this turn.
+                # Cap enforced BEFORE any work; the model never runs this turn.
                 try:
                     await db.advance_loop(instance_id, loop_id, status="capped")
                 except Exception as exc:
@@ -347,7 +375,7 @@ async def _judge(
         # An objective verify spec on the trigger turns this into a *checked*
         # judgment: the cheap model answers, the LLM-free verifier inspects it,
         # and a failed check escalates cheap→smart once (the §2.8 cascade). The
-        # verifier never calls a model — it only reads the produced text.
+        # verifier never calls a model; it only reads the produced text.
         vspec = (getattr(trigger, "params", {}) or {}).get("verify")
         decision_note = decision.reason
 
@@ -384,7 +412,7 @@ async def _judge(
             logger.warning(f"step: primary provider {chosen.name!r} failed: {exc}")
             last_exc = exc
 
-        # 2) Resilience fallback CHAIN — only when the caller did NOT pin an
+        # 2) Resilience fallback CHAIN; only when the caller did NOT pin an
         # explicit provider (``provider`` is the offline injection seam tests/CLI
         # overrides use to force one exact provider deterministically; honoring
         # that pin keeps the seam meaningful and never silently reaches into the
@@ -397,7 +425,7 @@ async def _judge(
             # The kill switch is a HARD stop, not a budget signal. It subclasses
             # BudgetExceeded, so without this branch the CLI fallback below
             # would still call out to claude/codex/opencode with the switch
-            # engaged — the owner flips a switch expecting silence and the
+            # engaged; the owner flips a switch expecting silence and the
             # heartbeat keeps talking. No fallback: degrade to deferred.
             attempts = []
         elif result is None and provider is None:
@@ -429,8 +457,8 @@ async def _judge(
             except Exception as exc:
                 # A live provider/CLI can fail in ways neither of the two typed
                 # exceptions cover (a real network error, an auth failure, a CLI
-                # crash) — this must degrade to the next attempt (or defer), the
-                # same as ``notify/telegram_inbound._brain_reply``'s chain walk,
+                # crash); this must degrade to the next attempt (or defer), the
+                # same as ``chat/think.brain_reply``'s chain walk,
                 # never propagate and crash the tick.
                 logger.warning(
                     f"step: provider {getattr(attempt_provider, 'name', '?')!r} "
@@ -449,7 +477,7 @@ async def _judge(
 
         if result is None:
             # Always surface as one of the two typed, degrade-safe exceptions the
-            # outer except below (and the caller) already handle — an arbitrary
+            # outer except below (and the caller) already handle; an arbitrary
             # exception type from a live provider/CLI must never escape and crash
             # the tick.
             if isinstance(last_exc, (ProviderNotConfigured, BudgetExceeded)):
@@ -477,7 +505,7 @@ async def _judge(
         # ("done") and stops recurrence; a FAIL bumps the turn ("iterate") and
         # threads the verifier's detail into trigger.params["_loop_feedback"] for
         # the recurrence-mint block below to carry into the next occurrence. A
-        # loop row with no verifier_spec (shouldn't happen — /goal always sets
+        # loop row with no verifier_spec (shouldn't happen; /goal always sets
         # one when it creates a loop) is left alone rather than guessed at.
         loop_note = ""
         loop_vspec = loop_row.get("verifier_spec") if loop_row is not None else None
@@ -583,11 +611,11 @@ async def step(
     await db.init_db()
 
     # Reap any delegated jobs that finished since the last tick (cheap; disk-only
-    # supervision — never blocks). This is how long work is followed across ticks.
+    # supervision; never blocks). This is how long work is followed across ticks.
     reaped = await runner.supervise(instance_id)
 
     # Deferred-task retry sweep: a task the judgment path could not run (no
-    # provider / budget spent) sits "diferida" — re-queue it once the backoff
+    # provider / budget spent) sits "diferida": re-queue it once the backoff
     # window has passed, or reject it (terminal) once it has exhausted its
     # retries. Wrapped defensively: a sweep failure must never crash a tick.
     n_rejected = 0
@@ -649,7 +677,7 @@ async def step(
             ep.finish(
                 decision="rejected by task signature gate",
                 accion=trigger.action,
-                resultado=signature_error,
+                resultado=_rejection_resultado(trigger, signature_error),
             )
             await ep.append()
             if trigger.task_id is not None:
@@ -657,8 +685,28 @@ async def step(
             n_rejected += 1
             continue
 
+        # An action that structurally CANNOT act (a feature flag off, nothing
+        # configured to read) is skipped outright: no run, and deliberately no
+        # episode. Logging "nothing was possible" once a day per dead action;
+        # each one dragging a full delivery trail behind it; filled the log with
+        # rows that never described an event, and that log is what episodic
+        # recall reads. Silence must mean nothing happened.
+        #
+        # The task still completes, so a RECURRING action keeps its schedule and
+        # resumes by itself the day the owner configures what it needs. The
+        # reasons stay visible in `lhassa capabilities`, which is where "why
+        # isn't this running?" is answered now that the log stays quiet.
+        skipped_reason = ""
         if trigger.maps_to_fixed_action():
-            # Fixed deterministic action — no LLM (§2.4).
+            skipped_reason = actions.precondition_unmet(
+                trigger.action, trigger.params
+            )
+
+        if skipped_reason:
+            ran_model = False
+            n_skipped += 1
+        elif trigger.maps_to_fixed_action():
+            # Fixed deterministic action; no LLM (§2.4).
             gate = await _allow_fixed_action(
                 trigger, instance_id, action=trigger.action, params=trigger.params
             )
@@ -681,7 +729,7 @@ async def step(
         else:
             # Deterministic policy layer FIRST (§ core/policy.py "reflexes"):
             # zero-token triage before the router/judgment path even loads memory.
-            # NEVER raises — degrades to think/minimal on any error.
+            # NEVER raises; degrades to think/minimal on any error.
             pdecision = policy.evaluate(trigger)
 
             if pdecision.kind == "action":
@@ -716,9 +764,9 @@ async def step(
                     resultado=pdecision.reason,
                 )
                 n_skipped += 1
-                ran_model = True  # handled — the task is done, not deferred
+                ran_model = True  # handled; the task is done, not deferred
             else:
-                # "think" — thread the policy's hardness hint into the trigger so
+                # "think": thread the policy's hardness hint into the trigger so
                 # the router's existing trigger.params["hard"] seam picks it up
                 # (least-code path; force_think/force_justdo still win if set).
                 if pdecision.hard:
@@ -731,12 +779,12 @@ async def step(
                     force_think=force_think, force_justdo=force_justdo,
                 )
                 if decision.kind == "delegate":
-                    # Long work — LAUNCH a harness process and return; do NOT block.
+                    # Long work. LAUNCH a harness process and return; do NOT block.
                     await _delegate(trigger, ep, decision, instance_id=instance_id)
                     n_delegated += 1
                     ran_model = True
                 else:
-                    # Judgment — the model wakes for criteria. Guarded so a missing
+                    # Judgment; the model wakes for criteria. Guarded so a missing
                     # provider or a spent budget degrades to a deferred episode.
                     ran_model = await _judge(
                         trigger, ep,
@@ -750,7 +798,8 @@ async def step(
                     else:
                         n_deferred += 1
 
-        await ep.append()
+        if not skipped_reason:
+            await ep.append()
 
         # Mark the originating task done so the next tick doesn't re-fire it.
         if trigger.task_id is not None:

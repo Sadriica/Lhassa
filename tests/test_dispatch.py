@@ -1,5 +1,5 @@
 """
-Tests for lhassa/core/dispatch.py — Phase 2: closing the judgment loop.
+Tests for lhassa/core/dispatch.py. Phase 2: closing the judgment loop.
 
 All tests are fully offline:
   - A tmp brain DB via monkeypatched ``db.DB_PATH``.
@@ -38,7 +38,7 @@ async def _init(tmp_path, monkeypatch):
 
 @dataclass
 class _FakeEp:
-    """Minimal Episode double — only needs an id for procedencia."""
+    """Minimal Episode double; only needs an id for procedencia."""
     id: str = "ep-test-0001"
 
 
@@ -102,7 +102,7 @@ async def test_dispatch_fenced_json(tmp_path, monkeypatch):
 @pytest.mark.asyncio
 async def test_dispatch_json_amid_prose(tmp_path, monkeypatch):
     """JSON embedded in prose is extracted by scanning for the first { ... }."""
-    raw = 'After thinking, I conclude: {"say": "embedded"} — that is my answer.'
+    raw = 'After thinking, I conclude: {"say": "embedded"}; that is my answer.'
     summary, db = await _run_dispatch(raw, tmp_path=tmp_path, monkeypatch=monkeypatch)
     assert "say:" in summary
     assert "embedded" in summary
@@ -145,7 +145,7 @@ async def test_dispatch_json_array_not_object(tmp_path, monkeypatch):
     """
     raw = '[{"say": "oops"}]'
     summary, db = await _run_dispatch(raw, tmp_path=tmp_path, monkeypatch=monkeypatch)
-    # The inner {"say": "oops"} IS extractable — the parser finds the first { }.
+    # The inner {"say": "oops"} IS extractable; the parser finds the first { }.
     assert isinstance(summary, str)  # no crash
     assert "oops" in summary  # the inner dict was parsed
 
@@ -257,7 +257,7 @@ async def test_dispatch_facts_dedup_against_existing(tmp_path, monkeypatch):
     assert "1 fact" in summary
     assert "1 dupe fact" in summary
     loaded = await facts.load_facts("inst_test")
-    # The pre-seeded fact + exactly one new fact — the dupe was never written.
+    # The pre-seeded fact + exactly one new fact; the dupe was never written.
     assert len(loaded) == 2
     contenidos = {f.contenido for f in loaded}
     assert "nuevo hecho distinto" in contenidos
@@ -314,7 +314,7 @@ async def test_dispatch_always_approve_accion_awaits_approval(tmp_path, monkeypa
 
     We patch ``_always_approve`` in the approval module directly rather than the
     Config class attribute, because test_api_server.py reloads config which creates
-    a new Config class object — patching the class attribute would land on the wrong
+    a new Config class object; patching the class attribute would land on the wrong
     object after a reload, while patching the function is always module-local.
     """
     import lhassa.security.approval as approval_mod
@@ -326,7 +326,7 @@ async def test_dispatch_always_approve_accion_awaits_approval(tmp_path, monkeypa
     summary, db = await _run_dispatch(raw, tmp_path=tmp_path, monkeypatch=monkeypatch)
     assert "awaiting approval" in summary
 
-    # Task is NOT in the pendiente queue — it is parked under approval.
+    # Task is NOT in the pendiente queue; it is parked under approval.
     assert await db.load_pending_tasks("inst_test") == []
 
     # An approval row exists.
@@ -407,7 +407,7 @@ async def test_dispatch_disabled_no_writes(tmp_path, monkeypatch):
     assert await db.load_pending_tasks("inst_test") == []
 
 
-# ── Delegate key (Etapa 3 — real delegation) ──────────────────────────────────
+# ── Delegate key (Etapa 3; real delegation) ──────────────────────────────────
 
 def _ensure_org_run_registered():
     """org_run is an actionpack action; register it so mint_task accepts it."""
@@ -483,7 +483,7 @@ async def test_dispatch_script_mints_run_script_task_awaiting_approval(tmp_path,
     assert "1 script" in summary
     assert "awaiting approval" in summary
 
-    # Not in the pendiente queue — parked under approval, same as always_approve.
+    # Not in the pendiente queue; parked under approval, same as always_approve.
     assert await db.load_pending_tasks("inst_test") == []
 
     from lhassa._vendor import aiosqlite
@@ -582,7 +582,7 @@ async def test_dispatch_apply_never_raises(tmp_path, monkeypatch):
         instance_id="inst_test",
         config=_config(),
     )
-    # Any safe degradation — no crash.
+    # Any safe degradation; no crash.
     assert isinstance(summary, str)
 
 

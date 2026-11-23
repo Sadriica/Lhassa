@@ -111,7 +111,7 @@ def test_help_lists_registered_commands():
 
 
 def _no_llm(monkeypatch):
-    """Make any attempt to construct/call a provider blow up — proving /status is
+    """Make any attempt to construct/call a provider blow up; proving /status is
     LLM-free."""
     import lhassa.llm.provider as provider_mod
 
@@ -297,42 +297,60 @@ def test_approve_requires_id():
     assert "Usage" in reply
 
 
+def _probe_capability(monkeypatch):
+    """A one-entry catalog (core ships it empty; packs register real ones)."""
+    from lhassa.notify import capabilities
+
+    async def _handler(text, *, config=None):
+        return None
+
+    monkeypatch.setattr(
+        capabilities,
+        "CAPABILITIES",
+        [capabilities.Capability("probe_view", lambda t: False, "stand-in", _handler)],
+    )
+
+
 def test_approve_mint_route_turns_on_the_route(tmp_path, monkeypatch):
-    """Approving a mint_route proposal from chat applies it — the approval->apply
+    """Approving a mint_route proposal from chat applies it; the approval->apply
     connection point (mirrors the code_run launch-on-approve pattern)."""
     from lhassa.notify import capabilities
+
+    _probe_capability(monkeypatch)
 
     db = asyncio.run(_init_db(tmp_path, monkeypatch))
     ap_id = asyncio.run(
         db.add_approval(
             "inst_personal",
             "mint_route",
-            {"accion": "mint_route", "capability": "calendar_view", "count": 7},
+            {"accion": "mint_route", "capability": "probe_view", "count": 7},
         )
     )
     cfg = _cfg(instance_id="inst_personal", routes_file=str(tmp_path / "routes.json"))
     reply = asyncio.run(commands.dispatch(f"/approve {ap_id}", config=cfg))
 
     assert "approved" in reply
-    assert capabilities.is_routed("calendar_view", config=cfg)
+    assert capabilities.is_routed("probe_view", config=cfg)
 
 
 def test_deny_mint_route_does_not_turn_on_the_route(tmp_path, monkeypatch):
     from lhassa.notify import capabilities
+
+    _probe_capability(monkeypatch)
 
     db = asyncio.run(_init_db(tmp_path, monkeypatch))
     ap_id = asyncio.run(
         db.add_approval(
             "inst_personal",
             "mint_route",
-            {"accion": "mint_route", "capability": "calendar_view", "count": 7},
+            {"accion": "mint_route", "capability": "probe_view", "count": 7},
         )
     )
     cfg = _cfg(instance_id="inst_personal", routes_file=str(tmp_path / "routes.json"))
     reply = asyncio.run(commands.dispatch(f"/deny {ap_id}", config=cfg))
 
     assert "denied" in reply
-    assert not capabilities.is_routed("calendar_view", config=cfg)
+    assert not capabilities.is_routed("probe_view", config=cfg)
 
 
 # ── /watch, /watches, /unwatch ─────────────────────────────────────────────────
@@ -365,9 +383,9 @@ def test_watch_rejects_invalid_regex_and_writes_nothing(tmp_path):
     reply = asyncio.run(commands.dispatch("/watch [unterminated -> backup_memory", config=cfg))
     assert "Invalid regex" in reply
 
-    from lhassa.notify import telegram_inbound as _ti
+    from lhassa.chat import rules as _rules
 
-    assert _ti._load_raw_watch_rules(cfg) == []
+    assert _rules.load_raw_watch_rules(cfg) == []
 
 
 def test_watch_rejects_unknown_accion(tmp_path):
@@ -375,9 +393,9 @@ def test_watch_rejects_unknown_accion(tmp_path):
     reply = asyncio.run(commands.dispatch("/watch hello -> not_a_real_action", config=cfg))
     assert "Unknown accion" in reply
 
-    from lhassa.notify import telegram_inbound as _ti
+    from lhassa.chat import rules as _rules
 
-    assert _ti._load_raw_watch_rules(cfg) == []
+    assert _rules.load_raw_watch_rules(cfg) == []
 
 
 def test_watch_accepts_judgment_accion(tmp_path):
@@ -517,7 +535,7 @@ def test_goal_no_verify_is_byte_identical_to_before(tmp_path, monkeypatch):
     assert asyncio.run(db.list_loops("inst_personal")) == []
 
 
-# ── /code — parks a code_run approval, never runs directly ───────────────────
+# ── /code; parks a code_run approval, never runs directly ───────────────────
 
 
 def test_code_requires_task():
@@ -531,9 +549,9 @@ def test_code_parks_approval_with_expected_payload(tmp_path, monkeypatch):
     from lhassa.agents import local_cli
 
     monkeypatch.setattr(local_cli, "detect_ai_cli", lambda: "claude")
-    from lhassa.api import code_routes
+    from lhassa.agents import code_run
 
-    monkeypatch.setattr(code_routes, "_agent_cwd", lambda: tmp_path)
+    monkeypatch.setattr(code_run, "agent_cwd", lambda: tmp_path)
 
     reply = asyncio.run(
         commands.dispatch(
@@ -836,9 +854,9 @@ def test_fleet_lists_known_machines(monkeypatch):
             {"machine_id": "laptop-01", "last_checkin": "2026-07-01T00:00:00Z", "desired_state": {"mode": "on"}},
         ]
 
-    import lhassa.api.fleet_routes as fleet_routes
+    from lhassa.core import fleet
 
-    monkeypatch.setattr(fleet_routes, "get_fleet", _fake_get_fleet)
+    monkeypatch.setattr(fleet, "list_fleet", _fake_get_fleet)
     reply = asyncio.run(commands.dispatch("/fleet", config=_cfg()))
     assert "laptop-01" in reply
     assert "mode=on" in reply
@@ -848,9 +866,9 @@ def test_fleet_empty_reports_none(monkeypatch):
     async def _fake_get_fleet():
         return []
 
-    import lhassa.api.fleet_routes as fleet_routes
+    from lhassa.core import fleet
 
-    monkeypatch.setattr(fleet_routes, "get_fleet", _fake_get_fleet)
+    monkeypatch.setattr(fleet, "list_fleet", _fake_get_fleet)
     reply = asyncio.run(commands.dispatch("/fleet", config=_cfg()))
     assert "No machines known yet." in reply
 
@@ -859,9 +877,9 @@ def test_fleet_degrades_on_failure(monkeypatch):
     async def _boom():
         raise RuntimeError("db unreachable")
 
-    import lhassa.api.fleet_routes as fleet_routes
+    from lhassa.core import fleet
 
-    monkeypatch.setattr(fleet_routes, "get_fleet", _boom)
+    monkeypatch.setattr(fleet, "list_fleet", _boom)
     reply = asyncio.run(commands.dispatch("/fleet", config=_cfg()))
     assert "couldn't" in reply
 
@@ -917,7 +935,7 @@ def test_menu_entries_fallback_for_undescribed(monkeypatch):
         commands.COMMANDS._items.pop("zzmenutest", None)
 
 
-# ── /remind — deterministic timed reminders from plain words ──────────────────────
+# ── /remind; deterministic timed reminders from plain words ──────────────────────
 
 
 def test_parse_remind_handles_the_owner_phrases():
@@ -972,131 +990,49 @@ def test_remind_without_time_gives_usage_hint(tmp_path, monkeypatch):
     assert "what and when" in reply
 
 
-# ── /remind + /event — the additive .ics calendar delivery ────────────────────
+# ── /remind extras; the seam a pack (the calendar's .ics) plugs into ─────────
 
 
-def _fake_deliver(calls):
-    async def fake(*, document=None, caption="", kind="message", metadata=None,
-                    origin_department="", config=None, **kwargs):
-        calls.append(
-            {
-                "document": document,
-                "caption": caption,
-                "kind": kind,
-                "metadata": metadata,
-                "origin_department": origin_department,
-            }
-        )
-        return True, "art_fake"
+def test_remind_with_no_extras_just_mints_the_reminder(tmp_path, monkeypatch):
+    from lhassa.notify.commands import _remind
 
-    return fake
-
-
-def test_remind_also_delivers_a_calendar_event(tmp_path, monkeypatch):
-    from lhassa.org import deliver as deliver_mod
-
-    monkeypatch.setenv("LHASSA_CALENDAR_DIR", str(tmp_path / "cal"))
+    monkeypatch.setattr(_remind, "REMINDER_EXTRAS", type(_remind.REMINDER_EXTRAS)("reminder extra"))
     db = asyncio.run(_init_db(tmp_path, monkeypatch))
-    calls: list = []
-    monkeypatch.setattr(deliver_mod, "deliver", _fake_deliver(calls))
-
     reply = asyncio.run(
         commands.dispatch(
             "/remind llamar al banco a las 5pm", config=_cfg(instance_id="inst_personal")
         )
     )
-
-    # the internal reminder UX is unchanged
     assert reply.startswith("⏰ Noted")
-    assert "llamar al banco" in reply
     tasks = asyncio.run(db.list_tasks("inst_personal", estado="pendiente", limit=10))
-    match = [t for t in tasks if t.get("accion") == "send_reminder"]
-    assert len(match) == 1
-
-    # AND a calendar_event was delivered
-    assert len(calls) == 1
-    call = calls[0]
-    assert call["kind"] == "calendar_event"
-    assert str(call["document"]).endswith(".ics")
-    assert call["metadata"]["summary"] == "llamar al banco"
-    assert call["origin_department"] == ""
+    assert len([t for t in tasks if t.get("accion") == "send_reminder"]) == 1
 
 
-def test_remind_survives_calendar_delivery_failure(tmp_path, monkeypatch):
-    monkeypatch.setenv("LHASSA_CALENDAR_DIR", str(tmp_path / "cal"))
+def test_remind_survives_a_raising_extra(tmp_path, monkeypatch):
+    from lhassa.notify.commands import _remind
+
+    extras = type(_remind.REMINDER_EXTRAS)("reminder extra")
+    seen: list = []
+
+    async def boom(what, when, run_at, *, config=None):
+        seen.append(what)
+        raise RuntimeError("extra is down")
+
+    extras.register("boom", boom)
+    monkeypatch.setattr(_remind, "REMINDER_EXTRAS", extras)
     db = asyncio.run(_init_db(tmp_path, monkeypatch))
-
-    async def boom(**kwargs):
-        raise RuntimeError("deliver is down")
-
-    from lhassa.org import deliver as deliver_mod
-
-    monkeypatch.setattr(deliver_mod, "deliver", boom)
-
     reply = asyncio.run(
         commands.dispatch(
             "/remind llamar al banco a las 5pm", config=_cfg(instance_id="inst_personal")
         )
     )
-    # the reminder still works even though the .ics delivery blew up
     assert reply.startswith("⏰ Noted")
+    assert seen == ["llamar al banco"]
     tasks = asyncio.run(db.list_tasks("inst_personal", estado="pendiente", limit=10))
-    match = [t for t in tasks if t.get("accion") == "send_reminder"]
-    assert len(match) == 1
+    assert len([t for t in tasks if t.get("accion") == "send_reminder"]) == 1
 
 
-def test_event_command_delivers_ics_with_no_reminder_task(tmp_path, monkeypatch):
-    from lhassa.org import deliver as deliver_mod
-
-    monkeypatch.setenv("LHASSA_CALENDAR_DIR", str(tmp_path / "cal"))
-    db = asyncio.run(_init_db(tmp_path, monkeypatch))
-    calls: list = []
-    monkeypatch.setattr(deliver_mod, "deliver", _fake_deliver(calls))
-
-    reply = asyncio.run(
-        commands.dispatch(
-            "/event dentist appointment at 3pm", config=_cfg(instance_id="inst_personal")
-        )
-    )
-
-    assert reply.startswith("📅 Sent")
-    assert "dentist appointment" in reply
-
-    assert len(calls) == 1
-    assert calls[0]["kind"] == "calendar_event"
-    assert str(calls[0]["document"]).endswith(".ics")
-
-    tasks = asyncio.run(db.list_tasks("inst_personal", estado="pendiente", limit=10))
-    match = [t for t in tasks if t.get("accion") == "send_reminder"]
-    assert match == []
-
-
-def test_event_command_degrades_when_delivery_fails(tmp_path, monkeypatch):
-    monkeypatch.setenv("LHASSA_CALENDAR_DIR", str(tmp_path / "cal"))
-    asyncio.run(_init_db(tmp_path, monkeypatch))
-
-    async def fails(**kwargs):
-        return False, None
-
-    from lhassa.org import deliver as deliver_mod
-
-    monkeypatch.setattr(deliver_mod, "deliver", fails)
-
-    reply = asyncio.run(
-        commands.dispatch(
-            "/event dentist appointment at 3pm", config=_cfg(instance_id="inst_personal")
-        )
-    )
-    assert "couldn't" in reply.lower()
-
-
-def test_event_without_time_gives_usage_hint(tmp_path, monkeypatch):
-    asyncio.run(_init_db(tmp_path, monkeypatch))
-    reply = asyncio.run(commands.dispatch("/event algo sin hora", config=_cfg()))
-    assert "what and when" in reply
-
-
-# ── /ai — search + model synthesis (a specific answer, not links) ──────────────────
+# ── /ai; search + model synthesis (a specific answer, not links) ──────────────────
 
 
 def test_ai_synthesizes_an_answer_from_search_results(tmp_path, monkeypatch):
@@ -1182,191 +1118,3 @@ def test_ai_without_question_gives_hint(tmp_path, monkeypatch):
     asyncio.run(_init_db(tmp_path, monkeypatch))
     reply = asyncio.run(commands.dispatch("/ai", config=_cfg()))
     assert "look something up" in reply
-
-
-# ── /calendar, /calendars ──────────────────────────────────────────────────────
-
-
-def _cal_cfg(tmp_path, **over):
-    return _cfg(
-        calendars_file=str(tmp_path / "calendars.json"),
-        calendar_ics_url="",
-        **over,
-    )
-
-
-def test_calendars_empty_gives_a_hint(tmp_path):
-    cfg = _cal_cfg(tmp_path)
-    reply = asyncio.run(commands.dispatch("/calendars", config=cfg))
-    assert "No calendars configured" in reply
-
-
-def test_calendar_add_list_remove_roundtrip(tmp_path):
-    cfg = _cal_cfg(tmp_path)
-
-    added = asyncio.run(
-        commands.dispatch("/calendar add Work https://example.edu/feed.ics", config=cfg)
-    )
-    assert "Calendar added: Work" in added
-
-    listed = asyncio.run(commands.dispatch("/calendars", config=cfg))
-    assert "Work" in listed
-    # the url is masked, not echoed in full for a long url
-    long_url = "https://example.edu/" + "x" * 60 + ".ics"
-    asyncio.run(commands.dispatch(f"/calendar add Long {long_url}", config=cfg))
-    listed2 = asyncio.run(commands.dispatch("/calendars", config=cfg))
-    assert long_url not in listed2
-
-    removed = asyncio.run(commands.dispatch("/calendar remove Work", config=cfg))
-    assert "Calendar removed: Work" in removed
-
-    listed3 = asyncio.run(commands.dispatch("/calendars", config=cfg))
-    assert "Work" not in listed3
-
-
-def test_calendar_add_rejects_bad_url(tmp_path):
-    cfg = _cal_cfg(tmp_path)
-    reply = asyncio.run(commands.dispatch("/calendar add Bad not-a-url", config=cfg))
-    assert "Couldn't add" in reply
-
-
-def test_calendar_add_missing_args_usage_hint(tmp_path):
-    cfg = _cal_cfg(tmp_path)
-    reply = asyncio.run(commands.dispatch("/calendar add OnlyName", config=cfg))
-    assert "Usage" in reply
-
-
-def test_calendar_remove_unknown_name(tmp_path):
-    cfg = _cal_cfg(tmp_path)
-    reply = asyncio.run(commands.dispatch("/calendar remove Ghost", config=cfg))
-    assert "No calendar named" in reply
-
-
-def test_calendar_no_args_usage_hint(tmp_path):
-    cfg = _cal_cfg(tmp_path)
-    reply = asyncio.run(commands.dispatch("/calendar", config=cfg))
-    assert "Usage" in reply
-
-
-def test_calendar_unknown_subcommand(tmp_path):
-    cfg = _cal_cfg(tmp_path)
-    reply = asyncio.run(commands.dispatch("/calendar frobnicate", config=cfg))
-    assert "Unknown /calendar sub-command" in reply
-
-
-def test_calendar_view_no_when_usage_hint(tmp_path):
-    cfg = _cal_cfg(tmp_path)
-    reply = asyncio.run(commands.dispatch("/calendar view", config=cfg))
-    assert "Usage" in reply
-
-
-def test_calendar_view_unparseable_when(tmp_path):
-    cfg = _cal_cfg(tmp_path)
-    reply = asyncio.run(commands.dispatch("/calendar view blorp", config=cfg))
-    assert "Couldn't work out a time reference" in reply
-
-
-def test_calendar_view_forces_a_deterministic_answer(tmp_path, monkeypatch):
-    """``/calendar view friday`` answers even though a bare 'friday' has no
-    calendar keyword — the command itself is the intent signal."""
-    cfg = _cal_cfg(tmp_path)
-
-    from lhassa.calendar import feed as feed_mod
-
-    async def _fake_upcoming(instance_id, *, hours=36, since=None, config=None):
-        return []
-
-    monkeypatch.setattr(feed_mod, "upcoming", _fake_upcoming)
-
-    reply = asyncio.run(commands.dispatch("/calendar view friday", config=cfg))
-    assert reply == "Friday you don't have anything on your calendar."
-
-
-def test_calendars_shows_env_shortcut_masked(tmp_path):
-    full_url = "https://example.com/shortcut-secret-feed-" + "z" * 30 + ".ics"
-    cfg = _cfg(
-        calendars_file=str(tmp_path / "calendars.json"),
-        calendar_ics_url=full_url,
-    )
-    reply = asyncio.run(commands.dispatch("/calendars", config=cfg))
-    assert "default" in reply
-    assert full_url not in reply  # the full secret url is never echoed back
-
-
-# ── /calendar primary + /calendar sync — master calendar reconcile ────────────
-
-
-def test_calendar_primary_sets_master(tmp_path):
-    cfg = _cal_cfg(tmp_path)
-    asyncio.run(commands.dispatch("/calendar add Work https://example.edu/feed.ics", config=cfg))
-
-    reply = asyncio.run(commands.dispatch("/calendar primary Work", config=cfg))
-    assert "Master calendar set: Work" in reply
-
-    from lhassa.calendar import store as _cal_store
-
-    assert _cal_store.get_primary(config=cfg) == "Work"
-
-
-def test_calendar_primary_unknown_name(tmp_path):
-    cfg = _cal_cfg(tmp_path)
-    reply = asyncio.run(commands.dispatch("/calendar primary Ghost", config=cfg))
-    assert "No calendar named" in reply
-
-
-def test_calendar_primary_missing_arg_usage_hint(tmp_path):
-    cfg = _cal_cfg(tmp_path)
-    reply = asyncio.run(commands.dispatch("/calendar primary", config=cfg))
-    assert "Usage" in reply
-
-
-def test_calendars_marks_the_primary(tmp_path):
-    cfg = _cal_cfg(tmp_path)
-    asyncio.run(commands.dispatch("/calendar add Work https://example.edu/feed.ics", config=cfg))
-    asyncio.run(commands.dispatch("/calendar add Personal https://example.com/p.ics", config=cfg))
-    asyncio.run(commands.dispatch("/calendar primary Work", config=cfg))
-
-    listed = asyncio.run(commands.dispatch("/calendars", config=cfg))
-    assert "Work (primary)" in listed
-    assert "Personal (primary)" not in listed
-
-
-def test_calendar_sync_reports_no_primary(tmp_path):
-    cfg = _cal_cfg(tmp_path)
-    asyncio.run(commands.dispatch("/calendar add Work https://example.edu/feed.ics", config=cfg))
-
-    reply = asyncio.run(commands.dispatch("/calendar sync", config=cfg))
-    assert "no primary" in reply.lower()
-
-
-def test_calendar_sync_reports_found_and_delivered(tmp_path, monkeypatch):
-    cfg = _cal_cfg(tmp_path, instance_id="inst_personal")
-    asyncio.run(commands.dispatch("/calendar add Work https://example.edu/feed.ics", config=cfg))
-    asyncio.run(commands.dispatch("/calendar primary Work", config=cfg))
-
-    from lhassa.actionpack import _calendar_sync
-
-    async def fake_sync(params):
-        return "calendar_sync: 2 unsynced event(s), 2 delivered"
-
-    monkeypatch.setattr(_calendar_sync, "calendar_sync", fake_sync)
-
-    reply = asyncio.run(commands.dispatch("/calendar sync", config=cfg))
-    assert "I found 2 event" in reply
-    assert "sent you 2" in reply
-
-
-def test_calendar_sync_reports_nothing_to_sync(tmp_path, monkeypatch):
-    cfg = _cal_cfg(tmp_path, instance_id="inst_personal")
-    asyncio.run(commands.dispatch("/calendar add Work https://example.edu/feed.ics", config=cfg))
-    asyncio.run(commands.dispatch("/calendar primary Work", config=cfg))
-
-    from lhassa.actionpack import _calendar_sync
-
-    async def fake_sync(params):
-        return "calendar_sync: 0 unsynced event(s), 0 delivered"
-
-    monkeypatch.setattr(_calendar_sync, "calendar_sync", fake_sync)
-
-    reply = asyncio.run(commands.dispatch("/calendar sync", config=cfg))
-    assert "already in sync" in reply.lower()

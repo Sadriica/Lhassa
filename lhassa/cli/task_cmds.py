@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""``lhassa task`` — manage tasks (standing goals, scheduled work).
+"""``lhassa task``: manage tasks (standing goals, scheduled work).
 
 Commands::
 
@@ -29,6 +29,8 @@ from typing import Optional
 import typer
 from rich.console import Console
 from rich.table import Table
+
+from lhassa.cli import capability_log as _capability_log
 
 task_app = typer.Typer(
     add_completion=False,
@@ -94,7 +96,7 @@ def _parse_due(raw: str | None) -> Optional[str]:
         except (ValueError, TypeError):
             _err().print(f"[red]Invalid --due shorthand {raw!r}. Use +Nh / +Nm / +Ns.[/red]")
             raise typer.Exit(code=1)
-    # ISO 8601 — validate by parsing.
+    # ISO 8601; validate by parsing.
     try:
         datetime.fromisoformat(s.replace("Z", "+00:00"))
         return s
@@ -180,9 +182,40 @@ def task_add(
         if due_at:
             out.print(f"  [dim]Due: {due_at}[/dim]")
         if think:
-            out.print("  [dim]Judgment: yes (brain will think each tick — token cost applies)[/dim]")
+            out.print("  [dim]Judgment: yes (brain will think each tick; token cost applies)[/dim]")
 
     asyncio.run(_run())
+    _capability_log.record_sync("task add")
+
+
+def _task_detail(row: dict, width: int = 46) -> str:
+    """One line saying WHAT this task is, read off its params.
+
+    Same idea as ``security/approval.py:describe`` and for the same reason: a
+    column of bare action names makes 200 rows of ``temple_run`` and
+    ``send_reminder`` indistinguishable, so the list cannot answer "is my Cohere
+    reminder in there?". The payload shapes are known and few; anything
+    unrecognized falls back to the first param value rather than showing
+    nothing. Never raises: an odd row degrades to an empty cell.
+    """
+    try:
+        params = row.get("params")
+        if not isinstance(params, dict) or not params:
+            return ""
+        # The keys that actually carry the subject, in the order they are most
+        # likely to be the point of the task.
+        for key in ("text", "action", "objetivo", "query", "name", "flow_id", "message"):
+            value = params.get(key)
+            if isinstance(value, str) and value.strip():
+                text = value.strip()
+                break
+        else:
+            first = next(iter(params.values()))
+            text = str(first).strip()
+        text = " ".join(text.split())
+        return text if len(text) <= width else text[: width - 1] + "…"
+    except Exception:
+        return ""
 
 
 @task_app.command("list")
@@ -202,19 +235,19 @@ def task_list(
 
     table = Table(show_header=True, header_style="bold")
     table.add_column("ID", style="dim", max_width=18)
-    table.add_column("Accion")
+    table.add_column("Accion", no_wrap=True)
+    table.add_column("Detail", no_wrap=True, overflow="ellipsis", max_width=46)
     table.add_column("Estado")
     table.add_column("Due at", style="dim")
     table.add_column("Recurrence", style="dim")
-    table.add_column("Created", style="dim")
     for r in rows:
         table.add_row(
             r.get("id", "")[:16],
             r.get("accion", ""),
+            _task_detail(r),
             r.get("estado", ""),
             r.get("due_at") or "",
             r.get("recurrence") or "",
-            (r.get("creado_en") or "")[:19],
         )
     _out().print(table)
 

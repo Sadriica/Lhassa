@@ -82,7 +82,7 @@ export default function AIUsagePanel({ metrics = {} }) {
         setBudgetInput('')
         if (label) toast.success(label)
       })
-      .catch(() => toast.error(label ? `${label} — failed` : 'Could not update limits'))
+      .catch(() => toast.error(label ? `${label}; failed` : 'Could not update limits'))
       .finally(() => setSaving(false))
   }
 
@@ -136,7 +136,7 @@ export default function AIUsagePanel({ metrics = {} }) {
       </div>
 
       <div className="grid grid-cols-2 gap-2">
-        <Metric label="Est. cost (USD)" value={fmtUsd(cost)} color="var(--lh-ok)" />
+        <Metric label="Cost today (USD)" value={fmtUsd(cost)} color="var(--lh-ok)" />
         <Metric label="LLM calls" value={fmtInt(calls)} color="var(--lh-accent)" />
         <Metric label="Input tokens" value={fmtTokens(inputTokens)} color="var(--lh-accent)" />
         <Metric label="Output tokens" value={fmtTokens(outputTokens)} color="var(--lh-accent)" />
@@ -176,7 +176,7 @@ export default function AIUsagePanel({ metrics = {} }) {
             onClick={() => postLimits({ kill_switch: !killOn }, killOn ? 'Kill-switch released' : 'Kill-switch engaged')}
             className={`lh-btn ${killOn ? 'lh-btn-danger' : ''}`}
           >
-            {killOn ? 'Engaged — release' : 'Off — engage'}
+            {killOn ? 'Engaged (release)' : 'Off (engage)'}
           </button>
         </div>
 
@@ -226,7 +226,7 @@ export default function AIUsagePanel({ metrics = {} }) {
           </div>
         ) : (
           <p className="text-xs" style={{ color: 'var(--lh-text-faint)' }}>
-            ccusage not detected — install it to track Claude Code / Codex / opencode spend.
+            ccusage not detected; install it to track Claude Code / Codex / opencode spend.
           </p>
         )}
       </div>

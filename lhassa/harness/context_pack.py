@@ -1,28 +1,28 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Context packs — the rented body starts a run with the RIGHT context.
+"""Context packs; the rented body starts a run with the RIGHT context.
 
 Every time Lhassa hands a task to a local AI CLI (claude/codex/opencode via
 ``/code`` or the API), the run should start knowing what it's working ON
 instead of rederiving it from scratch. A context pack is four generated
 markdown files, written NEXT TO the project's tracked state (never inside the
-owner's repo — see ``doc/boundaries.md``), following the VISION/ARCHITECTURE/
+owner's repo; see ``doc/boundaries.md``), following the VISION/ARCHITECTURE/
 RULES/MEMORY convention:
 
-  - ``VISION.md``       — what the project is and what success looks like.
-  - ``ARCHITECTURE.md`` — a shallow, deterministic shape-of-the-code scan.
-  - ``RULES.md``        — standing rules the body must honor.
-  - ``MEMORY.md``       — the loop-engineering three: TRIED / VERIFIED / OPEN.
+  - ``VISION.md``      : what the project is and what success looks like.
+  - ``ARCHITECTURE.md``: a shallow, deterministic shape-of-the-code scan.
+  - ``RULES.md``       : standing rules the body must honor.
+  - ``MEMORY.md``      : the loop-engineering three: TRIED / VERIFIED / OPEN.
 
-Everything here is **$0 and deterministic** — pure templating over local reads
+Everything here is **$0 and deterministic**: pure templating over local reads
 (``core/projects``, ``memory/facts``, ``core/db``), no model call. Every public
 function degrades to ``None``/``False`` rather than raising: a missing project,
-an unreadable path, or a DB hiccup must never break a launch — context is a
+an unreadable path, or a DB hiccup must never break a launch; context is a
 gift, not a gate.
 
 Freshness: each file carries a header comment
 ``<!-- lhassa:generated at=<iso> source_digest=<sha256-12> -->``. The digest is
 derived from the project's ``updated_at``, the newest relevant fact timestamp,
-and the newest relevant run's ``started_at`` — cheap inputs that change exactly
+and the newest relevant run's ``started_at``: cheap inputs that change exactly
 when the pack's source material changes. :func:`ensure` re-reads the existing
 header and skips regeneration when the digest still matches (cheap stale
 check); a mismatch or a missing file regenerates all four.
@@ -59,13 +59,13 @@ _README_NAMES = ("README.md", "README.rst", "README.txt", "README")
 
 _SKIP_DIRS = {".git", "__pycache__", "node_modules", ".venv", "venv", ".mypy_cache"}
 
-# Mirrors CLAUDE.md's spirit — the rented body's non-negotiables, in 5-6 lines.
+# Mirrors doc/architecture.md's spirit; the rented body's non-negotiables, in 5-6 lines.
 BASE_RULES = (
     "Never commit secrets, credentials, or personal/owner data.",
     'No AI/Claude attribution anywhere (no Co-Authored-By, no "generated with").',
     "Follow this project's existing conventions and structure; don't restructure without being asked.",
     "Prefer the smallest correct change over a rewrite.",
-    "Never fabricate results — degrade honestly on failure, don't guess.",
+    "Never fabricate results; degrade honestly on failure, don't guess.",
     "Ask before destructive or irreversible actions.",
 )
 
@@ -211,7 +211,7 @@ def _render_metadata(metadata: dict, limit: int = 20) -> list[str]:
 
 
 def _scan_code_architecture(path_str: str) -> dict:
-    """A shallow, bounded, deterministic scan — never raises, never slow."""
+    """A shallow, bounded, deterministic scan; never raises, never slow."""
     result = {"top_level_dirs": [], "manifests": [], "readme_heading": ""}
     try:
         root = Path(path_str)
@@ -261,7 +261,7 @@ def _vision_content(project: dict, facts: list) -> str:
     if vision_facts:
         lines += [f"- {f.contenido}" for f in vision_facts[:10]]
     else:
-        lines.append("The owner has not recorded a vision yet — ask, don't invent.")
+        lines.append("The owner has not recorded a vision yet; ask, don't invent.")
     return "\n".join(lines) + "\n"
 
 
@@ -355,7 +355,7 @@ async def _gather(project_id: str, config) -> Optional[tuple]:
 async def ensure(project_id: str, *, config=None) -> Optional[Path]:
     """Ensure a fresh context pack exists for ``project_id``; return its dir.
 
-    ``None`` for an unknown/empty project id, or on any internal failure —
+    ``None`` for an unknown/empty project id, or on any internal failure;
     context is a gift, not a gate, so this never raises. When the pack already
     matches the current source digest, this is a cheap no-op (a header read per
     file, no regeneration).

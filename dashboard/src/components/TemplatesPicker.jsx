@@ -1,15 +1,15 @@
 import { useCallback, useEffect, useState } from 'react'
 
-// The flow-templates gallery — named, multi-brain org presets the owner can apply
+// The flow-templates gallery; named, multi-brain org presets the owner can apply
 // in one move.
 //   GET  /api/org/templates                  the catalog
 //   POST /api/org/templates/{id}/apply       create its brains under Lhassa
 // Apply MUTATES the org chart, so we confirm first. The response carries
-// { template, created, skipped, chart } — we hand the chart back to the Brains
+// { template, created, skipped, chart }; we hand the chart back to the Brains
 // panel so the new brains appear in the tree/flow immediately. An unknown id (or
 // a bad template) is a 4xx with {detail}, surfaced on the card.
 
-// The multi-level showcase — gets a touch more presence.
+// The multi-level showcase; gets a touch more presence.
 const SHOWCASE_ID = 'software-factory'
 
 function TemplateCard({ tpl, onApply, confirming, onConfirm, onCancel, applying, result, errorText }) {
@@ -39,7 +39,7 @@ function TemplateCard({ tpl, onApply, confirming, onConfirm, onCancel, applying,
       <div className="flex items-center gap-2 mt-3 flex-wrap">
         <span
           className="lh-badge"
-          title="Brains this template ADDS (namespaced under Lhassa) — not the live org total"
+          title="Brains this template ADDS (namespaced under Lhassa); not the live org total"
         >
           adds {brainCount} brain{brainCount === 1 ? '' : 's'}
         </span>
@@ -144,7 +144,7 @@ export default function TemplatesPicker({ onApplied }) {
   return (
     <div>
       <div className="flex items-center justify-between mb-3">
-        <div className="lh-label">templates — apply a ready-made org in one move</div>
+        <div className="lh-label">templates; apply a ready-made org in one move</div>
         <button type="button" className="lh-btn" onClick={load}>Refresh</button>
       </div>
 

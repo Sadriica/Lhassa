@@ -1,12 +1,12 @@
 # Outlook Integration (Microsoft Graph)
 
-Lhassa can read your emails, send emails, read your calendar, and create calendar events — through the CLI/voice/Telegram chat surfaces. This is powered by the Microsoft Graph API and requires a free Azure app registration.
+Lhassa can read your emails, send emails, read your calendar, and create calendar events; through the CLI/voice/Telegram chat surfaces. This is powered by the Microsoft Graph API and requires a free Azure app registration.
 
 > **Status: voice/chat-tool only.** The four handlers below
 > (`tools/handlers/outlook.py`, wired through `tools/registry.py`) are only
-> reachable from a live LLM conversation (the built-in agent's tool loop —
+> reachable from a live LLM conversation (the built-in agent's tool loop;
 > CLI, voice, or Telegram). There is no dashboard panel, no `lhassa` CLI
-> subcommand, no core `action`, and no watchlist sense for it — Outlook never
+> subcommand, no core `action`, and no watchlist sense for it. Outlook never
 > triggers anything on its own; it only answers when asked. If you want a
 > scheduled digest of email/calendar, there isn't one today; `notify/digest.py`
 > covers signals + spend + approvals + episodes, not Outlook.
@@ -15,7 +15,7 @@ Lhassa can read your emails, send emails, read your calendar, and create calenda
 
 ## Prerequisites
 
-- A **Microsoft 365 account** (work, school, or personal — Outlook.com also works)
+- A **Microsoft 365 account** (work, school, or personal. Outlook.com also works)
 - Access to the **Azure portal** at [portal.azure.com](https://portal.azure.com) (free, uses your Microsoft account)
 
 ---
@@ -35,7 +35,7 @@ Fill in the form:
 | Field | Value |
 |---|---|
 | **Name** | `Lhassa` (or anything you like) |
-| **Supported account types** | Accounts in this organizational directory only — **or** Personal Microsoft accounts |
+| **Supported account types** | Accounts in this organizational directory only; **or** Personal Microsoft accounts |
 | **Redirect URI** | Leave blank |
 
 Click **Register**.
@@ -109,7 +109,7 @@ Back in the terminal, Lhassa will continue automatically once authentication com
 Microsoft Graph: authenticated successfully.
 ```
 
-Then it will proceed with your original request — reading emails, checking the calendar, etc.
+Then it will proceed with your original request; reading emails, checking the calendar, etc.
 
 ---
 
@@ -121,7 +121,7 @@ After the first authentication, the access token and refresh token are saved to:
 ~/.lhassa/ms_token_cache.json
 ```
 
-MSAL handles refresh token rotation automatically. As long as you use Lhassa regularly, you will never need to re-authenticate. The cache survives restarts — Lhassa loads it silently on each startup.
+MSAL handles refresh token rotation automatically. As long as you use Lhassa regularly, you will never need to re-authenticate. The cache survives restarts. Lhassa loads it silently on each startup.
 
 **Security note:** The token cache contains a refresh token that grants access to your Microsoft account. Keep `~/.lhassa/` private (`chmod 700 ~/.lhassa`).
 
@@ -134,10 +134,10 @@ MSAL handles refresh token rotation automatically. As long as you use Lhassa reg
 If the token cache file gets corrupted (e.g. a partial write during a crash), Lhassa detects it automatically:
 
 ```
-Token cache corrupted — deleting and re-authenticating.
+Token cache corrupted; deleting and re-authenticating.
 ```
 
-The file is deleted and you'll see the device flow prompt on your next email/calendar command. This is safe — just complete the device flow again.
+The file is deleted and you'll see the device flow prompt on your next email/calendar command. This is safe; just complete the device flow again.
 
 ### Expired token / re-authentication triggered
 
@@ -183,7 +183,7 @@ Lhassa: Done. Doctor appointment added for tomorrow at 10:00.
 
 ## Disabling the Integration
 
-If you don't use Microsoft 365, simply don't set `MS_TENANT_ID` and `MS_CLIENT_ID`. Lhassa works fine without them — the email and calendar tools will just return an error message if you try to use them:
+If you don't use Microsoft 365, simply don't set `MS_TENANT_ID` and `MS_CLIENT_ID`. Lhassa works fine without them; the email and calendar tools will just return an error message if you try to use them:
 
 ```
 MS_TENANT_ID and MS_CLIENT_ID are required for Outlook integration. Add them to your .env file.

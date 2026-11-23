@@ -14,6 +14,8 @@ import pytest_asyncio  # noqa: F401
 
 from lhassa.agents.author import propose_tool
 
+from tests._forge_marks import needs_system_pytest
+
 HAS_GIT = shutil.which("git") is not None
 needs_git = pytest.mark.skipif(not HAS_GIT, reason="git not installed")
 
@@ -28,7 +30,7 @@ class FakeConfig:
 
 
 def _failing_payload(name: str) -> str:
-    # A test file that always fails — used to fail gate 1 (segura), a retryable
+    # A test file that always fails; used to fail gate 1 (segura), a retryable
     # gate, on the first turn.
     tool_py = "def double(n):\n    return n * 2\n"
     test_py = f"from {name} import double\n\n\ndef test_double():\n    assert False\n"
@@ -76,6 +78,7 @@ async def brain(tmp_path, monkeypatch):
 
 
 @needs_git
+@needs_system_pytest
 @pytest.mark.asyncio
 async def test_iterate_recovers_on_turn_two(brain):
     provider = ScriptedProvider(
@@ -141,9 +144,10 @@ async def test_iterate_caps_when_always_failing(brain):
     assert len(forge_eps) == 2
 
 
+@needs_system_pytest
 @pytest.mark.asyncio
 async def test_mejor_no_baseline_stops_early_not_retried(brain):
-    """A missing baseline/metric_fn cannot be fixed by feedback — stop at turn 1."""
+    """A missing baseline/metric_fn cannot be fixed by feedback; stop at turn 1."""
     provider = ScriptedProvider([_passing_payload("solo")])
     outcome = await propose_tool(
         "solo",

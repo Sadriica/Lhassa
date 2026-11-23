@@ -7,7 +7,7 @@ dependency** (no import-linter): it parses every ``lhassa/**/*.py`` with the
 standard-library :mod:`ast` and inspects its ``import`` / ``from ... import``
 statements.
 
-The rules below were *measured from the current tree*, not assumed — every
+The rules below were *measured from the current tree*, not assumed; every
 forbidden edge is one that does not exist today, so this test passes now and
 only trips when a NEW violation is introduced. See ``doc/architecture-layers.md``
 for the prose description of the layers and the allowed-exceptions list.
@@ -29,20 +29,33 @@ from typing import Iterator
 #   interfaces    : memory, security, llm                     (mid layers / contracts)
 #   adapters      : harness, tools, agents, remote, health,    (the rentable "hands")
 #                   bench
-#   cv seam       : cv                                         (leaf file-I/O used by flows)
+#   cv seam       : cv                                         (leaf file-I/O; ships in the lhassa-cv pack)
 #   calendar seam : calendar                                   (leaf .ics file-I/O used by notify)
-#   leaf infra    : registry.py, plugins.py                   (keystone — depend on nothing)
+#   leaf infra    : registry.py, plugins.py                   (keystone; depend on nothing)
 #
 # ``flows`` counts as a SHELL: its engine composes the org layer (topology,
 # coordinator, executor), so no inner layer may depend on it. The two inner
 # importers that exist today (security/approval.py's durable flow-gate bridge,
 # personal/secretary.py's seed-shaped flow provisioning) are precisely keyed in
-# ALLOWED_EXCEPTIONS below — any NEW inner->flows edge trips the guard.
+# ALLOWED_EXCEPTIONS below; any NEW inner->flows edge trips the guard.
 #
 # The forbidden directions encode "inner layers must not reach out to shells",
 # the keystone-leaf rule, and the model-vs-harness swap-axis independence.
 
-SHELLS = {"cli", "api", "voice", "notify", "org", "dashboard", "actionpack", "flows"}
+# ``tui`` (the lhassa-tui pack) is a shell end to end: every screen composes
+# core/db, flows, skills and org reads plus the approval/delegate mutations, so
+# it ships as one shell subpackage rather than an inner core plus ``surfaces/``.
+# ``views`` holds the shell-level read-models (the overview aggregate ``lhassa
+# status`` and ``/api/overview`` render): they compose the org chart and the flow
+# store read-only, so they sit at the shell level and no inner layer may use them.
+# ``chat`` is the transport-agnostic chat engine (the brain's conversational
+# door): it composes notify (commands, hooks, capabilities), org (deliver) and
+# actionpack, so it is a shell; a transport drives it. ``telegram`` (the
+# lhassa-telegram pack) is that transport, a shell end to end like ``tui``.
+SHELLS = {
+    "cli", "api", "voice", "notify", "org", "dashboard", "actionpack", "flows", "views", "tui",
+    "chat", "telegram",
+}
 
 
 @dataclass(frozen=True)
@@ -56,7 +69,7 @@ class Rule:
 
 
 RULES: tuple[Rule, ...] = (
-    # The spine never reaches out to a shell — the loop is driven *by* the
+    # The spine never reaches out to a shell; the loop is driven *by* the
     # shells (heartbeat/api/cli), it must not know them.
     Rule("spine-isolation", frozenset({"core"}), frozenset(SHELLS)),
     # The mid-layer contracts (memory/security/llm) are reusable by any shell;
@@ -67,16 +80,16 @@ RULES: tuple[Rule, ...] = (
         frozenset(SHELLS),
     ),
     # The personal secretary layer (check-ins, agenda) is an interface-like
-    # read-model over config/core/memory — shells compose it (digest, the
+    # read-model over config/core/memory; shells compose it (digest, the
     # /today /tomorrow /checkin commands); it must never reach back into one.
     Rule("personal-isolation", frozenset({"personal"}), frozenset(SHELLS)),
-    # The "hands" (adapters) must not depend on the UI/messaging shells. ``voice``
-    # is included; the single legitimate desktop-notifier edge is whitelisted in
-    # ALLOWED_EXCEPTIONS below so this rule still blocks NEW voice coupling.
+    # The "hands" (adapters) must not depend on the UI/messaging shells,
+    # ``voice`` included (the desktop notifier the tools use lives in
+    # ``tools/notifier.py``; the voice pack plugs its speaker into it).
     # ``bench`` (LhassaBench, Wave E) joins this set: it is an adapter over the
     # existing swap points (agents/verify for scoring, llm/provider for the
-    # subjects under test) — a fixture-driven eval harness, not a world-facing
-    # surface — so it must never reach back into a shell either.
+    # subjects under test); a fixture-driven eval harness, not a world-facing
+    # surface; so it must never reach back into a shell either.
     Rule(
         "adapter-isolation",
         frozenset({"harness", "tools", "agents", "remote", "health", "bench"}),
@@ -87,31 +100,45 @@ RULES: tuple[Rule, ...] = (
     # independently. The reverse edge (llm/router.py choosing a harness) is the
     # intentional bridge seam and is therefore NOT forbidden.
     Rule("swap-axis-independence", frozenset({"harness"}), frozenset({"llm"})),
-    # The CV file-I/O seam is leaf infrastructure used BY the flow engine (the "build
-    # on a base CV, export a tailored .tex" foundation). Like the other inner layers
-    # it must never reach out to a shell — it depends only on the standard library.
+    # The CV file-I/O seam (the lhassa-cv pack) is leaf infrastructure: "build on a
+    # base CV, export a tailored .tex". Like the other inner layers it must never
+    # reach out to a shell; the pack's shell slice lives under cv/surfaces/.
     Rule("cv-infra-isolation", frozenset({"cv"}), frozenset(SHELLS)),
     # The calendar file-I/O seam (RFC5545 ``.ics`` generation) is leaf
     # infrastructure exactly like ``cv``: pure stdlib, used BY a shell
     # (``notify/commands.py``'s ``/remind`` and ``/event``) but never reaching
     # back into one itself.
     Rule("calendar-infra-isolation", frozenset({"calendar"}), frozenset(SHELLS)),
+    # The research pack's inner modules (evidence custody, assessments, the
+    # research gates, note drafting, product adoption) are adapters over core,
+    # llm, memory, security and tools; everything that composes a shell (the
+    # /idea intake, chat command, seed, API, CLI, integrity hooks) lives in
+    # ``research/surfaces/``.
+    Rule("research-isolation", frozenset({"research"}), frozenset(SHELLS)),
 )
 
 # Keystone leaf-infrastructure files: pure generic infrastructure that must not
 # import ANY ``lhassa.*`` feature module (they sit at the very bottom).
-KEYSTONE_FILES = ("registry.py", "plugins.py")
+KEYSTONE_FILES = ("registry.py", "plugins.py", "extensions.py")
 
-# Documented allowed exceptions — precise (source-file-suffix, imported-module)
+# ── Capability packs ─────────────────────────────────────────────────────────
+# A pack is a separate distribution under ``packages/lhassa-<x>/src/lhassa/<sub>``
+# (see ``packages/README.md``). Two rules bind every pack on top of the layer
+# rules above (which still apply to a pack by its subpackage name):
+#
+#   * core-never-imports-a-pack : nothing in the core tree (``lhassa/``) imports
+#     a pack subpackage. Core reaches a pack only through a registry.
+#   * pack-isolation           : a pack imports another pack only if the edge is
+#     declared in PACK_DEPENDENCIES (and in that pack's pyproject).
+#
+# A pack's ``surfaces/`` subpackage is its own shell slice (API router, CLI
+# sub-app, chat commands, actions that compose shells), so the shell-isolation
+# rules do not apply to files under it; the two pack rules still do.
+PACK_SURFACE_DIR = "surfaces"
+PACK_DEPENDENCIES: dict[str, frozenset[str]] = {}
+
+# Documented allowed exceptions; precise (source-file-suffix, imported-module)
 # pairs that are intentionally permitted despite tripping a rule above.
-#   tools/{monitor.py, handlers/agents.py} -> lhassa.voice.notifier:
-#     ``voice/notifier.py`` is the cross-platform DESKTOP notification router
-#     (notify-send / osascript / BurntToast), a shared utility, not the voice
-#     conversation shell. Tools legitimately use it to surface alerts (the
-#     delegate-to-agent handler notifies when a background agent finishes).
-#     Keying the exception on the exact module keeps the rest of the ``voice``
-#     package (e.g. ``voice.pipeline``, ``voice.brain_bridge``) forbidden to
-#     adapters.
 #   plugins.py -> lhassa.config:
 #     ``config`` is itself leaf infrastructure (pure configuration, not a feature
 #     module), so the plugin loader reading ``Config`` does not break the keystone
@@ -125,24 +152,23 @@ KEYSTONE_FILES = ("registry.py", "plugins.py")
 #     function body) rather than a general adapter -> shell coupling.
 #   personal/secretary.py -> lhassa.org{,.management,.topology}:
 #     The secretary module is SEED-SHAPED composition: it provisions the stable
-#     ``personal`` department in the org chart and its canonical briefing flows —
-#     exactly what ``seeds/cv.py`` does from the shell layer. The read-model
+#     ``personal`` department in the org chart and its canonical briefing flows;
+#     exactly what the cv pack's ``cv/surfaces/seed.py`` does from its shell slice. The read-model
 #     modules (``personal/agenda.py``, ``memory/checkins.py``) remain shell-free;
 #     keying the exception on secretary.py alone keeps them that way.
 #   security/approval.py -> lhassa.flows.{durable,projection}:
 #     The durable flow-gate bridge: resolving a ``flow_gate`` approval must
 #     commit the decision and the run cursor atomically and resume the approved
 #     work, for every surface (API/CLI/chat) that resolves approvals. The import
-#     is lazy (inside ``resolve()``), keyed to the exact two modules — any other
+#     is lazy (inside ``resolve()``), keyed to the exact two modules; any other
 #     ``security`` -> ``flows`` edge still trips the guard.
 #   personal/secretary.py -> lhassa.flows.{model,store}:
 #     Same seed-shaped composition as its org edges above: provisioning the
 #     canonical briefing flows needs the flow data model + store, not the engine.
 ALLOWED_EXCEPTIONS: frozenset[tuple[str, str]] = frozenset(
     {
-        ("tools/monitor.py", "lhassa.voice.notifier"),
-        ("tools/handlers/agents.py", "lhassa.voice.notifier"),
         ("plugins.py", "lhassa.config"),
+        ("extensions.py", "lhassa.registry"),
         ("health/checks.py", "lhassa.notify.dispatch"),
         ("personal/secretary.py", "lhassa.org"),
         ("personal/secretary.py", "lhassa.org.management"),
@@ -162,6 +188,7 @@ class ImportRecord:
     src_sub: str  # top-level subpackage of the source ("core", or "(root)")
     module: str  # fully-resolved dotted module being imported
     tgt_sub: str  # top-level lhassa subpackage of the target, or "(non-lhassa)"
+    src_pack: str = ""  # pack subpackage the source belongs to, "" for core
 
 
 def _subpackage(parts: list[str]) -> str:
@@ -214,13 +241,40 @@ def _lhassa_root() -> Path:
     return root
 
 
-def all_import_records() -> list[ImportRecord]:
-    root = _lhassa_root()
-    records: list[ImportRecord] = []
+def _pack_lhassa_roots() -> list[Path]:
+    """Every ``packages/*/src/lhassa`` directory (one per pack distribution)."""
+    packages = Path(__file__).resolve().parent.parent / "packages"
+    return sorted(p for p in packages.glob("*/src/lhassa") if p.is_dir())
+
+
+def pack_subpackages() -> dict[str, Path]:
+    """Pack subpackage name -> its directory, across all pack distributions."""
+    out: dict[str, Path] = {}
+    for root in _pack_lhassa_roots():
+        for sub in root.iterdir():
+            if sub.is_dir() and sub.name != "__pycache__":
+                if sub.name in out:
+                    raise AssertionError(f"two packs ship lhassa.{sub.name}")
+                out[sub.name] = sub
+    return out
+
+
+def _py_files(root: Path) -> Iterator[Path]:
     for py_file in sorted(root.rglob("*.py")):
-        if "__pycache__" in py_file.parts:
-            continue
+        if "__pycache__" not in py_file.parts:
+            yield py_file
+
+
+def all_import_records() -> list[ImportRecord]:
+    records: list[ImportRecord] = []
+    root = _lhassa_root()
+    for py_file in _py_files(root):
         records.extend(iter_import_records(root, py_file))
+    for pack_root in _pack_lhassa_roots():
+        for py_file in _py_files(pack_root):
+            for rec in iter_import_records(pack_root, py_file):
+                rec.src_pack = rec.src_sub
+                records.append(rec)
     return records
 
 
@@ -243,15 +297,31 @@ def find_violations(
     rules: tuple[Rule, ...] = RULES,
     exceptions: frozenset[tuple[str, str]] = ALLOWED_EXCEPTIONS,
     keystone_files: tuple[str, ...] = KEYSTONE_FILES,
+    packs: frozenset[str] | None = None,
+    pack_deps: dict[str, frozenset[str]] | None = None,
 ) -> list[Violation]:
     """Return every forbidden edge, minus the documented allowed exceptions."""
+    if packs is None:
+        packs = frozenset(pack_subpackages())
+    if pack_deps is None:
+        pack_deps = PACK_DEPENDENCIES
     out: list[Violation] = []
     for rec in records:
         if (rec.src_rel, rec.module) in exceptions:
             continue
         # Keystone leaf rule: registry.py / plugins.py import no lhassa feature.
-        if rec.src_rel in keystone_files and rec.tgt_sub != "(non-lhassa)":
+        if not rec.src_pack and rec.src_rel in keystone_files and rec.tgt_sub != "(non-lhassa)":
             out.append(Violation(rec.src_rel, rec.module, "keystone-leaf"))
+            continue
+        if rec.tgt_sub in packs and rec.tgt_sub != rec.src_pack:
+            if not rec.src_pack:
+                out.append(Violation(rec.src_rel, rec.module, "core-never-imports-a-pack"))
+                continue
+            if rec.tgt_sub not in pack_deps.get(rec.src_pack, frozenset()):
+                out.append(Violation(rec.src_rel, rec.module, "pack-isolation"))
+                continue
+        in_surface = bool(rec.src_pack) and rec.src_rel.split("/")[1:2] == [PACK_SURFACE_DIR]
+        if in_surface:
             continue
         for rule in rules:
             if rec.src_sub in rule.sources and rec.tgt_sub in rule.forbidden:
@@ -275,6 +345,7 @@ def test_rules_reference_real_subpackages() -> None:
     root = _lhassa_root()
     existing = {p.name for p in root.iterdir() if p.is_dir() and p.name != "__pycache__"}
     existing.add("dashboard")  # JS shell, lives outside the python package
+    existing |= set(pack_subpackages())  # a layer may move into a pack
     named = {sub for rule in RULES for sub in (rule.sources | rule.forbidden)}
     missing = named - existing
     assert not missing, f"rule references non-existent subpackage(s): {sorted(missing)}"
@@ -302,16 +373,16 @@ def test_checker_honours_allowed_exceptions() -> None:
     """A whitelisted edge is NOT flagged, but the same source importing a
     DIFFERENT module in the forbidden package still is."""
     allowed = ImportRecord(
-        src_rel="tools/monitor.py",
-        src_sub="tools",
-        module="lhassa.voice.notifier",
-        tgt_sub="voice",
+        src_rel="health/checks.py",
+        src_sub="health",
+        module="lhassa.notify.dispatch",
+        tgt_sub="notify",
     )
     not_allowed = ImportRecord(
-        src_rel="tools/monitor.py",
-        src_sub="tools",
-        module="lhassa.voice.pipeline",
-        tgt_sub="voice",
+        src_rel="health/checks.py",
+        src_sub="health",
+        module="lhassa.notify.channels",
+        tgt_sub="notify",
     )
     assert find_violations([allowed]) == []
     flagged = find_violations([not_allowed])
@@ -332,3 +403,42 @@ def test_keystone_files_import_no_feature_module() -> None:
     ]
     flagged = find_violations(synthetic)
     assert len(flagged) == 1 and flagged[0].rule == "keystone-leaf"
+
+
+# ── Pack rules: prove they have teeth ────────────────────────────────────────
+def test_core_importing_a_pack_is_flagged() -> None:
+    rec = ImportRecord(
+        src_rel="core/step.py", src_sub="core", module="lhassa.demo.thing", tgt_sub="demo"
+    )
+    flagged = find_violations([rec], packs=frozenset({"demo"}), pack_deps={})
+    assert [v.rule for v in flagged] == ["core-never-imports-a-pack"]
+
+
+def test_undeclared_pack_to_pack_edge_is_flagged_declared_is_not() -> None:
+    rec = ImportRecord(
+        src_rel="alpha/x.py", src_sub="alpha", module="lhassa.beta.y", tgt_sub="beta",
+        src_pack="alpha",
+    )
+    packs = frozenset({"alpha", "beta"})
+    assert [v.rule for v in find_violations([rec], packs=packs, pack_deps={})] == [
+        "pack-isolation"
+    ]
+    assert find_violations(
+        [rec], packs=packs, pack_deps={"alpha": frozenset({"beta"})}
+    ) == []
+
+
+def test_pack_surface_may_compose_shells_but_pack_core_may_not() -> None:
+    surface = ImportRecord(
+        src_rel="cv/surfaces/api.py", src_sub="cv", module="lhassa.notify.dispatch",
+        tgt_sub="notify", src_pack="cv",
+    )
+    inner = ImportRecord(
+        src_rel="cv/tex.py", src_sub="cv", module="lhassa.notify.dispatch",
+        tgt_sub="notify", src_pack="cv",
+    )
+    packs = frozenset({"cv"})
+    assert find_violations([surface], packs=packs, pack_deps={}) == []
+    assert [v.rule for v in find_violations([inner], packs=packs, pack_deps={})] == [
+        "cv-infra-isolation"
+    ]

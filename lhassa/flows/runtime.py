@@ -695,7 +695,7 @@ class FlowRuntimeRepository:
         Mirrors :meth:`park_gate`'s shape (a running claim pauses, atomically,
         with its cursor persisted) but for a retryable node failure instead of
         an approval: no ``approvals`` row, and the run becomes claimable again
-        the moment ``next_wakeup_at`` is due — :meth:`claim_run` already knows
+        the moment ``next_wakeup_at`` is due; :meth:`claim_run` already knows
         how to pick a ``waiting_retry`` row back up. The lease is released
         exactly like a completed run (the CAS/lease/fencing model is unchanged).
         """

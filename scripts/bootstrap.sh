@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Lhassa — per-distro prerequisite bootstrap. Run ONCE with sudo, BEFORE install.sh:
+# Lhassa; per-distro prerequisite bootstrap. Run ONCE with sudo, BEFORE install.sh:
 #
 #   sudo bash scripts/bootstrap.sh
 #

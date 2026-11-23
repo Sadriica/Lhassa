@@ -1,4 +1,4 @@
-"""Tests for the scheduled operative digest (Etapa 2) — fully offline, $0.
+"""Tests for the scheduled operative digest (Etapa 2); fully offline, $0.
 
 ``build_digest`` never calls an LLM: every section is monkeypatched to a fake,
 deterministic signal source (the monitor's ``gather_signals``, the cost ledger,
@@ -53,7 +53,7 @@ def test_build_digest_has_all_sections_deterministic(tmp_path, monkeypatch):
 
     text = asyncio.run(digest.build_digest(_cfg()))
 
-    assert "Lhassa —" in text and "check-in" in text
+    assert "Lhassa" in text and "check-in" in text
     assert "I need a look here (worst check: warn)" in text
     assert "failing checks: disk" in text
     assert "failures I am tracking (2)" in text
@@ -256,7 +256,7 @@ def test_send_digest_persona_revoices_through_the_model(tmp_path, monkeypatch):
 
 
 def test_send_digest_persona_degrades_to_plain_on_model_failure(tmp_path, monkeypatch):
-    """A broken model NEVER costs the owner their digest — plain text is sent."""
+    """A broken model NEVER costs the owner their digest; plain text is sent."""
     asyncio.run(_init_db(tmp_path, monkeypatch))
     _patch_signals(monkeypatch)
 
@@ -283,7 +283,7 @@ def test_send_digest_persona_degrades_to_plain_on_model_failure(tmp_path, monkey
 
 
 def test_send_digest_plain_never_touches_the_model(tmp_path, monkeypatch):
-    """The default style stays $0 — constructing a provider is an error."""
+    """The default style stays $0; constructing a provider is an error."""
     asyncio.run(_init_db(tmp_path, monkeypatch))
     _patch_signals(monkeypatch)
 

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Ed25519 signing for remote execution (§2.6) — "firmar > cifrar".
+"""Ed25519 signing for remote execution (§2.6); "firmar > cifrar".
 
 Authenticity, not secrecy: the channel is a TLS/WireGuard tunnel; the signature
 proves a ``Task`` really came from the brain and was not tampered with. The
@@ -64,7 +64,7 @@ def load_public_key() -> ed25519.Ed25519PublicKey:
 
 
 def public_key_hex() -> str:
-    """The public key as hex — shareable with a machine to pin the brain's identity."""
+    """The public key as hex; shareable with a machine to pin the brain's identity."""
     return load_public_key().public_bytes_raw().hex()
 
 
@@ -90,7 +90,7 @@ def verify(data: bytes, signature: str, public_key) -> bool:
     """Verify ``signature`` over ``data`` with ``public_key``.
 
     Tolerates the ``ed25519:`` prefix (and accepts a hex-string public key).
-    Returns ``False`` on any error — bad signature, garbage input, wrong type —
+    Returns ``False`` on any error; bad signature, garbage input, wrong type;
     and NEVER raises (the allowlist gate must be able to call it on hostile data).
     """
     try:

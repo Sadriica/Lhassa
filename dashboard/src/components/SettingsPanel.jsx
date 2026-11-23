@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { NOTICE, SOURCE_URL } from '../legal.js'
 
-// The Settings panel — the editable runtime allowlist.
+// The Settings panel; the editable runtime allowlist.
 //   GET   /api/config            → { settings:[…], groups:[…], available:{…} }
 //   PATCH /api/config {key,value} → { results, restart_hint, effective }
 // A bad key/value is a 400 with {detail}; we surface it inline near the field and
@@ -16,7 +16,7 @@ const RESTART_LABEL = {
   telegram: 'Restart Telegram to apply',
 }
 
-// The group that carries the dangerous toggles (kill-switch) — tinted red.
+// The group that carries the dangerous toggles (kill-switch); tinted red.
 const DANGER_GROUP = 'Budget & Safety'
 const ADVANCED_KEYS = new Set([
   'opencode_model',
@@ -227,7 +227,7 @@ function SecretControl({ setting, busy, onSave }) {
 const CUSTOM = '__custom__'
 
 // ── model field: a select of known ids + a "Custom…" path that reveals an input ──
-// The owner asked for drop-lists, not free typing — but a custom model id must
+// The owner asked for drop-lists, not free typing; but a custom model id must
 // still be possible. So: a <select> populated from the setting's options (falling
 // back to the available pools) plus a "Custom…" entry that swaps in a text field.
 function ModelCombo({ setting, options, busy, onSave, advanced, defaultLabel = 'engine default' }) {
@@ -311,7 +311,7 @@ function MultiSelect({ setting, options, busy, onSave, advanced }) {
               onClick={() => toggle(opt)}
               className={`lh-tag ${on ? 'lh-tag-accent' : ''}`}
               style={{ cursor: busy ? 'not-allowed' : 'pointer' }}
-              title={on ? `#${idx + 1} in the chain — click to remove` : 'Click to add to the chain'}
+              title={on ? `#${idx + 1} in the chain; click to remove` : 'Click to add to the chain'}
             >
               {on ? `${idx + 1}· ` : ''}{labelForOption(opt, advanced)}
             </button>
@@ -433,7 +433,7 @@ function SettingRow({ setting, settingsByKey, available, status, busy, onSave, a
             {overridden && (
               <span
                 className="lh-dot lh-dot-accent"
-                title="Overridden — differs from the default"
+                title="Overridden; differs from the default"
                 style={{ flexShrink: 0 }}
               />
             )}
@@ -676,10 +676,10 @@ export default function SettingsPanel() {
   )
 }
 
-// ── about footer — the flag, the identity sentence, a pointer to the docs ──────
+// ── about footer; the flag, the identity sentence, a pointer to the docs ──────
 // Settings is the one panel every owner opens sooner or later and reads slowly
 // (it's a form, not a stream), so it is the quiet place for Lhassa to say what it
-// is — once, without repeating it on every screen.
+// is; once, without repeating it on every screen.
 function AboutCard() {
   return (
     <div className="lh-card flex items-center gap-3 flex-wrap" style={{ borderColor: 'var(--lh-border)' }}>
@@ -703,13 +703,13 @@ function AboutCard() {
       <div className="min-w-0">
         <p className="text-[13px]" style={{ color: 'var(--lh-text)' }}>
           <strong style={{ color: 'var(--lh-accent-text)' }}>Build the brain, rent the body.</strong>{' '}
-          I am Lhassa. I live on this machine — I watch quietly, remember what
+          I am Lhassa. I live on this machine; I watch quietly, remember what
           matters, and think only when it is worth the spend.
         </p>
         <p className="text-[11px] mt-1" style={{ color: 'var(--lh-text-faint)' }}>
           More on how I'm told: <span className="lh-mono">README.md</span> in the repo.
         </p>
-        {/* Appropriate Legal Notice — required by the AGPL-3.0 section 7(b)
+        {/* Appropriate Legal Notice; required by the AGPL-3.0 section 7(b)
             term in LICENSE. Rendered from src/legal.js, asserted by
             tests/test_legal_notice.py; do not inline or remove it. */}
         <p className="text-[11px] mt-2" style={{ color: 'var(--lh-text-faint)' }}>

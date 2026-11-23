@@ -3,7 +3,7 @@ import { useState } from 'react'
 // ── department field ──────────────────────────────────────────────────────────
 // A dropdown over the EXISTING departments (distinct non-empty values across the
 // chart) plus a "+ New department…" option that reveals a text input to coin a new
-// one. Creating a department is just assigning a fresh string — no backend change.
+// one. Creating a department is just assigning a fresh string; no backend change.
 const NEW_DEPT = '__new_dept__'
 export function DepartmentField({ value, options, onChange }) {
   // We're in "type a new one" mode when adding, or when the current value isn't a
@@ -40,7 +40,7 @@ export function DepartmentField({ value, options, onChange }) {
       </div>
     )
   }
-  // A confirmed brand-new department isn't in `options` yet — surface it as its own
+  // A confirmed brand-new department isn't in `options` yet; surface it as its own
   // selected option so the field shows the coined name (never snaps back to "(none)").
   const isCustom = value !== '' && !known
   return (

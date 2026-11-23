@@ -19,7 +19,7 @@ def test_live_data_bucket_news_today_prices():
 
 
 def test_live_data_wins_over_cacheable_shape():
-    # Matches a "what is" cacheable prefix AND a live-data keyword — live_data
+    # Matches a "what is" cacheable prefix AND a live-data keyword; live_data
     # must win (never cache a time-sensitive answer).
     assert classify("what is the weather today") == "live_data"
 
@@ -48,7 +48,7 @@ def test_never_raises_on_bad_input():
     assert classify("   ") == "judgment"
 
 
-# ── work-type classification (Plan 4, Stream 1 — task identification) ───────
+# ── work-type classification (Plan 4, Stream 1; task identification) ───────
 
 
 def test_work_types_are_the_documented_six():

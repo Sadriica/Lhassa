@@ -1,4 +1,4 @@
-# Install — always-on Linux setup
+# Install; always-on Linux setup
 
 This is the native install path that turns Lhassa into a real, always-on Linux
 tool: the dashboard + REST API + scheduler run continuously, the brain heartbeat
@@ -12,7 +12,7 @@ Install these before running the installer:
 
 | Dependency | Why | Required? |
 |------------|-----|-----------|
-| [`uv`](https://docs.astral.sh/uv/) | Python toolchain — `uv sync` resolves the `.venv`. | Yes |
+| [`uv`](https://docs.astral.sh/uv/) | Python toolchain; `uv sync` resolves the `.venv`. | Yes |
 | `node` + `npm` | Build the React/Vite dashboard (`npm ci && npm run build`). | Yes (for the dashboard) |
 | `docker` | The containerized path + the installer's build/smoke test. | Only without `--no-docker` |
 | `tectonic` | LaTeX engine that compiles a tailored CV `.tex` into a PDF. Without it the CV bridge sends the raw `.tex`. | Optional |
@@ -27,41 +27,41 @@ On a fresh host, one command installs the system prerequisites for whichever
 distro it finds (pacman / apt / dnf / zypper):
 
 ```bash
-sudo bash scripts/bootstrap.sh   # git, curl, python3, nodejs+npm — idempotent
+sudo bash scripts/bootstrap.sh   # git, curl, python3, nodejs+npm; idempotent
 ```
 
 It then prints the user-level next steps (uv, `install.sh`, optional ollama and
 privileged). The privileged installer is distro-aware too:
-`scripts/install-privileged.sh` builds the sudoers line PER HOST — universal
+`scripts/install-privileged.sh` builds the sudoers line PER HOST; universal
 admin tools + whichever package manager the distro ships + laptop/power tools
-only when actually installed (a server simply gets a shorter, validated line) —
+only when actually installed (a server simply gets a shorter, validated line);
 and `lhassa/tools/privileged.py` mirrors the same host-filtered set at runtime.
 
 ## Quickstart
 
 ```bash
-cd ~/Code/lhassa
+cd Lhassa
 bash scripts/install.sh
 ```
 
 That single command:
 
-1. **Preflight** — checks `python3`, `uv`, and `docker`, prints versions, and
+1. **Preflight**: checks `python3`, `uv`, and `docker`, prints versions, and
    fails early with a helpful message if anything is missing.
-2. **Sync** — runs `uv sync` to resolve the `.venv`, and builds the dashboard
+2. **Sync**: runs `uv sync --all-packages --extra runtime` (core, every capability pack and the voice runtime) to resolve the `.venv`, and builds the dashboard
    (`npm ci && npm run build`) if `dashboard/dist` is missing.
-3. **Docker build + smoke test** — `docker build -t lhassa:latest .`, then two
+3. **Docker build + smoke test**: `docker build -t lhassa:latest .`, then two
    smoke checks: `import lhassa, main` inside the image, and starting the API to
    confirm `GET /api/status` returns 200. Reports PASS/FAIL. Skip with
    `--no-docker`.
-4. **Install services** — copies the systemd USER units into
+4. **Install services**: copies the systemd USER units into
    `~/.config/systemd/user/`, `daemon-reload`, and `enable --now` the app +
    heartbeat timer + health timer + the always-on `$0` monitor watcher (and the
    Telegram poller only if a bot token is set in `.env`).
-5. **Run on boot** — `loginctl enable-linger "$USER"` so the user services start
+5. **Run on boot**: `loginctl enable-linger "$USER"` so the user services start
    at boot even before you log in. If that needs elevated rights it prints the
    exact `sudo loginctl enable-linger $USER` to run.
-6. **Summary** — prints unit status, the dashboard URL, and how to read logs.
+6. **Summary**: prints unit status, the dashboard URL, and how to read logs.
 
 When it finishes the dashboard is live at **http://127.0.0.1:7766**.
 
@@ -75,7 +75,7 @@ When it finishes the dashboard is live at **http://127.0.0.1:7766**.
 | `--image NAME` | Image tag to build (default `lhassa:latest`). |
 | `-h`, `--help` | Show help. |
 
-The script is idempotent — re-running it re-syncs, re-copies the units, and
+The script is idempotent; re-running it re-syncs, re-copies the units, and
 re-enables them safely.
 
 ## The systemd services
@@ -94,7 +94,21 @@ Individual units can also be installed via `make`: `make install-heartbeat`,
 `make install-health`, `make install-telegram`, `make install-monitor`,
 `make install-ollama`.
 
-The voice pipeline (`make run` / `main.py`) is **not** run as a service — it
+The unit files in `scripts/systemd/` are templates: they hardcode the placeholder
+checkout path `%h/Code/lhassa`, which only exists if you cloned the repo exactly
+there (a clone nested elsewhere, e.g. `%h/Code/<tree>/lhassa/app`, has a different
+real path). Only the installers rewrite
+the placeholder: `scripts/install.sh` (`sed "s|%h/Code/lhassa|$REPO_ROOT|g"`) and
+`lhassa setup` (`_REPO_PLACEHOLDER` in `lhassa/cli/setup_cmds.py`) substitute the
+real checkout root when they copy the units. The `make install-*` targets copy
+the files verbatim, so after using them (or when copying by hand) replace every
+`%h/Code/lhassa` in the installed `WorkingDirectory=` and `ExecStart=` lines with
+your checkout root, e.g.
+`sed -i "s|%h/Code/lhassa|$PWD|g" ~/.config/systemd/user/lhassa-*.service`, then
+`systemctl --user daemon-reload`. Making the `make install-*` targets do this
+substitution themselves is still open.
+
+The voice pipeline (`make run` / `main.py`) is **not** run as a service; it
 needs host audio and the Deepgram/Cartesia keys. The always-on path is API-only
 by design.
 
@@ -119,12 +133,12 @@ lhassa memory reindex
 ```
 
 `make install-ollama` copies `scripts/systemd/ollama.service` into
-`~/.config/systemd/user/` and enables it — same USER-unit pattern as every
+`~/.config/systemd/user/` and enables it; same USER-unit pattern as every
 other Lhassa service. `LHASSA_EMBEDDER_BACKEND=auto` (the default) then
 detects the running daemon automatically; no other config is needed unless
 you want to force it (`LHASSA_EMBEDDER_BACKEND=ollama`) or pin a different
 model (`LHASSA_EMBEDDER_MODEL`). If Ollama is ever stopped or unreachable,
-every embedder call degrades silently back to the offline hashing embedder —
+every embedder call degrades silently back to the offline hashing embedder;
 nothing breaks, it just stops being semantic.
 
 ### Operational seeds
@@ -172,7 +186,7 @@ Application logs also land in `~/.lhassa/lhassa.log`.
 ## Update
 
 ```bash
-cd ~/Code/lhassa
+cd Lhassa
 git pull
 bash scripts/install.sh
 ```
@@ -188,15 +202,15 @@ bash scripts/uninstall.sh --purge         # also remove the lhassa:latest image
 bash scripts/uninstall.sh --purge-data    # also delete ~/.lhassa (DESTRUCTIVE)
 ```
 
-By default the uninstaller touches only the systemd units — your brain data in
+By default the uninstaller touches only the systemd units; your brain data in
 `~/.lhassa` and the Docker image/volume are left intact. `--purge` removes the
 image and, after an extra confirmation, the named data volume. `--no-linger`
 also disables boot lingering.
 
 ## See also
 
-- [`deployment.md`](deployment.md) — Docker image design, the Compose roles
-  (`api` / `heartbeat` / `telegram`), secrets, and the portability caveats
+- [`deployment.md`](deployment.md); Docker image design, the Compose roles
+  (`api` / `heartbeat` / `telegram` / `monitor`), secrets, and the portability caveats
   (voice needs host audio, the opencode heartbeat is a host CLI).
 
 ## One-command install
@@ -205,8 +219,6 @@ For a fresh machine with no clone, no Docker and no prior Python setup, there
 is a single-command bootstrap:
 
 ```bash
-curl -fsSL https://lhassa.witara.site/get-lhassa.sh | bash
-# or, until that host is live, straight from GitHub:
 curl -fsSL https://raw.githubusercontent.com/Sadriica/Lhassa/main/scripts/get-lhassa.sh | bash
 ```
 
@@ -215,7 +227,9 @@ is a clear "not supported yet" instead of a guess), installs `uv` if missing
 (leaving an existing install alone), clones the repo into
 `~/.local/share/lhassa` (override with `LHASSA_DIR`, or the source with
 `LHASSA_REPO_URL`) or updates it if already cloned, runs `uv sync` headless
-(no `voice` extra — pass `--voice` to include it), and drops a `lhassa` shim
+(core only: no capability packs and no voice runtime; pass `--voice` for
+`uv sync --all-packages --extra runtime`, or run `uv sync --all-packages`
+yourself afterwards to add the packs without the voice runtime), and drops a `lhassa` shim
 into `~/.local/bin` so the command is on `PATH`. It is idempotent: re-running
 it updates the clone and re-syncs instead of duplicating anything.
 
@@ -229,6 +243,6 @@ in the main [`README.md`](../README.md#quickstart).
 
 After it finishes, `lhassa --help` works with no model backend configured;
 commands that actually need to think (e.g. `lhassa "hello"`) need `.env` set
-up first — copy `.env.example` to `.env` in the clone and set one API key, or
+up first; copy `.env.example` to `.env` in the clone and set one API key, or
 point it at Ollama or a subscription CLI as described in
 [`getting-started.md`](getting-started.md).

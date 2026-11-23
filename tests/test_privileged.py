@@ -1,4 +1,4 @@
-"""Tests for lhassa.tools.privileged — scoped, allowlisted root execution.
+"""Tests for lhassa.tools.privileged; scoped, allowlisted root execution.
 
 No real sudo is invoked: subprocess creation is mocked, and the audit sink is
 stubbed so nothing touches the real home directory.
@@ -30,7 +30,7 @@ def test_allowlist_is_the_candidates_actually_installed():
 
     It is not a fixed list: ``privileged.allowlist()`` keeps only candidates
     ``shutil.which`` can find, so asserting {systemctl, journalctl, pacman,
-    power-mode} assumes a Linux host with systemd and pacman — which macOS CI
+    power-mode} assumes a Linux host with systemd and pacman; which macOS CI
     does not have. Assert the property that holds on every platform instead.
     """
     import shutil
@@ -46,7 +46,7 @@ def test_allowlist_keeps_installed_candidates_and_drops_the_rest(monkeypatch):
 
     ``_installed_allow`` is exercised directly: ``privileged`` imports shutil
     inside the function and freezes ``_DEFAULT_ALLOW`` at import time, so the
-    collector — not the cached result — is what a platform test can drive.
+    collector (not the cached result) is what a platform test can drive.
     """
     import shutil as _shutil
 
@@ -92,7 +92,7 @@ async def test_runs_allowlisted_command(monkeypatch):
 
     # ``systemctl`` is only in the default allowlist on a host that HAS it, so
     # it is granted here through the documented env seam. Otherwise this test
-    # asserts nothing on any platform without systemd — macOS CI caught that.
+    # asserts nothing on any platform without systemd; macOS CI caught that.
     monkeypatch.setenv("LHASSA_PRIVILEGED_ALLOW", "systemctl")
     monkeypatch.setattr(privileged.asyncio, "create_subprocess_exec", fake_exec)
     out = await privileged.run_privileged("systemctl is-active bluetooth")
@@ -111,7 +111,7 @@ async def test_reports_when_sudoers_not_installed(monkeypatch):
 
     # ``systemctl`` is only in the default allowlist on a host that HAS it, so
     # it is granted here through the documented env seam. Otherwise this test
-    # asserts nothing on any platform without systemd — macOS CI caught that.
+    # asserts nothing on any platform without systemd; macOS CI caught that.
     monkeypatch.setenv("LHASSA_PRIVILEGED_ALLOW", "systemctl")
     monkeypatch.setattr(privileged.asyncio, "create_subprocess_exec", fake_exec)
     out = await privileged.run_privileged("systemctl restart bluetooth")

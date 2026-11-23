@@ -1,5 +1,5 @@
 """
-Tests for lhassa.memory.backup — incremental backup + restore-and-verify (§2.10).
+Tests for lhassa.memory.backup; incremental backup + restore-and-verify (§2.10).
 
 Offline; the grande and the backup dir are rerouted to tmp paths via monkeypatch.
 """

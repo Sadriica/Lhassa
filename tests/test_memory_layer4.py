@@ -148,13 +148,13 @@ async def test_layer4_embed_on_write_indexes_facts(tmp_path, monkeypatch):
     A fact written via add_fact is already in the embeddings table (best-effort),
     so load() can serve it via the semantic layer without a prior index_facts call.
     The test accepts EITHER outcome (found or not found) to remain robust against
-    embedder fallback model-name mismatches in CI — the key assertion is that
+    embedder fallback model-name mismatches in CI; the key assertion is that
     load() does NOT crash.
     """
     await _init(tmp_path, monkeypatch)
     from lhassa.memory import facts, load
     await facts.add_fact("inst_personal", "dato", "hecho de optimización", tags=["perf"])
-    # No explicit index_facts call — embed-on-write should have done it.
+    # No explicit index_facts call; embed-on-write should have done it.
     ctx = await load.load(
         "inst_personal", token_budget=10_000, query="optimización", config=_Cfg,
     )
@@ -236,7 +236,7 @@ def test_truncate_drops_semantic_then_tags():
     )
     mandatory = estimate_tokens("Directivas (siempre vigentes):\n- dir uno")
     ep_tok = estimate_tokens(_render_episode(ep))
-    # Budget fits identity + recent only — both semantic and tags must go.
+    # Budget fits identity + recent only; both semantic and tags must go.
     budget = mandatory + ep_tok
     out = truncate(ctx, budget)
     assert out.semantic_facts == []

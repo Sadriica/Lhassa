@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """
-ClaudeCliAgent — runs any agent type through the Claude Code CLI (claude --print).
+ClaudeCliAgent; runs any agent type through the Claude Code CLI (claude --print).
 
 When LHASSA_AGENT_BACKEND=claude_code, all three agent types (code, research, system)
 are delegated to `claude --print "<task>"` instead of the built-in LLM tool loop.

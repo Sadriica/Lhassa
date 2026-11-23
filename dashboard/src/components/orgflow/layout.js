@@ -1,5 +1,5 @@
 // Pure layout + department-grouping math for the org FLOW canvas, plus the persisted
-// per-department offset store. No React here — just the tidy-tree geometry, the
+// per-department offset store. No React here; just the tidy-tree geometry, the
 // department bounding-box clustering, and the localStorage offset (de)serialization.
 // Kept dependency-free so the ReactFlow composition (OrgFlow.jsx) can memoize it.
 
@@ -18,7 +18,7 @@ export function computeLayout(topology) {
 
   // Reingold–Tilford-lite: leaves take the next slot; parents center over kids.
   // `seen` guards cycles; we never leave a node with a NaN/undefined position
-  // (React Flow silently drops those — the cause of "5 counted, 4 drawn").
+  // (React Flow silently drops those; the cause of "5 counted, 4 drawn").
   const place = (id, depth, seen) => {
     const node = byId[id]
     if (!node || seen.has(id)) return
@@ -42,7 +42,7 @@ export function computeLayout(topology) {
   // The roots to lay out, top-down. We do NOT trust `topology.root` (it can point
   // below the admin and orphan it). The permanent administrator (Lhassa) is forced
   // FIRST so it anchors at the very top (depth 0); then every genuinely parentless
-  // node (parent missing/null) seeds its own subtree — so EVERY node is drawn.
+  // node (parent missing/null) seeds its own subtree; so EVERY node is drawn.
   const admin = topology?.admin
   const isRootNode = (n) => !n.parent || !byId[n.parent]
   const rootIds = []
@@ -64,7 +64,7 @@ export function computeLayout(topology) {
 // ── department grouping ────────────────────────────────────────────────────────
 // Brains that share a `department` get a labeled, subtly-tinted bounding rectangle
 // drawn BEHIND them (the Oz/Lhasa look). A box is only drawn when the department's
-// brains form a clean cluster — i.e. no foreign brain sits inside their bounding
+// brains form a clean cluster; i.e. no foreign brain sits inside their bounding
 // box. When a department is scattered through the tree (a foreign node would be
 // swallowed by the box), we fall back to a per-node tint + a colored department
 // chip so it's still identifiable without an ugly overlapping rectangle. The admin
@@ -72,7 +72,7 @@ export function computeLayout(topology) {
 export const NODE_H_EST = 136 // generous node-height estimate for bbox math
 export const DEPT_PAD = 34
 export const DEPT_LABEL_H = 24
-// Muted, warm, on-palette tints — red (162,62,52) stays reserved for the sovereign.
+// Muted, warm, on-palette tints; red (162,62,52) stays reserved for the sovereign.
 export const DEPT_COLORS = [
   '217,165,33', // gold
   '120,140,92', // olive
@@ -85,7 +85,7 @@ export const DEPT_COLORS = [
 // ── persisted per-department layout offsets ─────────────────────────────────────
 // The owner can drag whole DEPARTMENT boxes to tidy the canvas. Each department
 // keeps a {dx,dy} pixel offset applied to its box AND to every member brain (so the
-// cluster moves as one unit while member nodes keep ABSOLUTE coords — the handle-based
+// cluster moves as one unit while member nodes keep ABSOLUTE coords; the handle-based
 // re-parent path is untouched). Offsets persist here, keyed by department name, so an
 // arrangement survives reloads/Refresh. Departments with no saved offset auto-layout.
 export const LAYOUT_KEY = 'lh-org-layout'
@@ -149,7 +149,7 @@ export function saveOrgLayout(layout) {
       nodes: cleanNodeLayout(layout?.nodes),
       viewport: cleanViewport(layout?.viewport),
     }))
-  } catch { /* storage unavailable — arrangement just won't persist */ }
+  } catch { /* storage unavailable; arrangement just won't persist */ }
 }
 
 export function loadOffsets() {

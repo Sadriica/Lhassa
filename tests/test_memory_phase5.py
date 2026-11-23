@@ -1,4 +1,4 @@
-"""Phase 5 memory tests — fully offline (monkeypatched httpx + completions).
+"""Phase 5 memory tests; fully offline (monkeypatched httpx + completions).
 
 Test inventory:
   1.  Embedder chain falls back on connection error and logs warning once (not twice).
@@ -115,7 +115,7 @@ async def test_semantic_query_filters_by_model(tmp_path, monkeypatch):
     f2 = await facts.add_fact("inst_test", "dato", "chocolate cake recipe", tags=[])
 
     # Store f1 with hashing-v1 (correct model for _CfgHashing) and
-    # f2 with a DIFFERENT model stamp ("alien-model") — f2 should be filtered out.
+    # f2 with a DIFFERENT model stamp ("alien-model"); f2 should be filtered out.
     h = HashingEmbedder()
     v1 = h.embed([f1.contenido])[0]
     v2 = h.embed([f2.contenido])[0]
@@ -148,7 +148,7 @@ async def test_reindex_restamps_all_facts(tmp_path, monkeypatch):
     await db.upsert_fact_embedding("inst_test", f1.id, [0.1], model="old-model")
     await db.upsert_fact_embedding("inst_test", f2.id, [0.2], model="old-model")
 
-    # reindex with hashing config — should overwrite both.
+    # reindex with hashing config; should overwrite both.
     count = await reindex("inst_test", _CfgHashing)
     assert count == 2
 
@@ -200,7 +200,7 @@ async def test_remember_regex_variants(tmp_path, monkeypatch):
     monkeypatch.setattr(db, "DB_PATH", tmp_path / "brain.db")
     await db.init_db()
 
-    import lhassa.notify.telegram_inbound as ti
+    from tests.chat_fakes import FakeTransport
 
     class _Cfg:
         instance_id = "inst_test"
@@ -218,19 +218,13 @@ async def test_remember_regex_variants(tmp_path, monkeypatch):
         memory_semantic_topk = 5
         watch_rules_file = ""
 
-    sent_replies: list[str] = []
-
-    async def _fake_send(text, *, config):
-        sent_replies.append(text)
-
-    # Patch telegram.send.
-    import lhassa.notify.telegram as tg_mod
-    monkeypatch.setattr(tg_mod, "send", _fake_send)
+    transport = FakeTransport()
+    sent_replies = transport.sent
 
     cfg = _Cfg()
     for variant in ["remember: my birthday is June 5", "recuerda: prefiero el café oscuro", "recordá, trabajo con Python"]:
         sent_replies.clear()
-        await ti._answer(variant, config=cfg, chat_id="123")
+        await transport.say(variant, config=cfg)
         assert sent_replies, f"no reply for variant {variant!r}"
         # Reply must contain a fact id.
         assert "f_" in sent_replies[-1] or "Remembered:" in sent_replies[-1], \
@@ -239,7 +233,7 @@ async def test_remember_regex_variants(tmp_path, monkeypatch):
     # 500-char cap test.
     sent_replies.clear()
     long_text = "remember: " + "x" * 600
-    await ti._answer(long_text, config=cfg, chat_id="123")
+    await transport.say(long_text, config=cfg)
     # The fact was written; check DB.
     rows = await db.query_facts("inst_test")
     capped = [r for r in rows if r["contenido"] == "x" * 500]
@@ -258,10 +252,10 @@ async def test_distill_happy_path(tmp_path, monkeypatch):
     from lhassa.memory import consolidate, facts
 
     # Pre-load an existing fact (for dedupe check).
-    await facts.add_fact("inst_test", "dato", "existing fact — skip me")
+    await facts.add_fact("inst_test", "dato", "existing fact; skip me")
 
     # Fake completion that returns a JSON array.
-    fake_json = '["owner prefers Python", "system runs on Arch Linux", "existing fact — skip me"]'
+    fake_json = '["owner prefers Python", "system runs on Arch Linux", "existing fact; skip me"]'
 
     from lhassa.llm.provider import Completion
 
@@ -293,7 +287,7 @@ async def test_distill_happy_path(tmp_path, monkeypatch):
     contents = {f.contenido for f in distilled}
     assert "owner prefers Python" in contents
     assert "system runs on Arch Linux" in contents
-    assert "existing fact — skip me" not in contents
+    assert "existing fact; skip me" not in contents
 
 
 # ── Test 8: distill malformed JSON ───────────────────────────────────────────────
@@ -415,8 +409,8 @@ async def test_load_works_with_empty_embeddings_table(tmp_path, monkeypatch):
         config=_CfgHashing,
     )
     # The fact is in the grande but not yet in the fact_embeddings table with
-    # the RIGHT model stamp for _CfgHashing — or it may have been auto-indexed
+    # the RIGHT model stamp for _CfgHashing; or it may have been auto-indexed
     # by embed-on-write. Either way, load() must not crash.
     assert ctx is not None
     # Pinned + directives are always loaded regardless.
-    # (No assertions on semantic_facts — that depends on whether embed-on-write ran.)
+    # (No assertions on semantic_facts; that depends on whether embed-on-write ran.)

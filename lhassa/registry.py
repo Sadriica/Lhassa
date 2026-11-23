@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """
-A tiny, generic, dependency-free registry — the reusable foundation for every
+A tiny, generic, dependency-free registry; the reusable foundation for every
 swap point in Lhassa (channels, org departments, providers, harnesses,
 verifiers, specialists, actions).
 
@@ -11,7 +11,7 @@ shared registry primitive those swap points adopt so the behaviour is uniform:
 
 * one string key → one item (a class, factory, instance, or dataclass);
 * register both as a **direct call** and as a **decorator**;
-* **duplicate registration is an error** unless ``override=True`` — so two
+* **duplicate registration is an error** unless ``override=True``: so two
   plugins can never silently clobber each other;
 * a clear, typed ``NotRegistered`` on a missing lookup.
 
@@ -52,7 +52,7 @@ class Registry(Generic[T]):
 
     Generic over the item type ``T`` (a class, factory, instance, dataclass…).
     Insertion order is preserved (plain ``dict`` semantics), so iteration and
-    :meth:`names` reflect registration order — handy for "first registered wins"
+    :meth:`names` reflect registration order; handy for "first registered wins"
     defaults elsewhere in the codebase.
 
     Parameters
@@ -78,9 +78,9 @@ class Registry(Generic[T]):
 
         Usable **two** ways:
 
-        * **Direct call** — ``reg.register("x", item)`` stores ``item`` and
+        * **Direct call**: ``reg.register("x", item)`` stores ``item`` and
           returns it.
-        * **Decorator** — ``@reg.register("x")`` (``item`` omitted) returns a
+        * **Decorator**: ``@reg.register("x")`` (``item`` omitted) returns a
           decorator that registers and returns the decorated object unchanged,
           so the name in the module still points at the original callable/class.
 
@@ -148,7 +148,7 @@ class Registry(Generic[T]):
         """A **live, read-only** view of the backing store.
 
         Reflects later (un)registrations and supports ``in``/``[]``/``.get()``/
-        ``len()``/iteration — ideal for exposing a legacy module-level ``dict``
+        ``len()``/iteration; ideal for exposing a legacy module-level ``dict``
         backed by this registry without letting callers mutate it directly.
         """
         from types import MappingProxyType
@@ -189,7 +189,7 @@ def attr_registry(
     each item is registered under ``getattr(item, key)``.
 
     ``items`` may be any iterable of items to seed the registry with. The
-    resulting registry behaves like any other — register more later with
+    resulting registry behaves like any other; register more later with
     ``reg.register(item.name, item)`` or via :func:`register_attr`-style calls.
     """
     reg: Registry = Registry(kind=kind)

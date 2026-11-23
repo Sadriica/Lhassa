@@ -1,9 +1,9 @@
-"""Tests for lhassa.org.relationships — the typed overlay graph.
+"""Tests for lhassa.org.relationships; the typed overlay graph.
 
 Offline: both the topology file and the relationships file are redirected to tmp
 paths via a tiny Config stand-in (``_Cfg``), and a small real topology is seeded so
 brain-id validation has actual nodes (``lhassa`` is injected at the root on load).
-A bad op must NOT corrupt the saved file — that invariant is asserted directly.
+A bad op must NOT corrupt the saved file; that invariant is asserted directly.
 """
 
 import json
@@ -53,7 +53,7 @@ def cfg(tmp_path):
 
 
 # SHARES is INSTANCE-scoped (its endpoints are whole instances, not brains in
-# THIS topology, and its 'to' must equal the local instance id) — it does not
+# THIS topology, and its 'to' must equal the local instance id); it does not
 # fit the brain-to-brain shape the rest of this file exercises, so it is
 # excluded here and covered by its own tests below.
 _BRAIN_SCOPED_KINDS = [k for k in rel.RELATION_KINDS if k not in rel.INSTANCE_SCOPED_KINDS]
@@ -213,7 +213,7 @@ def test_describe_shape(cfg):
     ]
 
 
-# ── SHARES — the instance-scoped cross-instance kind (Stream 6 Phase A) ───────
+# ── SHARES; the instance-scoped cross-instance kind (Stream 6 Phase A) ───────
 
 
 def test_shares_add_requires_to_equal_local_instance(cfg):
@@ -228,7 +228,7 @@ def test_shares_add_requires_to_equal_local_instance(cfg):
 
 def test_shares_endpoints_need_no_local_topology_membership(cfg):
     # Neither "inst_remote" nor "inst_local" is a node in cfg's org topology
-    # (only "general"/"dept:a"/"dept:b" are) — SHARES must not require that.
+    # (only "general"/"dept:a"/"dept:b" are); SHARES must not require that.
     rel.add("some-other-instance", "inst_local", rel.SHARES, config=cfg)
     assert rel.permits("some-other-instance", "inst_local", rel.SHARES, cfg) is True
 

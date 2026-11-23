@@ -1,4 +1,4 @@
-"""Tests for the utility tribunal — lhassa.agents.utility + review_capabilities.
+"""Tests for the utility tribunal; lhassa.agents.utility + review_capabilities.
 
 Offline: episodes are inserted directly via lhassa.core.db.append_episode
 against a tmp brain DB, and the ACTIONS registry is monkeypatched to a small
@@ -16,7 +16,7 @@ from lhassa.agents import utility
 
 @dataclass
 class _FakeEpisode:
-    """Minimal Episode double — just enough for db.append_episode."""
+    """Minimal Episode double; just enough for db.append_episode."""
 
     id: str
     instance_id: str
@@ -89,7 +89,7 @@ def test_classify_wake(raw, expected):
 
 
 def test_owner_wins_over_self_prefix_collision():
-    """'org' is self-driven but 'owner' is owner-driven — no prefix bleed."""
+    """'org' is self-driven but 'owner' is owner-driven; no prefix bleed."""
     assert utility.classify_wake("owner") == utility.WAKE_OWNER
     assert utility.classify_wake("org") == utility.WAKE_SELF
 
@@ -131,7 +131,7 @@ async def test_stale_owner_use_falls_out_of_the_window(brain, caps, monkeypatch)
     monkeypatch.setattr(utility.Config, "utility_dormant_days", 30, raising=False)
     monkeypatch.setattr(utility.Config, "utility_pinned", "", raising=False)
 
-    # A human used it — but 90 days ago. Used once ≠ still earning its place.
+    # A human used it; but 90 days ago. Used once ≠ still earning its place.
     await _seed(brain, accion="alpha", despertar_por="telegram", when=_iso(90))
     rows = {r["capability"]: r for r in await survey_now()}
     assert rows["alpha"]["state"] == utility.STATE_SELF_DRIVEN
@@ -167,7 +167,7 @@ async def test_survey_never_raises_on_a_broken_registry(brain, monkeypatch):
 async def test_owner_minted_task_counts_even_when_execution_is_deferred(
     brain, caps, monkeypatch
 ):
-    """/remind mints today and fires next week from task:* — still owner-driven."""
+    """/remind mints today and fires next week from task:*; still owner-driven."""
     monkeypatch.setattr(utility.Config, "instance_id", "inst_test", raising=False)
     monkeypatch.setattr(utility.Config, "utility_dormant_days", 30, raising=False)
     monkeypatch.setattr(utility.Config, "utility_pinned", "", raising=False)
@@ -217,7 +217,7 @@ async def test_overlapping_ledgers_are_maxed_not_summed(brain, caps, monkeypatch
 
 @pytest.mark.asyncio
 async def test_a_seed_minted_task_is_not_owner_use(brain, caps, monkeypatch):
-    """seed:digest mints at HUMANO trust — trust is not the provenance signal."""
+    """seed:digest mints at HUMANO trust; trust is not the provenance signal."""
     monkeypatch.setattr(utility.Config, "instance_id", "inst_test", raising=False)
     monkeypatch.setattr(utility.Config, "utility_pinned", "", raising=False)
 
@@ -320,7 +320,7 @@ async def test_review_capabilities_parks_one_approval_per_capability_once(
     assert all(t == "retire_capability" for t, _ in parked)
     assert len(notified) == 1
 
-    # Second sweep: the docket is deduped via watch_state — nothing new parked.
+    # Second sweep: the docket is deduped via watch_state; nothing new parked.
     parked.clear()
     notified.clear()
     out2 = await action_mod.review_capabilities({"instance_id": "inst_test"})

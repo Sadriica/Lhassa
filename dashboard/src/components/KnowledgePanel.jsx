@@ -3,7 +3,7 @@ import { getMemoryEntities, getMemoryGraph, searchEpisodes } from '../lib/api'
 import { shortWhen } from '../lib/format'
 import { EmptyState, ErrorState, SectionHeader } from './ui/common'
 
-// The "Knowledge" section — three $0 read models that had no surface at all:
+// The "Knowledge" section; three $0 read models that had no surface at all:
 //
 //   GET /api/memory/entities   every entity the brain has extracted, by mentions
 //   GET /api/memory/graph?q=   what it knows about ONE entity (facts, the
@@ -15,7 +15,7 @@ import { EmptyState, ErrorState, SectionHeader } from './ui/common'
 // facts, co-occurring terms, episodes), not as a node-link diagram. The
 // underlying read model is a projection over facts + episodes, and a force
 // layout would add a dependency and a lot of pixels without adding a fact the
-// lists do not already state. A canvas can be layered on later — the client
+// lists do not already state. A canvas can be layered on later; the client
 // function (`getMemoryGraph`) is the same either way.
 //
 // All model/episode text renders as plain React children. Never
@@ -84,7 +84,7 @@ export default function KnowledgePanel() {
   }, [])
 
   // One query drives BOTH reads: "what do I know about X" and "what did I do
-  // about X" — the same pairing the TUI's Memory screen makes.
+  // about X"; the same pairing the TUI's Memory screen makes.
   const ask = useCallback(async (value) => {
     const q = (value ?? '').trim()
     if (!q) return
@@ -136,7 +136,7 @@ export default function KnowledgePanel() {
           {entitiesError ? (
             <ErrorState>{entitiesError}</ErrorState>
           ) : visibleEntities.length === 0 ? (
-            <EmptyState>No entities extracted yet — the brain needs some history first.</EmptyState>
+            <EmptyState>No entities extracted yet; the brain needs some history first.</EmptyState>
           ) : (
             <div className="space-y-1 max-h-[60vh] overflow-y-auto">
               {visibleEntities.map((e) => (

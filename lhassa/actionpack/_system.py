@@ -2,7 +2,7 @@
 """System actions: run_command, system_snapshot, power_mode.
 
 run_command is the one action that requires human approval (requires_approval=True
-in the allowlist) — it executes arbitrary shell commands in the quarantine sandbox.
+in the allowlist); it executes arbitrary shell commands in the quarantine sandbox.
 
 system_snapshot and power_mode are deterministic and $0 (no LLM, no network).
 """
@@ -15,7 +15,7 @@ import subprocess
 
 from lhassa.security.quarantine import run_in_quarantine
 
-# Regex for power_mode's mode argument — only safe lowercase-kebab strings.
+# Regex for power_mode's mode argument; only safe lowercase-kebab strings.
 _MODE_RE = re.compile(r"^[a-z-]{1,20}$")
 
 # Output cap for run_command (chars returned to the caller).
@@ -29,12 +29,12 @@ async def run_command(params: dict) -> str:
     isolation: unshare → firejail → bwrap → best-effort). No network, scrubbed
     env, 60 s timeout, killpg on expiry. Output is capped at 2000 chars.
 
-    This action has ``requires_approval=True`` in the allowlist — a human must
+    This action has ``requires_approval=True`` in the allowlist; a human must
     approve it before it runs.
 
     params:
-        command (required)  — shell code string or argv list.
-        timeout             — integer seconds (default 60, max 120).
+        command (required) ; shell code string or argv list.
+        timeout            ; integer seconds (default 60, max 120).
 
     Never raises.
     """
@@ -80,7 +80,7 @@ def system_snapshot(params: dict) -> str:
         from lhassa.health.checks import check_disk, check_failed_units, check_mem_pressure
 
         # Uptime through the host platform layer (/proc/uptime on Linux,
-        # kern.boottime on macOS). An unreadable value stays "unknown" — it is
+        # kern.boottime on macOS). An unreadable value stays "unknown": it is
         # never guessed, because this string feeds the judgment path.
         from lhassa.host import get_platform
 
@@ -117,7 +117,7 @@ def power_mode(params: dict) -> str:
     values and will exit non-zero for unrecognised modes.
 
     params:
-        mode (required)  — e.g. "performance", "balanced", "power-saver".
+        mode (required) ; e.g. "performance", "balanced", "power-saver".
 
     Never raises.
     """
@@ -144,7 +144,7 @@ def power_mode(params: dict) -> str:
             out = (proc.stdout or "").strip() or "ok"
             return f"power_mode {mode}: {out}"
         err = (proc.stderr or proc.stdout or "").strip() or f"exit {proc.returncode}"
-        return f"power_mode {mode}: failed — {err}"
+        return f"power_mode {mode}: failed; {err}"
 
     except subprocess.TimeoutExpired:
         return "power_mode: timed out"

@@ -67,6 +67,13 @@ from lhassa.security.trust import Origin, TrustLevel
 _STDOUT_CAP = 50_000
 _STDERR_CAP = 10_000
 
+# One RPC request is an accion name + a params dict — it should never need to
+# be large. Passed as ``limit=`` to ``start_unix_server`` so the StreamReader
+# itself refuses to buffer past this many bytes on a single line, and checked
+# again explicitly in ``_handle`` so a refusal always comes back as the same
+# clean JSON error the rest of the RPC seam uses, never a bare exception.
+_RPC_REQUEST_CAP = 65_536
+
 # The actor id stamped on every Task built for an RPC call — lets the allowlist /
 # approval / audit trail tell a PTC-originated action apart from other origins.
 _PTC_ACTOR = "ptc"
@@ -276,8 +283,30 @@ async def run_script(
 
         async def _handle(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
             try:
-                line = await reader.readline()
+                try:
+                    line = await reader.readline()
+                except (asyncio.LimitOverrunError, ValueError):
+                    # The request line exceeded ``_RPC_REQUEST_CAP`` (either the
+                    # StreamReader's own ``limit=`` refused to buffer it, or —
+                    # belt and braces — readline's own overrun error). A
+                    # refusal, not a crash: same clean JSON error shape as
+                    # every other RPC failure.
+                    reply = {
+                        "ok": False,
+                        "error": f"request exceeded {_RPC_REQUEST_CAP} bytes — refused",
+                    }
+                    writer.write((json.dumps(reply) + "\n").encode("utf-8"))
+                    await writer.drain()
+                    return
                 if not line:
+                    return
+                if len(line) > _RPC_REQUEST_CAP:
+                    reply = {
+                        "ok": False,
+                        "error": f"request exceeded {_RPC_REQUEST_CAP} bytes — refused",
+                    }
+                    writer.write((json.dumps(reply) + "\n").encode("utf-8"))
+                    await writer.drain()
                     return
                 try:
                     req = json.loads(line.decode("utf-8", "replace"))
@@ -312,7 +341,9 @@ async def run_script(
                 except Exception:
                     pass
 
-        server = await asyncio.start_unix_server(_handle, path=sock_path)
+        server = await asyncio.start_unix_server(
+            _handle, path=sock_path, limit=_RPC_REQUEST_CAP
+        )
 
         env = _quarantine._scrub_env(workdir)
         env[_SOCKET_ENV_VAR] = sock_path

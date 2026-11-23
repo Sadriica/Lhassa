@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Work-flow TEMPLATES — a gallery of generic, instructive flow presets.
+"""Work-flow TEMPLATES; a gallery of generic, instructive flow presets.
 
 The flows counterpart of :mod:`lhassa.org.templates`: a named catalog of
 :class:`~lhassa.flows.model.Flow` builders anyone can apply in one move. Where the
@@ -8,15 +8,15 @@ working PROCESS (a validated DAG through the engine's node kinds).
 
 Design (mirrors ``org/templates.py``'s shape):
 
-  - Each entry is ``{"id", "name", "description", "teaches", "builder"}`` — ``builder``
+  - Each entry is ``{"id", "name", "description", "teaches", "builder"}``: ``builder``
     is a zero-arg callable returning a VALIDATED :class:`Flow` for a given flow id.
   - Every template routes its ``task`` nodes by ``skill`` (never a pinned personal
-    ``brain`` id) so it stays a portable, org-topology-agnostic preset — see
+    ``brain`` id) so it stays a portable, org-topology-agnostic preset; see
     ``doc/boundaries.md``: the repo carries generic, applyable EXAMPLES; the owner's
     tailored flows live in ``~/.lhassa/flows.json`` and never enter git.
   - :func:`apply_template` instantiates a template into a :class:`FlowStore` under a
     FRESH id, never clobbering an existing flow: a taken id is suffixed
-    (``"<id>-2"``, ``"<id>-3"``, …) — the flows analogue of the org templates'
+    (``"<id>-2"``, ``"<id>-3"``, …); the flows analogue of the org templates'
     skip-on-collision idempotency (there a *brain* id collision is skipped; here a
     *flow* is a fresh instance each time, so it is suffixed instead of skipped).
 
@@ -94,7 +94,7 @@ def _code_review_pass(flow_id: str = "code-review-pass") -> Flow:
     """trigger → task(code-review) → branch(verdict) → outputs.
 
     Teaches the ``branch`` node kind: one upstream verdict, two distinct downstream
-    paths chosen by an edge ``when`` condition (no gate involved — this is a plain
+    paths chosen by an edge ``when`` condition (no gate involved; this is a plain
     routing branch, the review-loop shape).
     """
     return Flow(
@@ -152,14 +152,14 @@ def _daily_summary(flow_id: str = "daily-summary") -> Flow:
     """trigger → task(summarize) → output(doc). The simplest possible flow.
 
     The hello-world of the engine: three nodes, one straight line, no gate, no
-    branch — read this one first.
+    branch; read this one first.
     """
     return Flow(
         id=flow_id,
         name="Daily Summary",
         description=(
             "The simplest possible work-flow: trigger → summarize → write a doc. "
-            "No gate, no branch — the hello-world to read before the others."
+            "No gate, no branch; the hello-world to read before the others."
         ),
         nodes=[
             FlowNode("trigger", NodeKind.TRIGGER, {"type": "schedule", "slot": "daily"}, "Daily tick"),
@@ -185,7 +185,7 @@ def _content_pipeline(flow_id: str = "content-pipeline") -> Flow:
     """trigger → task(draft) → task(critique) → gate(approval) → output.
 
     Teaches a HITL gate mid-flow: two chained tasks feed a human APPROVAL gate
-    (parked via ``security/approval.py``) before anything is published — the
+    (parked via ``security/approval.py``) before anything is published; the
     engine's non-pass-halts-the-path rule made concrete with a person in the loop.
     """
     return Flow(
@@ -270,7 +270,7 @@ _BY_ID: dict[str, dict] = {t["id"]: t for t in FLOW_TEMPLATES}
 def list_templates() -> list[dict]:
     """The whole gallery (serialisable) for the CLI / dashboard picker.
 
-    Each item is ``{id, name, description, teaches, node_count, node_kinds}`` — the
+    Each item is ``{id, name, description, teaches, node_count, node_kinds}``: the
     builder itself is not included (not JSON-serialisable); ``node_kinds`` previews
     which engine node kinds the template exercises without instantiating it.
     """
@@ -335,7 +335,7 @@ def apply_template(template_id: str, config: "Optional[Config]" = None) -> Flow:
 
     NEVER overwrites an existing flow: if the template's default id is already
     taken, the new instance is suffixed (``"<id>-2"``, …) rather than clobbering
-    the owner's customized flow of the same name — the flows analogue of the org
+    the owner's customized flow of the same name; the flows analogue of the org
     templates' idempotent, non-destructive re-apply. Returns the persisted
     :class:`Flow` (with its final, possibly-suffixed id).
     """

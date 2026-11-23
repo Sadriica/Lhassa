@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """
-Lhassa tool registry — the public seam that composes the LLM-visible schemas and
+Lhassa tool registry; the public seam that composes the LLM-visible schemas and
 async handlers for all tools.
 
 This module is the stable import surface: ``TOOLS`` (the schema catalog),
@@ -8,9 +8,9 @@ This module is the stable import surface: ``TOOLS`` (the schema catalog),
 shared/family helpers) are re-exported here so ``from lhassa.tools.registry
 import X`` keeps resolving exactly as before. The definitions themselves live in:
 
-  * ``lhassa.tools.schemas``           — the ``TOOLS`` catalog (JSON schemas).
-  * ``lhassa.tools.handlers._shared``  — cross-family machinery (``_bump_tool``).
-  * ``lhassa.tools.handlers.*``        — the ``handle_<name>`` handlers, by family.
+  * ``lhassa.tools.schemas``          : the ``TOOLS`` catalog (JSON schemas).
+  * ``lhassa.tools.handlers._shared`` : cross-family machinery (``_bump_tool``).
+  * ``lhassa.tools.handlers.*``       : the ``handle_<name>`` handlers, by family.
 """
 
 from loguru import logger

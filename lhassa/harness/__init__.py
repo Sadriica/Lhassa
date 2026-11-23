@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """
-Axis 2 — the ``HarnessAdapter`` seam (§2.2): delegated agentic *code* work.
+Axis 2; the ``HarnessAdapter`` seam (§2.2): delegated agentic *code* work.
 
 The brain never calls a concrete coding CLI; it calls a ``HarnessAdapter``. Three
-muscles are supported — ``opencode``, Claude Code (``claude``) and ``codex`` — each
+muscles are supported (``opencode``, Claude Code (``claude``) and ``codex``) each
 with different capabilities (Claude Code locked to Claude, Codex to OpenAI,
 opencode flexible). ``runner`` launches one as a separate process (PID/stream) and
 supervises it asynchronously via disk, so ``step()`` never blocks ("lanza y duerme").

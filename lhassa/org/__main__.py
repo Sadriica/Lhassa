@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Offline demo of the organizational layer — ``python -m lhassa.org``.
+"""Offline demo of the organizational layer; ``python -m lhassa.org``.
 
 Wires a general + the registered departments with an INJECTED fake executor (so it
 runs with no model and no keys, spending nothing), routes a few sample goals to the
@@ -32,7 +32,7 @@ _GOALS = [
 
 
 def _fake_executor(goal: str, *, department: str) -> dict:
-    """Offline stand-in for the real department brain — no model, $0.
+    """Offline stand-in for the real department brain; no model, $0.
 
     Returns the same structured shape :func:`lhassa.org.executor.brain_executor`
     does, so the demo exercises the real message flow without spending tokens.
@@ -90,7 +90,7 @@ async def _run() -> None:
             collected = await general.collect(assign.corr_id)
             print(f"  collect() -> {len(collected)} result(s)\n")
 
-        print("Done — offline, deterministic, $0 spent.")
+        print("Done; offline, deterministic, $0 spent.")
 
 
 if __name__ == "__main__":

@@ -1,4 +1,4 @@
-"""Tests for lhassa.core.episode — the structured Episode."""
+"""Tests for lhassa.core.episode; the structured Episode."""
 
 import json
 

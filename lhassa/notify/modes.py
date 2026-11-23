@@ -1,32 +1,32 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """
-Working modes — Plan 4, Stream 1's second axis (the versatile brain).
+Working modes. Plan 4, Stream 1's second axis (the versatile brain).
 
 ``notify.intent.classify_work_type`` answers "what KIND of work is this?" ($0,
 regex-only). This module answers the next question: "given that kind, HOW
-should Lhassa go about it?" — a small, pluggable registry of *ways of working*,
+should Lhassa go about it?": a small, pluggable registry of *ways of working*,
 adopting the same :class:`~lhassa.registry.Registry` pattern as every other
 swap point in the codebase (providers, harnesses, verifiers, channels,
 actions): a mode is a drop-in (``@register_mode("name")``), never a core edit.
 
 Five built-in modes cover the six work types:
 
-  ``answer_directly``      — a bounded, self-contained think. No tools, no
+  ``answer_directly``     : a bounded, self-contained think. No tools, no
                               delegation. The default for ``question``.
-  ``search_and_cite``      — routes through the research bridge (a real web
+  ``search_and_cite``     : routes through the research bridge (a real web
                               lookup, sourced). For ``research``.
-  ``iterate_with_verifier`` — a bounded, verifier-terminated loop (mirrors
+  ``iterate_with_verifier``: a bounded, verifier-terminated loop (mirrors
                               ``agents/author.py``'s propose/verify/retry
                               shape). For ``build`` and ``review``.
-  ``delegate_to_hierarchy`` — hands the work down the org chart (an
+  ``delegate_to_hierarchy``: hands the work down the org chart (an
                               ``org_run`` task) rather than thinking it
                               through inline. For ``maintenance``.
-  ``open_flow``             — opens a work-flow (trigger -> task -> gate ->
+  ``open_flow``            : opens a work-flow (trigger -> task -> gate ->
                               output) instead of a single think. For
                               ``decision`` (a choice worth a structured,
                               gated process rather than one opinion).
 
-This module resolves ONLY the *name* of a mode for a work type — it never
+This module resolves ONLY the *name* of a mode for a work type; it never
 calls a provider, launches a harness, or mints a task itself; wiring a mode's
 name to the actual execution path (chat think / research marker / org_run /
 flow run) is the caller's job, exactly like ``llm/router.py`` resolving a
@@ -53,11 +53,11 @@ __all__ = [
 class WorkingMode:
     """One registered way of working.
 
-    ``name``        — the registry key, also the stable identifier logged into
+    ``name``       : the registry key, also the stable identifier logged into
                        an Episode's ``decision``/``accion`` fields.
-    ``description`` — one line, human-readable (surfaced in ``/capabilities``-
+    ``description``: one line, human-readable (surfaced in ``/capabilities``-
                        style listings and test assertions).
-    ``tags``        — free-form hints for callers (e.g. ``{"tools": True}``);
+    ``tags``       : free-form hints for callers (e.g. ``{"tools": True}``);
                        purely descriptive, never interpreted by this module.
     """
 
@@ -85,7 +85,7 @@ register_mode(
     "answer_directly",
     WorkingMode(
         name="answer_directly",
-        description="One bounded, tool-less think — no delegation, no loop.",
+        description="One bounded, tool-less think; no delegation, no loop.",
         tags=frozenset({"single_turn"}),
     ),
 )
@@ -93,7 +93,7 @@ register_mode(
     "search_and_cite",
     WorkingMode(
         name="search_and_cite",
-        description="Route through the research bridge — a real web lookup, sourced.",
+        description="Route through the research bridge; a real web lookup, sourced.",
         tags=frozenset({"single_turn", "external_lookup"}),
     ),
 )
@@ -123,7 +123,7 @@ register_mode(
 )
 
 # The safest, cheapest fallback when a work type has no mapped mode, or the
-# mapped mode was never registered (a plugin removed/misnamed it) — never a
+# mapped mode was never registered (a plugin removed/misnamed it); never a
 # KeyError, never a silently "bigger" mode than what was asked for.
 DEFAULT_MODE = "answer_directly"
 
@@ -146,7 +146,7 @@ def resolve_mode(work_type: str, *, overrides: "dict[str, str] | None" = None) -
     Looks up ``overrides`` (if given) then :data:`WORK_TYPE_MODE` for the mode
     NAME, then :data:`MODES` for the registered :class:`WorkingMode`. An
     unknown work type, an unmapped-to mode, or an unregistered mode name all
-    degrade to :data:`DEFAULT_MODE` (``answer_directly``) rather than raising —
+    degrade to :data:`DEFAULT_MODE` (``answer_directly``) rather than raising;
     the working-mode axis must never crash the caller.
     """
     table = overrides if overrides else WORK_TYPE_MODE
@@ -155,7 +155,7 @@ def resolve_mode(work_type: str, *, overrides: "dict[str, str] | None" = None) -
     if mode is None:
         mode = MODES.get_or_none(DEFAULT_MODE)
     if mode is None:
-        # Even the default was somehow deregistered — synthesize a bare mode
+        # Even the default was somehow deregistered; synthesize a bare mode
         # rather than raise; this axis degrades, it never crashes a caller.
         return WorkingMode(name=DEFAULT_MODE, description="fallback: no modes registered")
     return mode

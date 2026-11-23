@@ -9,26 +9,26 @@ and no network. :class:`RemoteEmbedder` is an optional upgrade that hits either
 an OpenAI-compatible ``/v1/embeddings`` endpoint (cloud, or Ollama's own OpenAI
 compat surface) OR Ollama's NATIVE embeddings API (``/api/embed``, with a
 fallback to the older singular ``/api/embeddings``) depending on ``backend``;
-it NEVER crashes memory loading — any failure degrades silently to the hashing
+it NEVER crashes memory loading; any failure degrades silently to the hashing
 embedder. The fallback warning is logged at most ONCE per process.
 
 Backend selection (:func:`get_embedder`) reads three DEFENSIVE, ``getattr``-only
 config knobs so this module works unmodified whether or not ``Config`` has been
 extended with them:
 
-  - ``embedder_backend`` (default ``"auto"``) — ``"auto"`` prefers the existing
+  - ``embedder_backend`` (default ``"auto"``); ``"auto"`` prefers the existing
     explicit knobs (``embeddings_model``/``embedding_model``) when configured,
     else probes a local Ollama and falls back to hashing if unreachable;
     ``"ollama"`` forces the native Ollama backend (degrades to hashing, with a
     once-per-process warning, if unreachable); ``"hash"`` forces the offline
     embedder unconditionally.
-  - ``embedder_model`` (default ``"nomic-embed-text"``) — the Ollama model name
+  - ``embedder_model`` (default ``"nomic-embed-text"``); the Ollama model name
     used by the native backend.
   - ``ollama_base_url`` (falls back to ``embeddings_url``, then
-    ``http://localhost:11434``) — where the native Ollama API lives.
+    ``http://localhost:11434``); where the native Ollama API lives.
 
 A stable ``fingerprint`` string (e.g. ``"hash:v1"`` / ``"ollama:nomic-embed-text"``)
-identifies which backend+model an embedder is CONFIGURED for — distinct from the
+identifies which backend+model an embedder is CONFIGURED for; distinct from the
 ``name`` attribute, which reflects the ACTUAL backend used by the last ``embed()``
 call (and is what gets stamped onto stored vectors). Mixing vectors from
 different embedders makes cosine comparisons garbage, so :func:`needs_reindex`
@@ -76,7 +76,7 @@ def _tokenize(text: str) -> list[str]:
 
 
 def _bucket(token: str, dim: int) -> int:
-    """Stable hash of a token into ``[0, dim)`` — uses blake2b, NOT ``hash()``.
+    """Stable hash of a token into ``[0, dim)``: uses blake2b, NOT ``hash()``.
 
     Python's builtin ``hash()`` is salted per-process; blake2b is stable across
     runs so the same text always lands in the same buckets (determinism).
@@ -134,11 +134,11 @@ class RemoteEmbedder:
     flag.
 
     ``backend`` picks the wire format:
-      - ``"openai"`` (default, unchanged) — POST ``{base_url}/v1/embeddings``
+      - ``"openai"`` (default, unchanged); POST ``{base_url}/v1/embeddings``
         with ``{"model": ..., "input": [...]}``, OpenAI-compatible response
         shape (a ``data`` list of ``{embedding, index}``). Cloud providers and
         Ollama's own OpenAI-compat surface both speak this.
-      - ``"ollama"`` — POST ``{base_url}/api/embed`` with
+      - ``"ollama"``: POST ``{base_url}/api/embed`` with
         ``{"model": ..., "input": [...]}`` (Ollama's native batch API,
         response ``{"embeddings": [[...], ...]}``); on any failure of that call
         it retries via the older singular ``{base_url}/api/embeddings``
@@ -149,8 +149,8 @@ class RemoteEmbedder:
     the configured model name on success, or ``HashingEmbedder.name`` on
     fallback. Stamping stored vectors with this post-call name guarantees that
     vectors from different backends are never compared against each other in the
-    semantic layer. ``fingerprint`` is the CONFIGURED identity instead — stable
-    regardless of whether the last call happened to fall back — useful to detect
+    semantic layer. ``fingerprint`` is the CONFIGURED identity instead; stable
+    regardless of whether the last call happened to fall back; useful to detect
     a stale stamp (see :func:`needs_reindex`) before even calling ``embed()``.
     """
 
@@ -171,7 +171,7 @@ class RemoteEmbedder:
 
     # Hard per-text bound BEFORE the remote call. nomic-embed-text's context is
     # 2048 tokens and ollama may load it shorter; an over-long input 400s and
-    # that call's vectors silently degrade to hashing — MIXED vector spaces in
+    # that call's vectors silently degrade to hashing. MIXED vector spaces in
     # the store (the answer_cache has no model stamp to filter them). Clipping
     # the tail loses little semantically and kills the whole failure class.
     _MAX_EMBED_CHARS = 4000
@@ -239,7 +239,7 @@ class RemoteEmbedder:
             return [list(map(float, v)) for v in embeddings]
         except Exception:
             # Older Ollama builds only speak the singular /api/embeddings shape
-            # (one prompt per request) — try that before giving up entirely.
+            # (one prompt per request); try that before giving up entirely.
             out: list[list[float]] = []
             for text in texts:
                 resp = httpx.post(
@@ -313,7 +313,7 @@ def _ollama_reachable(base_url: str, timeout: float = 0.3) -> bool:
     """Best-effort, fast liveness probe for a local Ollama daemon.
 
     Short timeout on purpose: this runs on the hot ``get_embedder`` path, so a
-    down/unreachable daemon (connection refused — the common case when Ollama
+    down/unreachable daemon (connection refused; the common case when Ollama
     simply isn't running) must fail fast, not hang. Any exception → ``False``,
     never raises.
     """
@@ -329,11 +329,11 @@ def _ollama_reachable(base_url: str, timeout: float = 0.3) -> bool:
 def get_embedder(config=Config) -> "Embedder":
     """Return the best available embedder for ``config``.
 
-    Resolution (per call, not at import) — ``config.embedder_backend`` (default
+    Resolution (per call, not at import); ``config.embedder_backend`` (default
     ``"auto"``, read defensively via ``getattr`` so this works even before
     ``Config`` grows the attribute) gates everything:
 
-    - ``"hash"`` — always the offline :class:`HashingEmbedder`, unconditionally.
+    - ``"hash"``: always the offline :class:`HashingEmbedder`, unconditionally.
     - Otherwise, the pre-existing explicit knobs win first (unchanged, for
       backward compatibility):
         1. ``config.embeddings_model`` set → :class:`RemoteEmbedder` (OpenAI
@@ -341,15 +341,15 @@ def get_embedder(config=Config) -> "Embedder":
         2. ``config.embedding_model`` set (legacy) → same, at
            ``config.local_model_url``.
     - If neither explicit knob is set:
-        - ``"ollama"`` — force the native Ollama backend
+        - ``"ollama"``: force the native Ollama backend
           (``config.embedder_model`` / ``config.ollama_base_url``); degrades to
           :class:`HashingEmbedder` (with a once-per-process warning) if the
           daemon is unreachable.
-        - ``"auto"`` (default) — probe the local Ollama; use the native backend
+        - ``"auto"`` (default); probe the local Ollama; use the native backend
           if reachable, else :class:`HashingEmbedder`.
 
     In every branch, a REMOTE embedder's own ``embed()`` still degrades
-    per-call on failure — this function's job is only which embedder to hand
+    per-call on failure; this function's job is only which embedder to hand
     back, never a guarantee that the remote is actually usable.
     """
     backend = (getattr(config, "embedder_backend", "auto") or "auto").strip().lower()
@@ -357,21 +357,21 @@ def get_embedder(config=Config) -> "Embedder":
     if backend == "hash":
         return HashingEmbedder()
 
-    # New dedicated knobs (Phase 5) — explicit configuration always wins.
+    # New dedicated knobs (Phase 5); explicit configuration always wins.
     model = getattr(config, "embeddings_model", "") or ""
     if model:
         base_url = getattr(config, "embeddings_url", "") or "http://localhost:11434"
         api_key = getattr(config, "embeddings_api_key", "") or ""
         return RemoteEmbedder(model, base_url, api_key=api_key)
 
-    # Legacy knob (Phase 6 — kept for backward compatibility).
+    # Legacy knob (Phase 6; kept for backward compatibility).
     legacy_model = getattr(config, "embedding_model", "") or ""
     if legacy_model:
         legacy_url = getattr(config, "local_model_url", "") or OpenAICompatEmbedder._CLOUD_BASE
         api_key = getattr(config, "embeddings_api_key", "") or ""
         return RemoteEmbedder(legacy_model, legacy_url, api_key=api_key)
 
-    # Neither explicit knob is set — native Ollama, gated by embedder_backend.
+    # Neither explicit knob is set; native Ollama, gated by embedder_backend.
     ollama_model = getattr(config, "embedder_model", "") or "nomic-embed-text"
     ollama_base = (
         getattr(config, "ollama_base_url", "")
@@ -392,7 +392,7 @@ def get_embedder(config=Config) -> "Embedder":
             return HashingEmbedder()
         return RemoteEmbedder(ollama_model, ollama_base, api_key=api_key, backend="ollama")
 
-    # backend == "auto" (or any unrecognized value — degrade safely).
+    # backend == "auto" (or any unrecognized value; degrade safely).
     if _ollama_reachable(ollama_base):
         return RemoteEmbedder(ollama_model, ollama_base, api_key=api_key, backend="ollama")
     return HashingEmbedder()
@@ -404,7 +404,7 @@ def needs_reindex(stored_model: str, embedder: "Embedder") -> bool:
 
     Uses ``embedder.name`` (the same tag :func:`reindex` stamps new vectors
     with, and the same tag :mod:`lhassa.memory.load` filters semantic matches
-    by) rather than ``fingerprint`` — the two coincide once ``embed()`` has
+    by) rather than ``fingerprint``: the two coincide once ``embed()`` has
     been called at least once against the live backend, and this keeps the
     comparison consistent with the one the semantic-query filter already makes.
     Never raises: a missing/odd ``embedder.name`` degrades to "needs reindex".
@@ -424,7 +424,7 @@ async def reindex(instance_id: str, config=None) -> int:
     Best-effort PER FACT: a single fact's upsert failing (e.g. a transient DB
     error) is logged at DEBUG and skipped, not fatal to the whole batch.
     Returns the number of facts successfully re-embedded (not the total
-    considered — see :func:`reindex_all` for a fuller breakdown).
+    considered; see :func:`reindex_all` for a fuller breakdown).
     """
     from lhassa.core import db
     from lhassa.memory.facts import load_facts
@@ -440,7 +440,7 @@ async def reindex(instance_id: str, config=None) -> int:
         try:
             await db.upsert_fact_embedding(instance_id, fact.id, vec, model=embedder.name)
             done += 1
-        except Exception as exc:  # best-effort — one bad row never aborts the batch
+        except Exception as exc:  # best-effort; one bad row never aborts the batch
             logger.debug(f"reindex: fact {fact.id} failed, skipping: {exc}")
     return done
 
@@ -448,9 +448,10 @@ async def reindex(instance_id: str, config=None) -> int:
 async def _reindex_answer_cache(instance_id: str, embedder: "Embedder") -> tuple[int, int]:
     """Re-embed every cached question for ``instance_id`` with ``embedder``.
 
-    ``answer_cache`` has no per-row model stamp (unlike ``fact_embeddings``), so
-    this writes the new vector directly via a raw ``UPDATE`` against the same
-    table :mod:`lhassa.core.db` already owns — reusing ``db.DB_PATH`` and
+    ``answer_cache`` carries a per-row ``embedder`` stamp (migration 12,
+    mirroring ``fact_embeddings.model``), so this writes both the new vector
+    AND the current embedder's name via a raw ``UPDATE`` against the same
+    table :mod:`lhassa.core.db` already owns; reusing ``db.DB_PATH`` and
     ``db.list_answer_cache`` rather than duplicating the connection/table
     definition. Best-effort per row. Returns ``(updated, failed)``.
     """
@@ -467,12 +468,13 @@ async def _reindex_answer_cache(instance_id: str, embedder: "Embedder") -> tuple
             vector = embedder.embed([row["question"]])[0]
             async with aiosqlite.connect(db.DB_PATH) as conn:
                 await conn.execute(
-                    "UPDATE answer_cache SET embedding = ? WHERE instance_id = ? AND id = ?",
-                    (_json_dump(vector), instance_id, row["id"]),
+                    "UPDATE answer_cache SET embedding = ?, embedder = ? "
+                    "WHERE instance_id = ? AND id = ?",
+                    (_json_dump(vector), embedder.name, instance_id, row["id"]),
                 )
                 await conn.commit()
             updated += 1
-        except Exception as exc:  # best-effort — one bad row never aborts the batch
+        except Exception as exc:  # best-effort; one bad row never aborts the batch
             logger.debug(f"reindex: answer_cache row {row.get('id')} failed, skipping: {exc}")
             failed += 1
     return updated, failed
@@ -486,7 +488,7 @@ def _json_dump(vector: list[float]) -> str:
 
 async def reindex_all(instance_id: str, config=None) -> dict:
     """Re-embed BOTH facts and cached answers for ``instance_id`` with the
-    CURRENT embedder — the full migration path after switching backends.
+    CURRENT embedder; the full migration path after switching backends.
 
     Never raises: each half is independently best-effort (a facts failure
     doesn't block the answer-cache pass and vice versa). Returns a summary

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """
-Deterministic policy layer — the brain's "reflexes" (zero-token triage).
+Deterministic policy layer; the brain's "reflexes" (zero-token triage).
 
 Today every trigger that doesn't map to a fixed action falls straight through to
 LLM judgment, even when the right response is obvious in code: a finished job
@@ -15,7 +15,7 @@ rule functions that either resolve a trigger outright (a fixed action, or a
 A reflex is a pure function ``(Trigger) -> PolicyDecision | None``; the first
 reflex to return non-``None`` wins (``REFLEXES`` preserves registration order via
 the shared :class:`~lhassa.registry.Registry`, mirroring ``core/actions.py``).
-:func:`evaluate` NEVER raises — a broken reflex (or a totally unexpected error)
+:func:`evaluate` NEVER raises; a broken reflex (or a totally unexpected error)
 degrades to the safe default: think, minimal context, not hard.
 """
 
@@ -40,16 +40,16 @@ if TYPE_CHECKING:
 class PolicyDecision:
     """One reflex's verdict for a trigger.
 
-    ``kind``          — "action" (run a fixed deterministic action), "skip" (log
+    ``kind``         : "action" (run a fixed deterministic action), "skip" (log
                          the episode and stop, $0, no LLM), or "think" (hand off
                          to the router/judgment path).
-    ``action``         — the fixed action name to run, only set when kind=="action".
-    ``params``         — params for that fixed action (kind=="action" only).
-    ``context_tier``   — "minimal" or "full" — how much memory the judgment path
+    ``action``        : the fixed action name to run, only set when kind=="action".
+    ``params``        : params for that fixed action (kind=="action" only).
+    ``context_tier``   ("minimal" or "full") how much memory the judgment path
                          should load (kind=="think" only; ignored otherwise).
-    ``hard``           — whether this judgment is hard enough for the smart model
+    ``hard``          : whether this judgment is hard enough for the smart model
                          (kind=="think" only; ignored otherwise).
-    ``reason``         — human-readable trace, folded into the episode's ``decision``.
+    ``reason``        : human-readable trace, folded into the episode's ``decision``.
     """
 
     kind: str
@@ -70,7 +70,7 @@ def register_reflex(name: str, fn: "ReflexFn | None" = None, *, override: bool =
     """Register a reflex under ``name``. Usable as a direct call or decorator.
 
     The drop-in seam for a plugin to add a new zero-token triage rule without
-    editing this module. Order matters — reflexes are tried in registration
+    editing this module. Order matters; reflexes are tried in registration
     order and the first non-``None`` result wins, so a new reflex meant to run
     before ``"default"`` must be registered before it (the built-ins reserve
     ``"default"`` as the catch-all, always registered last).
@@ -182,7 +182,7 @@ def _health_alert(trigger: "Trigger") -> "Optional[PolicyDecision]":
             reason="health alert: needs judgment",
         )
     # Neither warn nor alert (shouldn't normally fire, watchlist only emits on a
-    # transition into warn/alert) — fall through to the default reflex.
+    # transition into warn/alert); fall through to the default reflex.
     return None
 
 
@@ -199,7 +199,7 @@ def _default(trigger: "Trigger") -> "Optional[PolicyDecision]":
 register_reflex("job_review", _job_review)
 register_reflex("repo_changed", _repo_changed)
 register_reflex("health_alert", _health_alert)
-register_reflex("default", _default)  # always last — the catch-all
+register_reflex("default", _default)  # always last; the catch-all
 
 
 # ── the safe fallback (used when evaluation itself errors) ────────────────────
@@ -208,7 +208,7 @@ _SAFE_FALLBACK = PolicyDecision(
     kind="think",
     context_tier="minimal",
     hard=False,
-    reason="policy evaluation degraded (error) — safe default: think/minimal",
+    reason="policy evaluation degraded (error); safe default: think/minimal",
 )
 
 
@@ -234,5 +234,5 @@ def evaluate(trigger: "Trigger") -> PolicyDecision:
     except Exception as exc:  # belt-and-suspenders: policy must never crash step()
         logger.warning(f"policy: evaluate() failed, degrading to safe default: {exc}")
         return _SAFE_FALLBACK
-    # No reflex matched at all (shouldn't happen — "default" always matches).
+    # No reflex matched at all (shouldn't happen; "default" always matches).
     return _SAFE_FALLBACK

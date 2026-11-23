@@ -28,26 +28,26 @@ import { useDeptDrag } from './orgflow/useDeptDrag'
 // custom nodes, parent→child command links are SOLID edges (the command spine).
 // On TOP of that spine it draws the typed RELATIONSHIP overlay (reads / notifies /
 // reviews / collaborates) as dashed, animated, per-kind-colored edges with a small
-// kind label and direction arrows — a legend with per-kind layer toggles lets the
+// kind label and direction arrows; a legend with per-kind layer toggles lets the
 // owner show/hide each kind so the two graphs never get confused. Lhassa (the admin / root)
-// is visually special and anchored — the sovereign: a matte gold fill with a thin
+// is visually special and anchored; the sovereign: a matte gold fill with a thin
 // deep-red ring, pinned at the top, with no drag-out handle (it can't be
 // re-parented or deleted). Layout is a tidy layered
 // top-down tree computed from depth; no heavy layout dep.
 //
 // This file is the ReactFlow COMPOSITION; the pieces live beside it under `orgflow/`:
-//   • orgflow/layout.js    — pure tidy-tree + department-box math + offset store
-//   • orgflow/nodes.jsx    — the brain + department-group node renderers (nodeTypes)
-//   • orgflow/legend.jsx   — the relationship overlay legend + layer toggles
-//   • orgflow/menu.jsx     — the right-click "Move under ▸" context menu
-//   • orgflow/useDeptDrag  — the draggable-department offset state + persistence + reset
+//   • orgflow/layout.js   ; pure tidy-tree + department-box math + offset store
+//   • orgflow/nodes.jsx   ; the brain + department-group node renderers (nodeTypes)
+//   • orgflow/legend.jsx  ; the relationship overlay legend + layer toggles
+//   • orgflow/menu.jsx    ; the right-click "Move under ▸" context menu
+//   • orgflow/useDeptDrag ; the draggable-department offset state + persistence + reset
 //
 // Interactions wired back to BrainsPanel (which owns the API calls):
 //   • click a node            → onSelect(id)        (drives the side inspector)
 //   • drag A's bottom → B     → onMove(A, B)        re-parent A under B
 //     (blocked when it would form a cycle, target itself, or move the admin)
 
-// The map React Flow keys custom nodes on — brains + the department-group boxes.
+// The map React Flow keys custom nodes on; brains + the department-group boxes.
 const nodeTypes = { brain: BrainFlowNode, deptGroup: DeptGroupNode }
 
 function FlowInner({ topology, selectedId, routePath, relationships, kindMeta, onSelect, onMove }) {
@@ -64,7 +64,7 @@ function FlowInner({ topology, selectedId, routePath, relationships, kindMeta, o
   const admin = topology?.admin
   const rf = useReactFlow()
 
-  // #12 — the tidy-tree layout and the department bounding-box math are the heavy
+  // #12; the tidy-tree layout and the department bounding-box math are the heavy
   // derivations. Memoize them on the topology so re-selecting a node or toggling a
   // relationship layer (edges-only churn) never recomputes the whole layout.
   const layout = useMemo(() => computeLayout(topology), [topology])
@@ -166,7 +166,7 @@ function FlowInner({ topology, selectedId, routePath, relationships, kindMeta, o
     setRfNodes([...offsetGroupNodes, ...brainNodes])
   }, [topology, selectedId, routePath, routeSet, admin, layout, groupNodes, deptStyle, nodeDept, deptLayouts, nodeOffsets, onDeptResizeEnd, setRfNodes])
 
-  // #7 — keep freshly-created/refreshed nodes on screen. A signature of the node-id
+  // #7; keep freshly-created/refreshed nodes on screen. A signature of the node-id
   // SET (not positions) so this fires only when brains are added/removed, not on a
   // cosmetic drag. When a brain is selected we center IT (dock-aware, below) instead
   // of refitting the whole graph.
@@ -175,11 +175,11 @@ function FlowInner({ topology, selectedId, routePath, relationships, kindMeta, o
     [topology],
   )
 
-  // #7a — after the node set changes, fit the whole graph so new departments/brains
-  // aren't rendered off-screen. #7b — when a node is selected (incl. a just-created
+  // #7a; after the node set changes, fit the whole graph so new departments/brains
+  // aren't rendered off-screen. #7b; when a node is selected (incl. a just-created
   // one), pan it into the VISIBLE area: on desktop the inspector docks on the right,
   // so we bias the node left of centre so the dock never covers it. Pan/zoom stay
-  // usable — this only nudges on a set/selection change, animated.
+  // usable; this only nudges on a set/selection change, animated.
   useEffect(() => {
     const raf = requestAnimationFrame(() => {
       const target = selectedId && rf.getNode(selectedId)
@@ -252,8 +252,8 @@ function FlowInner({ topology, selectedId, routePath, relationships, kindMeta, o
 
   // Right-click a node → a floating "Move under ▸" menu of VALID new parents. This
   // makes re-parenting reachable without a drag (and usable on trackpads/touch via
-  // a long-press → contextmenu). Validity reuses isValidConnection — no cycles, not
-  // itself, not its current parent, admin anchored — so the menu can never offer an
+  // a long-press → contextmenu). Validity reuses isValidConnection; no cycles, not
+  // itself, not its current parent, admin anchored; so the menu can never offer an
   // illegal move. The admin node has no valid targets (it's pinned at the root).
   const [menu, setMenu] = useState(null) // { x, y, nodeId } | null
   const onNodeContextMenu = useCallback((e, node) => {

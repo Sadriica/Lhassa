@@ -1,25 +1,25 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """
-Mixture-of-Agents (MoA) — the same prompt to N providers in parallel, an
+Mixture-of-Agents (MoA); the same prompt to N providers in parallel, an
 aggregator synthesizes a single answer (Wave D, §doc/plan.md).
 
 For decisions that are expensive to get wrong, one model's opinion isn't
 enough: fan a prompt out to the owner's chosen fleet (default
-``claude,codex,default`` — the two subscription CLIs plus the cost-gateway
+``claude,codex,default``: the two subscription CLIs plus the cost-gateway
 seat), let each panelist answer independently, then spend ONE more
-completion — the routine/cheap path, never the hard one, this is a
-comparison-and-synthesis task — comparing the answers and returning a single
+completion; the routine/cheap path, never the hard one, this is a
+comparison-and-synthesis task; comparing the answers and returning a single
 verdict that names real disagreement honestly instead of papering over it.
 
 This is an explicit, opt-in consultation: the ``/moa`` chat command and
 :func:`lhassa.agents.author.propose_tool`'s ``moa_verdict`` kwarg are the only
-callers. It is never wired into the automatic think path — the extra spend of
+callers. It is never wired into the automatic think path; the extra spend of
 running N models is always something the owner (or an explicit code path)
 asked for.
 
 Every sub-call and the aggregation call are fully try/excepted: a dead CLI, a
 missing binary, a budget-exceeded provider, or a malformed/empty reply all
-become one honest panel entry (or an honest aggregator fallback) — never sink
+become one honest panel entry (or an honest aggregator fallback); never sink
 the rest of the panel, never raise out of :func:`moa`.
 """
 
@@ -36,10 +36,10 @@ from lhassa.llm import router as _router
 from lhassa.llm.provider import ModelProvider, get_model_provider
 
 # Owner-decided default fleet: the two subscription CLIs + the cost-gateway
-# seat (deepseek, in practice today) — see doc/plan.md Wave D.
+# seat (deepseek, in practice today); see doc/plan.md Wave D.
 _DEFAULT_PROVIDERS = "claude,codex,default"
 
-# Fewer than this many honest panel answers isn't a "mixture" — degrade to the
+# Fewer than this many honest panel answers isn't a "mixture": degrade to the
 # single answer instead of paying for an aggregation pass over one opinion.
 _MIN_PANEL = 2
 
@@ -48,7 +48,7 @@ _AGGREGATOR_SYSTEM = (
     "different models, each labeled by its provider name. Compare them: "
     "identify where they agree, identify any real disagreement, and "
     "synthesize the single best answer. If the panel genuinely disagrees on "
-    "something material, say so plainly instead of papering over it — "
+    "something material, say so plainly instead of papering over it; "
     "honesty about disagreement is more useful than false consensus. Answer "
     "the original question directly; do not just describe the panel."
 )
@@ -74,7 +74,7 @@ class MoaResult:
 
 
 def _fleet(providers: Optional[list[str]], config: Any) -> list[str]:
-    """Resolve the panel's provider names — explicit arg, else config, else default."""
+    """Resolve the panel's provider names; explicit arg, else config, else default."""
     if providers:
         return [p.strip() for p in providers if p and p.strip()]
     raw = getattr(config, "moa_providers", "") or _DEFAULT_PROVIDERS
@@ -85,7 +85,7 @@ def _binary_missing(name: str, config: Any) -> bool:
     """True iff ``name`` is a CLI provider whose binary is not on PATH.
 
     Mirrors :func:`lhassa.llm.router.fallback_chain`'s own skip-if-missing
-    discipline so a dead CLI never even gets attempted — an honest panel
+    discipline so a dead CLI never even gets attempted; an honest panel
     entry is cheaper than a doomed subprocess spawn.
     """
     if name not in _router.CLI_PROVIDERS:
@@ -97,7 +97,7 @@ def _binary_missing(name: str, config: Any) -> bool:
 async def _call_one(
     name: str, config: Any, messages: list[dict], system: Optional[str], max_tokens: int
 ) -> dict:
-    """Resolve + call one panelist. Never raises — returns an honest panel entry."""
+    """Resolve + call one panelist. Never raises; returns an honest panel entry."""
     if _binary_missing(name, config):
         return {"provider": name, "ok": False, "error": "unavailable", "cost_usd": 0.0}
 
@@ -168,7 +168,7 @@ async def moa(
       reply becomes one honest ``panel`` entry, never sinks the others (each
       sub-call is independently try/excepted before ``asyncio.gather``);
     - fewer than 2 successful panel answers SKIPS aggregation entirely (no
-      extra spend) — returns the single answer, or an honest failure text if
+      extra spend); returns the single answer, or an honest failure text if
       nobody answered;
     - an aggregator failure degrades to the first successful panel answer.
     """
@@ -196,7 +196,7 @@ async def moa(
     if not oks:
         return MoaResult(
             text=(
-                "The panel didn't come back with an answer this time — "
+                "The panel didn't come back with an answer this time; "
                 "every provider was unavailable."
             ),
             panel=panel,
@@ -205,7 +205,7 @@ async def moa(
     if len(oks) < _MIN_PANEL:
         return MoaResult(text=oks[0]["text"], panel=panel, total_cost_usd=total_cost)
 
-    # Aggregation: one more completion, the ROUTINE (cheap) path — never the
+    # Aggregation: one more completion, the ROUTINE (cheap) path; never the
     # smart/hard model, this is a comparison-and-synthesis task, not a hard
     # judgment call. Mirrors the router's own cheap-path choice (§router.cascade).
     question = _question_text(messages)

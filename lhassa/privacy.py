@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """
-Pseudonymization hook (§3-Fase 0/6) — deterministic, regex-based PII scrubbing.
+Pseudonymization hook (§3-Fase 0/6); deterministic, regex-based PII scrubbing.
 
 The brain's heartbeat used to lean on free cloud models, so any context leaving
 the machine had to be stripped of obvious PII first. This module provides that
@@ -9,7 +9,7 @@ addresses and secret-shaped tokens for stable, reversible placeholders
 (``<email_1>``, ``<phone_1>``, …) and can put them back afterwards.
 
 The hook is enforced at the provider boundary (``PseudonymizingProvider`` in
-``lhassa.llm.provider``) and RELAXES when the active provider is local — local
+``lhassa.llm.provider``) and RELAXES when the active provider is local; local
 inference never leaves the box, so there is nothing to scrub.
 
 Hard rule: nothing here may ever raise. On any error it degrades to passthrough
@@ -93,7 +93,7 @@ def pseudonymize(text: str) -> tuple[str, dict[str, str]]:
 
     Returns ``(scrubbed_text, mapping)`` where ``mapping`` is
     ``{placeholder: original}`` (reversible via :func:`depseudonymize`). Never
-    raises — on any error returns the input unchanged with an empty mapping.
+    raises; on any error returns the input unchanged with an empty mapping.
     """
     try:
         mapping: dict[str, str] = {}
@@ -133,7 +133,7 @@ def depseudonymize(text: str, mapping: dict[str, str]) -> str:
     """Restore originals in ``text`` using ``mapping`` from :func:`pseudonymize`.
 
     Placeholders are angle-bracket delimited so plain substitution is safe.
-    Never raises — on any error returns ``text`` unchanged.
+    Never raises; on any error returns ``text`` unchanged.
     """
     try:
         if not mapping or not isinstance(text, str):

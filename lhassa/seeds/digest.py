@@ -1,16 +1,16 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""The ``digest`` seed — schedule Etapa 2's twice-daily operative digest.
+"""The ``digest`` seed; schedule Etapa 2's twice-daily operative digest.
 
 Mints two recurring ``send_digest`` tasks (see :mod:`lhassa.actionpack._digest` /
 :mod:`lhassa.notify.digest`): one due at 08:00 LOCAL time and one at 21:00 LOCAL
-time, each with an 86400-second (daily) recurrence — ``core/step.py``'s recurrence
+time, each with an 86400-second (daily) recurrence; ``core/step.py``'s recurrence
 re-minting (§ the "hace y duerme" loop) keeps re-minting the next occurrence every
 time one fires, so once applied this schedule runs forever with no further
 intervention. Entirely deterministic and $0: minting a task spends no tokens, and
 ``send_digest`` itself never calls an LLM.
 
 Idempotent + non-destructive, matching the ``cv`` seed's contract: re-applying does
-NOT pile up duplicate schedules — it skips minting when enough matching pending
+NOT pile up duplicate schedules; it skips minting when enough matching pending
 ``send_digest`` tasks already exist.
 """
 
@@ -34,21 +34,33 @@ _ACTION = "send_digest"
 # ``core/step.py``'s recurrence re-minting expect).
 _DAILY_SECONDS = str(24 * 60 * 60)
 
-# Default (hour, minute) in LOCAL time for each scheduled digest; overridable via
-# ``config.digest_hour_morning`` / ``config.digest_hour_evening``.
+# Default (hour, minute) in LOCAL time for the two standing digests; overridable
+# via ``config.digest_hour_morning`` / ``config.digest_hour_evening``.
 _DEFAULT_SCHEDULE: tuple[tuple[int, int], ...] = ((8, 0), (21, 0))
+
+# The optional midday slot is OFF unless configured, so this seed keeps minting
+# exactly two digests for everyone who has not asked for a third.
+_MIDDAY_OFF = -1
 
 
 def _schedule(config: "Config") -> tuple[tuple[int, int], ...]:
-    """The (hour, minute) pairs to schedule, honoring the config overrides."""
+    """The (hour, minute) pairs to schedule, honoring the config overrides.
+
+    Sorted by hour so the slots read in the order the owner's day runs, whatever
+    order the knobs are defined in.
+    """
     overrides = (
         getattr(config, "digest_hour_morning", None),
         getattr(config, "digest_hour_evening", None),
     )
-    return tuple(
+    hours = [
         (h, 0) if isinstance(h, int) and 0 <= h <= 23 else (default_h, default_m)
         for h, (default_h, default_m) in zip(overrides, _DEFAULT_SCHEDULE)
-    )
+    ]
+    midday = getattr(config, "digest_hour_midday", _MIDDAY_OFF)
+    if isinstance(midday, int) and 0 <= midday <= 23:
+        hours.append((midday, 0))
+    return tuple(sorted(set(hours)))
 
 
 def _resolve_config(config: "Optional[Config]") -> "Config":
@@ -78,12 +90,12 @@ async def _existing_digest_hours(instance_id: str) -> set[int]:
     """Local hours already covered by a pending ``send_digest`` task.
 
     Idempotency is per-SLOT, not a bare count: two tasks at the SAME hour must
-    not satisfy a schedule that wants two DIFFERENT hours (morning + evening) —
+    not satisfy a schedule that wants two DIFFERENT hours (morning + evening);
     a count-based check (``existing >= len(schedule)``) let a doubled morning
     slot mask a missing evening one, so the evening digest was never minted and
     the owner got two morning digests and no evening. Keying on the local hour
     of each pending task makes the seed self-healing: it mints exactly the slots
-    that are actually absent. Never raises — an unparseable ``due_at`` is skipped."""
+    that are actually absent. Never raises; an unparseable ``due_at`` is skipped."""
     from lhassa.core import db
 
     tasks = await db.list_tasks(instance_id, estado="pendiente", limit=200)
@@ -107,7 +119,7 @@ async def seed_digest_schedule(config: "Optional[Config]" = None) -> dict:
     Returns ``{"minted": [...], "skipped": bool, "errors": [...]}``. Skips minting
     when at least as many matching pending tasks already exist as the schedule has
     entries, so re-applying the seed never piles up duplicate recurring schedules.
-    Never raises destructively — a partial failure is recorded under ``errors``.
+    Never raises destructively; a partial failure is recorded under ``errors``.
     """
     cfg = _resolve_config(config)
     instance_id = getattr(cfg, "instance_id", None) or "inst_personal"
@@ -127,12 +139,12 @@ async def seed_digest_schedule(config: "Optional[Config]" = None) -> dict:
 
         existing_hours = await _existing_digest_hours(instance_id)
 
-        # HUMANO origin, actor "seed:digest" — a deliberate, human-authored bootstrap,
+        # HUMANO origin, actor "seed:digest": a deliberate, human-authored bootstrap,
         # not a model judgment, so it needs no approval (send_digest is INTERNO/no-HITL).
         origin = Origin(trust=TrustLevel.HUMANO, actor_id="seed:digest")
         for hour, minute in schedule:
             if hour in existing_hours:
-                continue  # this slot is already scheduled — never duplicate it
+                continue  # this slot is already scheduled; never duplicate it
             due_at = _next_local_occurrence(hour, minute).isoformat()
             task_id, estado = await mint_task(
                 instance_id,
@@ -166,11 +178,11 @@ async def seed_digest_schedule(config: "Optional[Config]" = None) -> dict:
     "recurring, $0 send_digest task.",
 )
 def apply(config: "Optional[Config]" = None) -> dict:
-    """The ``digest`` seed entry point — see :func:`seed_digest_schedule`.
+    """The ``digest`` seed entry point; see :func:`seed_digest_schedule`.
 
     ``Seed.apply`` is a plain sync callable (the CLI/``apply_all`` calling
     convention); ``seed_digest_schedule`` is async (it mints tasks through the DB),
-    so this thin wrapper drives it with ``asyncio.run`` — safe here because seeds
+    so this thin wrapper drives it with ``asyncio.run``: safe here because seeds
     are only ever invoked from a sync context (the CLI), never from inside a
     already-running event loop.
     """

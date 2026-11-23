@@ -1,4 +1,4 @@
-"""Tests for lhassa.org.coordinator — the two-brain core (Fase 7)."""
+"""Tests for lhassa.org.coordinator; the two-brain core (Fase 7)."""
 
 import pytest
 import pytest_asyncio  # noqa: F401
@@ -22,7 +22,7 @@ async def test_two_brain_assign_handle_collect(tmp_path, monkeypatch):
     general = GeneralBrain(instance_id="inst_personal")
     sales = DepartmentBrain(department="sales", instance_id="inst_personal")
 
-    # who actually ran the work — proves the department side executes, not general
+    # who actually ran the work; proves the department side executes, not general
     ran_on = {}
 
     def executor(goal, *, department):
@@ -61,7 +61,7 @@ async def test_general_never_executes_the_work(tmp_path, monkeypatch):
     from lhassa.org.coordinator import GeneralBrain
 
     general = GeneralBrain(instance_id="inst_personal")
-    # GeneralBrain has no execution method at all — it only routes.
+    # GeneralBrain has no execution method at all; it only routes.
     assert not hasattr(general, "handle")
     assert hasattr(general, "assign")
     assert hasattr(general, "collect")
@@ -98,7 +98,7 @@ async def test_department_cannot_assign(tmp_path, monkeypatch):
     from lhassa.org.coordinator import GeneralBrain
     from lhassa.org import rbac
 
-    # a department role may not assign — verified at the matrix and brain level
+    # a department role may not assign; verified at the matrix and brain level
     assert not rbac.can("department", "assign", "task")
     # GeneralBrain.assign requires the general role (it is the only assigner)
     general = GeneralBrain(instance_id="inst_personal")

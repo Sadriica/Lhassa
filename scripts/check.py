@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Lhassa pre-flight check — validates your environment before running `make run`.
+Lhassa pre-flight check; validates your environment before running `make run`.
 
 Usage:
   uv run python scripts/check.py           # quick checks (no API calls)
@@ -47,7 +47,7 @@ if env_file.exists():
     load_dotenv(env_file)
     ok(f".env loaded from {env_file}")
 else:
-    warn(".env not found — copy .env.example to .env and fill in your keys")
+    warn(".env not found; copy .env.example to .env and fill in your keys")
 
 
 # ── 1. Python version ──────────────────────────────────────────────────────────
@@ -57,7 +57,7 @@ major, minor = sys.version_info[:2]
 if (major, minor) >= (3, 13):
     ok(f"Python {major}.{minor} ✓")
 else:
-    fail(f"Python {major}.{minor} — Lhassa requires 3.13 or newer")
+    fail(f"Python {major}.{minor}; Lhassa requires 3.13 or newer")
 
 
 # ── 2. Node.js ─────────────────────────────────────────────────────────────────
@@ -71,9 +71,9 @@ if node:
     if major_node >= 18:
         ok(f"Node.js {v} ✓")
     else:
-        fail(f"Node.js {v} — Lhassa requires 18 or newer")
+        fail(f"Node.js {v}; Lhassa requires 18 or newer")
 else:
-    fail("node not found in PATH — install Node.js 18+")
+    fail("node not found in PATH; install Node.js 18+")
 
 
 # ── 3. Dashboard ───────────────────────────────────────────────────────────────
@@ -83,7 +83,7 @@ dist = ROOT / "dashboard" / "dist"
 if dist.exists() and any(dist.iterdir()):
     ok("Dashboard built (dashboard/dist/ exists)")
 else:
-    warn("Dashboard not built — run  make dashboard  to build it")
+    warn("Dashboard not built; run  make dashboard  to build it")
     _info("Lhassa still works without the dashboard; it's optional")
 
 
@@ -97,12 +97,12 @@ cartesia  = os.getenv("CARTESIA_API_KEY", "")
 if deepgram:
     ok("DEEPGRAM_API_KEY is set")
 else:
-    fail("DEEPGRAM_API_KEY is missing — sign up at console.deepgram.com")
+    fail("DEEPGRAM_API_KEY is missing; sign up at console.deepgram.com")
 
 if cartesia:
     ok("CARTESIA_API_KEY is set")
 else:
-    fail("CARTESIA_API_KEY is missing — sign up at console.cartesia.ai")
+    fail("CARTESIA_API_KEY is missing; sign up at console.cartesia.ai")
 
 _head("LLM provider")
 
@@ -121,9 +121,9 @@ if found_llm:
         ok(f"{env} is set  →  provider: {prov}")
     if len(found_llm) > 1:
         first_env, first_prov = found_llm[0]
-        _info(f"Multiple LLM keys found — {first_prov} wins (auto-detection priority order)")
+        _info(f"Multiple LLM keys found; {first_prov} wins (auto-detection priority order)")
 elif ollama_explicit:
-    ok("LHASSA_LLM_PROVIDER=ollama — no API key required")
+    ok("LHASSA_LLM_PROVIDER=ollama; no API key required")
     ollama_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
     _info(f"Ollama URL: {ollama_url}")
 else:
@@ -131,7 +131,7 @@ else:
         "No LLM API key found. Set one of: GROQ_API_KEY, ANTHROPIC_API_KEY, "
         "OPENAI_API_KEY, OPENROUTER_API_KEY, CEREBRAS_API_KEY"
     )
-    _info("Groq has a free tier — sign up at console.groq.com")
+    _info("Groq has a free tier; sign up at console.groq.com")
 
 
 # ── 5. Optional features ───────────────────────────────────────────────────────
@@ -140,9 +140,9 @@ _head("Optional features")
 
 brave = os.getenv("BRAVE_API_KEY", "")
 if brave:
-    ok("BRAVE_API_KEY set — web search uses Brave")
+    ok("BRAVE_API_KEY set; web search uses Brave")
 else:
-    _info("BRAVE_API_KEY not set — web search falls back to DuckDuckGo (fine)")
+    _info("BRAVE_API_KEY not set; web search falls back to DuckDuckGo (fine)")
 
 vision_capable = {"anthropic", "openai", "openrouter"}
 active_prov = (found_llm[0][1] if found_llm else None)
@@ -152,24 +152,24 @@ has_vision_key = (
     or bool(os.getenv("OPENAI_API_KEY"))
 )
 if has_vision_key:
-    ok("Vision tools (analyze_screen, analyze_image) — enabled")
+    ok("Vision tools (analyze_screen, analyze_image); enabled")
 else:
-    warn("Vision tools disabled — set ANTHROPIC_API_KEY or OPENAI_API_KEY to enable")
+    warn("Vision tools disabled; set ANTHROPIC_API_KEY or OPENAI_API_KEY to enable")
 
 github_token = os.getenv("GITHUB_TOKEN", "")
 if github_token:
-    ok("GITHUB_TOKEN set — GitHub tools enabled")
+    ok("GITHUB_TOKEN set. GitHub tools enabled")
 else:
-    _info("GITHUB_TOKEN not set — GitHub tools disabled")
+    _info("GITHUB_TOKEN not set. GitHub tools disabled")
 
 ms_tenant = os.getenv("MS_TENANT_ID", "")
 ms_client = os.getenv("MS_CLIENT_ID", "")
 if ms_tenant and ms_client:
-    ok("MS_TENANT_ID + MS_CLIENT_ID set — Outlook tools enabled")
+    ok("MS_TENANT_ID + MS_CLIENT_ID set. Outlook tools enabled")
 elif ms_tenant or ms_client:
-    warn("Outlook: only one of MS_TENANT_ID / MS_CLIENT_ID is set — both are required")
+    warn("Outlook: only one of MS_TENANT_ID / MS_CLIENT_ID is set; both are required")
 else:
-    _info("MS_TENANT_ID / MS_CLIENT_ID not set — Outlook tools disabled")
+    _info("MS_TENANT_ID / MS_CLIENT_ID not set. Outlook tools disabled")
 
 
 # ── 6. Audio devices ───────────────────────────────────────────────────────────
@@ -190,7 +190,7 @@ try:
         for idx, name in devices:
             _info(f"[{idx}] {name}")
     else:
-        fail("No audio input devices found — check your microphone")
+        fail("No audio input devices found; check your microphone")
 
     mic_name = os.getenv("LHASSA_MIC_NAME", "")
     if mic_name:
@@ -203,10 +203,10 @@ try:
                 "Lhassa will fall back to the system default."
             )
     else:
-        _info("LHASSA_MIC_NAME not set — using system default input device")
+        _info("LHASSA_MIC_NAME not set; using system default input device")
 
 except ImportError:
-    warn("pyaudio not installed — run  make install  first")
+    warn("pyaudio not installed; run  make install  first")
 
 
 # ── 7. Claude CLI (agent backend) ─────────────────────────────────────────────
@@ -216,17 +216,17 @@ claude_bin = shutil.which("claude")
 agent_backend_env = os.getenv("LHASSA_AGENT_BACKEND", "").lower()
 
 if agent_backend_env == "builtin":
-    ok("LHASSA_AGENT_BACKEND=builtin — built-in LLM tool loop")
+    ok("LHASSA_AGENT_BACKEND=builtin; built-in LLM tool loop")
 elif agent_backend_env == "claude_code":
     if claude_bin:
-        ok(f"LHASSA_AGENT_BACKEND=claude_code — claude found at {claude_bin}")
+        ok(f"LHASSA_AGENT_BACKEND=claude_code; claude found at {claude_bin}")
     else:
         fail(
             "LHASSA_AGENT_BACKEND=claude_code but 'claude' not found in PATH. "
             "Install Claude Code or set LHASSA_AGENT_BACKEND=builtin"
         )
 elif claude_bin:
-    ok(f"claude CLI found at {claude_bin} — agents will use claude_code (auto-detected)")
+    ok(f"claude CLI found at {claude_bin}; agents will use claude_code (auto-detected)")
     agent_dir = os.getenv("LHASSA_AGENT_DIR", "")
     if agent_dir:
         if Path(agent_dir).exists():
@@ -234,9 +234,9 @@ elif claude_bin:
         else:
             warn(f"LHASSA_AGENT_DIR={agent_dir!r} does not exist")
     else:
-        _info(f"LHASSA_AGENT_DIR not set — agents will run in {os.getcwd()}")
+        _info(f"LHASSA_AGENT_DIR not set; agents will run in {os.getcwd()}")
 else:
-    ok("claude CLI not found — agents will use builtin LLM tool loop (auto-detected)")
+    ok("claude CLI not found; agents will use builtin LLM tool loop (auto-detected)")
 
 
 # ── 8. Screenshot tool (for analyze_screen) ───────────────────────────────────
@@ -246,16 +246,16 @@ system = platform.system()
 
 if system == "Darwin":
     if shutil.which("screencapture"):
-        ok("screencapture found (macOS built-in) — analyze_screen enabled")
+        ok("screencapture found (macOS built-in); analyze_screen enabled")
     else:
-        warn("screencapture not found — unexpected on macOS")
+        warn("screencapture not found; unexpected on macOS")
 elif system == "Windows":
     _info("Windows: screenshots use PowerShell or Pillow")
     try:
         from PIL import ImageGrab  # noqa: F401
-        ok("Pillow installed — screenshots will work")
+        ok("Pillow installed; screenshots will work")
     except ImportError:
-        _info("Pillow not installed — PowerShell fallback will be used")
+        _info("Pillow not installed. PowerShell fallback will be used")
 else:  # Linux
     scrot_tools = ["scrot", "maim", "import", "gnome-screenshot", "spectacle"]
     found_scrot = [t for t in scrot_tools if shutil.which(t)]
@@ -263,7 +263,7 @@ else:  # Linux
         ok(f"Screenshot tool found: {found_scrot[0]}")
     else:
         warn(
-            "No screenshot tool found — install scrot, maim, or ImageMagick "
+            "No screenshot tool found; install scrot, maim, or ImageMagick "
             "to enable analyze_screen"
         )
 

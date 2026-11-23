@@ -24,16 +24,16 @@ const ICONS = {
 }
 
 /**
- * NavRail — the sidebar nav. One element that is a static rail ≥1024px and a
+ * NavRail; the sidebar nav. One element that is a static rail ≥1024px and a
  * slide-in drawer below it (the `open` class + the `lh-nav-close` button are the
  * drawer affordances). Driven by the SECTIONS list + the active section.
  *
  * Props:
- *   sections   : [{ id, label }]  — the nav sections.
- *   section    : string           — the active section id.
- *   onNavigate : (id) => void     — select a section (also closes the drawer).
- *   navOpen    : boolean          — drawer open state (mobile only).
- *   onClose    : () => void       — close the drawer.
+ *   sections   : [{ id, label }] ; the nav sections.
+ *   section    : string          ; the active section id.
+ *   onNavigate : (id) => void    ; select a section (also closes the drawer).
+ *   navOpen    : boolean         ; drawer open state (mobile only).
+ *   onClose    : () => void      ; close the drawer.
  */
 export default function NavRail({ sections, section, onNavigate, navOpen, onClose }) {
   const groups = sections.reduce((acc, item) => {
@@ -61,7 +61,7 @@ export default function NavRail({ sections, section, onNavigate, navOpen, onClos
             <div className="lh-brand-name">Lhassa</div>
             <div className="lh-brand-rule" />
           </div>
-          {/* Close affordance — only meaningful in the mobile drawer */}
+          {/* Close affordance; only meaningful in the mobile drawer */}
           <button
             type="button"
             className="lh-nav-close lg:hidden"
@@ -102,7 +102,7 @@ export default function NavRail({ sections, section, onNavigate, navOpen, onClos
           ))}
         </div>
 
-        {/* Subtle command-palette affordance — opens the ⌘K launcher. */}
+        {/* Subtle command-palette affordance; opens the ⌘K launcher. */}
         <button
           type="button"
           className="lh-cmdk-hint"

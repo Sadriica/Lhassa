@@ -1,6 +1,6 @@
-# The research method — how Lhassa writes, drafts, builds and focuses
+# The research method; how Lhassa writes, drafts, builds and focuses
 
-This is the GESHE's charter — the scholar-monk of the temple owns this method
+This is the GESHE's charter; the scholar-monk of the temple owns this method
 and carries it as its `research-method` skill, so every research think applies
 it. The line it serves is declared in [`../doc/research.md`](../doc/research.md);
 the corpus it feeds is [this folder](README.md).
@@ -9,15 +9,15 @@ the corpus it feeds is [this folder](README.md).
 
 1. **Born from real work.** A topic enters the line because the instruments
    surfaced it (a bench result, a ledger pattern, a repeated failure, a corpus
-   doc's section 6) — never because it is fashionable. The anti-example is
+   doc's section 6); never because it is fashionable. The anti-example is
    named in the corpus provenance notes: ideas that arrive over-attributed
    and unmeasured.
 2. **The three limits filter.** A topic that needs a big GPU, that steals the
    owner's attention, or that erodes the person's sovereignty is out of scope
-   by house design — not postponed, out.
+   by house design; not postponed, out.
 3. **Comprobación before construcción.** If a technique is a candidate for
    adoption, the FIRST artifact is the experiment design (what will be
-   measured, on which instrument, against which baseline) — not the
+   measured, on which instrument, against which baseline); not the
    implementation.
 4. **One open front per theme.** A theme (loops, graph, memory…) carries at
    most one active experiment at a time; depth beats breadth.
@@ -32,7 +32,7 @@ does not impersonate scientific precision. Every value keeps its rationale and
 source ids.
 
 The model never assigns its own budget. The LLM-free
-`core.idea_assessments.score_document` recomputes the weighted score, applies
+`lhassa.research.assessments.score_document` recomputes the weighted score, applies
 hard rejects, and chooses:
 
 - `none → archive`: retain the negative result; no further spend.
@@ -59,7 +59,7 @@ Every investigation walks the same path, and each step leaves an artifact:
 | 5. Owner review → publish | the public note, bilingual | the site (owner's act) |
 
 A step may end the investigation honestly ("the data does not support
-adoption") — a negative result is a result and may still become a note.
+adoption"); a negative result is a result and may still become a note.
 
 ### The custody rule
 
@@ -91,16 +91,16 @@ traceability, not truth: only step 3 can turn an external claim into OUR result.
 - **Plain structure.** Thesis first, evidence next, unknowns named, next
   measurement last. 400–700 words for a note; a corpus doc follows its 7
   fixed sections.
-- **Bilingual on publication** (Spanish + English) — the corpus and drafts
+- **Bilingual on publication** (Spanish + English); the corpus and drafts
   stay English; the published note ships in both.
-- **One mythology touch max** (the narrative rule) — and in research, usually
+- **One mythology touch max** (the narrative rule); and in research, usually
   zero.
 
 ## Templates (per artifact type)
 
 **Technical note** (`doc/notes/drafts/`, then published):
 ```
-# <Title — the claim, plainly>
+# <Title; the claim, plainly>
 Thesis (one paragraph).
 The evidence (each number cites its instrument/source inline).
 What we do not yet know.
@@ -108,7 +108,7 @@ The next measurement worth taking.
 [appendix: the evidence pack, verbatim]
 ```
 
-**Corpus document** (`research/<topic>.md`): the seven fixed sections — see
+**Corpus document** (`research/<topic>.md`): the seven fixed sections; see
 [README.md](README.md). Its LLM-free `research_corpus` gate requires every
 section exactly once and in order, declared source ids, `[S#]` on evidence
 bullets (or `UNVERIFIED`), no citations to undeclared ids, and a section-6
@@ -128,15 +128,15 @@ Result: <numbers, with rows/ids>  ·  Verdict: <adopt / reject / inconclusive>
 - **The geshe** owns this method, the `draft_research_note` action, and the
   focus decisions it can make alone (which section-6 experiment is next).
 - **The geshe's aides** (its research department, seeded by `lhassa seed
-  apply research`) run the idea-intake flow — `collector` (capture sources,
+  apply research`) run the idea-intake flow; `collector` (capture sources,
   nested resources included) → `analyst` (mechanics down to the base) →
-  `skeptic` (claims vs sources, theirs-vs-ours, attribution chains — the doer
+  `skeptic` (claims vs sources, theirs-vs-ours, attribution chains; the doer
   never judges, so verification is its own brain) → `synthesist` (the
   seven-section corpus draft), behind an objective structure gate. The door
   is `/idea <text or link>` from chat. The door first mints a signed,
   HUMANO-origin `research_intake` task; the immediate run is only an
   optimization and the heartbeat can retry it after a restart.
-- **The owner** decides publication — a draft NEVER ships without review
+- **The owner** decides publication; a draft NEVER ships without review
   (the draft header says so), and adoption decisions stay with the human.
 - **The scribe** keeps the repo docs in sync AFTER an adoption; the guardian
   runs the instruments' hygiene; the oracle feeds repeated-cost signals into
@@ -145,7 +145,7 @@ Result: <numbers, with rows/ids>  ·  Verdict: <adopt / reject / inconclusive>
 ## The standing rule
 
 The method is itself subject to the method: when a step repeatedly fails or
-produces slop, that is an instrument signal — the geshe revises this file and
+produces slop, that is an instrument signal; the geshe revises this file and
 the revision is logged in `doc/decisions.md` like any other decision.
 
 ## Adoption into the product

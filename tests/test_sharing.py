@@ -1,16 +1,16 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Tests for lhassa.org.sharing — cross-instance sharing (Stream 6 Phase A).
+"""Tests for lhassa.org.sharing; cross-instance sharing (Stream 6 Phase A).
 
 Offline + $0: a tmp brain DB (monkeypatched ``db.DB_PATH``) shared by two
-"instances" (distinguished only by ``instance_id`` — the schema's existing
+"instances" (distinguished only by ``instance_id``: the schema's existing
 multi-tenant shape), a tmp skills dir and a tmp relationships file. No network,
 no LLM, no org topology needed (SHARES is instance-scoped, see
 test_org_relationships.py).
 
 Covers: deny-by-default without a grant, the grant→list/subscribe happy path,
 publishing a resource that doesn't exist locally, the closed shareable-type
-vocabulary (facts/episodes can never be published), and — the mandatory
-leak test — that a subscription/grant NEVER exposes the other instance's
+vocabulary (facts/episodes can never be published), and; the mandatory
+leak test; that a subscription/grant NEVER exposes the other instance's
 private facts or episodes, only its declared shared resources.
 """
 
@@ -26,7 +26,7 @@ from lhassa.org import sharing
 
 def _cfg(tmp_path, instance_id: str) -> SimpleNamespace:
     # The SHARES grant registry (org_relationships_file) is shared across every
-    # instance on this "box" — same as the shared core.db DB_PATH (see
+    # instance on this "box": same as the shared core.db DB_PATH (see
     # lhassa.org.sharing's module docstring): a grant an instance writes must be
     # readable by the instance it names, which today means the same physical
     # file, the same way it means the same physical DB. skills_dir stays PER
@@ -244,7 +244,7 @@ async def test_every_hop_logs_a_zero_cost_episode(tmp_path):
 
 @pytest.mark.asyncio
 async def test_private_facts_never_leak_across_instances(tmp_path):
-    """Even with a full grant in place, sharing NEVER exposes facts/episodes —
+    """Even with a full grant in place, sharing NEVER exposes facts/episodes;
     only the resources explicitly published to shared_resources. This is the
     structural guarantee: SHAREABLE_TYPES has no 'fact'/'episode' member and
     shared_resources is a table populated only through publish(), so there is
@@ -267,7 +267,7 @@ async def test_private_facts_never_leak_across_instances(tmp_path):
     await sharing.publish("skill", "code-review", actor_id="alice", config=cfg_a)
     await sharing.grant("inst_b", actor_id="alice", config=cfg_a)
 
-    # inst_b, even fully granted, only ever sees the published skill — never
+    # inst_b, even fully granted, only ever sees the published skill; never
     # inst_a's facts (query_facts scoped to inst_a never appears anywhere here).
     listed = await sharing.list_offerings(
         "inst_a", requester_instance_id="inst_b", actor_id="bob", config=cfg_b
@@ -276,7 +276,7 @@ async def test_private_facts_never_leak_across_instances(tmp_path):
     names = {(o["resource_type"], o["resource_name"]) for o in listed["offerings"]}
     assert names == {("skill", "code-review")}
 
-    # And inst_a's own facts stay scoped to inst_a at the DB layer regardless —
+    # And inst_a's own facts stay scoped to inst_a at the DB layer regardless;
     # the isolation the whole schema is built on, unaffected by any grant.
     inst_a_facts = await db.query_facts("inst_a")
     inst_b_facts = await db.query_facts("inst_b")
@@ -291,7 +291,7 @@ async def test_list_offerings_filters_out_a_row_that_bypassed_publish(tmp_path):
     the low-level db.publish_resource (as a future bug, a bad migration, or
     manual DB surgery might), and asserts list_offerings still refuses to
     surface it. If this ever fails, it means SHAREABLE_TYPES is enforced only
-    at the publish() call site and not at read time — a real leak path."""
+    at the publish() call site and not at read time; a real leak path."""
     await db.init_db()
     await db.publish_resource("inst_a", "fact", "fact-secret", actor_id="alice")
     cfg_a = _cfg(tmp_path, "inst_a")
@@ -307,7 +307,7 @@ async def test_list_offerings_filters_out_a_row_that_bypassed_publish(tmp_path):
 
 @pytest.mark.asyncio
 async def test_grant_permit_alone_cannot_publish_a_fact(tmp_path):
-    """A grant only OPENS the discovery door for the closed shareable-type set —
+    """A grant only OPENS the discovery door for the closed shareable-type set;
     it can never be used to publish memory, because publish() itself refuses
     any resource_type outside SHAREABLE_TYPES regardless of grants."""
     cfg_a = _cfg(tmp_path, "inst_a")

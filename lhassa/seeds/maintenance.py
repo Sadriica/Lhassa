@@ -1,23 +1,23 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""The ``maintenance`` seed — mint the recurring self-improvement/hygiene tasks.
+"""The ``maintenance`` seed; mint the recurring self-improvement/hygiene tasks.
 
 Five of the built-in deterministic actions only do anything useful if something
 schedules them repeatedly: ``distill_memory`` (turn recent episodes into durable
-facts), ``review_tools`` (gate 4 — retire unused/failing graduated tools),
+facts), ``review_tools`` (gate 4; retire unused/failing graduated tools),
 ``detect_repetition`` (spot a repeated-judgment pattern worth automating),
-``curate_skills`` (Fase 2 — the skill usage lifecycle sweep: active -> stale ->
-archived, never deletes), ``calendar_sync`` (the master-calendar reconcile —
+``curate_skills`` (Fase 2; the skill usage lifecycle sweep: active -> stale ->
+archived, never deletes), ``calendar_sync`` (the master-calendar reconcile;
 a $0 set diff that delivers a ``.ics`` for each event missing from the primary
 calendar; a clean no-op with no primary/feeds configured, so it's safe to
 schedule unconditionally), ``derive_world_facts`` (the calendar-derived
-world model — bootstraps durable facts about courses/commitments/rhythm from
+world model; bootstraps durable facts about courses/commitments/rhythm from
 the calendar feed; also a clean no-op with no calendar configured), and
-``ingest_knowledge`` (document perception — re-indexes the owner's opt-in
+``ingest_knowledge`` (document perception; re-indexes the owner's opt-in
 knowledge roots; a clean no-op with ``LHASSA_KNOWLEDGE_ROOTS`` unset).
 
 Rather than minting each action bare (a task that used to dispatch straight to
 ``core.actions.run`` with no org attribution), this seed mints ``temple_run``
-— see :mod:`lhassa.actionpack._temple` / :mod:`lhassa.org.temple` — with the
+(see :mod:`lhassa.actionpack._temple` / :mod:`lhassa.org.temple`) with the
 real action name in its params. Each beat now runs the FULL down-execute-up
 loop: Lhassa delegates the action DOWN to the ``temple`` department (one
 ``org-delegate`` Episode), temple EXECUTES it via the same deterministic
@@ -26,11 +26,11 @@ unchanged), and the result travels back UP to Lhassa via ``org.deliver`` (the
 sender of record). This is still minted through the same
 :func:`lhassa.core.dispatch.mint_task` path everything else uses, so it shows
 up in ``lhassa task list`` and fires on schedule through the ordinary
-watchlist/step loop — no new scheduler, no core edit.
+watchlist/step loop; no new scheduler, no core edit.
 
 Idempotent: a matching PENDING recurring ``temple_run`` task for the same
 wrapped action is left alone rather than duplicated, so re-applying this seed
-on an already-seeded machine is a no-op. Never raises destructively — a single
+on an already-seeded machine is a no-op. Never raises destructively; a single
 mint failing is recorded under ``errors``, the others still proceed.
 """
 
@@ -47,11 +47,11 @@ if TYPE_CHECKING:
 
 # accion -> recurrence in seconds. distill_memory/detect_repetition/calendar_sync
 # are daily hygiene passes; review_tools (gate 4) and curate_skills (Fase 2) run
-# less often — both need time to accrue real usage before "unused" means
-# anything. derive_world_facts is a gentler weekly cadence too — the owner's
+# less often; both need time to accrue real usage before "unused" means
+# anything. derive_world_facts is a gentler weekly cadence too; the owner's
 # courses/commitments/rhythm don't change day to day, so a daily re-derive
 # would just re-check dedup for nothing. Each is minted as accion="temple_run"
-# with the real action name carried in params["action"] — see
+# with the real action name carried in params["action"]; see
 # lhassa.actionpack._temple.TEMPLE_ACTIONS (the closed set temple_run is
 # allowed to front).
 _RECURRING_ACTIONS: tuple[tuple[str, int], ...] = (
@@ -60,17 +60,23 @@ _RECURRING_ACTIONS: tuple[tuple[str, int], ...] = (
     ("apply_feedback", 86400),
     ("review_tools", 604800),
     ("curate_skills", 604800),
-    # The utility tribunal — weekly for the same reason as the two above: a
+    # The utility tribunal; weekly for the same reason as the two above: a
     # capability needs time to accrue real usage before "unused" means anything.
     ("review_capabilities", 604800),
     ("kg_sync", 604800),
     ("kg_resolve", 604800),
     ("calendar_sync", 86400),
     ("derive_world_facts", 604800),
-    # Document perception — re-index the owner's knowledge roots weekly (a
-    # clean $0 no-op when LHASSA_KNOWLEDGE_ROOTS is unset; notes/papers don't
-    # change so fast that a daily pass would earn its keep).
-    ("ingest_knowledge", 604800),
+    # Document perception; re-index the owner's knowledge roots DAILY (a clean
+    # $0 no-op when LHASSA_KNOWLEDGE_ROOTS is unset). This was weekly on the
+    # reasoning that notes and papers do not change fast enough to earn a daily
+    # pass, which measured the wrong thing: the cost of a pass, not the cost of
+    # being stale. The walk is incremental (an unchanged file is skipped on
+    # mtime+size) and only touches document extensions, so a pass over an
+    # untouched corpus is a cheap stat() sweep; what a weekly cadence actually
+    # bought was a brain that had not read what its owner wrote on Monday until
+    # the following weekend.
+    ("ingest_knowledge", 86400),
 )
 
 
@@ -97,24 +103,67 @@ def _is_matching_temple_task(row: dict, accion: str) -> bool:
     return isinstance(params, dict) and params.get("action") == accion
 
 
+def _clamped_due(due_at, recurrence: int) -> "Optional[str]":
+    """``due_at`` capped at ``now + recurrence``; ``None`` when it already fits.
+
+    Returning ``None`` leaves the stored due date alone, so a retune that
+    LENGTHENS an interval never pushes work earlier than it was promised.
+    An unparseable date is left untouched rather than guessed at.
+    """
+    from datetime import datetime, timedelta, timezone
+
+    now = datetime.now(timezone.utc)
+    ceiling = now + timedelta(seconds=int(recurrence))
+    try:
+        current = datetime.fromisoformat(str(due_at))
+    except (TypeError, ValueError):
+        return None
+    if current.tzinfo is None:
+        current = current.replace(tzinfo=timezone.utc)
+    return ceiling.isoformat() if current > ceiling else None
+
+
 async def _ensure_recurring_task(instance_id: str, accion: str, recurrence: int) -> str:
     """Mint ``accion`` (via the ``temple_run`` wrapper) as a recurring task,
-    unless a matching pending one already exists.
+    unless a matching pending one already exists; RETUNE it when the cadence
+    declared in :data:`_RECURRING_ACTIONS` no longer matches the live row.
 
-    Returns ``"created"`` or ``"existing"``.
+    Returns ``"created"``, ``"retuned"`` or ``"existing"``.
+
+    The retune exists because "already there" was hiding a slow failure: this
+    table is the declaration of how often each hygiene action should run, and
+    editing it changed nothing for the brain that was already seeded. Moving
+    ``ingest_knowledge`` from weekly to daily left the live task weekly forever,
+    so the fix looked applied and was not.
     """
     from lhassa.core import db as _db
     from lhassa.core.dispatch import mint_task
     from lhassa.security.trust import Origin, TrustLevel
 
-    # ALL pending tasks, not load_pending_tasks() — that one is DUE-AWARE and
+    # ALL pending tasks, not load_pending_tasks(); that one is DUE-AWARE and
     # hides a task whose due_at is still in the future, so a recurring wrapper
     # already scheduled for tomorrow would be invisible here and re-minted every
     # apply (the real cause of the temple_run pile-up). list_tasks sees them.
     pending = await _db.list_tasks(instance_id, estado="pendiente", limit=500)
     for row in pending:
         if _is_matching_temple_task(row, accion):
-            return "existing"
+            if str(row.get("recurrence") or "") == str(recurrence):
+                return "existing"
+            # Pull the next occurrence in when the new cadence is shorter than
+            # the wait already scheduled under the old one; a weekly task
+            # retuned to daily must not sleep out its original weekly slot.
+            await _db.set_task_recurrence(
+                row["id"],
+                str(recurrence),
+                due_at=_clamped_due(row.get("due_at"), recurrence),
+            )
+            logger.info(
+                "seed[maintenance]: {} retuned {} -> {}s",
+                accion,
+                row.get("recurrence"),
+                recurrence,
+            )
+            return "retuned"
 
     origin = Origin(trust=TrustLevel.INTERNO, actor_id="seed:maintenance")
     task_id, estado = await mint_task(
@@ -139,7 +188,7 @@ def seed_maintenance(config: "Optional[Config]" = None) -> dict:
     cfg = _resolve_config(config)
     instance_id = getattr(cfg, "instance_id", None) or "inst_personal"
 
-    summary: dict = {"created": [], "existing": [], "errors": []}
+    summary: dict = {"created": [], "existing": [], "retuned": [], "errors": []}
 
     async def _run() -> None:
         from lhassa.core import db as _db
@@ -158,7 +207,7 @@ def seed_maintenance(config: "Optional[Config]" = None) -> dict:
     except RuntimeError:
         asyncio.run(_run())
     else:
-        # Already inside a running loop (e.g. called from async test code) —
+        # Already inside a running loop (e.g. called from async test code);
         # this seed is only ever applied from sync CLI/bootstrap contexts, but
         # degrade gracefully rather than crash if that assumption ever breaks.
         summary["errors"].append("seed_maintenance: called from a running event loop")
@@ -173,5 +222,5 @@ def seed_maintenance(config: "Optional[Config]" = None) -> dict:
     "calendar_sync (daily), derive_world_facts (weekly), ingest_knowledge (weekly).",
 )
 def apply(config: "Optional[Config]" = None) -> dict:
-    """The ``maintenance`` seed entry point — see :func:`seed_maintenance`."""
+    """The ``maintenance`` seed entry point; see :func:`seed_maintenance`."""
     return seed_maintenance(config)

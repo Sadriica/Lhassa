@@ -1,7 +1,7 @@
-"""Tests for the ``temple`` seed (lhassa.seeds.temple) — Lhassa's inner department.
+"""Tests for the ``temple`` seed (lhassa.seeds.temple); Lhassa's inner department.
 
 Fully offline: a tiny Config stand-in redirects the topology file to a tmp path,
-mirroring tests/test_cv_seed.py. The seed goes through the validated org
+mirroring packages/lhassa-cv/tests/test_cv_seed.py. The seed goes through the validated org
 management API, so a bad op can never corrupt the saved topology file.
 """
 
@@ -83,7 +83,7 @@ def test_apply_temple_is_idempotent(cfg):
 
 
 def test_temple_is_a_sibling_not_nested_under_interns_or_personal(cfg):
-    # temple is Lhassa's OWN inner department — distinct from interns/personal.
+    # temple is Lhassa's OWN inner department; distinct from interns/personal.
     from lhassa.org import management
 
     management.add_brain("general", role="general", parent=None, config=cfg)

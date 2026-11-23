@@ -1,4 +1,4 @@
-"""Tests for lhassa.org.monitor — the environment monitor & improvement supervisor.
+"""Tests for lhassa.org.monitor; the environment monitor & improvement supervisor.
 
 Offline + $0: signals are read from a tmp brain DB / tmp topology / tmp skills, and
 the live reasoning path (LHASSA_ORG_LIVE) is left OFF so NO model is ever called.
@@ -94,7 +94,7 @@ async def test_gather_signals_picks_up_episodes_failures_and_approvals(
 
 @pytest.mark.asyncio
 async def test_failures_ignore_the_monitors_own_episodes(tmp_path, monkeypatch):
-    """The watcher's own episodes quote failure counts — counting them would have
+    """The watcher's own episodes quote failure counts; counting them would have
     the monitor alerting on its own reflection, forever."""
     await _init_db(tmp_path, monkeypatch)
     from lhassa.core.episode import Episode
@@ -116,7 +116,7 @@ async def test_failures_ignore_the_monitors_own_episodes(tmp_path, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_failures_ignore_prose_in_a_completed_think(tmp_path, monkeypatch):
-    """A successful think's resultado is model prose — "error"/"fail" in the TEXT is
+    """A successful think's resultado is model prose; "error"/"fail" in the TEXT is
     content, not outcome. A think that failed marks it in the decision itself."""
     await _init_db(tmp_path, monkeypatch)
     from lhassa.core.episode import Episode
@@ -139,7 +139,7 @@ async def test_failures_ignore_prose_in_a_completed_think(tmp_path, monkeypatch)
 
 @pytest.mark.asyncio
 async def test_failures_only_count_while_fresh(tmp_path, monkeypatch):
-    """A failure older than monitor_failure_window_h ages OUT of the signal — the
+    """A failure older than monitor_failure_window_h ages OUT of the signal; the
     alert's "total N" means "N current", not "N ever seen in the window"."""
     from datetime import datetime, timedelta, timezone
 
@@ -312,7 +312,7 @@ def test_ensure_monitor_skill_creates_and_is_idempotent(tmp_path):
     skill = ensure_monitor_skill(cfg)
     assert skill.name == MONITOR_SKILL_NAME
     assert "supervisor" in skill.instructions.lower()
-    # idempotent — a second call returns the same installed skill, no error
+    # idempotent; a second call returns the same installed skill, no error
     again = ensure_monitor_skill(cfg)
     assert again.name == MONITOR_SKILL_NAME
     assert again.error is None
@@ -338,7 +338,7 @@ def test_make_brain_monitor_assigns_skill_and_updates_role(tmp_path):
 
 
 def test_make_brain_monitor_is_reusable_for_any_brain(tmp_path):
-    """Not hard-coded to interns — any existing brain can be made the monitor."""
+    """Not hard-coded to interns; any existing brain can be made the monitor."""
     (tmp_path / "org.json").write_text(
         json.dumps(
             [

@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Security primitives — the three walls that guard remote execution (§2.6).
+"""Security primitives; the three walls that guard remote execution (§2.6).
 
 Phase-0 ships the deterministic order-execution wall:
-  - ``trust``     — TrustLevel + Origin (the WHO), trust degrades by contagion.
-  - ``signing``   — Ed25519 authenticity (brain signs, machine verifies).
-  - ``allowlist`` — deny-by-default gate, per-action HITL threshold by risk.
+  - ``trust``    : TrustLevel + Origin (the WHO), trust degrades by contagion.
+  - ``signing``  : Ed25519 authenticity (brain signs, machine verifies).
+  - ``allowlist``: deny-by-default gate, per-action HITL threshold by risk.
 
 The quarantine wall (self-written code, §2.8) and the probabilistic
 threat-awareness wall live in later phases. These three "fail differently":

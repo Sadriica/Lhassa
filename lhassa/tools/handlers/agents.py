@@ -36,7 +36,7 @@ async def handle_delegate_to_agent(params: FunctionCallParams):
     async def _run():
         try:
             result = await agent.run(task)
-            from lhassa.voice.notifier import notify
+            from lhassa.tools.notifier import notify
             summary = result[:200] + "..." if len(result) > 200 else result
             await notify(f"Agent {agent_type} finished. {summary}")
         except Exception as exc:

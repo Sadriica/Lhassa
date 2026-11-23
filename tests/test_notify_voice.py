@@ -3,7 +3,7 @@ into :func:`lhassa.notify.dispatch.notify`.
 
 Offline throughout: ``persona`` style is exercised against a stub provider
 (never a real model call), and every degrade path is asserted to still
-deliver — a notification must ALWAYS arrive.
+deliver; a notification must ALWAYS arrive.
 """
 
 import asyncio
@@ -36,8 +36,8 @@ def test_classify_sniffs_approval():
 
 
 def test_classify_sniffs_alert_from_watcher_shapes():
-    assert voice.classify("Heads up — monitor · interns: 1 new failure(s)") == "alert"
-    assert voice.classify("Something needs a look — monitor · interns: alert") == "alert"
+    assert voice.classify("Heads up: monitor · interns: 1 new failure(s)") == "alert"
+    assert voice.classify("Something needs a look: monitor · interns: alert") == "alert"
 
 
 def test_classify_falls_back_to_generic():
@@ -51,9 +51,9 @@ def test_classify_falls_back_to_generic():
 def test_template_action_result_dedupes_doubled_name():
     text = "⚙️ check_spend: check_spend: 2040 output tokens today, cost $0.0053"
     out = voice.template(text, "action-result")
-    # check_spend has a phrasebook lead ("I checked spend") — no mechanical
+    # check_spend has a phrasebook lead ("I checked spend"); no mechanical
     # "Check-spend:" title-casing for a known action.
-    assert out.startswith("Done — I checked spend:")
+    assert out.startswith("Done: I checked spend:")
     assert "2040 output tokens today" in out
     assert "check_spend: check_spend" not in out
 
@@ -61,7 +61,7 @@ def test_template_action_result_dedupes_doubled_name():
 def test_template_action_result_falls_back_to_title_case_for_unknown_action():
     text = "⚙️ totally_unknown_action: totally_unknown_action: did a thing"
     out = voice.template(text, "action-result")
-    assert out == "Done — Totally-unknown-action: did a thing"
+    assert out == "Done: Totally-unknown-action: did a thing"
 
 
 def test_template_naturalizes_key_value_tail():
@@ -83,29 +83,29 @@ def test_template_approval_adds_framing():
 
 def test_template_alert_adds_framing_when_not_already_voiced():
     out = voice.template("a new failure was seen", "alert")
-    # "Heads up — " is the ONE lead phrase — sourced from persona.LEAD_PHRASES,
+    # "Heads up: " is the ONE lead phrase; sourced from persona.LEAD_PHRASES,
     # the same table persona.format_alert draws from (no more duplicated,
     # drifted copies of "heads up").
-    assert out == "Heads up — a new failure was seen"
+    assert out == "Heads up: a new failure was seen"
 
 
 def test_template_alert_is_a_noop_on_already_voiced_watcher_text():
-    # persona.format_alert already leads with "Heads up — " / "Something needs
-    # a look — "; template() must not double-frame it.
-    already = "Heads up — monitor · interns: 1 new failure(s)"
+    # persona.format_alert already leads with "Heads up: " / "Something needs
+    # a look; "; template() must not double-frame it.
+    already = "Heads up: monitor · interns: 1 new failure(s)"
     assert voice.template(already, "alert") == already
 
-    already2 = "Something needs a look — monitor · interns: health worsened"
+    already2 = "Something needs a look: monitor · interns: health worsened"
     assert voice.template(already2, "alert") == already2
 
 
 def test_template_report_is_pass_through_verbatim():
-    text = "🧭 Lhassa — morning check-in. I kept the wheel turning at $0."
+    text = "🧭 Lhassa morning check-in. I kept the wheel turning at $0."
     assert voice.template(text, "report") == text
 
 
 def test_template_verbatim_when_unsure_generic():
-    # No known shape, no key=value tail — passed straight through.
+    # No known shape, no key=value tail; passed straight through.
     text = "the quick brown fox"
     assert voice.template(text, "generic") == text
 
@@ -168,7 +168,15 @@ class _FakeProvider:
         self.seen = None
 
     async def complete(self, messages, *, model=None, max_tokens=None, system=None):
-        self.seen = {"input": messages[0]["content"], "system": system, "model": model}
+        # "input" is the LAST message: the real notification. Anything before it
+        # is a few-shot example (see voice._REVOICE_EXAMPLES), kept in
+        # "messages" so a test can assert on the examples themselves.
+        self.seen = {
+            "input": messages[-1]["content"],
+            "messages": list(messages),
+            "system": system,
+            "model": model,
+        }
         return SimpleNamespace(text=self._text, cost_usd=self._cost)
 
 
@@ -186,7 +194,67 @@ def test_revoice_persona_style_rewrites_through_the_model(monkeypatch):
     assert out == "Buenas, ya lo tengo anotado."
     assert fake.seen is not None
     assert "You asked me to remind you: Buy milk" in fake.seen["input"]
-    assert "narrative.md" in fake.seen["system"] or "first person" in fake.seen["system"]
+    system = fake.seen["system"].lower()
+    assert "narrative.md" in system or "first person" in system
+    # The instruction earns its length by naming the failure modes measured off
+    # the live model: passive voice, a dropped identifier, an invented promise.
+    assert "passive" in system and "never invent" in system
+    assert "never say you are looking into it" in system
+    # No language pinned → no examples; the model sees only the real line.
+    assert len(fake.seen["messages"]) == 1
+
+
+def test_persona_pass_threads_few_shot_examples_in_the_owners_language(monkeypatch):
+    """Rules alone did not hold the voice; the examples are what pin it.
+
+    They are keyed by language because an example only teaches in the language
+    the answer is written in.
+    """
+    import lhassa.llm.provider as provider_mod
+    import lhassa.llm.router as router_mod
+
+    fake = _FakeProvider(text="Anotado.")
+    monkeypatch.setattr(provider_mod, "get_model_provider", lambda config, name=None: fake)
+    monkeypatch.setattr(router_mod, "pick_model", lambda p, *, hard, config: "cheap-model")
+
+    asyncio.run(
+        voice.revoice(
+            "Buy milk",
+            kind="reminder",
+            config=_cfg(notify_style="persona", notify_language="es"),
+        )
+    )
+    msgs = fake.seen["messages"]
+    assert len(msgs) == 5  # two user/assistant example pairs, then the real line
+    assert [m["role"] for m in msgs] == ["user", "assistant", "user", "assistant", "user"]
+    assert "examples of your voice" in fake.seen["system"]
+    # Every example must DEMONSTRATE what the rules ask for: first person, and
+    # the action's technical name kept. An example that paraphrases the name
+    # away teaches the model to drop it.
+    voiced = [m["content"] for m in msgs if m["role"] == "assistant"]
+    assert any("sync_repo" in v for v in voiced)
+    assert any("distill_memory" in v for v in voiced)
+    assert all(not v.startswith("Se ") for v in voiced)  # no passive opening
+
+
+def test_few_shot_examples_are_skipped_for_an_unknown_language(monkeypatch):
+    """An owner reading a language with no example table gets the rules alone,
+    never examples written in a language they do not read."""
+    import lhassa.llm.provider as provider_mod
+    import lhassa.llm.router as router_mod
+
+    fake = _FakeProvider(text="ok")
+    monkeypatch.setattr(provider_mod, "get_model_provider", lambda config, name=None: fake)
+    monkeypatch.setattr(router_mod, "pick_model", lambda p, *, hard, config: "cheap-model")
+
+    asyncio.run(
+        voice.revoice(
+            "Buy milk",
+            kind="reminder",
+            config=_cfg(notify_style="persona", notify_language="ja"),
+        )
+    )
+    assert len(fake.seen["messages"]) == 1
 
 
 def test_revoice_persona_style_degrades_to_template_on_failure(monkeypatch):
@@ -200,7 +268,7 @@ def test_revoice_persona_style_degrades_to_template_on_failure(monkeypatch):
     out = asyncio.run(
         voice.revoice("Buy milk", kind="reminder", config=_cfg(notify_style="persona"))
     )
-    # Degrades to the template() result — the message still arrives.
+    # Degrades to the template() result; the message still arrives.
     assert out == "You asked me to remind you: Buy milk"
 
 
@@ -224,7 +292,7 @@ def test_revoice_persona_style_degrades_when_completion_raises(monkeypatch):
 
 
 def test_revoice_report_kind_is_pass_through_even_in_template_style():
-    digest_text = "🧭 Lhassa — morning check-in. I kept the wheel turning at $0."
+    digest_text = "🧭 Lhassa morning check-in. I kept the wheel turning at $0."
     out = asyncio.run(voice.revoice(digest_text, kind="report", config=_cfg()))
     assert out == digest_text
 
@@ -278,7 +346,7 @@ def test_dispatch_notify_survives_a_raising_voice_layer(recording_channel, monke
 
     delivered = asyncio.run(dispatch.notify("Buy milk", kind="reminder", config=cfg))
     assert delivered is True
-    # The original text still fans out — voicing must never cost a notification.
+    # The original text still fans out; voicing must never cost a notification.
     assert recorder.sent == ["Buy milk"]
 
 
@@ -286,7 +354,7 @@ def test_dispatch_notify_report_kind_passes_digest_text_verbatim(recording_chann
     recorder = recording_channel
     cfg = _cfg(notify_channels="rec")
 
-    digest_text = "🧭 Lhassa — morning check-in. I kept the wheel turning at $0."
+    digest_text = "🧭 Lhassa morning check-in. I kept the wheel turning at $0."
     delivered = asyncio.run(dispatch.notify(digest_text, kind="report", config=cfg))
     assert delivered is True
     assert recorder.sent == [digest_text]

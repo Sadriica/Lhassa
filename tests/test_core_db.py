@@ -1,4 +1,4 @@
-"""Tests for lhassa.core.db — the append-only "grande" brain DB."""
+"""Tests for lhassa.core.db; the append-only "grande" brain DB."""
 
 import pytest
 import pytest_asyncio  # noqa: F401
@@ -94,6 +94,48 @@ async def test_load_recent_episodes_respects_limit(tmp_path, monkeypatch):
         await db.append_episode(_make_ep("inst_personal", f"t{i}"))
     rows = await db.load_recent_episodes("inst_personal", n=2)
     assert len(rows) == 2
+
+
+@pytest.mark.asyncio
+async def test_dominio_activity_aggregates_per_brain(tmp_path, monkeypatch):
+    db = await _init(tmp_path, monkeypatch)
+    ep1 = _make_ep("inst_personal", "trigger_a")
+    ep1.dominio = "temple"
+    await db.append_episode(ep1)
+    ep2 = _make_ep("inst_personal", "trigger_b")
+    ep2.dominio = "temple"
+    await db.append_episode(ep2)
+    ep3 = _make_ep("inst_personal", "trigger_c")
+    ep3.dominio = "guardian"
+    await db.append_episode(ep3)
+    # No dominio at all; must not blow up the grouping or appear as a key.
+    await db.append_episode(_make_ep("inst_personal", "no_dominio"))
+
+    activity = await db.dominio_activity("inst_personal")
+    assert activity["temple"]["count"] == 2
+    assert activity["guardian"]["count"] == 1
+    assert activity["temple"]["last"]
+    assert "" not in activity
+    assert None not in activity
+
+
+@pytest.mark.asyncio
+async def test_dominio_activity_respects_since_cutoff(tmp_path, monkeypatch):
+    db = await _init(tmp_path, monkeypatch)
+    ep = _make_ep("inst_personal", "old")
+    ep.dominio = "temple"
+    ep.creado_en = "2000-01-01T00:00:00+00:00"
+    await db.append_episode(ep)
+
+    activity = await db.dominio_activity("inst_personal", since="2099-01-01T00:00:00+00:00")
+    assert activity["temple"]["count"] == 0
+    assert activity["temple"]["last"] == "2000-01-01T00:00:00+00:00"
+
+
+@pytest.mark.asyncio
+async def test_dominio_activity_empty_on_no_episodes(tmp_path, monkeypatch):
+    db = await _init(tmp_path, monkeypatch)
+    assert await db.dominio_activity("inst_personal") == {}
 
 
 # ── tasks ───────────────────────────────────────────────────────────────────────
@@ -212,7 +254,7 @@ async def _defer(db, monkeypatch, instance_id, task_id):
 async def test_sweep_deferred_tasks_respects_backoff_window(tmp_path, monkeypatch):
     db = await _init(tmp_path, monkeypatch)
     task_id = await db.add_task("inst_personal", "algo", "x", params={})
-    # Deferred just now (updated_en ~= now) — a large backoff window means it is
+    # Deferred just now (updated_en ~= now); a large backoff window means it is
     # NOT yet due for retry.
     await db.set_task_state("inst_personal", task_id, "diferida")
 
@@ -271,7 +313,7 @@ async def test_sweep_deferred_tasks_rejects_after_max_retries(tmp_path, monkeypa
     tasks = await db.list_tasks("inst_personal")
     assert tasks[0]["estado"] == "rechazada"
 
-    # A rejected task is terminal — a further sweep leaves it alone.
+    # A rejected task is terminal; a further sweep leaves it alone.
     result = await db.sweep_deferred_tasks(
         "inst_personal", backoff_seconds=1, max_retries=max_retries
     )

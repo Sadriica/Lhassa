@@ -1,7 +1,7 @@
 """Tests for the effort-level axis (lhassa/core/effort.py, Plan 4 Stream 1).
 
 Effort must be DECLARED before anything is spent, never discovered by
-spending — these tests check the resolver's priority order, that levels are
+spending; these tests check the resolver's priority order, that levels are
 monotonically bigger, and that a marker never leaks into the cleaned text.
 """
 
@@ -28,7 +28,7 @@ def test_profiles_are_monotonically_bigger():
     assert turns == sorted(turns)
     assert verifiers == sorted(verifiers)
     assert costs == sorted(costs)
-    # Strictly bigger, not just non-decreasing — the whole point of the axis.
+    # Strictly bigger, not just non-decreasing; the whole point of the axis.
     assert len(set(tokens)) == len(tokens)
 
 

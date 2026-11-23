@@ -17,7 +17,7 @@ export function limitsToRows(limits) {
 }
 export function rowsToLimits(rows) {
   // The backend REPLACES limits with whatever object we send (a None/absent field
-  // means "leave unchanged", so we always send a full object — never null). A key
+  // means "leave unchanged", so we always send a full object; never null). A key
   // is CLEARED by simply omitting it: removing a row drops it here, and an empty
   // value drops it too, so clearing the field is also a removal. Sending `{}`
   // clears every limit.

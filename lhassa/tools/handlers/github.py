@@ -46,7 +46,7 @@ async def handle_github_list_issues(params: FunctionCallParams):
         if not issues:
             await params.result_callback(f"No {state_filter} issues in {repo}.")
             return
-        lines = [f"#{i['number']} [{i['state']}] {i['title']} — {i['url']}" for i in issues]
+        lines = [f"#{i['number']} [{i['state']}] {i['title']}; {i['url']}" for i in issues]
         await params.result_callback("\n".join(lines))
     except RuntimeError as e:
         await params.result_callback(str(e))

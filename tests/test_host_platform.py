@@ -1,9 +1,9 @@
-"""The host platform layer — pure parsers plus injected platform selection.
+"""The host platform layer; pure parsers plus injected platform selection.
 
 Every test here runs identically on Linux and macOS: the parsers are pure, and
 platform-dependent behaviour is exercised by INJECTING a platform (a registered
 fake, or ``LHASSA_PLATFORM``), never by monkeypatching ``os.name`` /
-``platform.system()``. That is the point of the layer — a Linux CI run really
+``platform.system()``. That is the point of the layer; a Linux CI run really
 does cover the macOS branches.
 """
 
@@ -21,7 +21,7 @@ def test_parse_proc_uptime():
 
 @pytest.mark.parametrize("bad", ["", "   ", "not-a-number", "\n"])
 def test_parse_proc_uptime_degrades_to_none(bad):
-    """A bad reading is None — never a plausible zero."""
+    """A bad reading is None; never a plausible zero."""
     assert host.parse_proc_uptime(bad) is None
 
 
@@ -69,7 +69,7 @@ def test_parse_vm_stat_is_clamped_to_a_percentage():
 
 def test_current_platform_takes_an_injected_system(monkeypatch):
     # The env override deliberately outranks the injected system (see the next
-    # test), so it is cleared here — otherwise this test silently depends on
+    # test), so it is cleared here; otherwise this test silently depends on
     # whatever LHASSA_PLATFORM the suite happens to run under.
     monkeypatch.delenv("LHASSA_PLATFORM", raising=False)
     assert host.current_platform_name(system="Darwin") == "darwin"

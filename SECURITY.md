@@ -1,7 +1,7 @@
 # Security
 
-Lhassa's security model — deny-by-default allowlist, Ed25519-signed tasks,
-quarantine for self-written code, human-in-the-loop approvals — is documented
+Lhassa's security model; deny-by-default allowlist, Ed25519-signed tasks,
+quarantine for self-written code, human-in-the-loop approvals; is documented
 in full, including its honest limits, in [`doc/security.md`](doc/security.md).
 What is public code and what stays on the owner's disk is drawn in
 [`doc/boundaries.md`](doc/boundaries.md).

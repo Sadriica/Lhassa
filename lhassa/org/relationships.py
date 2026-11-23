@@ -1,19 +1,19 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Typed org RELATIONSHIPS — the overlay graph (Fase 7).
+"""Typed org RELATIONSHIPS; the overlay graph (Fase 7).
 
 The org chart is a directed GRAPH: the command TREE (who-commands-whom, in
 ``org.json`` via :mod:`lhassa.org.topology`, with Lhassa the sovereign root) PLUS
 an OVERLAY of typed RELATIONSHIP edges that are NOT hierarchy. This module is that
-overlay — a separate graph stored at ``config.org_relationships_file`` so the
+overlay; a separate graph stored at ``config.org_relationships_file`` so the
 command tree and the relationship edges never tangle.
 
 The first closed set of edge kinds (:data:`RELATION_KINDS`), each reusing existing
 primitives so it has REAL meaning:
 
-  - ``reads``        — A may read B's state/output/memory-scope (directed A→B).
-  - ``notifies``     — A pushes info/events to B (directed A→B).
-  - ``reviews``      — B reviews/approves A's work (directed A→B: A is reviewed BY B).
-  - ``collaborates`` — peers share context, BIDIRECTIONAL (symmetric A↔B).
+  - ``reads``       : A may read B's state/output/memory-scope (directed A→B).
+  - ``notifies``    : A pushes info/events to B (directed A→B).
+  - ``reviews``     : B reviews/approves A's work (directed A→B: A is reviewed BY B).
+  - ``collaborates``: peers share context, BIDIRECTIONAL (symmetric A↔B).
 
 ``collaborates`` is symmetric: it is stored CANONICALLY (the two ids sorted) so
 A↔B is never duplicated as B↔A, and :func:`permits` honours it in both directions.
@@ -46,15 +46,15 @@ READS = "reads"
 NOTIFIES = "notifies"
 REVIEWS = "reviews"
 COLLABORATES = "collaborates"
-# SHARES — cross-INSTANCE, not cross-brain (Stream 6 Phase A). Edge (A, B,
+# SHARES; cross-INSTANCE, not cross-brain (Stream 6 Phase A). Edge (A, B,
 # shares) means "instance A may discover/subscribe to instance B's published
-# resources" — the SAME directed-A-reads-B shape as READS, one level up (whole
+# resources": the SAME directed-A-reads-B shape as READS, one level up (whole
 # brains, not sub-brains within one tree). See INSTANCE_SCOPED_KINDS below: this
 # is the one kind whose endpoints are NOT required to be local topology nodes.
 SHARES = "shares"
 
 # The closed set of valid relationship kinds. Adding a kind is a deliberate edit
-# here (and a description below) — the set is closed on purpose.
+# here (and a description below); the set is closed on purpose.
 RELATION_KINDS: tuple[str, ...] = (READS, NOTIFIES, REVIEWS, COLLABORATES, SHARES)
 
 # Which kinds are SYMMETRIC (bidirectional). A symmetric edge is stored canonically
@@ -62,12 +62,12 @@ RELATION_KINDS: tuple[str, ...] = (READS, NOTIFIES, REVIEWS, COLLABORATES, SHARE
 SYMMETRIC_KINDS: frozenset[str] = frozenset({COLLABORATES})
 
 # Which kinds are INSTANCE-scoped rather than brain-scoped: their endpoints are
-# whole Lhassa instances (possibly foreign — never in this instance's own org
+# whole Lhassa instances (possibly foreign; never in this instance's own org
 # topology), so the local-topology membership check (_require_brains) does not
 # apply. Deliberately a SEPARATE closed set from RELATION_KINDS: extending
 # cross-instance semantics to a kind is a distinct decision from adding the kind
 # at all. For a SHARES edge specifically, ``to_id`` MUST be this instance's own
-# identity (Config.instance_id) — only the resource owner can grant access to
+# identity (Config.instance_id); only the resource owner can grant access to
 # ITSELF; ``from_id`` is the (foreign, unvalidated) requester.
 INSTANCE_SCOPED_KINDS: frozenset[str] = frozenset({SHARES})
 
@@ -94,7 +94,7 @@ class RelationshipError(ValueError):
 class Relationship:
     """One typed overlay edge (immutable, hashable).
 
-    Identity is the ``(from_id, to_id, kind)`` triple — ``note``/``scope`` are
+    Identity is the ``(from_id, to_id, kind)`` triple; ``note``/``scope`` are
     metadata excluded from equality/hash, so two edges with the same triple but
     different notes dedupe to one. For a symmetric ``kind`` the triple is stored
     canonically (ids sorted) by :func:`add`, so A↔B and B↔A are the same edge.
@@ -224,7 +224,7 @@ def _require_brains(from_id: str, to_id: str, config: "Optional[Config]") -> Non
 def _require_instance_grant(from_id: str, to_id: str, config: "Optional[Config]") -> None:
     """Validate an INSTANCE-scoped edge (currently only :data:`SHARES`).
 
-    Endpoints are whole instances, not local topology brains — a foreign
+    Endpoints are whole instances, not local topology brains; a foreign
     ``from_id`` is expected and NOT checked against the local tree. What IS
     enforced: ``to_id`` must be THIS instance's own id, so an instance can only
     ever grant access to its own resources, never impersonate a grant on
@@ -315,7 +315,7 @@ def list_for(brain_id: str, config: "Optional[Config]" = None) -> dict:
     Directed edges land in exactly one bucket (``outgoing`` when ``brain_id`` is the
     source, ``incoming`` when it is the target). A SYMMETRIC ``collaborates`` edge is
     bidirectional, so when ``brain_id`` participates it appears in BOTH buckets (the
-    peer is on the other side either way) — the truthful view of a two-way edge.
+    peer is on the other side either way); the truthful view of a two-way edge.
     """
     brain_id = (brain_id or "").strip()
     outgoing: list[dict] = []
@@ -338,7 +338,7 @@ def permits(
 ) -> bool:
     """Does an edge of ``kind`` exist from A to B? The runtime seam ("may A read B?").
 
-    Pure read — never raises (an unknown kind simply returns ``False``). Honours
+    Pure read; never raises (an unknown kind simply returns ``False``). Honours
     direction: ``reads``/``notifies``/``reviews`` answer true ONLY for the exact
     stored direction A→B, while the symmetric ``collaborates`` answers true for A→B
     AND B→A.

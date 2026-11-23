@@ -1,19 +1,19 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """
-Candidate authoring — the missing first mile of self-improvement 2b (§2.8).
+Candidate authoring; the missing first mile of self-improvement 2b (§2.8).
 
 The four gates (:mod:`lhassa.agents.gates`) and local-git versioning
 (:mod:`lhassa.agents.versioning`) have always existed in isolation: something has
 to actually WRITE a candidate tool before it can be quarantined, gated and
 graduated. This module is that first mile.
 
-``author_candidate`` asks the ROUTINE (cheap) model — never the hard/smart one,
-this is a small mechanical writing task — for a small, self-contained Python tool
+``author_candidate`` asks the ROUTINE (cheap) model; never the hard/smart one,
+this is a small mechanical writing task; for a small, self-contained Python tool
 plus its test file. It NEVER executes what comes back; it only returns text.
 ``propose_tool`` chains authoring -> :func:`lhassa.agents.versioning.create_candidate`
 -> :func:`lhassa.agents.gates.promote` (which runs the candidate through the
 quarantine sandbox before anything else touches it) and, only if every gate
-passes, parks a ``tool_graduation`` approval — the same queue
+passes, parks a ``tool_graduation`` approval; the same queue
 ``POST /api/tools/{nombre}/graduate`` consumes. Nothing here auto-graduates a
 tool: a human (or the autonomy knob) still has to say yes.
 
@@ -43,7 +43,7 @@ from lhassa.llm.gateway import BudgetExceeded
 from lhassa.llm.moa import moa as _moa_consult
 from lhassa.llm.provider import ModelProvider, ProviderNotConfigured, get_model_provider
 
-# A cheap, mechanical writing task — plenty of budget for a small tool + test.
+# A cheap, mechanical writing task; plenty of budget for a small tool + test.
 _MAX_TOKENS = 1500
 
 
@@ -90,11 +90,11 @@ def _messages(
         f"runnable with `python3 -m pytest -q test_{name}.py`.\n\n"
         "Return ONLY JSON of the form "
         '{"files": {"' + name + '.py": "<source>", "test_' + name + '.py": "<source>"}}'
-        " — no prose, no markdown fences."
+        ": no prose, no markdown fences."
     )
     if feedback:
         # Iteration turn (turn > 1): thread the previous turn's objective gate
-        # failure back in — never a raw pass/fail judgment of the model's own
+        # failure back in; never a raw pass/fail judgment of the model's own
         # output, only the independent verifier's detail text (loop-engineering
         # principle: the doer never judges).
         prompt += (
@@ -118,12 +118,12 @@ async def author_candidate(
     """Ask the routine (cheap) model to write a tool file + its test file.
 
     ``feedback``, when given (turn > 1 of :func:`propose_tool`'s iteration loop),
-    is appended to the SAME authoring prompt — the failing gate's objective
+    is appended to the SAME authoring prompt; the failing gate's objective
     detail text, never a judgment of the model's own prior output.
 
     Returns ``{"<name>.py": "...", "test_<name>.py": "..."}`` on success, or an
     EMPTY dict on any degrade path (no provider configured, budget exceeded,
-    malformed reply). This function ONLY produces text — it never executes the
+    malformed reply). This function ONLY produces text; it never executes the
     returned code; the caller (:func:`propose_tool`) is what hands it to the
     quarantine + gates pipeline.
     """
@@ -182,7 +182,7 @@ def _quarantine_script(name: str, files: dict[str, str]) -> str:
     """Build the gate-1 (segura) candidate: a self-contained bash script.
 
     Materializes every authored file via a heredoc and, if a test file was
-    authored, runs it — all INSIDE whatever workdir the quarantine sandbox
+    authored, runs it; all INSIDE whatever workdir the quarantine sandbox
     gives it (a fresh, scrubbed, no-network temp directory; see
     :func:`lhassa.security.quarantine.run_in_quarantine`). This is the actual
     "run it caged" step: the authored code never executes anywhere else before
@@ -201,7 +201,7 @@ def _quarantine_script(name: str, files: dict[str, str]) -> str:
     if test_path:
         lines.append(f"python3 -m pytest -q {shlex.quote(test_path)}")
     else:
-        # No test authored — a best-effort syntax check of every file.
+        # No test authored; a best-effort syntax check of every file.
         for path in files:
             if path.endswith(".py"):
                 lines.append(f"python3 -m py_compile {shlex.quote(path)}")
@@ -230,7 +230,7 @@ async def _moa_code_review(
 ) -> Optional[dict[str, Any]]:
     """One opt-in :func:`lhassa.llm.moa.moa` pass reviewing a GRADUATED candidate.
 
-    Advisory only — this runs AFTER the objective gates already passed, purely
+    Advisory only; this runs AFTER the objective gates already passed, purely
     to give the owner a panel opinion on the approval card; it never gates or
     blocks graduation. Defensive: any failure (no panelists, moa() degrading,
     an unexpected exception) returns ``None`` so the caller attaches nothing
@@ -244,7 +244,7 @@ async def _moa_code_review(
             f"Review this self-authored tool named {name!r} (purpose: "
             f"{description}) for correctness and safety concerns before a human "
             f"approves it for use. It already passed automated tests and a "
-            f"quarantine sandbox run — focus on anything those checks would "
+            f"quarantine sandbox run; focus on anything those checks would "
             f"miss (edge cases, unsafe assumptions, unclear behavior).\n\n"
             f"{listing}"
         )
@@ -285,36 +285,36 @@ async def propose_tool(
     iteration recorded on the ``loops`` table (:mod:`lhassa.core.db`).
 
     Each turn:
-      1. :func:`author_candidate` asks the cheap model to write the tool + test —
+      1. :func:`author_candidate` asks the cheap model to write the tool + test;
          turn 1 as a fresh request; turn N>1 with the SAME prompt plus the
          previous turn's failing :class:`~lhassa.agents.gates.GateResult` detail
-         appended as feedback. The doer never judges its own output — only the
+         appended as feedback. The doer never judges its own output; only the
          independent gates' objective detail threads forward.
       2. :func:`lhassa.agents.versioning.create_candidate` commits the files on a
          ``candidate/<name>`` branch (re-pointed fresh each turn).
       3. :func:`lhassa.agents.gates.promote` runs the segura (quarantine) /
          correcta (tests) / mejor (metric vs. baseline) gates, in order, stopping
-         at the first failure — deny-by-default, exactly like the rest of §2.8.
+         at the first failure; deny-by-default, exactly like the rest of §2.8.
 
     Every turn logs one Episode (``despertar_por="forge"``) before the loop moves
     on. A ``segura``/``correcta`` failure is RETRYABLE (feedback can plausibly fix
     it) and bumps the turn; a ``mejor`` failure with no baseline/metric_fn is NOT
     retryable (no feedback can conjure a baseline) and stops immediately with the
     same honest single-pass message this function has always returned. Turns are
-    capped BEFORE any work — a candidate that never clears the gates within
+    capped BEFORE any work; a candidate that never clears the gates within
     ``max_turns`` ends the loop ``status="capped"`` rather than looping forever.
 
     Only when a turn's gates all pass does this park a ``tool_graduation``
     approval (the same queue the ``POST /api/tools/{nombre}/graduate`` endpoint
-    consumes) — nothing here auto-graduates a tool.
+    consumes); nothing here auto-graduates a tool.
 
-    ``moa_verdict`` (default ``False`` — byte-identical behavior when unset) is
+    ``moa_verdict`` (default ``False``: byte-identical behavior when unset) is
     an OPT-IN extra: when a candidate graduates the objective gates AND this is
     True, one extra :func:`lhassa.llm.moa.moa` consultation asks a panel of
     models to review the authored code for correctness/safety concerns, and the
     synthesized review is attached to the graduation approval's payload
     (``moa_review``) so the owner sees the panel's opinion on the approval card.
-    The panel is advisory color for the human — it NEVER overrides the
+    The panel is advisory color for the human; it NEVER overrides the
     objective gates, which remain the hard filter; a failed/degraded MoA
     consultation still lets graduation proceed (the approval simply carries no
     ``moa_review``).
@@ -369,7 +369,7 @@ async def propose_tool(
             config=config,
         )
         if not files:
-            # No provider / budget exceeded / malformed reply mid-loop — degrade
+            # No provider / budget exceeded / malformed reply mid-loop; degrade
             # without raising, exactly like the (former) single-pass behavior.
             reason = "author_candidate produced no files (degraded)"
             await _forge_episode(
@@ -406,7 +406,7 @@ async def propose_tool(
 
         # Read tools_repo_dir via the MODULE (not the class bound at import time)
         # so a test that monkeypatches ``Config.tools_repo_dir`` after this
-        # module was first imported is still honored — the same resilient
+        # module was first imported is still honored; the same resilient
         # pattern ``lhassa.agents.versioning`` already uses for the same setting.
         repo_dir = str(_config_mod.Config.tools_repo_dir)
         resolved_tests_spec = tests_spec or _default_tests_spec(repo_dir, files)
@@ -456,7 +456,7 @@ async def propose_tool(
         failed = next((g for g in gates_run if not g.passed), None)
 
         # The "mejor" gate cannot be fixed by feedback when the caller never gave
-        # it a baseline/metric_fn to prove "better" against — that is a caller
+        # it a baseline/metric_fn to prove "better" against; that is a caller
         # config gap, not something a rewritten candidate can address. Stop
         # early with the same honest message single-pass authoring always gave.
         if failed is not None and failed.gate == _gates.GATE_MEJOR and (
@@ -477,7 +477,7 @@ async def propose_tool(
         feedback = f"gate {verdict['gate']} failed: {verdict['detail']}"
         turn += 1
 
-    # Exhausted max_turns without graduating — cap it, do not loop forever.
+    # Exhausted max_turns without graduating; cap it, do not loop forever.
     await _advance(status="capped")
     if outcome:
         outcome["capped"] = True

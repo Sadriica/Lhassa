@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""apply_feedback — the deterministic action fronting the feedback→knob bridge.
+"""apply_feedback; the deterministic action fronting the feedback→knob bridge.
 
 Runs :func:`lhassa.security.autonomy.apply_feedback` and renders a one-line
-summary. $0, no external send — mirrors ``distill_memory`` / ``calendar_sync``
+summary. $0, no external send; mirrors ``distill_memory`` / ``calendar_sync``
 / ``ingest_knowledge`` (all ``requires_approval=False``): a routine hygiene
 pass that MOVES the autonomy knob from lived feedback (§2.2), never asks a
 model, and never raises.
@@ -15,8 +15,8 @@ async def apply_feedback(params: dict) -> str:
     """Apply recent behavioral feedback to the autonomy knob. Never raises.
 
     params:
-        config — optional Config override (tests).
-        window_days — optional int, how many days of episode history to read
+        config; optional Config override (tests).
+        window_days; optional int, how many days of episode history to read
             (default matches ``security.autonomy.apply_feedback``'s own default).
     """
     try:

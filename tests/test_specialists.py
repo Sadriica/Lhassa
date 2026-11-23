@@ -1,4 +1,4 @@
-"""Tests for lhassa.agents.specialists — domain skills (NOT fine-tuning).
+"""Tests for lhassa.agents.specialists; domain skills (NOT fine-tuning).
 
 Offline and model-agnostic: a specialist is base-model + instructions + tools +
 gate criteria, so these assertions never touch a model or the network.

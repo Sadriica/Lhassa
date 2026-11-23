@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""The real department executor — a department brain that actually thinks (Fase 7).
+"""The real department executor; a department brain that actually thinks (Fase 7).
 
 Slice 1 shipped the two-brain core with an INJECTABLE executor and a deterministic
 offline stub as the default. This module is the real executor: it runs an assigned
 goal through the SAME one-turn think path the rest of Lhassa uses
-(``cli/agent.run_once`` and ``voice/brain_bridge.answer``) — identity + layered
-memory + the router's routine provider + ``provider.complete`` — but with the
+(``cli/agent.run_once`` and ``voice/brain_bridge.answer``); identity + layered
+memory + the router's routine provider + ``provider.complete``: but with the
 DEPARTMENT'S identity reflected in the system prompt ("You are the <department>
 department brain.").
 
@@ -15,19 +15,19 @@ Two design rules keep it honest:
     ``LHASSA_ORG_LIVE`` (default OFF), exactly like the other live-cost paths in
     the codebase (voice, memory layer 4, the live heartbeat) which all default off
     and turn on with creds/flags. With the flag off, :func:`brain_executor` returns
-    a deterministic, structured offline result and never touches a model — so the
+    a deterministic, structured offline result and never touches a model; so the
     injectable seam stays the test/offline path and the slice-1 tests keep passing
     without a real call. A test (or production) turns the flag on, or injects/mocks
     a provider, to exercise the real think path.
   * **A department failure is data, never a crash.** ``ProviderNotConfigured`` /
     budget errors (and any unexpected error) degrade to a structured result with an
     explanatory ``summary`` and ``cost_usd=0.0``. :func:`brain_executor` NEVER
-    raises — a department that can't reach a model produces a ``TASK_RESULT``
+    raises; a department that can't reach a model produces a ``TASK_RESULT``
     carrying the failure, not an exception that breaks the queue.
 
 The returned dict carries the structured result the brief asks for
 (``summary`` / ``department`` / ``cost_usd`` / ``model``) plus ``ok`` (whether the
-department produced a result at all — always true here, since a degraded answer is
+department produced a result at all; always true here, since a degraded answer is
 still a result). ``ok`` keeps the result shape compatible with the slice-1 stub.
 """
 
@@ -63,8 +63,19 @@ def _live_enabled(config: Config) -> bool:
 
     Off by default so the department executor is offline-testable and spends no
     tokens out of the box (matching the codebase's turn-on-with-creds convention).
+
+    The environment variable wins when it is set at all, which keeps a one-off
+    ``LHASSA_ORG_LIVE=1 lhassa flow run ...`` and the tests' runtime monkeypatch
+    working. Otherwise the persisted ``config.org_live`` decides, so the owner
+    can turn their org on from ``lhassa config set`` or the dashboard instead of
+    having to hand-edit ``.env``: this is the switch between 21 brains returning
+    deterministic stubs and 21 brains actually thinking, and it was the one
+    behaviour-and-cost knob with no supported way to reach it.
     """
-    return (os.getenv("LHASSA_ORG_LIVE", "") or "").strip().lower() in _TRUTHY
+    raw = os.getenv("LHASSA_ORG_LIVE")
+    if raw is not None and raw.strip() != "":
+        return raw.strip().lower() in _TRUTHY
+    return bool(getattr(config, "org_live", False))
 
 
 def _system_prompt(instance_id: Optional[str], department: str, ctx: "Context") -> str:
@@ -78,7 +89,7 @@ def _system_prompt(instance_id: Optional[str], department: str, ctx: "Context") 
     identity = load_identity(instance_id)
     department_line = (
         f"You are the {department} department brain. You execute the typed work the "
-        "general assigns to your department, under your own identity — the general "
+        "general assigns to your department, under your own identity; the general "
         "coordinates, you do the thinking for your domain. Reason it through and "
         "return one concise, useful result for the goal."
     )
@@ -114,7 +125,7 @@ def _resolve_brain_skills(department: str, config: Config) -> tuple[str, ...]:
     Finds the :class:`BrainNode` whose ``department`` matches (or whose ``id`` ends
     with the department, e.g. ``"dept:optimization"``) and returns its ``.skills``.
     No match (or the single standalone admin) → no skills, unchanged behaviour.
-    Never raises — a missing/unreadable topology yields ``()``.
+    Never raises; a missing/unreadable topology yields ``()``.
     """
     if not (department or "").strip():
         return ()
@@ -126,7 +137,7 @@ def _resolve_brain_skills(department: str, config: Config) -> tuple[str, ...]:
             if node.department == department or node.id.endswith(department):
                 return tuple(node.skills or ())
     except Exception as exc:
-        logger.warning("org: could not resolve skills for dept:{} — {}", department, exc)
+        logger.warning("org: could not resolve skills for dept:{}; {}", department, exc)
     return ()
 
 
@@ -151,14 +162,14 @@ def _load_skill_blocks(
 
         store = SkillStore(config)
     except Exception as exc:  # pragma: no cover - store construction is defensive
-        logger.warning("org: skill store unavailable — {}", exc)
+        logger.warning("org: skill store unavailable; {}", exc)
         return blocks, list(names)
     for name in names:
         skill = None
         try:
             skill = store.get(name)
         except Exception as exc:  # pragma: no cover - reads degrade already
-            logger.warning("org: could not read skill {} — {}", name, exc)
+            logger.warning("org: could not read skill {}; {}", name, exc)
         instructions = (getattr(skill, "instructions", "") or "").strip() if skill else ""
         if skill is None or getattr(skill, "error", None) or not instructions:
             not_installed.append(name)
@@ -199,7 +210,7 @@ async def brain_executor(
         instance_id or getattr(config, "instance_id", None) or Config.instance_id
     )
 
-    # Idempotent — a department may be woken before the DB is initialised.
+    # Idempotent; a department may be woken before the DB is initialised.
     await db.init_db()
 
     ep = Episode.begin(despertar_por="org", instance_id=instance_id)
@@ -207,8 +218,8 @@ async def brain_executor(
         # Offline/default path: no model call, deterministic structured result.
         if not _live_enabled(config):
             summary = (
-                f"[offline] {department} department handled (live thinking disabled "
-                f"— set LHASSA_ORG_LIVE=1 to think): {goal}"
+                f"[offline] {department} department handled (live thinking disabled; "
+                f"set LHASSA_ORG_LIVE=1 to think): {goal}"
             )
             ep.finish(
                 decision="org: offline (LHASSA_ORG_LIVE off)",
@@ -277,7 +288,7 @@ async def brain_executor(
         return out
 
     except (ProviderNotConfigured, BudgetExceeded) as exc:
-        # Known degradation — a department that can't reach a model still returns a
+        # Known degradation; a department that can't reach a model still returns a
         # result (carrying the failure), never an exception.
         summary = (
             f"{department} department could not think right now "

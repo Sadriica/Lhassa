@@ -4,7 +4,7 @@ import { NODE_W } from './layout'
 // Custom node renderers for the org FLOW canvas: the department-group box (a
 // non-interactive, draggable, tinted bounding rectangle drawn behind its members)
 // and the brain node (the sovereign-aware card with re-parent handles). The
-// composition (OrgFlow.jsx) keys React Flow's `nodeTypes` on these — kept identical
+// composition (OrgFlow.jsx) keys React Flow's `nodeTypes` on these; kept identical
 // so the canvas wiring is a pure structural move.
 
 // A non-interactive, rounded, tinted rectangle with an uppercase tracked label.
@@ -80,7 +80,7 @@ export function BrainFlowNode({ data }) {
   const limits = node.limits || {}
   const limitKeys = Object.keys(limits)
 
-  // The admin (Lhassa) is the sovereign — deep-red ring over a gold-tinted fill.
+  // The admin (Lhassa) is the sovereign; deep-red ring over a gold-tinted fill.
   // A scattered-department brain (no group box) carries its department tint on the
   // border so it's still identifiable; grouped brains keep the neutral border (the
   // surrounding box already marks them).
@@ -133,7 +133,7 @@ export function BrainFlowNode({ data }) {
         {isAdmin && (
           <span
             className="lh-tag"
-            title="Lhassa — commands everyone"
+            title="Lhassa; commands everyone"
             style={{
               borderColor: 'rgba(162,62,52,0.6)',
               background: 'rgba(162,62,52,0.16)',
@@ -193,7 +193,7 @@ export function BrainFlowNode({ data }) {
       )}
 
       {/* source (bottom): drag from here to another node to re-parent under it.
-          The admin is anchored — it gets no source handle, so it can't be moved. */}
+          The admin is anchored; it gets no source handle, so it can't be moved. */}
       {!isAdmin && (
         <Handle
           type="source"

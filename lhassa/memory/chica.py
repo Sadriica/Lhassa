@@ -1,19 +1,19 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """
-La chica — the persistent working-memory cache, DERIVED from the grande (§2.3).
+La chica; the persistent working-memory cache, DERIVED from the grande (§2.3).
 
 The grande (``lhassa.core.db`` / brain.db) is the append-only source of truth.
 The chica is a *live cache* loaded at wake: pinned facts + directivas + recent
 items. It lives in its own small SQLite file (``config.chica_db_path``, default
-``~/.lhassa/chica.db``) so it can be wiped independently of the grande — the
+``~/.lhassa/chica.db``) so it can be wiped independently of the grande; the
 brief's "matas la chica → se regenera de la grande". It survives process restart.
 
-Two mechanical operations (Phase 1 — NO tokens, NO LLM, NO semantics):
+Two mechanical operations (Phase 1. NO tokens, NO LLM, NO semantics):
 
-  - :func:`consolidate` — threshold-triggered LRU eviction. When ``size`` exceeds
+  - :func:`consolidate`: threshold-triggered LRU eviction. When ``size`` exceeds
     ``max_items`` we drop the least-recently-used NON-pinned items down to the
     threshold. Pinned items and directivas are NEVER evicted. ~80% mechanical.
-  - :func:`regenerate` — rebuild the chica from the grande via
+  - :func:`regenerate`: rebuild the chica from the grande via
     ``lhassa.memory.load.load``: pinned facts + directivas + recent items.
 
 Semantic consolidation (summarizing similar items, detecting contradictions with
@@ -32,7 +32,7 @@ from lhassa._vendor import aiosqlite
 
 from lhassa.config import Config
 
-# Module-level path seam — tests monkeypatch this the way they patch
+# Module-level path seam; tests monkeypatch this the way they patch
 # ``lhassa.core.db.DB_PATH``. Resolved at call time, so the patch takes effect.
 CHICA_DB_PATH = Path(Config.chica_db_path)
 
@@ -193,7 +193,7 @@ async def items(instance_id: str) -> list[dict[str, Any]]:
 
 async def clear(instance_id: str) -> int:
     """
-    "Kill the chica" for ``instance_id`` — empty its cache. Returns how many rows
+    "Kill the chica" for ``instance_id``: empty its cache. Returns how many rows
     were removed. The grande is untouched, so :func:`regenerate` rebuilds it.
     """
     conn = await _open()
@@ -213,13 +213,13 @@ async def consolidate(instance_id: str, *, max_items: int | None = None) -> dict
 
     If ``size`` exceeds ``max_items``, evict the least-recently-used items until we
     are back at the threshold. NEVER evicts pinned items or directivas (identity).
-    NO tokens, NO LLM, NO semantics — the ~80% mechanical path. Semantic
+    NO tokens, NO LLM, NO semantics; the ~80% mechanical path. Semantic
     consolidation (summarizing similar items, contradiction detection) is DEFERRED
     to Phase 2.
 
     Returns ``{"kept": int, "evicted": int}``. Note: if the protected (pinned +
     directiva) rows alone exceed ``max_items``, ``kept`` stays above the threshold
-    — protected rows are never dropped to honor it.
+   ; protected rows are never dropped to honor it.
     """
     if max_items is None:
         max_items = Config.chica_max_items
@@ -279,28 +279,28 @@ async def regenerate(instance_id: str, *, token_budget: int, active_tags=()) -> 
     await clear(instance_id)
 
     loaded = 0
-    # Directivas — identity; pinned, never evicted.
+    # Directivas; identity; pinned, never evicted.
     for i, directive in enumerate(ctx.directives):
         await remember(
             instance_id, f"directiva:{i}", directive,
             pinned=True, kind=KIND_DIRECTIVA,
         )
         loaded += 1
-    # Pinned facts — identity datos; pinned, never evicted.
+    # Pinned facts; identity datos; pinned, never evicted.
     for fact in ctx.pinned_facts:
         await remember(
             instance_id, f"fact:{fact.id}", fact.contenido,
             pinned=True, kind=KIND_FACT,
         )
         loaded += 1
-    # Active-context facts (by tag) — evictable.
+    # Active-context facts (by tag); evictable.
     for fact in ctx.tag_facts:
         await remember(
             instance_id, f"fact:{fact.id}", fact.contenido,
             pinned=False, kind=KIND_FACT,
         )
         loaded += 1
-    # Recent episodes — evictable, recency layer.
+    # Recent episodes; evictable, recency layer.
     for ep in ctx.episodes:
         ep_id = ep.get("id") or ep.get("creado_en") or str(loaded)
         content = ep.get("resultado") or ep.get("despertar_por") or ""

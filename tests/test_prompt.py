@@ -1,4 +1,4 @@
-"""Tests for lhassa.llm.prompt — system prompt builder."""
+"""Tests for lhassa.llm.prompt; system prompt builder."""
 
 from lhassa.llm.prompt import BASE_PROMPT, build_system_prompt
 
@@ -14,7 +14,7 @@ def test_base_prompt_no_markdown_bullet():
     assert "No markdown" in BASE_PROMPT
 
 
-# ── build_system_prompt — default (English) ────────────────────────────────────
+# ── build_system_prompt; default (English) ────────────────────────────────────
 
 def test_default_contains_base():
     result = build_system_prompt()
@@ -88,7 +88,7 @@ def test_bcp47_pt_br():
 
 
 def test_bcp47_en_gb_no_injection():
-    """en-GB is still English — no language instruction expected."""
+    """en-GB is still English; no language instruction expected."""
     result = build_system_prompt(stt_language="en-GB")
     assert "Language instruction" not in result
 

@@ -1,4 +1,4 @@
-"""Tests for lhassa.health.checks — focus on the pure parsers + safe aggregation."""
+"""Tests for lhassa.health.checks; focus on the pure parsers + safe aggregation."""
 
 import json
 
@@ -144,7 +144,7 @@ def test_check_mem_pressure_from_file(tmp_path):
     meminfo.write_text(SAMPLE_MEMINFO)
     result = checks.check_mem_pressure(meminfo_path=meminfo)
     assert result["name"] == "mem_pressure"
-    assert result["level"] == "info"  # 50% RAM, 25% swap — healthy
+    assert result["level"] == "info"  # 50% RAM, 25% swap; healthy
     assert result["detail"]["mem_used_pct"] == 50.0
 
 
@@ -237,6 +237,6 @@ def test_run_all_does_not_touch_real_home(tmp_path, monkeypatch):
 def test_format_digest_is_plain_text(tmp_path):
     digest = checks.run_all(out_dir=tmp_path, notify=False)
     text = checks.format_digest(digest)
-    assert "Lhassa — PC state check" in text
+    assert "Lhassa PC state check" in text
     for name in checks.CHECKS:
         assert name in text

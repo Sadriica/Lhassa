@@ -1,14 +1,14 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""create_project — the deterministic action + the $0 project-detector sense.
+"""create_project; the deterministic action + the $0 project-detector sense.
 
 Two halves of one door:
 
 - :func:`create_project_action` is the fixed ACTION (``create_project``):
   the owner's explicit alta via CLI/chat-marker/approval resolves through it.
-  $0, deterministic, never raises — errors return an honest string.
+  $0, deterministic, never raises; errors return an honest string.
 - :func:`register_sense` registers a watchlist check that notices a repo listed
   in ``Config.auto_sync_repos`` with NO matching project row and PROPOSES the
-  project: it mints a ``create_project`` task with a **MUNDO** origin — the
+  project: it mints a ``create_project`` task with a **MUNDO** origin; the
   trust model itself parks the approval ("world-derived content is never
   trusted to act on its own"), so detection can never silently create anything.
   De-duplicated per path via ``watch_state``; a denial is respected the same
@@ -42,16 +42,16 @@ async def create_project_action(params: dict) -> str:
         if not name and path:
             name = Path(path).name
         if not name:
-            return "create_project: no name given — pass name=<name> or path=<dir>."
+            return "create_project: no name given; pass name=<name> or path=<dir>."
         kind = str(params.get("kind") or "generic").strip() or "generic"
 
         row = await projects.create_project(
             instance_id, name, kind=kind, path=path,
         )
         where = f" at {row['path']}" if row.get("path") else ""
-        return f"create_project: {row['name']} ({row['kind']}) created{where} — id {row['id']}"
+        return f"create_project: {row['name']} ({row['kind']}) created{where}; id {row['id']}"
     except ValueError as exc:
-        return f"create_project: refused — {exc}"
+        return f"create_project: refused; {exc}"
     except Exception as exc:
         return f"create_project errored: {exc}"
 
@@ -63,7 +63,7 @@ async def _from_unregistered_repos(
 
     Emits no triggers (``out`` untouched): the proposal is a minted
     ``create_project`` task whose MUNDO origin parks it at the approval
-    frontier — the owner's tap is the creation. $0 and never raises.
+    frontier; the owner's tap is the creation. $0 and never raises.
     """
     if peek:
         return

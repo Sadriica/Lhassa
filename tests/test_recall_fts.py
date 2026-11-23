@@ -1,4 +1,4 @@
-"""Tests for Fase 1 "Recall" — FTS5 full-text search over the episode log.
+"""Tests for Fase 1 "Recall": FTS5 full-text search over the episode log.
 
 Covers: index creation + backfill of pre-existing rows, content search,
 automation-episode demotion, hostile-query safety, the /api/episodes/search
@@ -8,7 +8,6 @@ lhassa.memory.load.
 
 import asyncio
 
-import httpx
 import pytest
 import pytest_asyncio  # noqa: F401
 
@@ -42,7 +41,7 @@ async def test_backfill_indexes_pre_existing_episodes(tmp_path, monkeypatch):
     monkeypatch.setattr(db, "DB_PATH", db_path)
 
     # Simulate an "old" DB: only the episodes table exists (no FTS index yet),
-    # with rows already in it — as if upgrading from a pre-Fase-1 install.
+    # with rows already in it; as if upgrading from a pre-Fase-1 install.
     db_path.parent.mkdir(parents=True, exist_ok=True)
     async with aiosqlite.connect(db_path) as conn:
         await conn.execute("""
@@ -70,7 +69,7 @@ async def test_backfill_indexes_pre_existing_episodes(tmp_path, monkeypatch):
         )
         await conn.commit()
 
-    # Now run init_db() as if upgrading — it must create the FTS index AND
+    # Now run init_db() as if upgrading; it must create the FTS index AND
     # backfill the pre-existing row (rebuild), never crash.
     await db.init_db()
 
@@ -202,7 +201,7 @@ async def test_org_execution_is_demoted_more_gently_than_transport(tmp_path, mon
 async def test_a_strong_automation_match_still_beats_a_weak_interactive_one(
     tmp_path, monkeypatch
 ):
-    """The penalty is a nudge, not a filter — relevance can still win.
+    """The penalty is a nudge, not a filter; relevance can still win.
 
     This needs a REALISTIC corpus to be meaningful. bm25 is scored against
     corpus statistics: with only two documents its IDF term collapses to ~0, so
@@ -251,50 +250,9 @@ async def test_a_strong_automation_match_still_beats_a_weak_interactive_one(
 async def test_hostile_queries_never_raise(tmp_path, monkeypatch, hostile_query):
     db = await _init_db(tmp_path, monkeypatch)
     await _make_episode(db, "inst_personal", despertar_por="telegram", resultado="algo normal")
-    # Must not raise — a bad user query degrades to (possibly empty) results.
+    # Must not raise; a bad user query degrades to (possibly empty) results.
     results = await db.search_episodes("inst_personal", hostile_query, 10)
     assert isinstance(results, list)
-
-
-# ── /api/episodes/search ───────────────────────────────────────────────────────
-
-
-@pytest_asyncio.fixture
-async def api_client(tmp_path, monkeypatch):
-    import lhassa.core.db as db
-    from lhassa.config import Config
-
-    monkeypatch.setattr(db, "DB_PATH", tmp_path / "brain.db")
-    await db.init_db()
-
-    from lhassa.api.server import app
-
-    transport = httpx.ASGITransport(app=app)
-    async with httpx.AsyncClient(transport=transport, base_url="http://t") as client:
-        yield client, db, Config.instance_id
-
-
-@pytest.mark.asyncio
-async def test_api_episodes_search(api_client):
-    client, db, inst = api_client
-    await _make_episode(db, inst, despertar_por="telegram", resultado="jirafa multicolor")
-
-    r = await client.get("/api/episodes/search", params={"q": "jirafa"})
-    assert r.status_code == 200
-    body = r.json()
-    assert body["query"] == "jirafa"
-    assert body["count"] == 1
-    assert len(body["results"]) == 1
-    assert "jirafa" in body["results"][0]["resultado"].lower()
-
-
-@pytest.mark.asyncio
-async def test_api_episodes_search_validates_n(api_client):
-    client, _db, _inst = api_client
-    r = await client.get("/api/episodes/search", params={"q": "x", "n": 0})
-    assert r.status_code == 422
-    r2 = await client.get("/api/episodes/search", params={"q": "x", "n": 201})
-    assert r2.status_code == 422
 
 
 # ── /recall command ────────────────────────────────────────────────────────────

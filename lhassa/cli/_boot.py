@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Boot-time setup for the Lhassa CLI — quiet logging before the heavy imports.
+"""Boot-time setup for the Lhassa CLI; quiet logging before the heavy imports.
 
 The CLI entry does not go through ``main.py`` (which configures loguru), so loguru's
 DEFAULT sink is active: a DEBUG-to-stderr sink that dumps the pipecat banner, the
 "Tools registered" line, and per-call gateway DEBUG records straight into the REPL.
 :func:`quiet_logging` drops that default sink and keeps only a WARNING+ sink, so the
-terminal shows the conversation — not the plumbing. Call it BEFORE importing any heavy
+terminal shows the conversation; not the plumbing. Call it BEFORE importing any heavy
 ``lhassa`` module (those emit at import time). Override the floor with
 ``LHASSA_CLI_LOG_LEVEL`` (e.g. ``INFO`` to debug, ``OFF`` to silence entirely).
 

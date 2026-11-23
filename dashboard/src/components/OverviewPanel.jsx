@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from '../lib/toast'
 
-// The Overview home — a live COMMAND CENTER, top-to-bottom:
+// The Overview home; a live COMMAND CENTER, top-to-bottom:
 //   now running → do-and-sleep pulse → key stats (clickable) → approvals → smart activity.
 //
 //   GET /api/overview → {
@@ -13,7 +13,7 @@ import { toast } from '../lib/toast'
 //   }
 // Polled every ~10s. In addition we open a lightweight /ws listener (the same
 // fan-out App.jsx uses) so agent_started/token/done/stopped/error events refresh
-// the "Now running" strip immediately — a poll would lag by up to 10s. A 1s local
+// the "Now running" strip immediately; a poll would lag by up to 10s. A 1s local
 // ticker drives the live elapsed timers. Approvals resolve inline against the same
 // endpoint the ApprovalQueuePanel uses (POST /api/approvals/{id} {approved});
 // a per-run Stop hits POST /api/code/{id}/stop. Defensive throughout: a partial/failed
@@ -86,7 +86,7 @@ function healthDot(level, ok) {
   return 'lh-dot-warn'
 }
 
-// ── a compact stat card — clickable navigates to `hash` (the app's hash router) ──
+// ── a compact stat card; clickable navigates to `hash` (the app's hash router) ──
 function StatCard({ label, value, sub, children, accent, pct, hash }) {
   const clickable = Boolean(hash)
   const go = () => { if (hash) window.location.hash = hash }
@@ -127,7 +127,7 @@ function StatCard({ label, value, sub, children, accent, pct, hash }) {
 
 // ── smart activity: collapse routine offline ticks, flag important events ────────
 // An event is "important" if it looks like an approval, error, completed flow, or an
-// agentic/stopped run — anything the owner would actually want to notice. Everything
+// agentic/stopped run; anything the owner would actually want to notice. Everything
 // else (mostly repetitive "[offline] … department handled" beats) is routine noise.
 const IMPORTANT_RE = /(approv|error|fail|denied|blocked|escalat|stopped|flow|agent|graduat|kill.?switch)/i
 
@@ -136,7 +136,7 @@ function isImportant(ep) {
   return IMPORTANT_RE.test(hay)
 }
 
-// A stable signature for "the same routine tick" — group consecutive identical ones.
+// A stable signature for "the same routine tick"; group consecutive identical ones.
 function routineKey(ep) {
   return `${ep.despertar_por || ''}|${ep.decision || ''}`
 }
@@ -205,7 +205,7 @@ export default function OverviewPanel() {
         } catch { /* ignore malformed frames */ }
       }
       ws.onerror = () => { /* poll fallback covers it */ }
-    } catch { /* WS unavailable — poll fallback covers it */ }
+    } catch { /* WS unavailable; poll fallback covers it */ }
     return () => { clearTimeout(debounce); ws?.close() }
   }, [load])
 
@@ -253,7 +253,7 @@ export default function OverviewPanel() {
   const pulse = data?.pulse || {}
 
   // Tick the elapsed/relative clocks once a second while something is in flight or
-  // the pulse card is showing a "last beat" — otherwise stay idle (no churn).
+  // the pulse card is showing a "last beat"; otherwise stay idle (no churn).
   const needsClock = nowRunning.length > 0 || pulse.last_beat != null
   useEffect(() => {
     if (!needsClock) return undefined
@@ -383,7 +383,7 @@ export default function OverviewPanel() {
         </div>
       </div>
 
-      {/* 1 — Now running strip */}
+      {/* 1; Now running strip */}
       <div className="lh-card" style={nowRunning.length > 0 ? { borderColor: 'rgba(217,165,33,0.3)' } : undefined}>
         <div className="lh-card-head">
           <div className="flex items-center gap-2">
@@ -398,7 +398,7 @@ export default function OverviewPanel() {
         {nowRunning.length === 0 ? (
           <div className="lh-row flex items-center gap-2" style={{ color: 'var(--lh-text-faint)' }}>
             <span className="lh-dot lh-dot-ok" />
-            <span className="text-xs">Idle — nothing in flight.</span>
+            <span className="text-xs">Idle; nothing in flight.</span>
           </div>
         ) : (
           <ul className="space-y-2">
@@ -441,7 +441,7 @@ export default function OverviewPanel() {
         )}
       </div>
 
-      {/* 2 — Personal secretary snapshot */}
+      {/* 2; Personal secretary snapshot */}
       <div className="lh-card">
         <div className="lh-card-head">
           <div className="flex items-center gap-2">
@@ -469,7 +469,7 @@ export default function OverviewPanel() {
         </div>
       </div>
 
-      {/* 2 — Autonomy heartbeat + automation summary */}
+      {/* 2; Autonomy heartbeat + automation summary */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="lh-card">
           <div className="lh-card-head">
@@ -495,7 +495,7 @@ export default function OverviewPanel() {
                 {pulse.mode || 'offline'}
               </span>
             </div>
-            {/* next_tick is intentionally omitted — the heartbeat cadence lives in the
+            {/* next_tick is intentionally omitted; the heartbeat cadence lives in the
                 systemd timer, not in config, so we never fabricate a time. */}
           </div>
         </div>
@@ -525,7 +525,7 @@ export default function OverviewPanel() {
         </div>
       </div>
 
-      {/* 3 — Stat cards (clickable → the app's hash router switches section) */}
+      {/* 3; Stat cards (clickable → the app's hash router switches section) */}
       <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4">
         <StatCard
           label="Brains"
@@ -603,7 +603,7 @@ export default function OverviewPanel() {
         />
       </div>
 
-      {/* 4 — Decisions — pending + inline approve/deny */}
+      {/* 4. Decisions: pending + inline approve/deny */}
       <div className="lh-card" style={approvals.pending > 0 ? { borderColor: 'rgba(217,165,33,0.3)' } : undefined}>
         <div className="lh-card-head">
           <div className="flex items-center gap-2">
@@ -657,7 +657,7 @@ export default function OverviewPanel() {
         {resolveErr && <div className="text-[11px] mt-2" style={{ color: 'var(--lh-alert)' }}>{resolveErr}</div>}
       </div>
 
-      {/* 5 — Smart activity feed (grouped routine ticks, flagged important events) */}
+      {/* 5; Smart activity feed (grouped routine ticks, flagged important events) */}
       <div className="lh-card">
         <div className="lh-card-head">
           <div className="flex items-center gap-2">
@@ -725,7 +725,7 @@ export default function OverviewPanel() {
         )}
       </div>
 
-      {/* Errors — surfaced subtly */}
+      {/* Errors; surfaced subtly */}
       {errorKeys.length > 0 && (
         <div className="lh-card" style={{ borderColor: 'rgba(162,62,52,0.25)' }}>
           <div className="lh-eyebrow" style={{ color: 'var(--lh-red-soft)' }}>Degraded sections</div>

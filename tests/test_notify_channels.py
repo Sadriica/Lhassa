@@ -2,7 +2,7 @@
 
 Covers the :class:`~lhassa.notify.channels.Channel` registry, ``active_channels``
 resolution (order, unknown-skip, unconfigured-skip, log always on), the desktop
-channel (subprocess fully mocked — no real ``notify-send``), and the dispatcher
+channel (subprocess fully mocked; no real ``notify-send``), and the dispatcher
 fanning out over several channels. No network, no subprocess, no real notifier.
 """
 
@@ -57,9 +57,15 @@ def _cfg(channels):
 
 
 def test_builtin_channels_registered():
-    # The three built-ins are present the moment the package is imported.
-    for name in ("telegram", "desktop", "log"):
+    # The two built-ins are present the moment the package is imported; the
+    # telegram channel comes from the telegram pack, registered with it.
+    from lhassa import actionpack
+    from lhassa.extensions import PACKS
+
+    actionpack.register_all()
+    for name in ("desktop", "log"):
         assert name in ch.CHANNELS
+    assert ("telegram" in ch.CHANNELS) == ("telegram" in PACKS)
     assert ch.CHANNELS.get("log").name == "log"
 
 
@@ -171,7 +177,7 @@ def test_desktop_send_invokes_notify_send(monkeypatch):
 
     # The desktop channel dispatches per platform (notify-send on Linux,
     # osascript elsewhere), so the platform is PINNED by injection rather than
-    # left to whatever host the suite runs on — macOS CI caught this.
+    # left to whatever host the suite runs on; macOS CI caught this.
     monkeypatch.setenv("LHASSA_PLATFORM", "linux")
     monkeypatch.setattr(desktop.shutil, "which", lambda _b: "/usr/bin/notify-send")
     monkeypatch.setattr(
@@ -249,7 +255,7 @@ def test_dispatch_never_raises_on_channel_error(add_channel):
 
 
 def test_desktop_send_uses_osascript_off_linux(monkeypatch):
-    """The macOS counterpart — same seam, other platform, pinned by injection."""
+    """The macOS counterpart; same seam, other platform, pinned by injection."""
     d = ch.CHANNELS.get("desktop")
     calls = []
 
@@ -261,6 +267,82 @@ def test_desktop_send_uses_osascript_off_linux(monkeypatch):
     assert ok is True
     argv = calls[0][0][0]
     assert argv[0] == "osascript"
-    # The message rides the environment, never interpolated into the script.
+    # Both halves ride the environment, never interpolated into the script.
+    # This matters more now that a message with no separator becomes the TITLE
+    # (it used to always be the body): title and message must both be passed
+    # out of band, or the summary would be the new injection seam.
     assert "hola mac" not in " ".join(argv)
-    assert calls[0][1]["env"]["_LHASSA_MSG"] == "hola mac"
+    env = calls[0][1]["env"]
+    assert env["_LHASSA_TITLE"] == "hola mac" and env["_LHASSA_MSG"] == ""
+
+
+# ── the toast's headline ─────────────────────────────────────────────────────────
+
+
+def test_split_headline_lifts_the_messages_own_opening_clause():
+    """The toast already shows "Lhassa" as the app name; the summary must not repeat it.
+
+    The regression: every alert rendered as "Lhassa / Lhassa / <the actual
+    message>", spending the one line the owner reads at a glance on the app
+    name they already knew.
+    """
+    from lhassa.notify.desktop import split_headline
+
+    title, body = split_headline("Something needs a look: 2 new failures")
+    assert title == "Something needs a look:"
+    assert body == "2 new failures"
+
+
+def test_split_headline_keeps_the_separator_on_the_summary():
+    """Dropping it broke the sentence the owner reads.
+
+    The daemon stacks summary over body, so a summary ending in "failed" above
+    a body starting with "1 critical" rendered as "…failed 1 critical finding":
+    the colon gone and nothing in its place.
+    """
+    from lhassa.notify.desktop import split_headline
+
+    title, body = split_headline(
+        "The integrity check failed: 1 critical finding and 1 warning"
+    )
+    assert title.endswith(":")
+    assert f"{title} {body}" == (
+        "The integrity check failed: 1 critical finding and 1 warning"
+    )
+
+
+def test_split_headline_never_repeats_the_app_name():
+    """The toast already shows "Lhassa" as the application.
+
+    Falling back to it as the SUMMARY printed the name twice and pushed the
+    message down a line. With no separator the message itself is the summary;
+    an empty body is fine, a duplicated summary is not.
+    """
+    from lhassa.notify.desktop import _APP_NAME, split_headline
+
+    assert split_headline("disco casi lleno") == ("disco casi lleno", "")
+    assert split_headline("") == (_APP_NAME, "")  # nothing to say, nothing to lift
+
+
+def test_split_headline_falls_back_to_the_first_sentence():
+    """A whole first sentence is a legitimate headline when there is no clause
+    separator; without this the entire message landed in the summary, where the
+    daemon truncates it."""
+    from lhassa.notify.desktop import split_headline
+
+    title, body = split_headline(
+        "Encontré un problema serio y uno menor en las comprobaciones internas. "
+        "Corré `lhassa integrity findings`, ahí está lo que falló."
+    )
+    assert title.endswith("internas.")
+    assert body.startswith("Corré")
+
+
+def test_split_headline_refuses_an_over_long_first_clause():
+    """A clause too long to be a headline is detail, not a title; the whole
+    message becomes the summary rather than a title made of detail."""
+    from lhassa.notify.desktop import split_headline
+
+    long_head = "x" * 80
+    text = f"{long_head}: tail"
+    assert split_headline(text) == (text, "")

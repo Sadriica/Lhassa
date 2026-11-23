@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """
-Session lifecycle — called on shutdown to extract facts and save a summary.
+Session lifecycle; called on shutdown to extract facts and save a summary.
 The fact-extraction LLM call is routed through the cost gateway
 (``lhassa.llm.gateway``) so the shared cache, daily token budget, and cost
 ledger all apply. The gateway is provider-agnostic, so the request for JSON
@@ -28,16 +28,16 @@ Rules for facts:
 - Only include NEW or UPDATED facts about the user (name, job, projects, preferences, OS, etc.)
 - Keys must be descriptive snake_case: name, job, current_project, operating_system, etc.
 - If there are no new facts, use facts: []
-- The summary field is always required — one concise sentence
+- The summary field is always required; one concise sentence
 
 Conversation:
 {conversation}"""
 
 # The gateway is provider-agnostic and does not pass an OpenAI-style
 # ``response_format=json_object``, so the JSON-only contract is stated here in
-# the system prompt — it covers both the Anthropic and OpenAI-compatible paths.
+# the system prompt; it covers both the Anthropic and OpenAI-compatible paths.
 EXTRACT_SYSTEM = (
-    "You are a JSON extraction assistant. Reply with valid JSON only — "
+    "You are a JSON extraction assistant. Reply with valid JSON only; "
     "no prose, no markdown."
 )
 
@@ -54,12 +54,12 @@ async def close_session(messages: list):
     """
     exchange = [m for m in messages if m.get("role") in ("user", "assistant")]
     if len(exchange) < 2:
-        logger.info("Session too short — skipping memory save.")
+        logger.info("Session too short; skipping memory save.")
         return
 
     # Keep only the last 40 turns to avoid exceeding model context limits
     if len(exchange) > 40:
-        logger.debug(f"[memory] conversation has {len(exchange)} messages — truncating to last 40 for extraction")
+        logger.debug(f"[memory] conversation has {len(exchange)} messages; truncating to last 40 for extraction")
         exchange = exchange[-40:]
 
     conversation_text = "\n".join(
@@ -68,13 +68,13 @@ async def close_session(messages: list):
         if isinstance(m.get("content"), str)
     )
 
-    # .replace (not .format) — EXTRACT_PROMPT contains literal JSON braces.
+    # .replace (not .format); EXTRACT_PROMPT contains literal JSON braces.
     prompt = EXTRACT_PROMPT.replace("{conversation}", conversation_text)
 
     try:
         raw = await _extract_session_payload(prompt)
     except BudgetExceeded as e:
-        logger.warning(f"[memory] Daily LLM budget reached — skipping memory extraction: {e}")
+        logger.warning(f"[memory] Daily LLM budget reached; skipping memory extraction: {e}")
         return
     except Exception as e:
         logger.error(f"Error extracting session memory: {e}")

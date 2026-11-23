@@ -141,7 +141,7 @@ def test_incremental_reingest_skips_unchanged_and_reindexes_touched(tmp_path):
     first = _run(knowledge.ingest(INSTANCE, config=cfg))
     assert first["files_indexed"] == 1
 
-    # Re-ingest unchanged — nothing new.
+    # Re-ingest unchanged; nothing new.
     second = _run(knowledge.ingest(INSTANCE, config=cfg))
     assert second["files_indexed"] == 0
     assert second["chunks"] == 0
@@ -149,7 +149,7 @@ def test_incremental_reingest_skips_unchanged_and_reindexes_touched(tmp_path):
     rows_before = _run(db.list_knowledge_chunks(INSTANCE))
     assert any("First version" in r["text"] for r in rows_before)
 
-    # Touch the file (new content + a bumped mtime) — re-indexed.
+    # Touch the file (new content + a bumped mtime); re-indexed.
     f.write_text("Second, updated version of the log entry.")
     new_mtime = time.time() + 5
     os.utime(f, (new_mtime, new_mtime))

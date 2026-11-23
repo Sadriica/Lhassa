@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { subscribe, dismiss } from '../lib/toast'
 
 /**
- * ToastHost — the single, app-level render surface for the toast store.
+ * ToastHost; the single, app-level render surface for the toast store.
  * Mount it ONCE (App.jsx). Panels never render toasts themselves; they call
  * `toast.success(...)` / `toast.error(...)` (see src/lib/toast.js) and this host
  * paints whatever is queued. Top-right on desktop, bottom on mobile.

@@ -5,6 +5,12 @@ on:
     branches:
       - main
   pull_request:
+    branches:
+      - main
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   test:
@@ -18,7 +24,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        # ubuntu is pinned: Playwright has no chromium build for ubuntu-latest
+        # (26.04) yet; unpin once it does.
+        os: [ubuntu-24.04, macos-latest]
 
     steps:
       - name: Checkout
@@ -31,9 +39,11 @@ jobs:
 
       - name: Setup uv
         uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
 
       - name: Setup Node
-        if: matrix.os == 'ubuntu-latest'
+        if: matrix.os == 'ubuntu-24.04'
         uses: actions/setup-node@v4
         with:
           node-version: '20'
@@ -41,36 +51,41 @@ jobs:
           cache-dependency-path: dashboard/package-lock.json
 
       - name: Install Python dependencies
-        run: uv sync --extra dev
+        # Every capability pack plus the dev tools: testpaths includes packages/,
+        # and the workspace members are not installed by a bare `uv sync`.
+        run: uv sync --all-packages --extra dev
 
       - name: Install dashboard dependencies
-        if: matrix.os == 'ubuntu-latest'
+        if: matrix.os == 'ubuntu-24.04'
         working-directory: dashboard
         run: npm ci
 
       - name: Install Playwright browser
-        if: matrix.os == 'ubuntu-latest'
+        if: matrix.os == 'ubuntu-24.04'
         working-directory: dashboard
         run: npx playwright install --with-deps chromium
 
-      - name: Run Python tests
-        run: uv run pytest -q -p no:cacheprovider
-
       - name: Run Python lint
-        run: uv run ruff check .
+        run: uv run --all-packages --extra dev ruff check .
+
+      - name: Run architecture guard
+        run: uv run --all-packages --extra dev pytest tests/test_architecture.py -q -p no:cacheprovider
+
+      - name: Run Python tests
+        run: uv run --all-packages --extra dev pytest -q -p no:cacheprovider
 
       - name: Run dashboard lint
-        if: matrix.os == 'ubuntu-latest'
+        if: matrix.os == 'ubuntu-24.04'
         working-directory: dashboard
         run: npm run lint
 
       - name: Run dashboard E2E tests
-        if: matrix.os == 'ubuntu-latest'
+        if: matrix.os == 'ubuntu-24.04'
         working-directory: dashboard
         run: npm run test:e2e
 
       - name: Upload Playwright artifacts
-        if: failure() && matrix.os == 'ubuntu-latest'
+        if: failure() && matrix.os == 'ubuntu-24.04'
         uses: actions/upload-artifact@v4
         with:
           name: playwright-artifacts

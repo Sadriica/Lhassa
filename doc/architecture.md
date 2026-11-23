@@ -1,4 +1,4 @@
-# Lhassa — architecture overview
+# Lhassa; architecture overview
 
 A current, high-level map of the Lhassa "brain". For the full spec read
 [`lhassa-brief.md`](lhassa-brief.md); for the phase-by-phase decisions read
@@ -7,7 +7,7 @@ A current, high-level map of the Lhassa "brain". For the full spec read
 
 ## What Lhassa is
 
-An identity-first core (a JARVIS) that runs the **do-and-sleep** loop — state on
+An identity-first core (a JARVIS) that runs the **do-and-sleep** loop; state on
 disk + a `step()` that advances it one tick, woken by a systemd **heartbeat** or
 the API. It **orchestrates** models and tools behind two stable interfaces rather
 than depending on any one of them: *build the brain, rent the body*. It is
@@ -17,46 +17,47 @@ capabilities drop in without editing core), and scales from one brain to an org 
 
 ## Layers
 
-Dependencies point **down** only — inner layers never import an outer shell. The
+Dependencies point **down** only; inner layers never import an outer shell. The
 guard test (`tests/test_architecture.py`) fails on any new layer-crossing import.
 
 | Layer | Subpackages | Role |
 |---|---|---|
 | Leaf infra | `registry.py`, `plugins.py`, `config.py`, `host.py` | Generic machinery; imports no feature code |
 | Spine | `core/` | The do-and-sleep loop: `step`, `heartbeat`, `episode`, `db`, `watchlist`, `actions`, `task` |
-| Interfaces | `memory/`, `security/`, `llm/`, `settings.py` | Reusable contracts: typed facts, trust/approval, `ModelProvider` + router, the editable-settings service |
-| Adapters (hands) | `harness/`, `tools/`, `agents/`, `skills/`, `remote/`, `health/` | The rentable body: harnesses, MCP/tools, specialist agents, first-class skills, the check-in local agent |
-| Shells (outer) | `cli/`, `api/`, `voice/`, `notify/`, `org/`, dashboard (JS) | World-facing surfaces; compose everything below |
+| Interfaces | `memory/`, `security/`, `llm/`, `settings.py`, `personal/` | Reusable contracts: typed facts, trust/approval, `ModelProvider` + router, the editable-settings service, the personal agenda read-model |
+| Adapters (hands) | `harness/`, `tools/`, `agents/`, `skills/`, `remote/`, `health/`, `bench/` | The rentable body: harnesses, MCP/tools, specialist agents, first-class skills, the check-in local agent, the LhassaBench eval harness |
+| File-I/O seams | `cv/`, `calendar/` | Leaf, stdlib-only seams (`.tex` CV, `.ics` calendar) used by shells; never reach into one |
+| Shells (outer) | `cli/`, `api/`, `voice/`, `notify/`, `chat/` (the transport-agnostic chat engine), `org/`, `actionpack/`, `flows/`, `tui/` (the `lhassa-tui` pack), `telegram/` (the `lhassa-telegram` pack: the transport that drives `chat/`), dashboard (JS) | World-facing surfaces; compose everything below |
 
 The two swap axes are kept **independent**: `harness/` (agentic body) must not
-import `llm/` (think-directly providers). The reverse edge — `llm/router.py`
-*choosing* a harness — is the one intentional bridge.
+import `llm/` (think-directly providers). The reverse edge; `llm/router.py`
+*choosing* a harness; is the one intentional bridge.
 
 
 ## The host platform layer (`host.py`)
 
-Lhassa reads a few facts from the machine it runs on — uptime, memory pressure,
+Lhassa reads a few facts from the machine it runs on; uptime, memory pressure,
 failed managed services, how to pop a desktop toast, which sandbox exists. Each
 is a different mechanism per platform, and each call site used to answer it its
 own way: a `shutil.which` guard here, a bare `open("/proc/uptime")` there, a
 module-level `platform.system()` branch elsewhere.
 
-`host.py` is the one place that knows. It is **leaf infra** — it imports the
-registry keystone and the standard library, nothing else from the package — so
+`host.py` is the one place that knows. It is **leaf infra**: it imports the
+registry keystone and the standard library, nothing else from the package; so
 any layer may use it.
 
 - **Pure parser + injected input.** Every reading splits into a pure function
   over text (`parse_proc_uptime`, `parse_vm_stat`, `parse_boottime`) and a thin
   collector that supplies it. That is the pattern `health/checks.py` already
   used for its injected `meminfo_path`, not a new one. Tests parametrise by
-  passing a platform or a reader, never by patching `platform.system()` — so a
+  passing a platform or a reader, never by patching `platform.system()`: so a
   Linux CI run genuinely covers the macOS branches.
 - **A registry, not a branch.** `PLATFORMS` + `@register_platform` means adding
   a platform is a drop-in module and selecting one is configuration
   (`LHASSA_PLATFORM`), never surgery. The existing module-level
-  `platform.system()` dispatch (`voice/notifier.py`, `agents/local_cli.py`,
+  `platform.system()` dispatch (`tools/notifier.py`, `agents/local_cli.py`,
   `tools/vision.py`) is left where it is and lives *inside* the default
-  implementations — two idioms were not merged into a third.
+  implementations; two idioms were not merged into a third.
 - **Honesty over completeness.** A reading that cannot be taken returns `None`,
   never a plausible zero, because these values feed the judgment path: a wrong
   number silently corrupts a decision, a missing one is reported as unavailable.
@@ -64,27 +65,28 @@ any layer may use it.
   (macOS memory accounting), `MemoryReading.comparable` says so and the health
   summary names its source.
 
-**Linux is tier 1, macOS (Apple Silicon) tier 2** — see the README for what each
+**Linux is tier 1, macOS (Apple Silicon) tier 2**: see the README for what each
 tier promises. The tier-1 paths are untouched by the layer: `quarantine.py`
 still tries `unshare`/`firejail`/`bwrap` first and only consults the layer off
 Linux, so the Linux selection chain is byte-identical.
 
-## Data dir — `~/.lhassa/`
+## Data dir; `~/.lhassa/`
 
 Every default path derives from `Path.home()`, so pointing `HOME` relocates all
 state (the Docker image sets `HOME=/data`).
 
 | Path | Contents |
 |---|---|
-| `~/.lhassa/brain.db` | The "grande" — append-only SQLite (WAL): facts, episodes, jobs, approvals, org tables, … |
-| `~/.lhassa/chica.db` | The "chica" — persistent working cache (LRU) |
+| `~/.lhassa/brain.db` | The "grande": append-only SQLite (WAL): facts, episodes, jobs, approvals, org tables, … |
+| `~/.lhassa/chica.db` | The "chica": persistent working cache (LRU) |
 | `~/.lhassa/llm_gateway.db` | The cost gateway's ledger (per-call tokens/cost, the budget/kill-switch state) |
 | `~/.lhassa/backups/` | WAL-safe online backups |
 | `~/.lhassa/keys/ed25519` | Signing key for `Task` provenance |
 | `~/.lhassa/settings.env` | Runtime overrides from `lhassa config` / the Settings panel (loaded after `.env`, override on; **no secrets**) |
-| `~/.lhassa/org.json` | The org command tree (1..N brains, Lhassa the root admin) — `LHASSA_ORG_TOPOLOGY_FILE` |
-| `~/.lhassa/relationships.json` | Typed relationship **overlay** on the tree (reads/notifies/reviews/collaborates) — `LHASSA_ORG_RELATIONSHIPS_FILE` |
-| `~/.lhassa/flows.json` | Work-flow graphs (trigger→task→gate→output + branch) — `LHASSA_FLOWS_FILE` |
+| `~/.lhassa/org.json` | The org command tree (1..N brains, Lhassa the root admin); `LHASSA_ORG_TOPOLOGY_FILE` |
+| `~/.lhassa/relationships.json` | Typed relationship **overlay** on the tree (reads/notifies/reviews/collaborates); `LHASSA_ORG_RELATIONSHIPS_FILE` |
+| `~/.lhassa/routes.json` | Approved `mint_route` entries (data, not code); `LHASSA_ROUTES_FILE` |
+| `~/.lhassa/flows.json` | Work-flow graphs (trigger→task→gate→output + branch); `LHASSA_FLOWS_FILE` |
 | `~/.lhassa/skills/` | First-class skills (`SKILL.md` per skill: frontmatter + instructions) |
 | `~/.lhassa/plugins/` | Drop-in plugin modules (self-register) |
 | `~/.lhassa/tools/` | Local-git repo for self-written tool versioning |
@@ -105,9 +107,39 @@ Built additively over an existing skeleton (extend, never rewrite). From
 | 4 | The hands | `HarnessAdapter` (OpenCode/Claude Code/Codex) + runner/supervisor + `pick_harness`; MCP client + a typed task (`tracking_postulaciones`) |
 | 5 | Self-improvement (caged) | Quarantine sandbox + the four gates (segura/correcta/mejor/retiro); specialists as **skills not fine-tuning** + local-git tool versioning |
 | 6 | Maturity (continuous) | `LocalModelProvider` + PII pseudonymization + router routine→local; memory **layer 4** (semantic embeddings); CLI power subcommands + Telegram + opencode heartbeat + voice brain-bridge |
-| 7 | Org layer | Typed inter-brain messages, read-only commons, RBAC, `GeneralBrain` (coordinates) / `DepartmentBrain` (executes), the validated topology tree (1..N brains) + coordinator/routing/executor + `lhassa org` |
+| 7 | Org layer (**frozen 2026-08-30**: maintained, not extended; see `decisions.md`) | Typed inter-brain messages, read-only commons, RBAC, `GeneralBrain` (coordinates) / `DepartmentBrain` (executes), the validated topology tree (1..N brains) + coordinator/routing/executor + `lhassa org` |
 
-## Diagram — the loop, the seams, the tree
+## Action preconditions; silence means nothing happened
+
+A registered action may declare a **precondition** (`core/actions.py:
+register_precondition`) answering one narrow question: *could this possibly
+produce a result right now?* Not "should it run": that is the allowlist's and
+the approval frontier's job; but whether a feature flag is off or nothing is
+configured for it to read.
+
+When a precondition is unmet, `core/step.py` does not dispatch the action **and
+emits no episode at all**. This is deliberate. Three scheduled actions were
+running daily against a disabled knowledge graph and unset knowledge roots;
+none of them ever failed and none of them could ever succeed, yet each no-op
+still paid a full down-execute-up delivery trail. Those rows described no event,
+and the episode log is what episodic recall reads; so the fix is to not run
+them, not to phrase the emptiness better.
+
+Two invariants make the skip safe:
+
+- **The task still completes**, so a recurring action keeps its schedule and
+  resumes by itself the day the owner configures what it needs. (A skip that
+  left the task unfinished would kill the recurrence; the same failure mode as
+  a signature refusal; see `doc/decisions.md`, 2026-08-04.)
+- **Fail-open**: a missing precondition, or one that raises, means runnable. A
+  buggy capability check must never be able to silence a working action.
+
+Because a skip is invisible in the log by design, the reasons are surfaced by
+`lhassa capabilities`, which lists every blocked action and why. `temple_run`
+registers a precondition that defers to the inner action it fronts, so the
+wrapper is skipped whole rather than short-circuiting after its hops.
+
+## Diagram; the loop, the seams, the tree
 
 ```
         systemd heartbeat timer ──► one fresh process per beat
@@ -140,7 +172,7 @@ Built additively over an existing skeleton (extend, never rewrite). From
       Settings · Reports · Fleet · Activity
 
   Org: a command TREE + a typed RELATIONSHIP overlay (1..N brains)
-                  lhassa  (root administrator — never removed/demoted)
+                  lhassa  (root administrator; never removed/demoted)
                        │
                     general  (coordinates, never executes)
                   /          |              \
@@ -157,7 +189,7 @@ Built additively over an existing skeleton (extend, never rewrite). From
   Agentic RUN: POST /api/code {task, cli?} → a local CLI (claude/codex/opencode)
         streamed over /ws (agent_started/agent_token/agent_done). CLI: `lhassa code`.
 
-  API routes (FastAPI, :7766) include — besides the brain/LLM/approval surface —
+  API routes (FastAPI, :7766) include; besides the brain/LLM/approval surface;
     /api/org/* (topology · brains · route · templates · relationships) ·
     /api/flows[/{id}[/run]] · /api/code (+ /clis, /runs) · /api/skills/* ·
     /api/projects[/{id}[/runs|artifacts|episodes]] · /api/config
@@ -165,40 +197,40 @@ Built additively over an existing skeleton (extend, never rewrite). From
 
 Everything that can be swapped sits behind a `Registry` (`registry.py`) and can be
 added by dropping a self-registering module into `plugins_dir` or a `lhassa.plugins`
-entry point (`plugins.py`) — no core edit. `lhassa capabilities` (alias `doctor`)
+entry point (`plugins.py`); no core edit. `lhassa capabilities` (alias `doctor`)
 prints the whole wired / on-off picture.
 
 ### The delivery chain (sender of record)
 
 Work goes DOWN the tree through `org/delegate.py`; whatever a leaf produces comes
 back UP through its exact mirror, `org/deliver.py`. A department that finishes a
-work product — a tailored CV (`.tex` + compiled `.pdf`), a report, any file the
-owner ends up receiving — doesn't send it itself: `deliver()` walks the SAME
+work product; a tailored CV (`.tex` + compiled `.pdf`), a report, any file the
+owner ends up receiving; doesn't send it itself: `deliver()` walks the SAME
 command chain the down-hop used, and every brain on it (the department, any
 intermediate coordinator, the root) logs its own `org-deliver` Episode before
 Lhassa, the permanent root administrator, actually sends. One append-only row per
-delivered file lands in the `artifacts` registry (`core/artifacts.py` —
+delivered file lands in the `artifacts` registry (`core/artifacts.py`;
 `GET /api/artifacts[/{id}]`, `lhassa artifacts list|show`), carrying its paths,
 free-form metadata, origin department, and the episode it travelled with. The
-golden rule mirrors `delegate`'s: **audit is best-effort, delivery is not** — a
+golden rule mirrors `delegate`'s: **audit is best-effort, delivery is not**: a
 broken topology or a failed episode write degrades to a single root-attributed
 hop and is logged, never blocks the send; the only thing that can make `deliver()`
 report failure is the send itself.
 
-### The temple (`temple`) — Lhassa's inner workshop, and its monks
+### The temple (`temple`); Lhassa's inner workshop, and its monks
 
 `temple` is a department seeded directly under Lhassa (`seeds/temple.py`, `lhassa
-seed apply temple`) — distinct from `interns` (the CV pipeline's workers) and
-`personal` (the owner's own department) — that owns Lhassa's INTERNAL functions:
+seed apply temple`); distinct from `interns` (the CV pipeline's workers) and
+`personal` (the owner's own department); that owns Lhassa's INTERNAL functions:
 docs, internal creation (tools/skills/flows authoring, the consciousness
 proposals), synchronization (repo/calendar/memory), and self-maintenance.
 
-The same seed also creates temple's five leaf WORKER brains — its **monks**, each
-owning a sub-domain: `scribe` (docs), `artificer` (internal creation — tools/
-skills/flows authoring), `synchronizer` (sync — repo/calendar/memory), `guardian`
-(self-maintenance) and `oracle` (the consciousness). `org/temple.py:ACTION_OWNERS`
+The same seed also creates temple's six leaf WORKER brains; its **monks**, each
+owning a sub-domain: `scribe` (docs), `artificer` (internal creation; tools/
+skills/flows authoring), `synchronizer` (sync; repo/calendar/memory), `guardian`
+(self-maintenance), `oracle` (the consciousness) and `geshe` (the research line). `org/temple.py:ACTION_OWNERS`
 is the deterministic action→monk ownership map for the maintenance seed's
-hygiene actions (a representative subset shown below — the map has grown
+hygiene actions (a representative subset shown below; the map has grown
 past this list without every addition being echoed here):
 
 | action | owning monk |
@@ -213,7 +245,7 @@ past this list without every addition being echoed here):
 | versioned integrity contracts / conformance findings | `guardian` |
 
 An action absent from the map, or whose resolved worker is missing from the
-topology, falls back to `temple` itself — the department is always someone.
+topology, falls back to `temple` itself; the department is always someone.
 
 `org/temple.py:delegate_internal` runs the SAME down/up shape as the delivery
 chain above, but for internal work instead of a work product, now with the
@@ -221,24 +253,24 @@ worker resolved FIRST: one `org-delegate` Episode logs Lhassa delegating an
 action DOWN the path `lhassa → temple → <worker>` (`resolve_worker` picks the
 monk, `command_path` walks the topology), the monk then EXECUTES the action via
 `core/actions.run` with its own Episode attributed `dominio=<worker>`, and the
-result travels back UP via `deliver(origin_department=<worker>)` — the per-brain
+result travels back UP via `deliver(origin_department=<worker>)`: the per-brain
 hops walk worker → temple → Lhassa.
 
 This is the first instance of an org-wide pattern: **every tool reports to its
 brain.** The worker's execution Episode already names the tool (`accion`) and its
 outcome (`resultado`); when a real monk ran it (not the bare department), the
-`resultado` also states it reports up through `temple` — so the trail reads
+`resultado` also states it reports up through `temple`: so the trail reads
 "guardian ran curate_skills → 3 stale skills archived → reports ↑ temple" from the
 tool's own log line, before the deliver seam's per-brain hops even start.
 
-The `maintenance` seed's five hygiene actions now mint `temple_run` (a closed
+The `maintenance` seed's eleven recurring hygiene actions now mint `temple_run` (a closed
 allowlisted wrapper, `actionpack/_temple.py`) instead of running bare, so every
 beat carries the full hop and worker attribution instead of an unattributed
 heartbeat action. The Telegram `/temple <instruction>` door keyword-matches a
 known action (LLM-free) or falls through to `org_run(department="temple")` for
 free-form internal work.
 
-## Beyond phase 7 — product/hardening
+## Beyond phase 7; product/hardening
 
 Continuing past the phase plan: a keystone `Registry` + plugin loader adopted at
 every swap point; **first-class skills** (3-layer: a name on a brain → a `SKILL.md`
@@ -254,18 +286,18 @@ Three further surfaces landed on top of the org layer (dashboard + API, no dedic
 CLI subcommand yet for the first two):
 
 - **Typed relationship overlay** (`org/relationships.py` + `api/relationship_routes.py`)
-  — a directed OVERLAY graph layered on the command tree, stored separately at
+ ; a directed OVERLAY graph layered on the command tree, stored separately at
   `~/.lhassa/relationships.json` (`LHASSA_ORG_RELATIONSHIPS_FILE`) so hierarchy and
   relationships never tangle. A closed kind vocabulary: `reads` / `notifies` /
   `reviews` (directed A→B) and `collaborates` (symmetric, stored canonically).
   `permits(from, to, kind)` is the pure runtime read seam ("may A read B?"). API:
   `GET /api/org/relationships`, `GET /api/org/relationships/kinds`,
   `POST /api/org/relationships {from,to,kind,note?}`,
-  `DELETE /api/org/relationships {from,to,kind}` — every mutating op validates (real
+  `DELETE /api/org/relationships {from,to,kind}`: every mutating op validates (real
   nodes, known kind, no self-edge) before it writes. On the dashboard the Brains
   canvas draws the edges as a dashed per-kind colored overlay (legend + toggles) and
   the inspector adds/removes them.
-- **Work-flows** (`lhassa/flows/` model/store/engine + `api/flow_routes.py`) — an
+- **Work-flows** (`lhassa/flows/` model/store/engine + `api/flow_routes.py`); an
   n8n-style DAG that wires `trigger → task → gate → output` (+ `branch`), persisted to
   `~/.lhassa/flows.json` (`LHASSA_FLOWS_FILE`). Task nodes use HYBRID routing (pin a
   brain via `config.brain`, else auto-route by skill through the org topology); the
@@ -278,28 +310,28 @@ CLI subcommand yet for the first two):
   time-specific flows: `personal-morning-briefing` and
   `personal-evening-briefing` both pin work to the `personal` brain, while their
   DAG order differs for planning versus review.
-- **Agentic run surface** (`api/code_routes.py` + `agents/local_cli.py`) —
+- **Agentic run surface** (`api/code_routes.py` + `agents/local_cli.py`);
   `POST /api/code {task, cli?}` launches an agentic task through a local CLI
   (`claude` / `codex` / `opencode`, on subscription, no key) and streams it over the
   WebSocket as `agent_started` / `agent_token` / `agent_done`; `GET /api/code/clis`
   and `GET /api/code/runs` list the installed CLIs and recent runs. The dashboard
   "Run" section is the UI; the CLI equivalent is `lhassa code "<task>"`. The
   `lhassa-app` service adds `~/.local/bin` to PATH so it finds the `claude` CLI.
-- **Projects** (`core/projects.py` + `api/project_routes.py`) — the first-class
+- **Projects** (`core/projects.py` + `api/project_routes.py`); the first-class
   workspace entity, scoped through existing tables via one namespaced-string
   convention (`entity_tag`) rather than new columns. `kind` is a policy key: it
   maps to an org template (`org/templates.py`, overridable via
   `LHASSA_KIND_TEMPLATES`) that a $0 watchlist sense (`actionpack/_standing.py`)
-  proposes attaching — gated unless the template is provably read-only. A second
+  proposes attaching; gated unless the template is provably read-only. A second
   sense (`actionpack/_projects.py`) detects an unregistered repo on
-  `LHASSA_AUTO_SYNC_REPOS` and proposes a project with `MUNDO` origin — detection
+  `LHASSA_AUTO_SYNC_REPOS` and proposes a project with `MUNDO` origin; detection
   never creates silently. `lhassa project create|list|show|archive|runs|artifacts`
   is the CLI door; `ProjectsPanel.jsx` (dashboard, "Projects" section) is
   read-only. Runs/tasks scoped to a project render an **evidence rung**
   (`memory/evidence.py`: `prepared` / `observed` / `verified`), a pure derived
   read with no new storage.
 - **The persisted knowledge graph** (`memory/kg.py` + `memory/graph_retrieve.py`,
-  opt-in via `LHASSA_MEMORY_GRAPH`) — a durable accumulation of the same
+  opt-in via `LHASSA_MEMORY_GRAPH`); a durable accumulation of the same
   entity/co-occurrence extraction `memory/graph.py`'s on-the-fly read-model
   already does, into two new grande tables (`kg_entities`/`kg_edges`, a closed
   edge-kind vocabulary). `kg_sync` (owned by the `guardian` monk, weekly) is the

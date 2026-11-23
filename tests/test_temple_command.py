@@ -1,4 +1,4 @@
-"""Tests for the /temple Telegram command — the owner's door into temple.
+"""Tests for the /temple Telegram command; the owner's door into temple.
 
 Offline + $0: a tmp brain DB, a seeded lhassa->temple topology, and a fake
 ``notify.dispatch.notify`` so the up-hop send never touches the network.
@@ -86,7 +86,7 @@ def test_temple_free_form_instruction_mints_org_run(tmp_path):
     assert org_runs[0]["params"]["department"] == "temple"
 
 
-# ── /temple schedule — the temple's own clock ─────────────────────────────────────
+# ── /temple schedule; the temple's own clock ─────────────────────────────────────
 
 
 def test_temple_schedule_lists_recurring_jobs_with_cadence_and_monk(tmp_path, monkeypatch):
@@ -101,7 +101,7 @@ def test_temple_schedule_lists_recurring_jobs_with_cadence_and_monk(tmp_path, mo
         from lhassa.security.trust import Origin, TrustLevel
         origin = Origin(trust=TrustLevel.INTERNO, actor_id="seed")
         # Two internal cronjobs owned by different monks + one owner-facing task
-        # (send_digest) that must NOT appear — it isn't the temple's.
+        # (send_digest) that must NOT appear; it isn't the temple's.
         await mint_task("inst_personal", "temple_run", objetivo="curate",
                         params={"action": "curate_skills"}, origin=origin,
                         recurrence="604800")
@@ -114,8 +114,8 @@ def test_temple_schedule_lists_recurring_jobs_with_cadence_and_monk(tmp_path, mo
 
     reply = asyncio.run(go())
     assert "temple's clock" in reply
-    assert "curate_skills — weekly · guardian" in reply
-    assert "detect_repetition — daily · oracle" in reply
+    assert "curate_skills; weekly · guardian" in reply
+    assert "detect_repetition; daily · oracle" in reply
     assert "send_digest" not in reply  # owner-facing, not the temple's
 
 

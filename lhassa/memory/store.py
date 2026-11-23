@@ -3,9 +3,9 @@
 Persistent SQLite store for Lhassa memory.
 
 Tables:
-  facts           — key/value facts about the user, extracted by the LLM
-  sessions        — one-sentence summaries of past conversations
-  scheduled_tasks — reminders set via the schedule_reminder tool
+  facts          ; key/value facts about the user, extracted by the LLM
+  sessions       ; one-sentence summaries of past conversations
+  scheduled_tasks; reminders set via the schedule_reminder tool
 """
 
 from datetime import datetime, timezone

@@ -1,0 +1,4 @@
+{"arm": "b", "task_id": "bigfile", "passed": true, "tokens_in": 0, "tokens_out": 0, "tokens_cache": 0, "latency_ms": 15310, "detail": "imported+continue"}
+{"arm": "c", "task_id": "bigfile", "passed": true, "tokens_in": 0, "tokens_out": 0, "tokens_cache": 0, "latency_ms": 41763, "detail": ""}
+{"arm": "b", "task_id": "bigfile", "passed": true, "tokens_in": 0, "tokens_out": 0, "tokens_cache": 0, "latency_ms": 13160, "detail": "imported+continue"}
+{"arm": "c", "task_id": "bigfile", "passed": true, "tokens_in": 0, "tokens_out": 0, "tokens_cache": 0, "latency_ms": 45310, "detail": ""}

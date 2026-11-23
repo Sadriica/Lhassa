@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Deterministic delegation seam — a flow run flows THROUGH the org hierarchy.
+"""Deterministic delegation seam; a flow run flows THROUGH the org hierarchy.
 
 The Telegram bridge and the flow API used to call :func:`lhassa.flows.engine.run_flow`
 directly, bypassing the org's sovereignty (Lhassa is the permanent root
 administrator; every flow is OWNED by some department beneath it). This module wraps
-that call so a run instead flows down the command chain —
-**Lhassa (root) → the owning department → the flow** — leaving an audit-trail
+that call so a run instead flows down the command chain;
+**Lhassa (root) → the owning department → the flow**: leaving an audit-trail
 :class:`~lhassa.core.episode.Episode` at the delegation, WITHOUT any extra model call.
 
 Two design rules mirror :mod:`lhassa.org.coordinator` / :mod:`lhassa.org.executor`
@@ -22,7 +22,7 @@ exactly:
     empty one on total failure). :func:`delegate_flow` never raises.
 
 The delegation :class:`Episode` (``despertar_por="org-delegate"``) lands on the same
-audit plane :mod:`lhassa.org.monitor` reads, so the monitor sees the whole chain —
+audit plane :mod:`lhassa.org.monitor` reads, so the monitor sees the whole chain;
 the org stays fully observable.
 """
 
@@ -41,7 +41,7 @@ if TYPE_CHECKING:  # pragma: no cover - typing only, no runtime import (breaks n
     from lhassa.flows.model import Flow
     from lhassa.org.topology import BrainNode, Topology
 
-# The trigger label for a delegation episode — a distinct, greppable audit marker
+# The trigger label for a delegation episode; a distinct, greppable audit marker
 # the monitor (and ``org/monitor.py``) picks up alongside the org's other episodes.
 DESPERTAR_DELEGATE = "org-delegate"
 
@@ -78,7 +78,7 @@ def _parent_department(topology: "Topology", node: "BrainNode") -> Optional[str]
 
 
 def _department_for_brain(topology: "Topology", brain: str) -> Optional[str]:
-    """Map a pinned brain to the department that owns it — deterministic, no LLM.
+    """Map a pinned brain to the department that owns it; deterministic, no LLM.
 
     Resolution order (each defensive): the brain as a node id → that node's own
     department (else its parent's department, else the node id); else a node whose
@@ -107,17 +107,17 @@ def _root_department(topology: "Topology") -> str:
 
 
 def owning_department(flow: "Flow", topology: "Topology") -> str:
-    """Derive the department that OWNS ``flow`` — deterministic, table-driven, $0.
+    """Derive the department that OWNS ``flow``: deterministic, table-driven, $0.
 
     Collects the flow's ``task`` nodes' pinned ``config.brain`` values, maps each to
     its topology node's department (or the node / its parent department), and returns
     the shared / most-common department. When nothing resolves (no pinned brains, or
     a broken topology), it falls back to the topology root / ``config.root_admin_id``
-    (Lhassa) — a flow always has an owner and this never raises.
+    (Lhassa); a flow always has an owner and this never raises.
     """
     try:
         fallback = _root_department(topology)
-    except Exception:  # a degenerate topology — degrade to the config admin id
+    except Exception:  # a degenerate topology; degrade to the config admin id
         from lhassa.org.topology import admin_id
 
         fallback = admin_id(None)
@@ -219,13 +219,13 @@ async def delegate_flow(
     Resolves the owning department, computes the command PATH from the root admin down
     to it, and logs one LLM-free ``org-delegate`` :class:`Episode` (the whole
     delegation, $0). Then runs the flow via a LAZY :func:`lhassa.flows.engine.run_flow`
-    (the lazy import breaks the org↔flows cycle — both are shells) with the SAME
+    (the lazy import breaks the org↔flows cycle; both are shells) with the SAME
     arguments, so callers are unchanged. The returned record is annotated with
     ``record["delegation"] = {"chain": [...], "department": <dept>}`` and returned as-is
     otherwise.
 
     NEVER raises and NEVER blocks the work: if the topology/routing/episode step fails,
-    it logs a debug line and STILL runs the flow directly (an empty/minimal chain) —
+    it logs a debug line and STILL runs the flow directly (an empty/minimal chain);
     governance and observability must never stop the actual execution.
     """
     chain: list[str] = []

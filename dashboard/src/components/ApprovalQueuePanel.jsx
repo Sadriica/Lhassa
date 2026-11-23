@@ -1,20 +1,30 @@
 import { useCallback, useEffect, useState } from 'react'
-import { getApprovals, resolveApproval } from '../lib/api'
+import { getApprovalBriefs, resolveApproval } from '../lib/api'
 import { toast } from '../lib/toast'
 import { shortWhen } from '../lib/format'
 
-// The approval queue (§2.9 — "la cola de aprobaciones"). Lists pending approvals
-// and lets a human approve or deny each one. Resolving feeds the autonomy knob on
-// the server: a repeatedly approved human action earns auto-approval.
+const RIESGO_PILL = {
+  low: { label: 'low', cls: 'lh-pill lh-pill-ok' },
+  medium: { label: 'medium', cls: 'lh-pill lh-pill-warn' },
+  high: { label: 'high', cls: 'lh-pill lh-pill-danger' },
+  // legacy rows stored before the queue moved to English
+  baja: { label: 'low', cls: 'lh-pill lh-pill-ok' },
+  media: { label: 'medium', cls: 'lh-pill lh-pill-warn' },
+  alta: { label: 'high', cls: 'lh-pill lh-pill-danger' },
+}
+
+// The decision queue, enriched: each row carries a category, an origin
+// (brain / flow / department), a risk level and a brief with a summary plus
+// Lhassa's recommendation (why yes or why no), newest decision first.
 export default function ApprovalQueuePanel() {
   const [approvals, setApprovals] = useState([])
   const [loading, setLoading] = useState(true)
-  const [busy, setBusy] = useState(null) // id currently being resolved
+  const [busy, setBusy] = useState(null)
   const [error, setError] = useState('')
 
   const load = useCallback(async () => {
     try {
-      const data = await getApprovals()
+      const data = await getApprovalBriefs()
       setApprovals(Array.isArray(data) ? data : [])
       setError('')
     } catch {
@@ -38,7 +48,7 @@ export default function ApprovalQueuePanel() {
     try {
       await resolveApproval(id, approved)
       setApprovals(prev => prev.filter(a => a.id !== id))
-      toast.success(approved ? 'Approved.' : 'Denied.')
+      toast.success(approved ? 'Approved.' : 'Rejected.')
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Resolve failed'
       setError(msg)
@@ -51,9 +61,7 @@ export default function ApprovalQueuePanel() {
   return (
     <div className="lh-card">
       <div className="flex items-center justify-between mb-3">
-        <h2 className="lh-card-title">
-          Decisions queue
-        </h2>
+        <h2 className="lh-card-title">Decisions queue</h2>
         <span className="text-xs" style={{ color: 'var(--lh-text-muted)' }}>{approvals.length} pending</span>
       </div>
 
@@ -62,10 +70,14 @@ export default function ApprovalQueuePanel() {
       ) : approvals.length === 0 ? (
         <p className="text-xs" style={{ color: 'var(--lh-text-faint)' }}>No decisions waiting for approval.</p>
       ) : (
-        <ul className="space-y-2">
+        <ul className="space-y-3">
           {approvals.map(a => {
             const p = a.payload || {}
             const s = a.summary || {}
+            const risk = RIESGO_PILL[a.riesgo] || RIESGO_PILL.medium
+            const rec = /^(reject|rechazar)/i.test(a.recomendacion || '')
+              ? { label: a.recomendacion, cls: 'lh-pill lh-pill-danger' }
+              : { label: a.recomendacion || '-', cls: 'lh-pill lh-pill-ok' }
             return (
               <li key={a.id} className="lh-row">
                 <div className="flex items-center justify-between gap-2">
@@ -74,12 +86,25 @@ export default function ApprovalQueuePanel() {
                   </span>
                   <span className="text-[10px] shrink-0" style={{ color: 'var(--lh-text-muted)' }}>{shortWhen(a.creado_en)}</span>
                 </div>
-                {s.detail && (
-                  <div className="text-[11px] mt-1" style={{ color: 'var(--lh-text-muted)' }}>{s.detail}</div>
-                )}
-                <div className="text-[10px] mt-1 lh-mono" style={{ color: 'var(--lh-text-faint)' }}>
-                  {a.tipo}{a.id ? ` · ${a.id}` : ''}
+
+                <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                  <span className="lh-badge">{a.categoria || 'General'}</span>
+                  <span className="lh-badge">{a.origen || 'Lhassa'}</span>
+                  <span className={risk.cls}>risk {risk.label}</span>
+                  <span className={rec.cls}>{rec.label}</span>
+                  <span className="text-[10px] lh-mono ml-auto" style={{ color: 'var(--lh-text-faint)' }}>{a.id}</span>
                 </div>
+
+                {s.detail && (
+                  <div className="text-[11px] mt-1.5" style={{ color: 'var(--lh-text-muted)' }}>{s.detail}</div>
+                )}
+
+                {a.resumen && (
+                  <div className="text-[11px] mt-1.5 lh-card" style={{ padding: '6px 10px', color: 'var(--lh-text)' }}>
+                    {a.resumen}
+                  </div>
+                )}
+
                 <div className="flex gap-2 mt-2">
                   <button
                     type="button"
@@ -95,7 +120,7 @@ export default function ApprovalQueuePanel() {
                     onClick={() => resolve(a.id, false)}
                     className="lh-btn lh-btn-danger"
                   >
-                    {busy === a.id ? '…' : 'Deny'}
+                    {busy === a.id ? '…' : 'Reject'}
                   </button>
                 </div>
               </li>

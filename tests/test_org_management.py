@@ -1,9 +1,9 @@
-"""Tests for lhassa.org.management — create brains, skills, limits, hierarchy.
+"""Tests for lhassa.org.management; create brains, skills, limits, hierarchy.
 
 Offline: the topology file is redirected to a tmp path via a tiny Config stand-in
 (``_Cfg``), so no real config/DB is touched. Every mutation is validated through a
 ``Topology`` construction before it is persisted, so a bad op must NOT corrupt the
-saved file — that invariant is asserted directly.
+saved file; that invariant is asserted directly.
 """
 
 import json
@@ -121,7 +121,7 @@ def test_add_missing_parent_rejected_does_not_corrupt(tmp_path):
     before = (tmp_path / "org.json").read_text()
     with pytest.raises(TopologyError):
         management.add_brain("dept:y", parent="ghost", config=cfg)
-    # the file is byte-for-byte unchanged — the op never persisted.
+    # the file is byte-for-byte unchanged; the op never persisted.
     assert (tmp_path / "org.json").read_text() == before
 
 
@@ -176,7 +176,7 @@ def test_remove_subtree_with_force(tmp_path):
     assert {n.id for n in updated.nodes()} == {"lhassa", "general"}
 
 
-# ── set_parent (re-parent) — who commands whom ──────────────────────────────────────
+# ── set_parent (re-parent); who commands whom ──────────────────────────────────────
 
 
 def test_set_parent_reparents(tmp_path):
@@ -211,7 +211,7 @@ def test_set_parent_cycle_rejected_does_not_corrupt(tmp_path):
     assert (tmp_path / "org.json").read_text() == before
 
 
-# ── set_root (PROMOTE) — a top-level coordinator UNDER the permanent admin ───────────
+# ── set_root (PROMOTE); a top-level coordinator UNDER the permanent admin ───────────
 # Lhassa is never unseated: promoting B makes B a direct child of the administrator.
 
 

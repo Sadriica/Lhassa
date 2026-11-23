@@ -3,7 +3,7 @@
 Lhassa's LICENSE carries an additional term under AGPL-3.0 section 7(b): the
 attribution notice must be preserved and displayed wherever legal or version
 information is shown. A term like that is worth nothing if the notice is a
-decorative string someone can delete without consequence — so these tests are
+decorative string someone can delete without consequence; so these tests are
 the consequence. Removing the notice from the CLI, the API, the dashboard, or
 LICENSE itself fails the suite.
 """
@@ -12,7 +12,6 @@ import json
 import pathlib
 import re
 
-import pytest
 
 from lhassa import legal
 
@@ -59,7 +58,7 @@ def test_license_no_longer_grants_mit():
 
 
 def test_cli_version_renders_the_notice():
-    """`lhassa version` must show it — and `--json` must not be a way around it."""
+    """`lhassa version` must show it; and `--json` must not be a way around it."""
     from lhassa.cli.extra_cmds import version_info
 
     info = version_info()
@@ -70,14 +69,6 @@ def test_cli_source_actually_references_the_notice_module():
     """The panel must render legal.NOTICE, not a copy pasted next to it."""
     src = (REPO / "lhassa" / "cli" / "extra_cmds.py").read_text()
     assert "_legal.NOTICE" in src
-
-
-@pytest.mark.asyncio
-async def test_api_exposes_the_notice():
-    from lhassa.api.runtime_routes import get_legal, get_status
-
-    assert (await get_legal())["notice"] == legal.NOTICE
-    assert (await get_status())["legal"]["notice"] == legal.NOTICE
 
 
 def test_dashboard_notice_matches_the_python_one():
@@ -118,5 +109,5 @@ def test_readmes_declare_agpl_and_not_mit():
     for name in ("README.md", "README.es.md"):
         text = (REPO / name).read_text()
         assert "AGPL" in text, f"{name} does not mention AGPL"
-        assert "MIT — see" not in text, f"{name} still declares MIT"
-        assert "MIT — ver" not in text, f"{name} still declares MIT"
+        assert "MIT; see" not in text, f"{name} still declares MIT"
+        assert "MIT; ver" not in text, f"{name} still declares MIT"

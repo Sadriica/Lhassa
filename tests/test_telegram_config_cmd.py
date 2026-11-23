@@ -1,8 +1,8 @@
-"""The Telegram ``/config`` command — the CLI-parity door onto the settings service.
+"""The Telegram ``/config`` command; the CLI-parity door onto the settings service.
 
 Offline: HOME is redirected so ``settings.env`` lands in a temp ``~/.lhassa``,
 and every editable Config attr is snapshotted (the same isolation
-``test_settings.py`` uses). LLM-free by construction — these tests never touch
+``test_settings.py`` uses). LLM-free by construction; these tests never touch
 a provider.
 """
 

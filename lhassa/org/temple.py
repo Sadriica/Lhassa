@@ -1,45 +1,46 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""The temple internal-delegation loop — Lhassa's own inner workshop.
+"""The temple internal-delegation loop. Lhassa's own inner workshop.
 
 :mod:`lhassa.org.delegate` is the DOWN-hop exemplar for a *flow*; :mod:`lhassa.org.deliver`
 is the UP-hop mirror for a *work product*. This module wires the SAME two seams
-together end to end for Lhassa's INTERNAL functions — docs, internal creation
+together end to end for Lhassa's INTERNAL functions; docs, internal creation
 (tools/skills/flows authoring, the consciousness proposals), synchronization
 (repo/calendar/memory), and self-maintenance (curate/review/detect_repetition/
-distill/check_integrity) — through the ``temple`` department (Lhassa's inner temple, distinct
+distill/check_integrity); through the ``temple`` department (Lhassa's inner temple, distinct
 from ``interns``/``personal``, see :mod:`lhassa.seeds.temple`).
 
-**The monks.** ``temple`` has five leaf worker brains under it (created by
+**The monks.** ``temple`` has six leaf worker brains under it (created by
 :mod:`lhassa.seeds.temple`), each OWNING a sub-domain: ``scribe`` (docs),
-``artificer`` (internal creation — tools/skills/flows authoring), ``synchronizer``
-(sync — repo/calendar/memory), ``guardian`` (self-maintenance — curate/review/
-distill/conformance) and ``oracle`` (the consciousness — repetition detection, self-routing
-proposals). :data:`ACTION_OWNERS` maps each of the five deterministic maintenance
-actions to the monk that owns it; an unmapped action (or a topology missing the
-resolved worker) falls back to ``temple`` itself — the department never fails to
+``artificer`` (internal creation; tools/skills/flows authoring), ``synchronizer``
+(sync (repo/calendar/memory), ``guardian`` (self-maintenance) curate/review/
+distill/conformance), ``oracle`` (the consciousness; repetition detection, self-routing
+proposals) and ``geshe`` (the research line). :data:`ACTION_OWNERS` maps each of the
+deterministic maintenance actions (the maintenance seed mints eleven recurring ones;
+the map also covers ``check_integrity`` and ``draft_research_note``) to the monk that owns it; an unmapped action (or a topology missing the
+resolved worker) falls back to ``temple`` itself; the department never fails to
 have SOMEONE attributed.
 
 The whole loop, one call:
 
-  1. **DOWN** — resolve the owning WORKER for ``action`` (:func:`resolve_worker`),
+  1. **DOWN**: resolve the owning WORKER for ``action`` (:func:`resolve_worker`),
      then the command path from the root admin (Lhassa) down to it
-     (:func:`lhassa.org.delegate.command_path` — ``lhassa → temple → <worker>``
+     (:func:`lhassa.org.delegate.command_path`: ``lhassa → temple → <worker>``
      when the worker exists in the topology, else ``lhassa → temple``) and log
      ONE deterministic, $0, LLM-free ``org-delegate`` Episode narrating the
      handoff (mirrors :func:`lhassa.org.delegate._log_delegation` exactly). A
-     broken topology degrades to a direct run, attributed to ``temple`` —
+     broken topology degrades to a direct run, attributed to ``temple``;
      governance must NEVER block the work.
-  2. **EXECUTE** — the resolved WORKER actually DOES the work: the deterministic
+  2. **EXECUTE**: the resolved WORKER actually DOES the work: the deterministic
      action runs via :func:`lhassa.core.actions.run`, and its own execution
-     Episode is attributed ``dominio=<worker>`` — e.g. the monk ``guardian``,
+     Episode is attributed ``dominio=<worker>``: e.g. the monk ``guardian``,
      not the department abstractly. This is the first instance of an org-wide
-     pattern: **every tool reports to its brain** — the action's own outcome is
+     pattern: **every tool reports to its brain**: the action's own outcome is
      the worker's Episode, which then reports UP through its department, exactly
      like a person handing finished work to their manager.
-  3. **UP** — the result travels back to the owner via
+  3. **UP**: the result travels back to the owner via
      :func:`lhassa.org.deliver.deliver` (``origin_department=<worker>``), which
-     itself writes one Episode per brain on the chain — worker → temple → Lhassa
-     — before the final send. Lhassa is the sender of record.
+     itself writes one Episode per brain on the chain; worker → temple → Lhassa
+    ; before the final send. Lhassa is the sender of record.
 
 Every step is best-effort except the actual execution: a delegation-episode
 failure or a deliver failure is logged and swallowed, never blocks the action
@@ -48,7 +49,7 @@ or the caller. :func:`delegate_internal` itself NEVER raises.
 For JUDGMENT internal work (e.g. authoring a doc from a free-form instruction,
 not a fixed deterministic action), the caller should instead go through
 ``org_run`` with ``params={"department": "temple"}`` (see
-:mod:`lhassa.actionpack._org`) — the real coordinator path, gated behind
+:mod:`lhassa.actionpack._org`); the real coordinator path, gated behind
 ``LHASSA_ORG_LIVE`` like every other judgment delegation. :func:`delegate_internal`
 is the DETERMINISTIC core of the loop; judgment work rides the existing
 ``org_run`` seam with the department hint pointed at ``temple``.
@@ -72,81 +73,81 @@ if TYPE_CHECKING:
 #: The temple department id (matches lhassa.seeds.temple.TEMPLE_ID).
 TEMPLE_DEPARTMENT = "temple"
 
-#: The temple's worker brains (the "monks") — leaf brains under ``temple``, each
+#: The temple's worker brains (the "monks"); leaf brains under ``temple``, each
 #: owning a sub-domain of internal work. Ids are ASCII-safe on purpose (matched
 #: 1:1 by lhassa.seeds.temple, the single source of truth for CREATING them).
-SCRIBE = "scribe"  # docs — documentation upkeep
-ARTIFICER = "artificer"  # internal creation — tools/skills/flows authoring
-SYNCHRONIZER = "synchronizer"  # sync — repo/calendar/memory sync
-GUARDIAN = "guardian"  # self-maintenance — curate/review/distill
-ORACLE = "oracle"  # the consciousness — repetition detection, self-routing
+SCRIBE = "scribe"  # docs; documentation upkeep
+ARTIFICER = "artificer"  # internal creation; tools/skills/flows authoring
+SYNCHRONIZER = "synchronizer"  # sync; repo/calendar/memory sync
+GUARDIAN = "guardian"  # self-maintenance; curate/review/distill
+ORACLE = "oracle"  # the consciousness; repetition detection, self-routing
 # The scholar-monk. Deliberately a TIBETAN id (a geshe is the monk who earned
-# the doctorate in philosophy) breaking the English-id convention — the one
+# the doctorate in philosophy) breaking the English-id convention; the one
 # mythology touch this list carries, because the research method IS its role:
 # how Lhassa writes, drafts, builds and focuses its research.
-GESHE = "geshe"  # the research line — method, evidence-cited notes, focus
+GESHE = "geshe"  # the research line; method, evidence-cited notes, focus
 
-#: All five monks, in a stable order (docs, creation, sync, maintenance, mind).
+#: All six monks, in a stable order (docs, creation, sync, maintenance, mind, research).
 TEMPLE_WORKERS: tuple[str, ...] = (SCRIBE, ARTIFICER, SYNCHRONIZER, GUARDIAN, ORACLE, GESHE)
 
-#: The geshe's AIDES — the research support department under the scholar-monk
-#: (seeded by ``seeds/research.py``). They mirror the corpus method's steps:
+#: The geshe's AIDES; the research support department under the scholar-monk
+#: (seeded by the research pack's ``research`` seed). They mirror the corpus method's steps:
 #: capture sources → analyze mechanics → verify claims → synthesize the doc.
-#: The skeptic exists because the doer never judges — verification is a
+#: The skeptic exists because the doer never judges; verification is a
 #: separate brain by design.
 GESHE_AIDES: tuple[str, ...] = ("collector", "analyst", "skeptic", "synthesist")
 
 #: Which monk owns which internal action. Resolved BEFORE the down-hop in
 #: :func:`resolve_worker`; an action absent here (or whose worker is missing
-#: from the topology) falls back to ``temple`` itself — the department.
+#: from the topology) falls back to ``temple`` itself; the department.
 ACTION_OWNERS: dict[str, str] = {
     "distill_memory": GUARDIAN,
     # The watcher only provides cadence. Guardian owns the deterministic
     # conformance pass and reports its result through temple to Lhassa.
     "check_integrity": GUARDIAN,
-    # The knowledge graph is stored signal turned durable structure — the
+    # The knowledge graph is stored signal turned durable structure; the
     # guardian's domain, like distill_memory.
     "kg_sync": GUARDIAN,
     "kg_resolve": GUARDIAN,
     "review_tools": GUARDIAN,
     "curate_skills": GUARDIAN,
     # The utility tribunal is self-maintenance of the same family as
-    # review_tools/curate_skills — it asks whether a capability still serves.
+    # review_tools/curate_skills; it asks whether a capability still serves.
     "review_capabilities": GUARDIAN,
     "detect_repetition": ORACLE,
     # Research artifacts belong to the scholar-monk, not the docs scribe: the
     # geshe owns HOW Lhassa writes, drafts and focuses its research (the
     # method lives in research/METHOD.md and rides its research-method skill).
     "draft_research_note": GESHE,
-    # Feedback→autonomy is the consciousness reading its own reception — the
+    # Feedback→autonomy is the consciousness reading its own reception; the
     # oracle's domain, like repetition detection.
     "apply_feedback": ORACLE,
     "calendar_sync": SYNCHRONIZER,
-    # Memory enrichment — bootstrapping durable facts (courses, commitments,
+    # Memory enrichment; bootstrapping durable facts (courses, commitments,
     # rhythm) from the calendar feed is the same domain as distill_memory
     # (turning a raw signal into durable grande facts), so it sits with
     # guardian rather than synchronizer (which owns the calendar SYNC/deliver
     # loop, not fact-writing) or oracle (pattern detection over episodes, not
     # calendar-derived world knowledge).
     "derive_world_facts": GUARDIAN,
-    # Document perception — indexing the owner's knowledge roots is a sync
+    # Document perception; indexing the owner's knowledge roots is a sync
     # pass over an external-ish source (the filesystem), same domain as
     # calendar_sync, so it sits with synchronizer.
     "ingest_knowledge": SYNCHRONIZER,
 }
 
-#: The trigger label for the worker's OWN execution episode — a distinct, greppable
+#: The trigger label for the worker's OWN execution episode; a distinct, greppable
 #: marker alongside ``org-delegate`` (the down hop) and ``org-deliver`` (the up hop).
 DESPERTAR_EXECUTE = "temple-execute"
 
 
 def resolve_worker(action: str, topology: "Topology") -> str:
-    """The monk that OWNS ``action`` — deterministic, table-driven, $0.
+    """The monk that OWNS ``action``: deterministic, table-driven, $0.
 
     Looks up :data:`ACTION_OWNERS`; degrades to ``temple`` (the department
     itself) when the action is unmapped, or when the mapped worker does not
     (yet) exist in ``topology`` (e.g. an env whose seed hasn't been re-run).
-    Never raises — any lookup failure degrades to ``temple`` too.
+    Never raises; any lookup failure degrades to ``temple`` too.
     """
     candidate = ACTION_OWNERS.get(action, TEMPLE_DEPARTMENT)
     try:
@@ -164,7 +165,7 @@ def _resolve_config(config: "Optional[Config]") -> "Config":
 async def _log_down_hop(
     action: str, instruction: str, chain: list[str], worker: str, *, config: "Optional[Config]"
 ) -> None:
-    """Log the DOWN hop — mirrors :func:`lhassa.org.delegate._log_delegation`.
+    """Log the DOWN hop; mirrors :func:`lhassa.org.delegate._log_delegation`.
 
     One deterministic, $0, LLM-free ``org-delegate`` Episode narrating "Lhassa
     delegates <action> down to <worker>" and the root→…→worker path.
@@ -190,14 +191,14 @@ async def _execute_as_worker(
 ) -> str:
     """Run ``action`` via the deterministic ACTIONS registry, attributed to ``worker``.
 
-    Logs its OWN Episode with ``dominio=<worker>`` — the monk's hop in the log,
+    Logs its OWN Episode with ``dominio=<worker>``: the monk's hop in the log,
     distinct from the down-delegation and up-delivery hops. Never raises: any
     failure is captured in the returned result string (mirrors
     :func:`lhassa.core.actions.run`'s own never-raise contract).
 
     This is the "tool reports to its brain" exemplar: the action's own outcome
     IS the worker's Episode (``accion``=the tool, ``resultado``=its outcome),
-    and — when a real monk (not the bare department) ran it — the ``resultado``
+    and (when a real monk (not the bare department) ran it) the ``resultado``
     also names that it reports up through ``temple``, so the trail reads
     "guardian ran curate_skills → 3 stale skills archived → reports ↑ temple"
     end to end from the tool's own log line.
@@ -237,13 +238,13 @@ async def delegate_internal(
 
     1. Resolve the owning WORKER for ``action`` (:func:`resolve_worker`), then
        the command path Lhassa → … → temple → <worker> and log the DOWN
-       ``org-delegate`` Episode (best-effort — a broken topology degrades to a
+       ``org-delegate`` Episode (best-effort; a broken topology degrades to a
        direct run attributed to temple, never blocking the work).
     2. EXECUTE ``action`` as the resolved WORKER via the deterministic ACTIONS
        registry (:func:`lhassa.core.actions.run`); its Episode is attributed
-       ``dominio=<worker>`` — the monk that did the work, reporting to temple.
+       ``dominio=<worker>``: the monk that did the work, reporting to temple.
     3. Deliver the result UP via :func:`lhassa.org.deliver.deliver`
-       (``origin_department=<worker>``) — the per-brain up-hops (worker →
+       (``origin_department=<worker>``); the per-brain up-hops (worker →
        temple → Lhassa) + the final send, so the result returns to Lhassa, the
        sender of record.
 
@@ -256,7 +257,7 @@ async def delegate_internal(
         if not action:
             return {"ok": False, "action": action, "result": "no action given", "delivered": False}
 
-        # ── 1. DOWN — resolve the owning monk, then delegate ──────────────────
+        # ── 1. DOWN; resolve the owning monk, then delegate ──────────────────
         chain: list[str] = []
         worker = TEMPLE_DEPARTMENT
         try:
@@ -272,17 +273,17 @@ async def delegate_internal(
             )
             worker = TEMPLE_DEPARTMENT
 
-        # ── 2. EXECUTE — the monk does the work ───────────────────────────────
+        # ── 2. EXECUTE; the monk does the work ───────────────────────────────
         result = await _execute_as_worker(action, params, worker, config=cfg)
 
-        # ── 3. UP — deliver the result to the owner (Lhassa is sender of record) ─
+        # ── 3. UP; deliver the result to the owner (Lhassa is sender of record) ─
         delivered = False
         try:
             from lhassa.org import deliver as deliver_mod
 
             # The owner reads this line, so it is written for a person, not for
             # a log. The phrasebook (notify/voice.py) turns a known action's
-            # outcome into a plain sentence at $0 — no model, no tokens. When
+            # outcome into a plain sentence at $0; no model, no tokens. When
             # an action has no phrasing, or its output cannot be parsed, we fall
             # back to the machine line rather than inventing a summary; the
             # action's own name prefix is dropped so it does not stutter

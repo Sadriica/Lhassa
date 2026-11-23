@@ -1,4 +1,4 @@
-"""Tests for lhassa.memory.graph — the deterministic $0 knowledge graph.
+"""Tests for lhassa.memory.graph; the deterministic $0 knowledge graph.
 
 Fully offline: the brain DB is redirected to a tmp file per test, seeded with a
 few tagged facts and episodes mentioning "Sezzle" and "Ana", then queried
@@ -10,7 +10,6 @@ from __future__ import annotations
 import asyncio
 import json
 
-import httpx
 import pytest
 import pytest_asyncio  # noqa: F401
 from typer.testing import CliRunner
@@ -115,7 +114,7 @@ async def test_what_do_i_know_never_raises_on_bad_db(tmp_path, monkeypatch):
     monkeypatch.setattr(db, "DB_PATH", tmp_path / "does_not_exist" / "brain.db")
     from lhassa.memory import graph
 
-    # No init_db() called — the parent dir doesn't even exist. Must degrade, not raise.
+    # No init_db() called; the parent dir doesn't even exist. Must degrade, not raise.
     result = await graph.what_do_i_know(INST, "sezzle")
     assert result["facts"] == []
     assert result["episodes"] == []
@@ -172,46 +171,6 @@ async def test_timeline_empty_entity_degrades(tmp_path, monkeypatch):
 
     assert await graph.timeline(INST, "") == []
     assert await graph.timeline(INST, "totally-unknown-xyz") == []
-
-
-# ── API ───────────────────────────────────────────────────────────────────────
-
-
-@pytest_asyncio.fixture
-async def api(tmp_path, monkeypatch):
-    await _seed(tmp_path, monkeypatch)
-    from lhassa.api.server import app
-
-    transport = httpx.ASGITransport(app=app)
-    async with httpx.AsyncClient(transport=transport, base_url="http://t") as client:
-        yield client
-
-
-@pytest.mark.asyncio
-async def test_api_memory_graph(api):
-    r = await api.get("/api/memory/graph", params={"q": "sezzle"})
-    assert r.status_code == 200
-    body = r.json()
-    assert body["query"] == "sezzle"
-    assert any("Sezzle" in f["contenido"] for f in body["facts"])
-
-
-@pytest.mark.asyncio
-async def test_api_memory_graph_empty_query(api):
-    r = await api.get("/api/memory/graph")
-    assert r.status_code == 200
-    body = r.json()
-    assert body["facts"] == []
-    assert body["episodes"] == []
-
-
-@pytest.mark.asyncio
-async def test_api_memory_entities(api):
-    r = await api.get("/api/memory/entities")
-    assert r.status_code == 200
-    body = r.json()
-    terms = {e["term"] for e in body["entities"]}
-    assert "Sezzle" in terms
 
 
 # ── CLI ───────────────────────────────────────────────────────────────────────

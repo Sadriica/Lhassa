@@ -1,20 +1,20 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""TOON (Token-Oriented Object Notation) encoder — Wave 5, build-and-shelve.
+"""TOON (Token-Oriented Object Notation) encoder. Wave 5, build-and-shelve.
 
 **Deliberately UNWIRED.** Nothing in the repo calls this module today. The
 house style for bulk-tabular data in a prompt is to hand-render compact lines
 inline at the call site (see ``memory/graph.py``/``memory/graph_retrieve.py``
 for examples of ad hoc compact rendering); there is currently no place that
 puts a large uniform table of dicts into an LLM prompt, so there is nothing to
-wire this into yet. It is built now so it is ready the day one shows up — the
+wire this into yet. It is built now so it is ready the day one shows up; the
 natural first consumer would be a bulk graph-expansion result table out of
 ``memory/graph_retrieve.py`` (many ``{"text": ..., "source": ..., "via": ...}``
 rows), where a JSON array repeats the same three key names on every element
 and TOON's one-header-many-rows shape amortizes that repetition away. Do not
-wire this in speculatively — wait for an actual multi-row payload that would
+wire this in speculatively; wait for an actual multi-row payload that would
 benefit, then reach for ``to_toon``.
 
-Grammar (TOON v3 spirit, kept minimal — uniform arrays of objects only, no
+Grammar (TOON v3 spirit, kept minimal; uniform arrays of objects only, no
 nested arrays-of-objects support beyond JSON-encoding the cell):
 
     name[N]{field1,field2,...}:
@@ -30,7 +30,7 @@ nested arrays-of-objects support beyond JSON-encoding the cell):
 Cell encoding:
 
 - ``None`` -> empty cell (indistinguishable from an actual empty string or a
-  missing key on the way back — a known, documented lossy edge of a MINIMAL
+  missing key on the way back; a known, documented lossy edge of a MINIMAL
   encoder, not a bug).
 - ``bool`` -> ``true`` / ``false`` (also indistinguishable from the literal
   strings ``"true"``/``"false"`` on the way back).
@@ -43,7 +43,7 @@ Cell encoding:
   doubled) if the escaped text contains a comma, a quote, or leading/trailing
   whitespace.
 
-:func:`from_toon` is a best-effort inverse for round-trip verification only —
+:func:`from_toon` is a best-effort inverse for round-trip verification only;
 it re-parses ints/floats/bools and JSON-decodes cells that look like a JSON
 object/array, but genuinely cannot distinguish ``None`` from ``""``, or the
 number/bool literals from their string spellings. That ambiguity is inherent
@@ -51,7 +51,7 @@ to a text format this small; do not build code that depends on the inverse
 being exact for those cases.
 
 Character count (``len(text)``) is used as the "token savings" proxy
-throughout this module's tests — it is NOT a real tokenizer count, just a
+throughout this module's tests; it is NOT a real tokenizer count, just a
 cheap, deterministic stand-in that tracks token count closely enough for a
 repetition-heavy tabular payload (repeated key names dominate both measures).
 """
@@ -194,7 +194,7 @@ def to_toon(rows: list[dict], *, name: str = "rows") -> str:
 
 
 def from_toon(text: str) -> list[dict]:
-    """Best-effort inverse of :func:`to_toon` — see module docstring for the
+    """Best-effort inverse of :func:`to_toon`: see module docstring for the
     documented lossiness (None/"" and bool/number-vs-string ambiguity).
 
     Never raises: malformed input degrades to ``[]``.

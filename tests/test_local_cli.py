@@ -1,4 +1,4 @@
-"""Tests for lhassa.agents.local_cli — argv construction, detection, graceful absence."""
+"""Tests for lhassa.agents.local_cli; argv construction, detection, graceful absence."""
 
 from pathlib import Path
 

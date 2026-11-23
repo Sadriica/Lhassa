@@ -1,6 +1,6 @@
 // ── layout: a tidy left→right layered graph computed from the edges ─────────────
 // Pure geometry + reachability helpers for the work-flow canvas. No React, no
-// side effects — the editor calls these to place nodes and to flag orphans.
+// side effects; the editor calls these to place nodes and to flag orphans.
 export const NODE_W = 184
 export const COL_GAP = 92
 export const ROW_GAP = 28
@@ -56,7 +56,7 @@ export function computeLayout(nodes, edges, direction) {
   return pos
 }
 
-// Nodes that can't be reached from the trigger — surfaced as a non-blocking
+// Nodes that can't be reached from the trigger; surfaced as a non-blocking
 // warning so a visually-"connected" flow can't be saved silently disconnected.
 // Operates on React Flow nodes/edges (kind lives under `n.data.kind`).
 export function computeDisconnected(rfNodes, rfEdges) {

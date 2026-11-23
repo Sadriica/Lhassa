@@ -4,7 +4,7 @@
 from the legacy ``memory/store.py`` ``scheduled_tasks`` table into the real
 ``tasks`` table (``core/db.py``) as ``send_reminder`` tasks, then marks the
 legacy rows ``migrated`` (never deleted). Guarded by a ``watch_state`` marker
-so a second run is a no-op — verified explicitly below.
+so a second run is a no-op; verified explicitly below.
 """
 
 from __future__ import annotations
@@ -23,7 +23,7 @@ def _register_send_reminder():
     """Register ``send_reminder`` in the ACTIONS registry for this test module.
 
     Production registration happens in ``actionpack/__init__.py`` +
-    ``security/allowlist.py`` (out of scope for this pass — see
+    ``security/allowlist.py`` (out of scope for this pass; see
     ``doc/scheduler.md``); ``mint_task`` only requires the accion to be a known
     member of ``core.actions.ACTIONS`` to accept a non-judgment task, so
     registering it directly here (via the public registry API, not by editing
@@ -87,7 +87,7 @@ async def test_migration_copies_pending_legacy_reminders(legacy_store, monkeypat
     statuses = {row["id"]: row["status"] for row in all_legacy}
     assert statuses[id1] == "migrated"
     assert statuses[id2] == "migrated"
-    assert statuses[id3] == "done"  # untouched — was never pending
+    assert statuses[id3] == "done"  # untouched; was never pending
     assert len(all_legacy) == 3  # nothing deleted
 
 

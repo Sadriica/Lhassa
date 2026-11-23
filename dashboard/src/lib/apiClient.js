@@ -5,25 +5,25 @@
 // whether to send credentials. That is three inconsistencies per call site and
 // no single place to add an auth header. This module centralises:
 //
-//   * the base URL          — `API_BASE`, same-origin by default (the API serves
+//   * the base URL         ; `API_BASE`, same-origin by default (the API serves
 //                             the dashboard), overridable at build time with
 //                             `VITE_LHASSA_API_BASE` for a split deployment;
-//   * the auth header       — `require_local_or_token` (lhassa/api/server.py)
+//   * the auth header      ; `require_local_or_token` (lhassa/api/server.py)
 //                             accepts `Authorization: Bearer <t>` or
 //                             `X-Lhassa-Api-Token: <t>` and waives both on
 //                             loopback. We send the token when one is
 //                             configured (`VITE_LHASSA_API_TOKEN`), so the same
 //                             build works behind a token without edits;
-//   * status → Error        — via `requireOk`, the existing helper, so error
+//   * status → Error       ; via `requireOk`, the existing helper, so error
 //                             wording stays identical to what panels showed;
-//   * JSON parsing          — one place that tolerates an empty 200 body.
+//   * JSON parsing         ; one place that tolerates an empty 200 body.
 //
 // "Typed" here means JSDoc: this is a plain-JS project (no tsconfig), so the
 // annotations buy editor completion and a readable contract without adding a
 // build step. Each function documents its params and its return shape.
 //
 // Every function returns a Promise of parsed JSON and REJECTS with an Error on a
-// non-2xx — callers `try/catch` exactly as they already did around `requireOk`.
+// non-2xx; callers `try/catch` exactly as they already did around `requireOk`.
 
 /**
  * Turn a non-2xx response into a worded Error; pass a 2xx through unchanged.
@@ -99,7 +99,7 @@ export async function request(path, options = {}) {
   if (body !== undefined) init.body = JSON.stringify(body)
   const response = await fetch(apiUrl(path, query), init)
   if (!response.ok) {
-    // The API words its own 4xx (`{"detail": "..."}` — e.g. a flow that failed
+    // The API words its own 4xx (`{"detail": "..."}`; e.g. a flow that failed
     // validation names the offending node). Prefer that over a generic message:
     // it is the difference between "Flow failed (400)" and "duplicate node id
     // 'gate'". Fall back to `requireOk`'s wording when there is no detail.
@@ -130,6 +130,9 @@ export const getStatus = () => request('/api/status', { label: 'Status' })
 
 /** @returns {Promise<any>} the composite overview (signals, approvals, runs, …) */
 export const getOverview = () => request('/api/overview', { label: 'Overview' })
+
+/** @returns {Promise<{packs: {name: string, summary: string}[]}>} the loaded capability packs */
+export const getPacks = () => request('/api/packs', { label: 'Packs' })
 
 /** @returns {Promise<any>} the health digest */
 export const getHealth = () => request('/api/health', { label: 'Health' })
@@ -328,7 +331,7 @@ export const deleteFlow = (id) =>
 
 /**
  * Run a stored flow. The server routes it through `org/delegate.py:delegate_flow`
- * — the dashboard never reaches the engine directly.
+ *; the dashboard never reaches the engine directly.
  * @param {string} id
  * @param {{inputs?: object, input?: string, company?: string, idempotency_key?: string}} [body]
  * @returns {Promise<any>} the run record
@@ -500,3 +503,5 @@ export const getConfig = () => request('/api/config', { label: 'Settings' })
 /** @param {object} body @returns {Promise<any>} */
 export const patchConfig = (body) =>
   request('/api/config', { method: 'PATCH', body, label: 'Settings' })
+
+export const getApprovalBriefs = () => request('/api/approvals/briefs', { label: 'Approval briefs' })

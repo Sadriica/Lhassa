@@ -1,4 +1,4 @@
-"""list_dir / read_file — deterministic file perception, roots-bounded.
+"""list_dir / read_file; deterministic file perception, roots-bounded.
 
 All offline: a tmp_path plays the knowledge root. These pin the security
 frontier (outside-root refused, secret-shaped names never read, traversal

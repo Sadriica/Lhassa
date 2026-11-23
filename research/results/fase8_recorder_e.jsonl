@@ -1,0 +1,6 @@
+{"arm": "c", "task_id": "svc", "seed": 0, "passed": false, "tokens_in": 8247, "tokens_out": 700, "tokens_cache": 44032, "latency_ms": 21148, "n_events": 0, "detail": ""}
+{"arm": "e", "task_id": "svc", "seed": 0, "passed": true, "tokens_in": 8462, "tokens_out": 564, "tokens_cache": 65152, "latency_ms": 66195, "n_events": 4, "detail": ""}
+{"arm": "c", "task_id": "svc", "seed": 1, "passed": false, "tokens_in": 8033, "tokens_out": 429, "tokens_cache": 32384, "latency_ms": 17824, "n_events": 0, "detail": ""}
+{"arm": "e", "task_id": "svc", "seed": 1, "passed": true, "tokens_in": 16064, "tokens_out": 1047, "tokens_cache": 109056, "latency_ms": 109420, "n_events": 4, "detail": ""}
+{"arm": "c", "task_id": "svc", "seed": 2, "passed": false, "tokens_in": 8111, "tokens_out": 490, "tokens_cache": 22656, "latency_ms": 27061, "n_events": 0, "detail": "Traceback (most recent call last):\n  File \"<stdin>\", line 5, in <module>\nTypeError: last_favorite() takes 1 positional argument but 2 were given\n"}
+{"arm": "e", "task_id": "svc", "seed": 2, "passed": true, "tokens_in": 8847, "tokens_out": 712, "tokens_cache": 61056, "latency_ms": 37015, "n_events": 5, "detail": ""}

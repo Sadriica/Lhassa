@@ -58,7 +58,7 @@ def test_resolve_mode_falls_back_when_override_points_at_unregistered_name():
 
 
 def test_register_mode_is_a_drop_in_seam():
-    # A new mode registers without touching this module — the elastic/modular
+    # A new mode registers without touching this module; the elastic/modular
     # pattern shared with providers/verifiers/channels/actions.
     name = "pair_program_test_only"
     try:
@@ -66,7 +66,7 @@ def test_register_mode_is_a_drop_in_seam():
         assert MODES.get(name).description == "test-only mode"
     finally:
         # Clean up so this test is repeatable across runs in one process.
-        MODES._items.pop(name, None)  # noqa: SLF001 — test-only cleanup
+        MODES._items.pop(name, None)  # noqa: SLF001; test-only cleanup
 
 
 def test_register_mode_duplicate_without_override_raises():

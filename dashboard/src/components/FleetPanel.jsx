@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 
-// Phase 6 "madurez" — the fleet view. Lists known machines (from /api/fleet) with
+// Phase 6 "madurez"; the fleet view. Lists known machines (from /api/fleet) with
 // their last check-in and desired_state reconciliation targets. Read-only.
 export default function FleetPanel() {
   const [machines, setMachines] = useState([])

@@ -1,8 +1,8 @@
-"""Temple wiring for ``derive_world_facts`` — the calendar-derived world model.
+"""Temple wiring for ``derive_world_facts``: the calendar-derived world model.
 
 Offline + $0. Trusts tests/test_org_temple.py for the generic down-execute-up
 loop mechanics (a topology failure degrading to a direct run, dominio
-attribution, etc.) — this file only asserts derive_world_facts' OWN wiring:
+attribution, etc.); this file only asserts derive_world_facts' OWN wiring:
 it's in the closed TEMPLE_ACTIONS set, resolve_worker attributes it to
 guardian, and the /temple command's keyword matcher + door route to it.
 """
@@ -51,7 +51,7 @@ def test_temple_keyword_matcher_routes_to_derive(text):
 
 
 def test_temple_keyword_calendar_alone_still_routes_to_sync():
-    # A bare "calendar"/"sync" phrase must keep routing to calendar_sync — the
+    # A bare "calendar"/"sync" phrase must keep routing to calendar_sync; the
     # new derive keywords must not shadow the existing behavior.
     assert commands._match_temple_action("sync my calendar") == "calendar_sync"
 
@@ -84,16 +84,3 @@ def _isolated_db(tmp_path, monkeypatch):
         return True
 
     monkeypatch.setattr(notify_dispatch, "notify", fake_notify)
-
-
-def test_temple_derive_door_dispatches(tmp_path, monkeypatch):
-    async def fake_derive(instance_id, *, config=None, days=45):
-        return []
-
-    from lhassa.calendar import derive as derive_mod
-
-    monkeypatch.setattr(derive_mod, "derive_world", fake_derive)
-
-    reply = asyncio.run(commands.dispatch("/temple derive", config=_cfg(tmp_path)))
-    assert "derive_world_facts" in reply
-    assert "nothing to derive" in reply

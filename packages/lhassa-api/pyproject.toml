@@ -1,0 +1,26 @@
+[project]
+name = "lhassa-api"
+version = "0.8.0"
+description = "Lhassa API pack: the FastAPI REST/WebSocket server and the React dashboard it serves"
+license = "AGPL-3.0-or-later"
+requires-python = ">=3.13"
+dependencies = [
+    "lhassa",
+    "fastapi>=0.110.0",
+    "starlette<1.0.0",
+    "uvicorn[standard]>=0.29.0",
+]
+
+[project.entry-points."lhassa.plugins"]
+api = "lhassa.api.pack"
+
+[tool.uv.sources]
+lhassa = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+# Ship only the pack's own subpackage: core owns lhassa/__init__.py.
+packages = ["src/lhassa"]

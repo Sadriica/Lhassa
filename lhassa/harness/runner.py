@@ -1,12 +1,12 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """
-The PID/stream runner (§2.1, §2.7) — "lanza y duerme".
+The PID/stream runner (§2.1, §2.7); "lanza y duerme".
 
 ``launch`` starts a ``HarnessAdapter``'s command as a *separate* subprocess, records
 a ``jobs`` row (PID, harness, estado="running"), and fires a background task that
 streams ``parse_line`` events to ``state.broadcast`` while accumulating live cost.
 It returns the **job_id** immediately and never blocks the caller (the brain keeps
-its bookkeeping serial; the work runs in parallel by PID — §2.7).
+its bookkeeping serial; the work runs in parallel by PID; §2.7).
 
 ``supervise`` is the next-tick reaper: it checks running jobs, reaps the finished
 ones, writes their final estado/costo/terminado_en back to the ``jobs`` table and
@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+from collections import deque
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
@@ -37,6 +38,10 @@ try:
 except ValueError:
     _DEFAULT_TIMEOUT = 1800
 
+# How many trailing stderr lines to keep for diagnostics (bounded; never grows
+# unbounded even if the CLI floods stderr).
+_STDERR_TAIL_LINES = 40
+
 
 @dataclass
 class _RunningJob:
@@ -50,9 +55,12 @@ class _RunningJob:
     cost_usd: float = 0.0
     estado: str = "running"
     task: Optional[asyncio.Task] = field(default=None)
+    # Bounded ring of the most recent stderr lines; diagnostics for a failed/
+    # timed-out run without ever growing unbounded (§ stderr-drain fix).
+    stderr_tail: deque = field(default_factory=lambda: deque(maxlen=_STDERR_TAIL_LINES))
 
 
-# Module-level registry of live jobs (apuntadores vivos — §2.3). supervise() reaps
+# Module-level registry of live jobs (apuntadores vivos; §2.3). supervise() reaps
 # them; a reaped job is removed (becomes an archived row in the jobs table).
 _JOBS: dict[str, _RunningJob] = {}
 
@@ -87,13 +95,13 @@ async def launch(
     work_dir = Path(cwd).expanduser() if cwd else _default_cwd()
     timeout = timeout if timeout is not None else _DEFAULT_TIMEOUT
 
-    # Graceful degradation — the muscle is not installed.
+    # Graceful degradation; the muscle is not installed.
     if not adapter.available():
         job_id = await db.record_job(
             instance_id, pid=None, harness=adapter.name,
             estado="error: harness unavailable", costo_usd=0.0,
         )
-        logger.warning(f"[harness/{adapter.name}] unavailable — recorded error job {job_id}")
+        logger.warning(f"[harness/{adapter.name}] unavailable; recorded error job {job_id}")
         await state.broadcast({
             "type": "agent_error", "run_id": job_id,
             "error": f"harness {adapter.name} unavailable",
@@ -113,7 +121,7 @@ async def launch(
             instance_id, pid=None, harness=adapter.name,
             estado="error: harness unavailable", costo_usd=0.0,
         )
-        logger.warning(f"[harness/{adapter.name}] spawn failed ({exc}) — error job {job_id}")
+        logger.warning(f"[harness/{adapter.name}] spawn failed ({exc}); error job {job_id}")
         return job_id
 
     job_id = await db.record_job(
@@ -135,10 +143,18 @@ async def launch(
 
 
 async def _stream(adapter: HarnessAdapter, rj: _RunningJob, timeout: int) -> None:
-    """Drain the process, parse + broadcast events, accumulate cost. Never raises."""
+    """Drain the process, parse + broadcast events, accumulate cost. Never raises.
+
+    Drains stdout AND stderr concurrently. A CLI that writes a lot to stderr
+    (crash traces, warnings, a chatty --verbose) would otherwise fill the pipe
+    buffer and block the child forever once it's full; the parent only read
+    stdout, so the child's write() to stderr never returns and the job hangs
+    past its own timeout (the timeout only bounds our await, not the child).
+    Draining both concurrently avoids that deadlock.
+    """
     proc = rj.proc
 
-    async def _drain() -> None:
+    async def _drain_stdout() -> None:
         while True:
             line_bytes = await proc.stdout.readline()  # type: ignore[union-attr]
             if not line_bytes:
@@ -157,6 +173,20 @@ async def _stream(adapter: HarnessAdapter, rj: _RunningJob, timeout: int) -> Non
                 "type": "agent_token", "run_id": rj.job_id,
                 "token": ev.payload, "kind": ev.kind,
             })
+
+    async def _drain_stderr() -> None:
+        # Never surfaced as agent output/events; just kept as a bounded tail
+        # for diagnostics, purely so the pipe never fills up and blocks the
+        # child. `readline` degrades to plain bytes decode; a broken pipe or
+        # closed stream just ends the loop.
+        while True:
+            line_bytes = await proc.stderr.readline()  # type: ignore[union-attr]
+            if not line_bytes:
+                break
+            rj.stderr_tail.append(line_bytes.decode(errors="replace").rstrip("\n"))
+
+    async def _drain() -> None:
+        await asyncio.gather(_drain_stdout(), _drain_stderr())
         await proc.wait()  # type: ignore[union-attr]
 
     try:
@@ -164,11 +194,15 @@ async def _stream(adapter: HarnessAdapter, rj: _RunningJob, timeout: int) -> Non
         rc = getattr(proc, "returncode", 0)
         if rj.estado != "error":
             rj.estado = "done" if rc in (0, None) else "error"
+        elif rj.stderr_tail:
+            rj.run.output += "\n(stderr) " + "\n".join(rj.stderr_tail)
     except asyncio.TimeoutError:
         _kill(proc)
         rj.estado = "error"
         rj.run.output += f"\n(timed out after {timeout}s)"
-        logger.warning(f"[harness/{rj.harness}] job {rj.job_id} timed out — killed")
+        if rj.stderr_tail:
+            rj.run.output += "\n(stderr) " + "\n".join(rj.stderr_tail)
+        logger.warning(f"[harness/{rj.harness}] job {rj.job_id} timed out; killed")
     except asyncio.CancelledError:
         _kill(proc)
         rj.estado = "error"
@@ -176,6 +210,8 @@ async def _stream(adapter: HarnessAdapter, rj: _RunningJob, timeout: int) -> Non
     except Exception as exc:  # never let the background task crash silently
         rj.estado = "error"
         rj.run.output += f"\n{exc}"
+        if rj.stderr_tail:
+            rj.run.output += "\n(stderr) " + "\n".join(rj.stderr_tail)
         logger.error(f"[harness/{rj.harness}] job {rj.job_id} stream error: {exc}")
 
 
@@ -192,7 +228,7 @@ async def supervise(instance_id: Optional[str] = None) -> list[dict]:
 
     Cheap to call every tick. Only jobs whose streaming task has completed are
     reaped; still-running jobs are left in place for a later tick (disk supervision,
-    never blocking — §2.1). Scoped to ``instance_id`` when given.
+    never blocking; §2.1). Scoped to ``instance_id`` when given.
     """
     summary: list[dict] = []
     for job_id, rj in list(_JOBS.items()):

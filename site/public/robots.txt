@@ -1,4 +1,0 @@
-User-agent: *
-Allow: /
-
-Sitemap: https://lhassa.witara.site/sitemap-index.xml

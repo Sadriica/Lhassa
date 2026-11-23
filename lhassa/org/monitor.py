@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """The environment MONITOR & continuous-improvement SUPERVISOR (Fase 7).
 
-A brain can be more than an executor: it can be the one **everyone reports to** —
+A brain can be more than an executor: it can be the one **everyone reports to**;
 the brain that constantly watches its environment (episodes, health, flow runs,
 pending approvals, failures) and turns what it sees into concrete, routed
 improvements. This module is that capability, built as a REUSABLE seam so ANY
@@ -17,11 +17,11 @@ Two design rules mirror :mod:`lhassa.org.executor` exactly:
     (:func:`lhassa.org.executor.brain_executor` + the ``monitor`` skill).
   * **A monitoring failure is data, never a crash.** Every signal source is read
     in its own ``try/except`` and degrades to empty; :func:`monitor_pass` never
-    raises — an unexpected error degrades to a report carrying an ``error`` note.
+    raises; an unexpected error degrades to a report carrying an ``error`` note.
 
 Where a heartbeat would plug in: a routine beat (``core/heartbeat.py``) could call
 :func:`monitor_pass` on a cadence and surface the report through ``notify``. That
-hook is intentionally OUT of scope here — this module only provides the capability.
+hook is intentionally OUT of scope here; this module only provides the capability.
 """
 
 from __future__ import annotations
@@ -48,11 +48,11 @@ _TRUTHY = {"1", "true", "yes", "on"}
 # loaded into the prompt at think time (the 3-layer skills convention).
 MONITOR_SKILL_NAME = "monitor"
 
-# The role/description the monitor brain wears in the topology (open label — RBAC is
+# The role/description the monitor brain wears in the topology (open label. RBAC is
 # by coordinating-vs-executing, not by this string, so renaming a role is safe).
 MONITOR_ROLE = "monitor"
 MONITOR_DESCRIPTION = (
-    "environment monitor & continuous-improvement supervisor — everyone reports to it"
+    "environment monitor & continuous-improvement supervisor; everyone reports to it"
 )
 
 _MONITOR_INSTRUCTIONS = (
@@ -99,7 +99,7 @@ def _resolve_config(config: "Optional[Config]") -> Config:
     return config if config is not None else Config()
 
 
-# ── signal collection (read-only, cheap, defensive — never an LLM) ────────────────
+# ── signal collection (read-only, cheap, defensive; never an LLM) ────────────────
 
 
 def _read_episodes(instance_id: str, n: int) -> list[dict]:
@@ -129,7 +129,7 @@ def _read_episodes(instance_id: str, n: int) -> list[dict]:
         finally:
             con.close()
     except sqlite3.Error as exc:
-        logger.warning("monitor: could not read episodes — {}", exc)
+        logger.warning("monitor: could not read episodes; {}", exc)
         return []
 
 
@@ -153,7 +153,7 @@ def _read_pending_approvals(instance_id: str) -> list[dict]:
         finally:
             con.close()
     except sqlite3.Error as exc:
-        logger.warning("monitor: could not read approvals — {}", exc)
+        logger.warning("monitor: could not read approvals; {}", exc)
         return []
 
 
@@ -172,7 +172,7 @@ def _dept_from_episode(ep: dict) -> Optional[str]:
 def _is_stale(ep: dict, max_age_hours: float) -> bool:
     """Whether ``ep`` is older than the freshness window (0 → never stale).
 
-    An unparseable/missing ``creado_en`` counts as FRESH — defensively keep the
+    An unparseable/missing ``creado_en`` counts as FRESH; defensively keep the
     episode rather than silently dropping a real failure we can't date.
     """
     if max_age_hours <= 0:
@@ -195,11 +195,11 @@ def _failures_from_episodes(
 
     Three noise guards keep the signal honest:
 
-    - the monitor's OWN episodes (``despertar_por == "monitor"``) never count —
+    - the monitor's OWN episodes (``despertar_por == "monitor"``) never count;
       their summaries quote failure counts ("N new failure(s)"), so counting them
       would have the watcher alerting on its own reflection.
     - a completed think's ``resultado`` is model PROSE (a CV, an analysis…) where
-      "error"/"fail" are content, not outcome — for ``think*`` decisions the
+      "error"/"fail" are content, not outcome; for ``think*`` decisions the
       markers match on ``decision``/``accion`` only. A think that actually failed
       carries the marker in its decision ("telegram: error", "org: deferred").
     - a failure only counts while FRESH (``max_age_hours``; 0 = no cutoff): on a
@@ -266,7 +266,7 @@ def _health_signal(config: Config) -> dict:
             "alerted": list(raw.get("alerted") or []),
         }
     except Exception as exc:  # pragma: no cover - reads degrade already
-        logger.warning("monitor: could not read health digest — {}", exc)
+        logger.warning("monitor: could not read health digest; {}", exc)
         return empty
 
 
@@ -285,7 +285,7 @@ def _flows_signal(config: Config) -> list[dict]:
             for f in flows
         ]
     except Exception as exc:
-        logger.warning("monitor: could not read flows — {}", exc)
+        logger.warning("monitor: could not read flows; {}", exc)
         return []
 
 
@@ -294,16 +294,16 @@ def gather_signals(config: Config, *, instance_id: Optional[str] = None) -> dict
 
     Cheap, read-only and defensive: each source is read in its own ``try/except`` and
     a missing/unreadable source degrades to empty, never raising. This is the
-    "everyone reports to it" aggregator — the raw material a monitor reasons over.
+    "everyone reports to it" aggregator; the raw material a monitor reasons over.
 
     Returns a dict with the keys:
 
-      - ``episodes``  — the most-recent activity trail (newest first).
-      - ``health``    — ``{worst_level, ok, failing, alerted}`` from the last digest.
-      - ``flows``     — the defined work-flows (``{id, name, nodes}``).
-      - ``approvals`` — the pending human-in-the-loop approvals.
-      - ``failures``  — recent episodes whose outcome marks a failure/offline/deferred.
-      - ``instance_id`` — the instance the signals belong to.
+      - ``episodes`` : the most-recent activity trail (newest first).
+      - ``health``   : ``{worst_level, ok, failing, alerted}`` from the last digest.
+      - ``flows``    : the defined work-flows (``{id, name, nodes}``).
+      - ``approvals``: the pending human-in-the-loop approvals.
+      - ``failures`` : recent episodes whose outcome marks a failure/offline/deferred.
+      - ``instance_id``: the instance the signals belong to.
     """
     config = _resolve_config(config)
     instance_id = (
@@ -328,7 +328,7 @@ def gather_signals(config: Config, *, instance_id: Optional[str] = None) -> dict
 
 
 def _offline_report(signals: dict, department: str) -> dict:
-    """Build a structured report from the signals alone — no model, deterministic.
+    """Build a structured report from the signals alone; no model, deterministic.
 
     The shape is the contract both paths return:
     ``{observations, risks, improvements, delegations}`` (plus metadata). Each risk
@@ -515,13 +515,13 @@ async def monitor_pass(
 ) -> dict:
     """Run one monitoring pass and return a structured report.
 
-    Gathers the environment's signals (:func:`gather_signals`), then — offline by
-    default — builds a deterministic ``{observations, risks, improvements,
+    Gathers the environment's signals (:func:`gather_signals`), then; offline by
+    default; builds a deterministic ``{observations, risks, improvements,
     delegations}`` report from them at $0 with NO model call. With
     ``LHASSA_ORG_LIVE`` on, the supervising ``department`` brain reasons over the
     signals through the org think path (the ``monitor`` skill in its prompt).
 
-    Always logs an ``Episode`` (``despertar_por="monitor"``). NEVER raises — an
+    Always logs an ``Episode`` (``despertar_por="monitor"``). NEVER raises; an
     unexpected error degrades to a report carrying an ``error`` note.
     """
     config = _resolve_config(config)
@@ -529,7 +529,7 @@ async def monitor_pass(
         instance_id or getattr(config, "instance_id", None) or Config.instance_id
     )
 
-    # Idempotent — the monitor may run before the DB is initialised.
+    # Idempotent; the monitor may run before the DB is initialised.
     await db.init_db()
 
     ep = Episode.begin(despertar_por="monitor", instance_id=instance_id)
@@ -615,15 +615,15 @@ def make_brain_monitor(
     description: str = MONITOR_DESCRIPTION,
     skill_name: str = MONITOR_SKILL_NAME,
 ) -> dict:
-    """Make ``brain_id`` the environment monitor — REUSABLE for any brain.
+    """Make ``brain_id`` the environment monitor. REUSABLE for any brain.
 
     Ensures the monitor skill exists, assigns it to the brain (merging, never
     dropping existing skills), and updates the brain's topology node's role +
     description note to reflect "environment monitor & continuous-improvement
-    supervisor — everyone reports to it". The description is stashed in the node's
+    supervisor; everyone reports to it". The description is stashed in the node's
     opaque ``limits`` mapping (no schema change) and is fully reversible.
 
-    If ``brain_id`` is not in the topology this is a NO-OP with a clear log — it
+    If ``brain_id`` is not in the topology this is a NO-OP with a clear log; it
     returns ``{"ok": False, "reason": ...}`` and touches nothing. Never raises for a
     missing brain; other errors propagate (a real misconfiguration).
     """
@@ -636,7 +636,7 @@ def make_brain_monitor(
     top = load_topology(cfg)
     if not top.has(brain_id):
         logger.info(
-            "monitor: brain {!r} not in topology — skipping monitor wiring", brain_id
+            "monitor: brain {!r} not in topology; skipping monitor wiring", brain_id
         )
         return {"ok": False, "reason": f"no brain {brain_id!r} in topology", "brain": brain_id}
 

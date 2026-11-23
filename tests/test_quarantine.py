@@ -1,4 +1,4 @@
-"""Tests for lhassa.security.quarantine — the gate-1 sandbox (no red/datos).
+"""Tests for lhassa.security.quarantine; the gate-1 sandbox (no red/datos).
 
 All offline: candidates are harmless ``bash -c`` snippets run in a throwaway temp
 dir with a scrubbed env. No real network is ever touched.
@@ -73,17 +73,49 @@ async def test_argv_list_candidate():
 async def test_reports_isolation_level():
     res = await run_in_quarantine("true")
     # In CI/dev at least one of these holds; the field is always populated.
-    assert res.isolation in {"unshare", "firejail", "bwrap", "none"}
+    assert res.isolation in {"bwrap", "firejail", "env+net only", "none"}
 
 
 @pytest.mark.asyncio
 async def test_fallback_when_no_namespacing_tool(monkeypatch):
     # Force the best-effort path: no unshare/firejail/bwrap available.
+    # conftest.py pins LHASSA_QUARANTINE_ISOLATION=none suite-wide, which is the
+    # "deliberate operator opt-out" that bypasses the new default refusal; see
+    # test_quarantine_platform.py for the refusal itself and its escape hatch.
     monkeypatch.setattr(quarantine.shutil, "which", lambda _name: None)
     res = await run_in_quarantine("echo plain")
     assert res.isolation == "none"
     assert res.ok is True
     assert "plain" in res.stdout
+
+
+@pytest.mark.asyncio
+async def test_bwrap_preferred_over_unshare_when_both_available(monkeypatch, tmp_path):
+    # Requirement: FS-isolating tools (bwrap/firejail) must win over bare
+    # unshare, which cannot hide the real filesystem.
+    monkeypatch.delenv("LHASSA_QUARANTINE_ISOLATION", raising=False)
+    monkeypatch.setattr(
+        quarantine.shutil, "which",
+        lambda name: "/usr/bin/" + name if name in {"unshare", "bwrap"} else None,
+    )
+    monkeypatch.setattr(quarantine, "_sandbox_works", lambda prefix, workdir: True)
+    prefix, level = quarantine._select_isolation(tmp_path)
+    assert level == "bwrap"
+    assert prefix[0] == "bwrap"
+
+
+@pytest.mark.asyncio
+async def test_unshare_only_reports_env_net_only_not_fs_isolated(monkeypatch, tmp_path):
+    # unshare alone never hides the real filesystem; the label must say so.
+    monkeypatch.delenv("LHASSA_QUARANTINE_ISOLATION", raising=False)
+    monkeypatch.setattr(
+        quarantine.shutil, "which",
+        lambda name: "/usr/bin/unshare" if name == "unshare" else None,
+    )
+    monkeypatch.setattr(quarantine, "_sandbox_works", lambda prefix, workdir: True)
+    prefix, level = quarantine._select_isolation(tmp_path)
+    assert level == "env+net only"
+    assert prefix[:2] == ["unshare", "-rnm"]
 
 
 @pytest.mark.asyncio

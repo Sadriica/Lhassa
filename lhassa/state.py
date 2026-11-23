@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""AppState singleton — shared mutable state across voice pipeline, API, and scheduler."""
+"""AppState singleton; shared mutable state across voice pipeline, API, and scheduler."""
 
 import asyncio
 import json
@@ -41,7 +41,7 @@ class AppState:
         # Configurable via LHASSA_AUDIT_MAX (default 100, minimum 10)
         self._MAX_AUDIT_EVENTS: int = max(10, int(os.getenv("LHASSA_AUDIT_MAX", "100")))
 
-        # Set by the voice pipeline — used by notifier and for session recovery
+        # Set by the voice pipeline; used by notifier and for session recovery
         self.pipeline_task: Optional[object] = None
         self.llm_context: Optional[object] = None   # LLMContext ref for session saving on shutdown
         self.is_voice_active: bool = False
@@ -151,10 +151,10 @@ class AppState:
             try:
                 q.put_nowait(event)
             except asyncio.QueueFull:
-                dead.append(q)  # slow client — remove it
+                dead.append(q)  # slow client; remove it
         for q in dead:
             self._ws_clients.discard(q)
-            logger.debug("WebSocket client dropped (queue full — too slow to consume events)")
+            logger.debug("WebSocket client dropped (queue full; too slow to consume events)")
 
     # ── Agent tracking ─────────────────────────────────────────────────────────
 
@@ -176,7 +176,7 @@ class AppState:
     def finish_agent(self, run_id: str, output: str, success: bool = True):
         run = self.agent_runs.get(run_id)
         # A run that was explicitly stopped keeps its "stopped" status and streamed
-        # output — a late-arriving finish from the torn-down subprocess must not clobber it.
+        # output; a late-arriving finish from the torn-down subprocess must not clobber it.
         if run and run.status != "stopped":
             run.status = "done" if success else "error"
             run.output = output
@@ -193,5 +193,5 @@ class AppState:
         return True
 
 
-# Module-level singleton — import from anywhere via `from lhassa.state import state`
+# Module-level singleton; import from anywhere via `from lhassa.state import state`
 state = AppState()

@@ -2,14 +2,14 @@
 """Power subcommands for the Lhassa CLI.
 
 These operate **offline** against the local brain DB (``lhassa.core.db``) and the
-LLM gateway ledger — no LLM call, no network (except ``report``'s optional
+LLM gateway ledger; no LLM call, no network (except ``report``'s optional
 cross-harness ccusage read, which is itself fully defensive). Each command runs its
 async work through ``asyncio.run`` and supports ``--json`` for machine-readable
 output. Data goes to stdout; diagnostics / errors go to stderr (so ``--json`` stays
 clean when piped).
 
 They are registered onto the main Typer ``app`` via :func:`register`, alongside the
-default chat/REPL behavior — see ``lhassa.cli.app``.
+default chat/REPL behavior; see ``lhassa.cli.app``.
 """
 
 from __future__ import annotations
@@ -110,6 +110,11 @@ async def _load_approvals() -> list[dict]:
                 "accion": payload.get("accion"),
                 "actor_id": payload.get("actor_id"),
                 "creado_en": r.get("creado_en"),
+                # Kept whole: ``security.approval.describe`` reads the payload to
+                # say WHAT is being approved, and this projection used to drop
+                # it, which is why the queue could only ever show a bare action
+                # name. The --json callers get the fuller row too.
+                "payload": payload,
             }
         )
     return out
@@ -126,16 +131,30 @@ def approvals_cmd(
     if not rows:
         _err().print("No pending approvals.", style="dim")
         return
+    from lhassa.security import approval as _approval
+
     table = Table(title="Pending approvals", **TABLE_KWARGS)
-    for col in ("id", "tipo", "accion", "actor_id", "creado_en"):
-        table.add_column(col)
+    table.add_column("id")
+    table.add_column("what", no_wrap=True, overflow="ellipsis", max_width=52)
+    table.add_column("tipo")
+    table.add_column("actor_id")
+    table.add_column("creado_en")
     for r in rows:
+        # ``describe`` is the ONE place that knows each payload shape; the
+        # dashboard, the digest and Telegram all render through it. This table
+        # printed the bare ``accion`` instead, so ten proposals to retire ten
+        # different capabilities were ten identical rows of "retire_capabi...".
+        try:
+            described = _approval.describe(r)
+            what = str(described.get("title") or "") or str(r["accion"] or "")
+        except Exception:  # a display helper must never break the queue
+            what = str(r["accion"] or "")
         table.add_row(
             str(r["id"]),
-            str(r["tipo"] or "—"),
-            str(r["accion"] or "—"),
-            str(r["actor_id"] or "—"),
-            str(r["creado_en"] or "—"),
+            what or "-",
+            str(r["tipo"] or "-"),
+            str(r["actor_id"] or "-"),
+            str(r["creado_en"] or "-"),
         )
     _out().print(table)
 
@@ -403,7 +422,7 @@ def register(app: "typer.Typer") -> None:
 
     ``tools`` is intentionally NOT registered here: it is now the ``tools`` Typer
     GROUP in :mod:`lhassa.cli.tools_cmds` (list + ``propose``), which reuses
-    ``tools_cmd`` for its bare/``--json`` form — see that module's callback.
+    ``tools_cmd`` for its bare/``--json`` form; see that module's callback.
 
     ``memory`` is likewise NOT registered here: it is now the ``memory`` Typer
     GROUP in :mod:`lhassa.cli.memory_cmds` (search + ``add``), which reuses

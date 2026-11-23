@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""The signed ``Task`` — the unit of work the brain hands a machine (§2.5).
+"""The signed ``Task``: the unit of work the brain hands a machine (§2.5).
 
 A ``Task`` is reconciliation made concrete: the brain mints it, signs it
 (Ed25519, ``security.signing``), and the machine runs it only after its

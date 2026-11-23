@@ -18,9 +18,9 @@ async def add_fact(params: dict) -> str:
     validated via dispatch.clean_tags (public since Phase 3).
 
     params:
-        contenido (required)  — the fact text.
-        tags                  — list of tag strings (optional).
-        instance_id           — defaults to Config.instance_id.
+        contenido (required) ; the fact text.
+        tags                 ; list of tag strings (optional).
+        instance_id          ; defaults to Config.instance_id.
 
     Never raises.
     """
@@ -52,7 +52,7 @@ async def backup_memory(params: dict) -> str:
 
     Uses ``memory.backup.backup()`` (WAL-safe online copy) then
     ``memory.backup.verify(path)`` (integrity_check + table presence). Never
-    raises — a failed backup reports an error string.
+    raises; a failed backup reports an error string.
 
     params: (none required; dest overrides the default backup path)
 
@@ -63,7 +63,7 @@ async def backup_memory(params: dict) -> str:
         path = await _backup.backup(dest=dest)
         ok = await _backup.verify(path)
         verified = "verified ok" if ok else "VERIFICATION FAILED"
-        return f"backup_memory: {path} — {verified}"
+        return f"backup_memory: {path}; {verified}"
 
     except Exception as exc:
         return f"backup_memory: error: {exc}"
@@ -72,13 +72,13 @@ async def backup_memory(params: dict) -> str:
 async def consolidate_memory(params: dict) -> str:
     """Run LLM-free chica consolidation (mechanical LRU eviction only).
 
-    Calls ``memory.chica.consolidate`` — the purely mechanical, $0, no-LLM
+    Calls ``memory.chica.consolidate``: the purely mechanical, $0, no-LLM
     path. DOES NOT call the semantic/LLM variant (memory.consolidate). Pinned
     items and directivas are never evicted.
 
     params:
-        instance_id  — defaults to Config.instance_id.
-        max_items    — integer override (default is Config.chica_max_items).
+        instance_id ; defaults to Config.instance_id.
+        max_items   ; integer override (default is Config.chica_max_items).
 
     Never raises.
     """
@@ -109,8 +109,8 @@ async def distill_memory(params: dict) -> str:
     ``since_hours`` of episodes into at most 10 novel dato facts.
 
     params:
-        instance_id  — defaults to Config.instance_id.
-        since_hours  — hours of episode history to consider (default 24).
+        instance_id ; defaults to Config.instance_id.
+        since_hours ; hours of episode history to consider (default 24).
 
     Never raises.
     """

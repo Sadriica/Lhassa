@@ -1,4 +1,4 @@
-"""Tests for lhassa.agents.versioning — local-git tool versioning.
+"""Tests for lhassa.agents.versioning; local-git tool versioning.
 
 Offline: a real local git repo in a tmp dir, the brain DB redirected to a tmp file,
 no GitHub remote/network. Exercises init → create_candidate → approve (merge) →

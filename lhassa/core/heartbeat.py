@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """
-The heartbeat — the brain's pulse (§2.1).
+The heartbeat; the brain's pulse (§2.1).
 
 "Hace y duerme": a systemd timer (or any caller) fires ``beat()`` on a fixed
 cadence; it ensures the brain DB exists, advances the brain exactly one tick via
-``step()``, and returns ``step``'s summary. Nothing here calls an LLM — a routine
+``step()``, and returns ``step``'s summary. Nothing here calls an LLM; a routine
 beat is deterministic and costs zero tokens (§0, §2.4). The model only wakes for
 the hard judgment, which ``step()`` defers to the Phase 2 router.
 

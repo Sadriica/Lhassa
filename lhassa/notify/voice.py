@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""The notify voice — reshape machine-built notifications into Lhassa's own voice.
+"""The notify voice; reshape machine-built notifications into Lhassa's own voice.
 
 Owner's ask, verbatim: *"a brain that, before sending notification/automation
 messages, interprets them and makes them more Lhassa or more human-like; it can
@@ -12,53 +12,53 @@ This module is the ONE place that turns a robotic line like::
 
 into something a person would actually read. It sits behind
 :func:`lhassa.notify.dispatch.notify` (the ONE fan-out choke point), so every
-channel gets the same voiced text — no per-channel special-casing.
+channel gets the same voiced text; no per-channel special-casing.
 
 **One source of voice.** Every lead phrase this module uses comes from
-:data:`lhassa.persona.LEAD_PHRASES` (and its Spanish mirror) — the SAME table
+:data:`lhassa.persona.LEAD_PHRASES` (and its Spanish mirror); the SAME table
 :func:`lhassa.persona.format_alert` draws from. Before this module and
 ``persona.py`` were unified they carried duplicated, silently-drifting copies
-of the same phrases ("Heads up: " here vs "Heads up — " there); the
+of the same phrases ("Heads up: " here vs "Heads up -- " there); the
 deterministic plane consulted its own near-copy instead of the one place that
 actually defines Lhassa's voice. There is now exactly one vocabulary.
 
 Four deterministic layers, same degrade discipline as the digest's
 ``digest_style`` (:mod:`lhassa.notify.digest`):
 
-  * :func:`classify` — an explicit ``kind`` always wins; otherwise a cheap,
+  * :func:`classify`: an explicit ``kind`` always wins; otherwise a cheap,
     regex-only sniff of the text. $0, never raises.
-  * :func:`template` — the $0 reshaping layer. Per-kind deterministic templates
+  * :func:`template`: the $0 reshaping layer. Per-kind deterministic templates
     (the ``TEMPLATES`` registry): strip robotic prefixes, dedupe a doubled
     action name, naturalize obvious ``key=value`` tails, look up a natural
     first-person lead per action via :mod:`lhassa.notify.phrasebook` (with an
-    intent-based outer framing — "Done — " / "Heads up — " / "I learned
-    something — ", point 5 of Stream 4, not one blanket framing for every
+    intent-based outer framing; "Done: " / "Heads up: " / "I learned
+    something: ", point 5 of Stream 4, not one blanket framing for every
     action-result). When unsure, it passes the text through verbatim with
-    only the framing added — it NEVER drops information. Idempotent: a text
+    only the framing added; it NEVER drops information. Idempotent: a text
     that already carries a known lead phrase (ours, or the monitor's own
     :func:`lhassa.persona.format_alert` leads) is returned unchanged.
   * **Identity reaches the $0 plane** (no model): :func:`template` also
     localizes the lead phrase to the owner's language
     (``config.digest_language``, reused as the general notify-language
-    signal — ``LEAD_PHRASES_ES`` if it starts with ``"es"``) and applies the
-    identity's own directives — concretely, a "keep it concise" directive
+    signal; ``LEAD_PHRASES_ES`` if it starts with ``"es"``) and applies the
+    identity's own directives; concretely, a "keep it concise" directive
     (loaded via :func:`lhassa.persona.load_identity`) caps the rendered
     length. Both are pure post-processing over already-templated text; a
     broken identity registry degrades to the untouched text, never a raised
     exception.
-  * :func:`revoice` — the style switch (``config.notify_style``):
+  * :func:`revoice`: the style switch (``config.notify_style``):
     ``"plain"`` leaves the text untouched, ``"template"`` (the default) applies
     :func:`template`, ``"persona"`` adds ONE cheap-model re-voicing pass on top
     of the template (mirrors :func:`lhassa.notify.digest._persona_pass`
     exactly: cheap/fast model, bounded ``max_tokens``, the identity's
     persona block as system prompt, same language as the input, every fact
-    kept). ANY failure in the persona pass — a missing provider, a raised
-    exception, an empty completion — degrades to the template() result; a
+    kept). ANY failure in the persona pass; a missing provider, a raised
+    exception, an empty completion; degrades to the template() result; a
     notification ALWAYS arrives.
 
 The ``report`` kind is special: the digest already re-voices itself
 (``digest_style = "persona"``, see :mod:`lhassa.notify.digest`), so
-``template()`` for ``"report"`` is pass-through-verbatim — callers that hand
+``template()`` for ``"report"`` is pass-through-verbatim; callers that hand
 in an already-voiced digest (``kind="report"``) are never double-voiced.
 """
 
@@ -77,16 +77,16 @@ from lhassa.notify import phrasebook
 KINDS = ("alert", "reminder", "action-result", "approval", "report", "generic")
 
 # One-line first-person framings, added ONCE per kind (never for "report" or
-# "generic" — those pass through as-is beyond the light cleanup below).
-# Sourced from :data:`lhassa.persona.LEAD_PHRASES` — the one vocabulary (see
+# "generic": those pass through as-is beyond the light cleanup below).
+# Sourced from :data:`lhassa.persona.LEAD_PHRASES`: the one vocabulary (see
 # module docstring). Extra keys in that table not in ``KINDS`` (e.g.
 # ``"learned"``, used only for the action-result intent framing below) are
 # simply unused here.
 _FRAMING: dict[str, str] = persona.LEAD_PHRASES
 
 # The idempotency sentinel: a text that already starts with ANY known lead
-# phrase — ours, or ``persona.format_alert``'s own leads (which now draw from
-# the exact same table) — is considered already voiced and returned unchanged
+# phrase; ours, or ``persona.format_alert``'s own leads (which now draw from
+# the exact same table); is considered already voiced and returned unchanged
 # rather than double-framed. English and Spanish leads both count, so a
 # reprocessed already-localized message stays a no-op.
 _ALL_LEADS = tuple(
@@ -109,7 +109,7 @@ def _already_voiced(text: str) -> bool:
 def classify(text: str, kind: Optional[str] = None) -> str:
     """Return the notification kind for ``text``. Explicit ``kind`` always wins.
 
-    Otherwise a cheap, deterministic, regex-only sniff of the text shape — no
+    Otherwise a cheap, deterministic, regex-only sniff of the text shape; no
     model, never raises. Unrecognized shapes fall back to ``"generic"``.
     """
     if kind:
@@ -148,7 +148,7 @@ def _title_action(name: str) -> str:
 
 
 def _naturalize_kv(text: str) -> str:
-    """Turn obvious ``key=value`` tails into ``key: value`` — trivially safe,
+    """Turn obvious ``key=value`` tails into ``key: value``: trivially safe,
     never touches anything that isn't a plain ``word=token`` pair."""
     return _KV_RE.sub(lambda m: f"{m.group(1)}: {m.group(2)}", text)
 
@@ -159,7 +159,7 @@ def _extract_action(text: str) -> "tuple[str | None, str]":
     Handles the doubled-name shape (``"check_spend: check_spend: rest"``) and
     the plain leading-name shape (``"check_spend: rest"``); strips a leading
     ``⚙️`` first. Returns ``(None, naturalized_text)`` when neither shape
-    matches — the caller falls back to passing the text through untouched.
+    matches; the caller falls back to passing the text through untouched.
     """
     t = text.strip()
     if t.startswith("⚙️"):
@@ -181,11 +181,11 @@ def _clean_action_result(text: str) -> str:
 
     ``"⚙️ check_spend: check_spend: 2040 output tokens..."`` becomes
     ``"I checked spend: 2040 output tokens..."`` when ``check_spend`` has a
-    :mod:`lhassa.notify.phrasebook` entry (the obligation — see that module's
+    :mod:`lhassa.notify.phrasebook` entry (the obligation; see that module's
     parity test), or falls back to the mechanical
     ``"Check-spend: 2040 output tokens..."`` rendering for an action this
     table doesn't (yet) know. When the shape doesn't match at all, the text is
-    naturalized (key=value tails only) and passed through — NEVER dropped.
+    naturalized (key=value tails only) and passed through. NEVER dropped.
     """
     action, rest = _extract_action(text)
     if action is None:
@@ -199,15 +199,15 @@ def _clean_action_result(text: str) -> str:
 
 def _template_report(text: str, _kind: str) -> str:
     # The digest is already voiced (plain or persona) before it ever reaches
-    # here — pass-through-verbatim, byte for byte.
+    # here; pass-through-verbatim, byte for byte.
     return text
 
 
 def _template_action_result(text: str, kind: str) -> str:
     # Templates by INTENT, not only by kind (Stream 4, point 5): most
-    # action-results are "I finished something" ("Done — "), but a few are
-    # "something needs your attention" ("Heads up — ") or "I learned
-    # something" — see lhassa.notify.phrasebook.intent_for.
+    # action-results are "I finished something" ("Done: "), but a few are
+    # "something needs your attention" ("Heads up: ") or "I learned
+    # something": see lhassa.notify.phrasebook.intent_for.
     action, _rest = _extract_action(text)
     intent = phrasebook.intent_for(action) if action else kind
     framing = _FRAMING.get(intent, _FRAMING[kind])
@@ -219,7 +219,7 @@ def _template_framed(text: str, kind: str) -> str:
 
 
 def _template_generic(text: str, _kind: str) -> str:
-    # No framing for generic text — light-touch naturalization only, so an
+    # No framing for generic text; light-touch naturalization only, so an
     # arbitrary/unknown-shaped message is never editorialized.
     return _naturalize_kv(text.strip())
 
@@ -238,10 +238,10 @@ TEMPLATES: dict[str, Callable[[str, str], str]] = {
 
 # ── Identity reaches the $0 plane (no model) ────────────────────────────────
 # The owner's language and hard limits, applied as pure deterministic
-# post-processing over already-templated text — never a raise, never a cost.
+# post-processing over already-templated text; never a raise, never a cost.
 
 # A directive naming any of these (case-insensitive substring) is read as
-# "keep notifications brief" — the same signal an English "keep it concise"
+# "keep notifications brief": the same signal an English "keep it concise"
 # or "be brief" directive would give. The default personal identity carries
 # "responder conciso por defecto" out of the box (see persona.py), so this is
 # live for the owner today, not a hypothetical.
@@ -251,12 +251,16 @@ _CONCISE_MAX_CHARS = 480
 
 def _localize_lead(text: str, config) -> str:
     """Swap an English lead phrase for its Spanish mirror when the owner's
-    configured notify language calls for it (``config.digest_language``,
-    reused as the general $0 notify-language signal — no separate model call
-    needed to know which language the owner reads in)."""
+    configured notify language calls for it (``notify_language``, falling back
+    to ``digest_language``: the same one knob the model-written messages are
+    pinned to, so the $0 lead and the re-voiced body never disagree)."""
     if not text or config is None:
         return text
-    lang = (getattr(config, "digest_language", "") or "").strip().lower()
+    lang = (
+        getattr(config, "notify_language", "")
+        or getattr(config, "digest_language", "")
+        or ""
+    ).strip().lower()
     if not lang.startswith("es"):
         return text
     for key, en_lead in persona.LEAD_PHRASES.items():
@@ -266,7 +270,7 @@ def _localize_lead(text: str, config) -> str:
 
 
 def _apply_identity_limits(text: str, config) -> str:
-    """Apply the loaded identity's directives to templated text — concretely,
+    """Apply the loaded identity's directives to templated text; concretely,
     a "keep it concise" directive caps the length. Any failure (a broken
     identity registry) leaves ``text`` untouched; identity must never cost a
     notification."""
@@ -291,10 +295,10 @@ def template(text: str, kind: str, config=None) -> str:
     """The $0 deterministic reshaping layer for one notification ``kind``.
 
     Idempotent: re-voicing an already-voiced text (starts with a known framing
-    or lead phrase) is a no-op — returns ``text`` unchanged (only localized,
+    or lead phrase) is a no-op; returns ``text`` unchanged (only localized,
     never re-framed or re-truncated). Unrecognized ``kind`` falls back to the
     generic (light-touch, no framing) template. ``config``, when given, lets
-    the owner's identity reach this $0 plane — see :func:`_localize_lead` /
+    the owner's identity reach this $0 plane; see :func:`_localize_lead` /
     :func:`_apply_identity_limits`. Never raises; never drops information.
     """
     if not text or not text.strip():
@@ -315,15 +319,113 @@ def template(text: str, kind: str, config=None) -> str:
 
 # ── The persona layer (one cheap-model pass, opt-in via notify_style) ──────
 
+# The re-voicing instruction, layered under the identity's persona block.
+# Written against measured output, not intuition: the earlier version ("first
+# person, warm, calm and BRIEF") produced flat, PASSIVE lines that read like a
+# clerk's log ("Una falla nueva quedó registrada") and padded them with filler
+# offers the brain never made ("dime cuándo quieres que lo miremos juntos").
+# Naming the failure modes is what fixed it: demand the active first person,
+# forbid the passive, forbid inventing a next step, and require that a failure
+# be called a failure. Compare before changing this: the same three fixtures
+# through both versions is a 30-second check.
+_REVOICE_INSTRUCTION = (
+    "The line below is a machine-built notification about YOUR OWN work. Say it "
+    "as yourself, to your owner, in ONE or TWO short sentences.\n"
+    "- Speak in the FIRST PERSON about what you did or found ('I ran', 'I "
+    "found', 'I am watching'). You are the one who did the work: never describe "
+    "it from the outside, and never use the passive voice.\n"
+    "- Keep every fact, number, name and id EXACTLY as given. Never invent one, "
+    "never drop one. If something failed, say plainly that it failed.\n"
+    "- Translate the machine's jargon into what it MEANS for your owner, but "
+    "keep the technical name so it stays searchable.\n"
+    "- The monk's register: short sentences, present tense, understatement. "
+    "Calm, never alarmed, never cheerful about a failure. No preamble, no "
+    "sign-off, no 'let me know'. Never use an em dash; use a colon, a semicolon "
+    "or a comma.\n"
+    "- Report only what ALREADY happened. Never say you are looking into it, "
+    "will fix it, or are about to do anything: nothing runs after this message, "
+    "so any such promise is a lie. Never offer help you were not asked for.\n"
+    "Answer with the rewritten notification ONLY, no explanation. "
+)
+
+# Two worked examples, threaded as real chat turns before the actual line.
+# Rules alone did not hold this model: across repeated runs of one fixture the
+# same instruction produced first person, third person and passive voice by
+# turns, and once dropped the action's technical name. The examples pin what
+# the prose could not (person, length, keeping the identifier, stopping without
+# an offer of help), so they must DEMONSTRATE every one of those: an example
+# that paraphrases away the action name teaches exactly that, which is how the
+# first draft of this table made the output worse.
+#
+# Keyed by the pinned language, because an example is only useful in the
+# language the answer is written in. A language with no entry falls through to
+# the rules alone (the previous behaviour), never to examples in a language the
+# owner does not read.
+_REVOICE_EXAMPLES: dict[str, list[dict]] = {
+    "es": [
+        {"role": "user", "content": "Sync-repo: 2 repos synced, 1 skipped (dirty tree)"},
+        {
+            "role": "assistant",
+            "content": (
+                "Sincronicé 2 repos con sync_repo; salté 1 porque tenía cambios "
+                "sin guardar."
+            ),
+        },
+        {
+            "role": "user",
+            "content": (
+                "Something needs a look: 1 new failure: distill_memory: fail; "
+                "provider unreachable"
+            ),
+        },
+        {
+            "role": "assistant",
+            "content": (
+                "Encontré un fallo nuevo: distill_memory no pudo correr, no "
+                "alcancé al proveedor."
+            ),
+        },
+    ],
+    "en": [
+        {"role": "user", "content": "Sync-repo: 2 repos synced, 1 skipped (dirty tree)"},
+        {
+            "role": "assistant",
+            "content": "I synced 2 repos with sync_repo; I skipped 1, it had uncommitted changes.",
+        },
+        {
+            "role": "user",
+            "content": (
+                "Something needs a look: 1 new failure: distill_memory: fail; "
+                "provider unreachable"
+            ),
+        },
+        {
+            "role": "assistant",
+            "content": "I found a new failure: distill_memory could not run, I could not reach the provider.",
+        },
+    ],
+}
+
+
+def _revoice_examples(config) -> list[dict]:
+    """The few-shot turns for the owner's pinned language ([] when unknown)."""
+    lang = (
+        getattr(config, "notify_language", "")
+        or getattr(config, "digest_language", "")
+        or ""
+    ).strip().lower()[:2]
+    return list(_REVOICE_EXAMPLES.get(lang, ()))
+
 
 async def _persona_pass(text: str, kind: str, config) -> str:
     """Re-voice ``text`` as Lhassa via ONE cheap, fast model call.
 
     Mirrors :func:`lhassa.notify.digest._persona_pass`: the API gateway's
     routine (cheap) model, the instance's persona block as the system prompt,
-    same language as the input, every fact/number/id kept exactly. Raises on
-    failure — :func:`revoice` catches and falls back to :func:`template`.
-    Logs one best-effort Episode (``dominio="scribe"`` — the temple's docs
+    the owner's pinned language, every fact/number/id kept exactly, plus the
+    few-shot turns in :data:`_REVOICE_EXAMPLES`. Raises on failure;
+    :func:`revoice` catches and falls back to :func:`template`.
+    Logs one best-effort Episode (``dominio="scribe"``: the temple's docs
     monk owns the voice); a logging failure never costs the re-voiced text.
     """
     from lhassa.llm import router
@@ -337,20 +439,24 @@ async def _persona_pass(text: str, kind: str, config) -> str:
     system = (
         identity.persona_block
         + "\n\n"
-        + "Rewrite the notification below as yourself speaking directly to your "
-          "owner: first person, warm, calm and BRIEF (one or two short "
-          "sentences). Use the monk's register: patient, frugal, attentive, "
-          "humble — never mystical, never preachy. Keep every fact, number and "
-          "id EXACTLY as given — never invent or drop one. Reply in the SAME "
-          "language as the notification below."
+        + _REVOICE_INSTRUCTION
+        + persona.language_directive(
+            config, "Reply in the SAME language as the notification below."
+        )
     )
+    examples = _revoice_examples(config)
+    if examples:
+        system += (
+            " The exchanges before the real notification are examples of your "
+            "voice; follow them."
+        )
     completion = await provider.complete(
-        [{"role": "user", "content": text}],
+        [*examples, {"role": "user", "content": text}],
         model=model,
         max_tokens=200,
         system=system,
     )
-    out = (completion.text or "").strip() or text
+    out = persona.scrub_dashes((completion.text or "").strip()) or text
 
     try:
         from lhassa.core.episode import Episode
@@ -373,9 +479,9 @@ async def _persona_pass(text: str, kind: str, config) -> str:
 async def revoice(text: str, *, kind: Optional[str] = None, config=None) -> str:
     """Reshape ``text`` into Lhassa's own voice per ``config.notify_style``.
 
-    ``"plain"`` — unchanged. ``"template"`` (default) — :func:`template` only,
-    $0. ``"persona"`` — :func:`template` then one cheap-model pass; ANY
-    failure there degrades to the template() result. Never raises — a
+    ``"plain"``: unchanged. ``"template"`` (default); :func:`template` only,
+    $0. ``"persona"``: :func:`template` then one cheap-model pass; ANY
+    failure there degrades to the template() result. Never raises; a
     notification must ALWAYS arrive.
     """
     if config is None:
@@ -400,23 +506,23 @@ async def revoice(text: str, *, kind: Optional[str] = None, config=None) -> str:
         return templated
 
 
-# ── The phrasebook — deterministic, $0 translation of an action's outcome ──────
+# ── The phrasebook; deterministic, $0 translation of an action's outcome ──────
 #
 # `template()` frames a notification ("Heads up: …"); it does not TRANSLATE it.
 # So an internal action's own line reached the owner verbatim:
 #
-#     guardian completed check_integrity: fail — 1 critical (run conf_3bc1d93…)
+#     guardian completed check_integrity: fail. 1 critical (run conf_3bc1d93…)
 #
 # Every part of that is machine vocabulary: the action's name, "1 critical", an
 # opaque run id. The phrasebook turns a known action's outcome into a sentence a
 # person can act on, with NO model call.
 #
 # Two rules keep it honest:
-#   * an entry returns ``None`` when it cannot parse its own action's output —
+#   * an entry returns ``None`` when it cannot parse its own action's output;
 #     the caller then falls back to the raw line rather than inventing a summary;
 #   * unregistered actions simply have no entry, so nothing changes for them.
 #
-# Add one with @register_phrase("<action>") — a drop-in, like every other
+# Add one with @register_phrase("<action>"); a drop-in, like every other
 # registry in the codebase.
 
 PHRASES: "dict[str, Callable[[str], Optional[str]]]" = {}
@@ -455,7 +561,7 @@ def _count(pattern: str, text: str) -> Optional[int]:
 
 
 def _plural(n: int, singular: str, plural: Optional[str] = None) -> str:
-    """"1 problem" / "2 problems" — a "(s)" suffix is what machines write."""
+    """"1 problem" / "2 problems": a "(s)" suffix is what machines write."""
     return f"{n} {singular if n == 1 else (plural or singular + 's')}"
 
 
@@ -464,7 +570,7 @@ def _phrase_check_integrity(result: str) -> Optional[str]:
     """The owner does not know what a "contract" or a run id is; they know
     whether something needs their attention, and what to type to see it."""
     if "every contract passed" in result:
-        return "All my internal checks passed — nothing needs you."
+        return "All my internal checks passed; nothing needs you."
     critical = _count(r"(\d+) critical", result) or 0
     warnings = _count(r"(\d+) warning", result) or 0
     if not critical and not warnings:
@@ -489,21 +595,21 @@ def _phrase_curate_skills(result: str) -> Optional[str]:
     if archived:
         return (
             f"I tidied my skills: {_plural(archived, 'skill')} went unused for months, "
-            f"so I archived {'it' if archived == 1 else 'them'} — nothing was deleted."
+            f"so I archived {'it' if archived == 1 else 'them'}; nothing was deleted."
         )
     if stale is not None and not stale:
-        return "I checked my skills — all still in use, nothing to tidy."
+        return "I checked my skills: all still in use, nothing to tidy."
     return None
 
 
 @register_phrase("review_tools")
 def _phrase_review_tools(result: str) -> Optional[str]:
     if "none retired" in result:
-        return "I reviewed the tools I wrote myself — all still earning their keep."
+        return "I reviewed the tools I wrote myself; all still earning their keep."
     retired = _count(r"retired (\d+)", result)
     if retired:
         return (
-            f"I retired {_plural(retired, 'tool')} I had written myself — "
+            f"I retired {_plural(retired, 'tool')} I had written myself; "
             "they stopped being useful."
         )
     return None
@@ -517,8 +623,8 @@ def _phrase_review_capabilities(result: str) -> Optional[str]:
     if proposed:
         return (
             f"I found {_plural(proposed, 'thing')} I can do that nobody uses. "
-            f"I left you a proposal to retire {'it' if proposed == 1 else 'them'} "
-            "— see /approvals."
+            f"I left you a proposal to retire {'it' if proposed == 1 else 'them'}"
+            "; see /approvals."
         )
     return None
 
@@ -531,10 +637,10 @@ def _phrase_detect_repetition(result: str) -> Optional[str]:
         return (
             f"I noticed {_plural(proposed, 'thing')} I keep doing over and over, "
             f"and left you a proposal to make {'it' if proposed == 1 else 'them'} "
-            "automatic — see /approvals."
+            "automatic; see /approvals."
         )
     if proposed == 0:
-        return "I looked for things I repeat too often — nothing new this time."
+        return "I looked for things I repeat too often; nothing new this time."
     return None
 
 
@@ -545,7 +651,7 @@ def _phrase_calendar_sync(result: str) -> Optional[str]:
     if unsynced is None:
         return None
     if unsynced == 0:
-        return "Your calendar and my reminders are in step — nothing to sync."
+        return "Your calendar and my reminders are in step; nothing to sync."
     return (
         f"I found {_plural(unsynced, 'calendar event')} I wasn't tracking and "
         f"set up {delivered or 0} of them as reminders."
@@ -558,14 +664,14 @@ def _phrase_derive_world_facts(result: str) -> Optional[str]:
     if new is None:
         return None
     if new == 0:
-        return "I re-read your calendar for new routines — nothing I didn't already know."
+        return "I re-read your calendar for new routines; nothing I didn't already know."
     return f"I learned {_plural(new, 'new thing')} about your routine from your calendar."
 
 
 @register_phrase("apply_feedback")
 def _phrase_apply_feedback(result: str) -> Optional[str]:
     if "no scorable signals" in result:
-        return "I checked how my recent answers landed — not enough signal to tell yet."
+        return "I checked how my recent answers landed; not enough signal to tell yet."
     return None
 
 
@@ -573,7 +679,7 @@ def _phrase_apply_feedback(result: str) -> Optional[str]:
 def _phrase_draft_research_note(result: str) -> Optional[str]:
     if "written to" in result:
         return (
-            "I drafted a research note for you. It is review-only — nothing is "
+            "I drafted a research note for you. It is review-only; nothing is "
             "published until you read it."
         )
     return None

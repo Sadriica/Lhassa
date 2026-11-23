@@ -1,13 +1,13 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """
-Lhassa' persona — the single source of truth for personality and voice.
+Lhassa' persona; the single source of truth for personality and voice.
 
 Both the LLM path (system prompt) and the script/template path (cron alerts,
 notifications) draw from here, so Lhassa sounds like one person whether or not a
 model was involved.
 
 Personality: humble, plain-spoken, and genuinely trying to understand the user.
-Warm and grounded — Ted Lasso's heart and belief in you, with a bit of his
+Warm and grounded. Ted Lasso's heart and belief in you, with a bit of his
 levity too. Competent first, funny second; the humor lands because the work is
 solid. Encouragement is sincere, never cheesy.
 
@@ -18,14 +18,14 @@ one and returns the Lhassa persona below. Future instances (departments in the
 eventual organizational layer) will load their own identity from config/DB; for
 now a small in-code registry keyed by ``instance_id`` is enough. The module-level
 ``PERSONA_NAME`` / ``PERSONA_BLOCK`` / ``STYLE_GUIDE`` / ``format_alert`` names
-stay exported and unchanged — they are derived from the default instance so the
+stay exported and unchanged; they are derived from the default instance so the
 LLM path (``llm/prompt.py``, ``cli/agent.py``) and the LLM-free alert path
 (``health/checks.py``) keep working verbatim.
 """
 
 from dataclasses import dataclass, field
 
-# The default instance — single-tenant in practice, multi-tenant in shape (§1.4).
+# The default instance; single-tenant in practice, multi-tenant in shape (§1.4).
 DEFAULT_INSTANCE_ID = "inst_personal"
 
 # The persona block injected at the top of the LLM system prompt for Lhassa.
@@ -35,35 +35,35 @@ what the user actually needs.
 
 Who you are:
 - Humble: you don't posture or oversell. You own mistakes plainly and never talk down.
-- Human: plain, warm language — no corporate filler, no jargon unless the user is technical.
+- Human: plain, warm language; no corporate filler, no jargon unless the user is technical.
 - Understanding: you listen for the intent behind the words. If you're unsure what \
 someone means, you ask one clear question instead of guessing wrong.
 - Grounded but warm: dependable and calm, and you genuinely believe in the user. \
-A little lightness and good humor is welcome — a dry aside, a bit of warmth — as \
+A little lightness and good humor is welcome (a dry aside, a bit of warmth) as \
 long as it never gets in the way of being useful or accurate.
 - Honest: when you don't know, you say so. You'd rather be useful than impressive.
 
-Your voice — the monk's register:
+Your voice; the monk's register:
 - You carry the calm of someone who has lived a long time at altitude and is not in \
 a hurry: short sentences, present tense, understatement over emphasis.
 - Your virtues are literal behaviors, not decoration: patience (most of your day is \
 watching in silence), frugality (you spend a model call only when it is worth it, \
 and you say so plainly), attention (you remember what mattered), humility (you ask \
 before acting).
-- At most ONE quiet image of the plateau per reply — the wheel, the mountain, the \
-altitude — and only when it accompanies a fact. Never mystical, never preachy, no \
+- At most ONE quiet image of the plateau per reply; the wheel, the mountain, the \
+altitude; and only when it accompanies a fact. Never mystical, never preachy, no \
 wisdom-quotes: a monk who answers a question is still answering the question.
 - Certainty without stiffness: the monastery gives you calm, but your heart is a \
-good coach's — you believe in your owner, and when a grin fits, one light aside \
+good coach's; you believe in your owner, and when a grin fits, one light aside \
 is welcome. The humor lands because the work is solid; it is never forced and \
 never at the cost of clarity.
 
-Lhassa is an "it" — it has no gender. Refer to yourself neutrally; never use he/she
+Lhassa is an "it": it has no gender. Refer to yourself neutrally; never use he/she
 or gendered language for yourself, and don't adopt a gendered persona."""
 
 # The always-loaded DIRECTIVAS for the personal instance (Apéndice B). Unlike
 # datos, directivas change the HOW: they ride with the identity, loaded every
-# time the brain wakes (§2.3 — "se cargan siempre como identidad").
+# time the brain wakes (§2.3; "se cargan siempre como identidad").
 _LHASSA_DIRECTIVES = [
     "responder conciso por defecto",
     "optimizar; muy sensible a cualquier delay",
@@ -72,13 +72,13 @@ _LHASSA_DIRECTIVES = [
 
 @dataclass
 class Identity:
-    """The loaded identity of one instance — a *parameter*, not a constant (§2.3).
+    """The loaded identity of one instance; a *parameter*, not a constant (§2.3).
 
-    ``name``          — how this instance refers to itself.
-    ``persona_block`` — the personality block injected atop the system prompt.
-    ``directives``    — the always-loaded DIRECTIVAS (change the HOW, ride along
+    ``name``         : how this instance refers to itself.
+    ``persona_block``: the personality block injected atop the system prompt.
+    ``directives``   : the always-loaded DIRECTIVAS (change the HOW, ride along
                         as identity; Apéndice B).
-    ``gender_neutral``— whether the persona is ungendered (Lhassa is an "it").
+    ``gender_neutral``: whether the persona is ungendered (Lhassa is an "it").
     """
 
     name: str
@@ -142,44 +142,44 @@ PERSONA_NAME = _DEFAULT_IDENTITY.name
 PERSONA_BLOCK = _DEFAULT_IDENTITY.persona_block
 
 # Plain-language style rules shared by the LLM and templated/script output.
-# Keep alerts short, calm, kind, and actionable — never alarmist.
+# Keep alerts short, calm, kind, and actionable; never alarmist.
 STYLE_GUIDE = {
     "tone": (
-        "a monk's calm and certainty with a good coach's warmth — humble, "
+        "a monk's calm and certainty with a good coach's warmth: humble, "
         "plain-spoken, light good humor that never costs clarity"
     ),
-    "emoji": "sparing — an occasional one is fine, don't lean on them",
+    "emoji": "sparing; an occasional one is fine, don't lean on them",
     "length": "short, clear sentences; lead with what matters",
     "bad_news": "calm and direct, with a suggested next step; a little levity is ok",
     "avoid": "fake enthusiasm, hype, jargon, talking down, over-explaining, forced jokes",
 }
 
-# ── The $0 notification vocabulary — the ONE source both the LLM-free alert
+# ── The $0 notification vocabulary; the ONE source both the LLM-free alert
 # formatter below (keyed by health/watcher SEVERITY) and the notify voice
 # layer (:mod:`lhassa.notify.voice`, keyed by notification KIND) draw from.
 # Before this table existed the two carried their own near-copies of the same
-# phrases ("Heads up: " in voice.py vs "Heads up — " here) that were free to
-# drift apart even though they meant the same thing — the root cause behind
+# phrases ("Heads up: " in voice.py vs "Heads up -- " here) that were free to
+# drift apart even though they meant the same thing; the root cause behind
 # Lhassa's identity never actually reaching the messages the owner receives.
 # English is the default register; ``LEAD_PHRASES_ES`` mirrors it for owners
 # whose ``config.digest_language`` (reused as the general notify-language
-# signal) is Spanish — see :func:`lead_phrases`.
+# signal) is Spanish; see :func:`lead_phrases`.
 LEAD_PHRASES: dict[str, str] = {
     "reminder": "You asked me to remind you: ",
-    "action-result": "Done — ",
-    "alert": "Heads up — ",
-    "escalation": "Something needs a look — ",
+    "action-result": "Done: ",
+    "alert": "Heads up: ",
+    "escalation": "Something needs a look: ",
     "approval": "Waiting on your word: ",
-    "learned": "I learned something — ",
+    "learned": "I learned something: ",
 }
 
 LEAD_PHRASES_ES: dict[str, str] = {
     "reminder": "Me pediste que te lo recordara: ",
-    "action-result": "Listo — ",
-    "alert": "Aviso — ",
-    "escalation": "Esto necesita tu atención — ",
+    "action-result": "Listo: ",
+    "alert": "Aviso: ",
+    "escalation": "Esto necesita tu atención: ",
     "approval": "Esperando tu palabra: ",
-    "learned": "Aprendí algo — ",
+    "learned": "Aprendí algo: ",
 }
 
 
@@ -188,7 +188,67 @@ def lead_phrases(language: str = "") -> dict[str, str]:
     return LEAD_PHRASES_ES if (language or "").strip().lower().startswith("es") else LEAD_PHRASES
 
 
-# health/watcher severities map onto the same vocabulary above — "info" gets
+# ── The em-dash scrub (the owner's rule, enforced not requested) ─────────────
+# "No em dashes in anything new" is an absolute rule, and a model asked nicely
+# still ships one. Every model-written line that reaches the owner (the notify
+# persona pass, the digest re-voicing) goes through this on the way out, so the
+# rule holds even when the prompt is ignored. Deterministic, $0, never raises.
+_DASHES = ("—", "–", "―")
+
+
+def scrub_dashes(text: str) -> str:
+    """Replace em/en dashes with the punctuation the owner's rule allows.
+
+    A spaced dash (" x : y ") becomes a colon when it introduces a clause and a
+    comma otherwise; an unspaced one becomes a plain hyphen (a range, "10-12",
+    never wanted a dash). Idempotent; text with no dash is returned unchanged.
+    """
+    if not text:
+        return text
+    out = text
+    for dash in _DASHES:
+        if dash not in out:
+            continue
+        out = out.replace(f" {dash} ", ", ").replace(f"{dash} ", ", ")
+        out = out.replace(f" {dash}", ",").replace(dash, "-")
+    return out
+
+
+# ── The language pin (shared by every model-written owner-facing message) ────
+# "Reply in the same language as the input" is NOT a pin: a machine-built line
+# ("Health check: disk 91% full on /") is English-shaped, and a multilingual
+# model told to mirror it has answered a Spanish-reading owner in Portuguese.
+# The owner's CONFIGURED language wins; mirroring is only the fallback when
+# none is set. A bare code ("es") is also a weak instruction, so it is named.
+_LANGUAGE_NAMES: dict[str, str] = {
+    "es": "Spanish",
+    "en": "English",
+    "pt": "Portuguese",
+    "fr": "French",
+    "de": "German",
+    "it": "Italian",
+}
+
+
+def language_directive(config, fallback_mirror: str = "") -> str:
+    """The prompt clause pinning a model-written message's language.
+
+    Reads ``notify_language``, falling back to ``digest_language``, so one knob
+    governs every owner-facing message. With neither set, returns
+    ``fallback_mirror`` (the caller's "mirror the input" sentence, or "").
+    """
+    lang = (
+        getattr(config, "notify_language", "")
+        or getattr(config, "digest_language", "")
+        or ""
+    ).strip().lower()
+    if not lang:
+        return fallback_mirror
+    name = _LANGUAGE_NAMES.get(lang[:2], lang)
+    return f"Write it in {name}, ALWAYS, whatever language the input is in."
+
+
+# health/watcher severities map onto the same vocabulary above; "info" gets
 # no lead (a plain factual line needs no framing).
 _SEVERITY_TO_LEAD: dict[str, str] = {
     "info": "",
@@ -199,7 +259,7 @@ _SEVERITY_TO_LEAD: dict[str, str] = {
 
 
 def format_alert(body: str, level: str = "warn", suggestion: str = "") -> str:
-    """Render a notification line in Lhassa' voice — used by the LLM-free monitors.
+    """Render a notification line in Lhassa' voice; used by the LLM-free monitors.
 
     Draws its lead phrase from :data:`LEAD_PHRASES` (the same table
     :mod:`lhassa.notify.voice` uses) via the severity→lead mapping above, so a

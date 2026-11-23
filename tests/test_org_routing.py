@@ -1,6 +1,6 @@
-"""Tests for lhassa.org.routing — deterministic department routing (Fase 7).
+"""Tests for lhassa.org.routing; deterministic department routing (Fase 7).
 
-Routing is table-driven keyword matching — NO LLM. It must send the right goal to
+Routing is table-driven keyword matching. NO LLM. It must send the right goal to
 the right department, fall back deterministically, and the general's assign_auto must
 use it to pick the target (the general routes; it never executes).
 """
@@ -93,7 +93,7 @@ async def test_general_assign_auto_never_executes(tmp_path, monkeypatch):
     from lhassa.org.coordinator import GeneralBrain
 
     general = GeneralBrain(instance_id="inst_personal")
-    # routing + assigning only — the general has no execution method
+    # routing + assigning only; the general has no execution method
     await general.assign_auto("optimize it", by_actor="owner")
     assert not hasattr(general, "handle")
     assert hasattr(general, "assign_auto")

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Runtime SETTINGS service — the panel/CLI editable knobs (slice BE).
+"""Runtime SETTINGS service; the panel/CLI editable knobs (slice BE).
 
 A thin, safe layer over :mod:`lhassa.config` that lets the dashboard and
 ``lhassa config`` read and change a small ALLOWLIST of runtime settings WITHOUT
@@ -8,7 +8,7 @@ keep it safe and elastic:
 
   - **Allowlist only.** Only the keys in :data:`EDITABLE` (plus advanced
     ``LHASSA_*`` vars via :func:`set_env`) can be changed. Everything else is
-    refused with a clear error — never an exception into the caller.
+    refused with a clear error; never an exception into the caller.
   - **Write to ``settings.env``, never ``.env``.** Edits are persisted to
     ``~/.lhassa/settings.env`` (a simple ``KEY=value`` file that :mod:`lhassa.config`
     already loads AFTER ``.env`` with ``override=True``), so a new heartbeat /
@@ -47,16 +47,16 @@ def settings_env_path() -> Path:
 # Groups order the panel: Heartbeat, Models, Budget & Safety, Memory, Surfaces, Org.
 
 # A change to a setting consumed only by the heartbeat takes effect on the NEXT beat
-# (each beat is a fresh process that re-reads env) — no manual restart needed. A
+# (each beat is a fresh process that re-reads env); no manual restart needed. A
 # setting consumed by a long-running service needs that service restarted.
-RESTART_NONE = "none"  # picked up live / next heartbeat — no restart needed
+RESTART_NONE = "none"  # picked up live / next heartbeat; no restart needed
 RESTART_APP = "app"  # restart the main app/API service
 RESTART_VOICE = "voice"  # restart the voice surface
 RESTART_TELEGRAM = "telegram"  # restart the telegram poller
 
 # ── static model hints for the dropdowns (no network) ────────────────────────────
 # These are SUGGESTIONS the panel renders as a select/datalist; the fields stay free
-# text (``allow_custom``) so any model id can still be typed. [SUPUESTO] — static,
+# text (``allow_custom``) so any model id can still be typed. [SUPUESTO]; static,
 # not verified against a live catalogue; refresh when the providers rotate ids.
 
 # Cheap/free opencode models (reused by the opencode_model dropdown + available()).
@@ -67,7 +67,7 @@ OPENCODE_MODEL_HINTS = [
 ]
 
 # Cloud model ids per provider, used to populate the cheap/smart model dropdowns.
-# [SUPUESTO] current-ish ids — kept small and defensive.
+# [SUPUESTO] current-ish ids; kept small and defensive.
 MODEL_HINTS: dict[str, list[str]] = {
     "groq": [
         "llama-3.3-70b-versatile",
@@ -195,7 +195,7 @@ EDITABLE: list[dict] = [
         "options": _model_options(),
         "allow_custom": True,
         "label": "Chat model (CLI / voice / agent)",
-        "help": "The model the CLI chat, voice, and the built-in agent use — this is the "
+        "help": "The model the CLI chat, voice, and the built-in agent use; this is the "
                 "'main' model, separate from the background heartbeat. Any model id may be typed.",
         "group": "Models",
         "default": "(provider default)",
@@ -267,7 +267,7 @@ EDITABLE: list[dict] = [
         "label": "Budget soft-limit fraction (downgrade smart→cheap)",
         "help": (
             "Once today's spend crosses this fraction of the daily token budget, "
-            "the router never picks the smart model — it downgrades to cheap/$0 "
+            "the router never picks the smart model; it downgrades to cheap/$0 "
             "providers as a brake before the budget is fully exhausted."
         ),
         "group": "Budget & Safety",
@@ -333,7 +333,7 @@ EDITABLE: list[dict] = [
         "help": (
             "OpenAI-compatible embeddings endpoint (e.g. http://localhost:11434 "
             "for Ollama). Any connection or HTTP failure falls back silently to "
-            "the offline hashing embedder — memory loading never crashes."
+            "the offline hashing embedder; memory loading never crashes."
         ),
         "group": "Memory",
         "default": "http://localhost:11434",
@@ -348,7 +348,7 @@ EDITABLE: list[dict] = [
         "help": (
             "Model name for the embeddings endpoint (e.g. 'nomic-embed-text'). "
             "Must match what the endpoint serves. Changing the model invalidates "
-            "existing stored vectors — run 'lhassa memory reindex' after switching."
+            "existing stored vectors; run 'lhassa memory reindex' after switching."
         ),
         "group": "Memory",
         "default": "nomic-embed-text",
@@ -362,7 +362,7 @@ EDITABLE: list[dict] = [
         "label": "Minimal context token budget (routine reflex think)",
         "help": (
             "Token budget the deterministic policy layer requests for a routine "
-            "judgment (no reflex flagged it hard) — cheaper than the full "
+            "judgment (no reflex flagged it hard); cheaper than the full "
             "context_token_budget used for a hard judgment."
         ),
         "group": "Memory",
@@ -380,7 +380,7 @@ EDITABLE: list[dict] = [
             "How outgoing notifications sound: plain = machine-built lines as-is; "
             "template = deterministic per-kind reshaping in Lhassa's voice ($0); "
             "persona = one cheap-model re-voicing pass on top (degrades to "
-            "template — the message always arrives)."
+            "template; the message always arrives)."
         ),
         "group": "Surfaces",
         "default": "template",
@@ -394,7 +394,7 @@ EDITABLE: list[dict] = [
         "label": "Knowledge roots (folders the brain may read)",
         "help": (
             "Comma-separated directories document perception and the "
-            "list_dir/read_file actions may touch — the OWNER'S opt-in reading "
+            "list_dir/read_file actions may touch; the OWNER'S opt-in reading "
             "frontier. Nothing is read until this is set; the hard ignore-list "
             "(dotfiles, .env*, keys…) applies even inside a root."
         ),
@@ -426,7 +426,7 @@ EDITABLE: list[dict] = [
         "label": "Answer cache (serve repeat stable questions for $0)",
         "help": (
             "A deterministic intent classifier gates a semantic cache of past chat "
-            "answers to STABLE questions (facts, how-tos, definitions) — a repeat "
+            "answers to STABLE questions (facts, how-tos, definitions); a repeat "
             "ask is served free instead of spending another model call. "
             "Time-sensitive questions (news/prices/weather/'today') are never cached."
         ),
@@ -441,7 +441,7 @@ EDITABLE: list[dict] = [
         "type": "float",
         "label": "Answer cache similarity threshold",
         "help": (
-            "Cosine-similarity floor for a cache hit — kept high (0.90 default) so "
+            "Cosine-similarity floor for a cache hit; kept high (0.90 default) so "
             "a merely-similar-but-different question is never served the wrong "
             "past answer."
         ),
@@ -458,7 +458,7 @@ EDITABLE: list[dict] = [
         "label": "Auto-sync repos on change (CSV paths)",
         "help": (
             "Repos in this list reconcile themselves automatically (sync_repo) "
-            "the moment the watchlist sees a new commit — no judgment needed. "
+            "the moment the watchlist sees a new commit; no judgment needed. "
             "Repos NOT in this list still route a repo_changed trigger to judgment."
         ),
         "group": "Watchlist",
@@ -495,7 +495,7 @@ EDITABLE: list[dict] = [
         "help": (
             "How many user+assistant PAIRS of a Telegram chat are kept in the "
             "rolling in-memory history and threaded into the next brain think. "
-            "History is process-memory only — restarting the poller clears it."
+            "History is process-memory only; restarting the poller clears it."
         ),
         "group": "Surfaces",
         "default": 8,
@@ -510,10 +510,10 @@ EDITABLE: list[dict] = [
         "label": "Telegram chat provider (reply speed)",
         "help": (
             "Who answers a plain Telegram chat message. 'auto' → the router's routine "
-            "decision (the heartbeat seat). 'default' → the API cost gateway (groq/… — "
+            "decision (the heartbeat seat). 'default' → the API cost gateway (groq/…; "
             "~1.5s replies, metered pennies). 'claude'/'codex'/'opencode' → that CLI "
             "subscription ($0, but a cold CLI boot per message ≈ 5–10s). 'local' → the "
-            "local endpoint. Flows and hard work are NOT affected — this pins only the "
+            "local endpoint. Flows and hard work are NOT affected; this pins only the "
             "chat door, and the fallback chain still backs a failing pick."
         ),
         "group": "Surfaces",
@@ -521,32 +521,22 @@ EDITABLE: list[dict] = [
         "restart": RESTART_TELEGRAM,
     },
     {
-        "key": "calendar_ics_url",
-        "attr": "calendar_ics_url",
-        "env_var": "LHASSA_CALENDAR_ICS_URL",
-        "type": "str",
-        "secret": True,
-        "label": "Calendar ICS feed URL (read-only)",
+        "key": "tui_theme",
+        "attr": "tui_theme",
+        "env_var": "LHASSA_TUI_THEME",
+        "type": "enum",
+        "options": ["auto", "dark", "light"],
+        "label": "TUI theme (lhassa tui)",
         "help": (
-            "A published calendar's secret .ics URL. Subscribing makes /today and "
-            "the briefing show your real events — read-only, no admin/API. Get it "
-            "from your calendar (Outlook: Settings → Calendar → Shared calendars → "
-            "Publish → ICS link). Kept secret (it grants read access)."
+            "Which palette 'lhassa tui' renders with. 'auto' detects the terminal's "
+            "background via COLORFGBG, then a short-timeout OSC 11 probe, defaulting "
+            "to dark on any ambiguity or error. 'dark'/'light' pin it. Each 'lhassa "
+            "tui' launch is a fresh process, so this takes effect on the next launch "
+            "no long-running service to restart."
         ),
         "group": "Surfaces",
-        "default": "",
-        "restart": RESTART_TELEGRAM,
-    },
-    {
-        "key": "calendar_feed_ttl",
-        "attr": "calendar_feed_ttl",
-        "env_var": "LHASSA_CALENDAR_FEED_TTL",
-        "type": "float",
-        "label": "Calendar feed cache (seconds)",
-        "help": "How long a fetched calendar feed is cached before re-download (default 3600).",
-        "group": "Surfaces",
-        "default": 3600.0,
-        "restart": RESTART_TELEGRAM,
+        "default": "auto",
+        "restart": RESTART_NONE,
     },
     {
         "key": "notify_channels",
@@ -569,10 +559,26 @@ EDITABLE: list[dict] = [
             "'plain' → the deterministic $0 template (already first-person). "
             "'persona' → one cheap fast-model pass re-voices it naturally as Lhassa "
             "(same facts; ~$0.0001 per digest). If the model fails, the plain text "
-            "is sent instead — the digest always arrives."
+            "is sent instead; the digest always arrives."
         ),
         "group": "Surfaces",
         "default": "plain",
+        "restart": RESTART_NONE,
+    },
+    {
+        "key": "notify_language",
+        "attr": "notify_language",
+        "env_var": "LHASSA_NOTIFY_LANGUAGE",
+        "type": "str",
+        "label": "Notification language",
+        "help": (
+            "Language every model-written owner-facing message is pinned to (e.g. "
+            "'es', 'en'). Empty falls back to the digest language; with neither set "
+            "the model mirrors the input, which lets it drift off the owner's own "
+            "language."
+        ),
+        "group": "Surfaces",
+        "default": "",
         "restart": RESTART_NONE,
     },
     {
@@ -606,6 +612,21 @@ EDITABLE: list[dict] = [
         "restart": RESTART_NONE,
     },
     # ── Org ──────────────────────────────────────────────────────────────────────
+    {
+        "key": "org_live",
+        "attr": "org_live",
+        "env_var": "LHASSA_ORG_LIVE",
+        "type": "bool",
+        "label": "Departments think for real (costs tokens)",
+        "help": (
+            "Off, every department brain returns a deterministic stub and the "
+            "org costs nothing. On, they run a real one-turn think, so flows "
+            "and delegations answer with real content and each hop is billed."
+        ),
+        "group": "Org",
+        "default": False,
+        "restart": RESTART_APP,
+    },
     {
         "key": "org_departments",
         "attr": "org_departments",
@@ -644,7 +665,7 @@ def _chat_provider_error(provider: str, config) -> "Optional[str]":
     p = (provider or "").strip().lower()
     if p in _CLI_CHAT_PROVIDERS:
         if shutil.which(p) is None:
-            return f"the {p!r} CLI is not installed — install it (it runs via your subscription, no API key)."
+            return f"the {p!r} CLI is not installed; install it (it runs via your subscription, no API key)."
         return None
     if p == "ollama":
         return None
@@ -679,6 +700,27 @@ class SettingsError(ValueError):
     """
 
 
+def register_editable(entry: dict) -> dict:
+    """Let a capability pack expose one of its own knobs in the settings panel.
+
+    ``entry`` has the same shape as the rows of :data:`EDITABLE` (key, attr,
+    env_var, type, label, help, group, default, restart; ``secret`` when it
+    is one). A key core already owns is refused, so a pack cannot change a
+    core setting's rules; registering the same key again is a no-op.
+    """
+    key = entry.get("key")
+    if not key or not entry.get("attr") or not entry.get("env_var"):
+        raise ValueError("an editable setting needs key, attr and env_var")
+    for existing in EDITABLE:
+        if existing["key"] == key:
+            if existing.get("pack") and existing.get("pack") == entry.get("pack"):
+                return existing
+            raise ValueError(f"setting {key!r} is already defined")
+    EDITABLE.append(entry)
+    _BY_KEY[key] = entry
+    return entry
+
+
 # ── secret masking ───────────────────────────────────────────────────────────────
 
 
@@ -691,7 +733,7 @@ def _is_secret(name: str, entry: Optional[dict] = None) -> bool:
 
 
 def _mask(value: Any) -> str:
-    """Mask a secret value to ``"set"``/``"unset"`` — never echo the value."""
+    """Mask a secret value to ``"set"``/``"unset"``; never echo the value."""
     return "set" if value not in (None, "", 0, False) else "unset"
 
 
@@ -721,7 +763,7 @@ def _write_env_var(name: str, value: str) -> None:
     existing[name] = value
     body = "".join(f"{k}={v}\n" for k, v in existing.items())
     header = (
-        "# Lhassa runtime overrides — written by the settings panel / `lhassa config`.\n"
+        "# Lhassa runtime overrides; written by the settings panel / `lhassa config`.\n"
         "# Loaded AFTER .env with override=True. Do NOT put secrets meant for .env here.\n"
     )
     path.write_text(header + body, encoding="utf-8")
@@ -815,7 +857,7 @@ def _config():
 def available() -> dict:
     """Read-only lists the panel needs: provider names, harness adapters, opencode
     model hints, a per-provider model map (so the cheap/smart dropdowns can union
-    them), and the enum option sets. No network calls — every list is a static
+    them), and the enum option sets. No network calls; every list is a static
     ``[SUPUESTO]`` hint."""
     providers: list[str] = []
     harnesses: list[str] = []
@@ -897,7 +939,7 @@ def effective(config=None) -> dict:
 def get(key: str, config=None) -> dict:
     """One editable setting's effective row, or an error result for an unknown key.
 
-    Never raises — an unknown key returns ``{"key", "error"}``.
+    Never raises; an unknown key returns ``{"key", "error"}``.
     """
     entry = _BY_KEY.get(key)
     if entry is None:
@@ -921,7 +963,7 @@ def set(key: str, value: Any) -> dict:  # noqa: A001 - deliberate panel verb
     except SettingsError as exc:
         return {"key": key, "value": value, "applied": False, "error": str(exc)}
     # Guard: don't let the chat provider be set to something that can't actually run
-    # (an API provider with no key, or a CLI that isn't installed) — that breaks chat.
+    # (an API provider with no key, or a CLI that isn't installed); that breaks chat.
     if key == "llm_provider":
         err = _chat_provider_error(coerced, _config())
         if err:
@@ -935,7 +977,7 @@ def set(key: str, value: Any) -> dict:  # noqa: A001 - deliberate panel verb
     restart = entry.get("restart", RESTART_NONE)
     needed = restart != RESTART_NONE
     hint = (
-        "Applied live; new heartbeats pick it up automatically — no restart needed."
+        "Applied live; new heartbeats pick it up automatically; no restart needed."
         if not needed
         else f"Applied live, but restart the '{restart}' service for it to take full effect."
     )
@@ -969,7 +1011,7 @@ def set_env(name: str, value: str) -> dict:
             "name": name,
             "applied": False,
             "error": (
-                f"{name!r} is not an allowed advanced var — must start with one of "
+                f"{name!r} is not an allowed advanced var; must start with one of "
                 f"{ALLOWED_ENV_PREFIXES} or be a known integration key."
             ),
         }

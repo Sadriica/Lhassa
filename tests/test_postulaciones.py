@@ -1,8 +1,8 @@
-"""Tests for the ``tracking_postulaciones`` typed task — offline, tmp brain DB.
+"""Tests for the ``tracking_postulaciones`` typed task; offline, tmp brain DB.
 
 Covers the DB helper round-trip (add/update/list) with instance isolation, the
 deterministic action's add/update/list summaries, the never-raises contract, and
-the optional/guarded MCP pull (injected as a stub — no real MCP).
+the optional/guarded MCP pull (injected as a stub; no real MCP).
 """
 
 import pytest
@@ -34,6 +34,32 @@ async def test_postulaciones_table_exists_with_instance_id(tmp_path, monkeypatch
 # ── DB helpers round-trip ───────────────────────────────────────────────────────
 
 @pytest.mark.asyncio
+@pytest.mark.asyncio
+async def test_update_can_backfill_link(tmp_path, monkeypatch):
+    """A later-found posting URL is writable, and a bare state change keeps it."""
+    db = await _init(tmp_path, monkeypatch)
+    pid = await db.add_postulacion("inst_personal", "Loka", "Data Eng Intern")
+    url = "https://job-boards.greenhouse.io/lokainc/jobs/5226236007"
+
+    ok = await db.update_postulacion_estado("inst_personal", pid, "pendiente", link=url)
+    assert ok is True
+    rows = await db.list_postulaciones("inst_personal")
+    assert rows[0]["link"] == url
+
+    await db.update_postulacion_estado("inst_personal", pid, "enviada")
+    rows = await db.list_postulaciones("inst_personal")
+    assert rows[0]["link"] == url, "estado-only update must not erase the link"
+
+    from lhassa.core import actions
+    out = await actions.tracking_postulaciones(
+        {"op": "update", "id": pid, "estado": "entrevista",
+         "link": "https://example.test/corrected"}
+    )
+    assert "entrevista" in out
+    rows = await db.list_postulaciones("inst_personal")
+    assert rows[0]["link"] == "https://example.test/corrected"
+
+
 async def test_add_update_list_roundtrip(tmp_path, monkeypatch):
     db = await _init(tmp_path, monkeypatch)
     pid = await db.add_postulacion(
@@ -164,3 +190,53 @@ async def test_action_mcp_pull_failure_is_guarded(tmp_path, monkeypatch):
     )
     assert isinstance(out, str)
     assert "de MCP" not in out  # nothing pulled
+
+
+async def test_classification_is_stored_not_recomputed(tmp_path, monkeypatch):
+    """categoria/prioridad persist, so the same row cannot rank differently twice.
+
+    Before migration 013 the brain derived both on every render and discarded
+    them, so an application could read "critica" today and "alta" tomorrow with
+    nothing about it having changed.
+    """
+    db = await _init(tmp_path, monkeypatch)
+
+    pid = await db.add_postulacion(
+        "inst_x", "NVIDIA", "Intern CUDA",
+        categoria="HPC/CUDA", prioridad="alta",
+    )
+    row = (await db.list_postulaciones("inst_x"))[0]
+    assert row["id"] == pid
+    assert row["categoria"] == "HPC/CUDA"
+    assert row["prioridad"] == "alta"
+
+
+async def test_a_state_change_does_not_erase_the_classification(tmp_path, monkeypatch):
+    """Advancing estado must not silently drop a judgement the owner reviewed."""
+    db = await _init(tmp_path, monkeypatch)
+
+    pid = await db.add_postulacion(
+        "inst_x", "Cohere", "Scholars", categoria="IA/LLMs", prioridad="critica",
+    )
+    assert await db.update_postulacion_estado("inst_x", pid, "entrevista")
+
+    row = (await db.list_postulaciones("inst_x"))[0]
+    assert row["estado"] == "entrevista"
+    assert row["categoria"] == "IA/LLMs"   # untouched
+    assert row["prioridad"] == "critica"
+
+    # An explicit reclassification still goes through.
+    assert await db.update_postulacion_estado(
+        "inst_x", pid, "entrevista", prioridad="alta",
+    )
+    assert (await db.list_postulaciones("inst_x"))[0]["prioridad"] == "alta"
+
+
+async def test_an_unclassified_row_stays_honestly_empty(tmp_path, monkeypatch):
+    """No backfill: inventing a default would put a judgement in nobody's mouth."""
+    db = await _init(tmp_path, monkeypatch)
+
+    await db.add_postulacion("inst_x", "Inria", "Internship")
+    row = (await db.list_postulaciones("inst_x"))[0]
+    assert not row["categoria"]
+    assert not row["prioridad"]

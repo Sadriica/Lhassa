@@ -12,13 +12,13 @@ function StepResult({ step }) {
       <span>
         <span className="lh-mono" style={{ color: 'var(--lh-accent-text)' }}>{step.brain}</span>
         <span style={{ color: 'var(--lh-text-faint)' }}>{step.pinned ? ' · pinned' : ' · auto'}</span>
-        {summary ? <span style={{ color: 'var(--lh-text-muted)' }}> — {String(summary).slice(0, 120)}</span> : null}
+        {summary ? <span style={{ color: 'var(--lh-text-muted)' }}>; {String(summary).slice(0, 120)}</span> : null}
       </span>
     )
   }
   if (step.kind === 'gate') {
     if (step.needs_approval) return <span style={{ color: 'var(--lh-warn)' }}>parked for approval</span>
-    return <span style={{ color: 'var(--lh-text-muted)' }}>{step.gate} · {step.passed ? 'passed' : 'failed'}{step.detail ? ` — ${String(step.detail).slice(0, 100)}` : ''}</span>
+    return <span style={{ color: 'var(--lh-text-muted)' }}>{step.gate} · {step.passed ? 'passed' : 'failed'}{step.detail ? `; ${String(step.detail).slice(0, 100)}` : ''}</span>
   }
   if (step.kind === 'output') return <span style={{ color: 'var(--lh-text-muted)' }}>{step.output_type}{step.target ? ` → ${step.target}` : ''}</span>
   if (step.kind === 'trigger') return <span style={{ color: 'var(--lh-text-muted)' }}>{step.trigger}</span>
@@ -49,7 +49,7 @@ export function RunRecord({ run, live }) {
         </span>
         {!live && (
           <span className="text-[10px]" style={{ color: 'var(--lh-text-faint)' }}>
-            offline / stubbed — set LHASSA_ORG_LIVE for a live run
+            offline / stubbed; set LHASSA_ORG_LIVE for a live run
           </span>
         )}
         {run.duration_ms !== undefined && (

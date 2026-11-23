@@ -2,14 +2,14 @@
 """The deny-by-default order-execution wall (§2.6, wall #2).
 
 This is the machine's guard: a task runs ONLY if it clears every check. Nothing
-is allowed unless it is explicitly listed — the empty case denies.
+is allowed unless it is explicitly listed; the empty case denies.
 
 HITL per flow, NOT global: the approval threshold lives PER ACTION, by risk
 (``min_trust`` + ``requires_approval``), not one global knob. Moving money or
 deleting data can demand human approval while a draft does not.
 
 Relation to ``lhassa.tools.privileged``: that module is a separate, command-level
-(sudo) allowlist over OS binaries. THIS allowlist is task-level — it gates which
+(sudo) allowlist over OS binaries. THIS allowlist is task-level; it gates which
 signed ``Task`` actions execute. Independent layers, kept separate on purpose.
 
 Mirrors the brief's pseudocode:
@@ -58,8 +58,8 @@ def _config_repos() -> "set[str] | str":
     return Config.allowlist_repos
 
 
-def build_allowlist(repos: "set[str] | str | None" = None) -> dict[str, ActionSpec]:
-    """Build the action policy table. ``repos`` overrides the ``sync_repo`` targets.
+def _core_allowlist(repos: "set[str] | str | None" = None) -> dict[str, ActionSpec]:
+    """Build core's action policy table. ``repos`` overrides the ``sync_repo`` targets.
 
     Phase-0 entry: ``sync_repo`` (the first typed task, §2.5).
     Phase-3 entries: the 15 actionpack actions.
@@ -84,7 +84,7 @@ def build_allowlist(repos: "set[str] | str | None" = None) -> dict[str, ActionSp
             min_trust=TrustLevel.INTERNO,
             requires_approval=False,
         ),
-        # ── Phase 3 — actionpack ──────────────────────────────────────────────
+        # ── Phase 3; actionpack ──────────────────────────────────────────────
         "notify": ActionSpec(
             objetivos=WILDCARD,
             min_trust=TrustLevel.INTERNO,
@@ -109,11 +109,6 @@ def build_allowlist(repos: "set[str] | str | None" = None) -> dict[str, ActionSp
             objetivos=WILDCARD,
             min_trust=TrustLevel.INTERNO,
             requires_approval=True,   # high-risk: execute arbitrary shell code
-        ),
-        "compile_cv": ActionSpec(
-            objetivos=WILDCARD,
-            min_trust=TrustLevel.INTERNO,
-            requires_approval=False,
         ),
         "backup_memory": ActionSpec(
             objetivos=WILDCARD,
@@ -170,9 +165,9 @@ def build_allowlist(repos: "set[str] | str | None" = None) -> dict[str, ActionSp
             min_trust=TrustLevel.INTERNO,
             requires_approval=False,
         ),
-        # ── Self-improvement (§2.8, Etapa 4 — visible self-improvement) ──────────
+        # ── Self-improvement (§2.8, Etapa 4; visible self-improvement) ──────────
         # Both are deterministic detection/gate passes; neither calls an LLM.
-        # detect_repetition only PARKS an approval (mint_action) — it never
+        # detect_repetition only PARKS an approval (mint_action); it never
         # mints/executes anything itself, so no HITL gate is needed here.
         "detect_repetition": ActionSpec(
             objetivos=WILDCARD,
@@ -191,14 +186,14 @@ def build_allowlist(repos: "set[str] | str | None" = None) -> dict[str, ActionSp
         ),
         # The utility tribunal: a read over the episode log that only PARKS a
         # retire_capability approval. It never unregisters or deletes anything,
-        # so it needs no HITL gate of its own — the approval IS the gate.
+        # so it needs no HITL gate of its own; the approval IS the gate.
         "review_capabilities": ActionSpec(
             objetivos=WILDCARD,
             min_trust=TrustLevel.INTERNO,
             requires_approval=False,
         ),
         # Read-only conformance pass over the DB + repo state; never an LLM.
-        # Was registered but missing here for months — the parity test in
+        # Was registered but missing here for months; the parity test in
         # test_notify_phrasebook.py now makes that drift impossible.
         "check_integrity": ActionSpec(
             objetivos=WILDCARD,
@@ -210,17 +205,12 @@ def build_allowlist(repos: "set[str] | str | None" = None) -> dict[str, ActionSp
             min_trust=TrustLevel.INTERNO,
             requires_approval=False,  # read-only web search + a chat message
         ),
-        "research_intake": ActionSpec(
-            objetivos=WILDCARD,
-            min_trust=TrustLevel.HUMANO,
-            requires_approval=False,  # explicit /idea: source reads + review-only draft
-        ),
         "send_reminder": ActionSpec(
             objetivos=WILDCARD,
             min_trust=TrustLevel.INTERNO,
             requires_approval=False,  # a notification the owner scheduled themselves
         ),
-        # ── PTC — Programmatic Tool Calling (script-over-RPC in quarantine) ──
+        # ── PTC. Programmatic Tool Calling (script-over-RPC in quarantine) ──
         "run_script": ActionSpec(
             objetivos=WILDCARD,
             min_trust=TrustLevel.INTERNO,
@@ -229,23 +219,16 @@ def build_allowlist(repos: "set[str] | str | None" = None) -> dict[str, ActionSp
             # ticket into PTC always crosses the approval frontier.
             requires_approval=True,
         ),
-        # ── Etapa 2 — operative day via Telegram ─────────────────────────────
+        # ── Etapa 2; operative day via Telegram ─────────────────────────────
         "send_digest": ActionSpec(
             objetivos=WILDCARD,
             min_trust=TrustLevel.INTERNO,
             requires_approval=False,
         ),
-        # ── Master calendar reconcile — deterministic $0 diff + a delivered
-        # .ics per unsynced event; never writes to any calendar directly.
-        "calendar_sync": ActionSpec(
-            objetivos=WILDCARD,
-            min_trust=TrustLevel.INTERNO,
-            requires_approval=False,
-        ),
-        # ── Etapa 3 — real delegation into the org hierarchy ─────────────────
+        # ── Etapa 3; real delegation into the org hierarchy ─────────────────
         # ``requires_approval`` stays False here: org_run's OWN high-risk gate
         # lives in params (see actionpack._org.org_run / org.coordinator.run_goal)
-        # — a per-params flag, not a blanket per-action one. A high-risk goal
+        #; a per-params flag, not a blanket per-action one. A high-risk goal
         # parks its own multi-person approval inside the org layer and refuses
         # to self-approve; this allowlist entry only governs whether org_run may
         # be minted at all.
@@ -254,7 +237,18 @@ def build_allowlist(repos: "set[str] | str | None" = None) -> dict[str, ActionSp
             min_trust=TrustLevel.INTERNO,
             requires_approval=False,
         ),
-        # ── temple — internal hygiene routed down-execute-up (see
+        # ── Work-flows on the one clock ──────────────────────────────────────
+        # Running a STORED flow is not a new capability, it is the same work the
+        # owner already authored and can run by hand; the gates that matter live
+        # inside the flow itself (its gate nodes) and in delegate_flow's
+        # hierarchy walk. So no blanket approval here, same reasoning as
+        # org_run. It cannot execute anything that is not already in the store.
+        "run_flow": ActionSpec(
+            objetivos=WILDCARD,
+            min_trust=TrustLevel.INTERNO,
+            requires_approval=False,
+        ),
+        # ── temple; internal hygiene routed down-execute-up (see
         # lhassa.org.temple / lhassa.actionpack._temple) ─────────────────────
         # A closed, deterministic front over 5 already-$0 actions (its own
         # TEMPLE_ACTIONS set refuses anything else); no new HITL surface.
@@ -263,24 +257,16 @@ def build_allowlist(repos: "set[str] | str | None" = None) -> dict[str, ActionSp
             min_trust=TrustLevel.INTERNO,
             requires_approval=False,
         ),
-        # ── Calendar-derived world model — read-only calendar derivation +
-        # a fact write, no external send, no HITL-worthy surface (mirrors
-        # calendar_sync/add_fact, both also requires_approval=False).
-        "derive_world_facts": ActionSpec(
-            objetivos=WILDCARD,
-            min_trust=TrustLevel.INTERNO,
-            requires_approval=False,
-        ),
-        # ── Document perception — index the owner's opt-in knowledge roots ───
+        # ── Document perception; index the owner's opt-in knowledge roots ───
         # Read-only filesystem scan + a local write to the grande; no external
         # send, empty roots by default (nothing runs until the owner sets
-        # LHASSA_KNOWLEDGE_ROOTS). Mirrors calendar_sync/distill_memory.
+        # LHASSA_KNOWLEDGE_ROOTS). Mirrors distill_memory.
         "ingest_knowledge": ActionSpec(
             objetivos=WILDCARD,
             min_trust=TrustLevel.INTERNO,
             requires_approval=False,
         ),
-        # Deterministic file perception — read-only, roots-bounded (the action
+        # Deterministic file perception; read-only, roots-bounded (the action
         # itself refuses paths outside config.knowledge_roots + the hard
         # ignore-list), so no approval: the roots ARE the owner's approval.
         "list_dir": ActionSpec(
@@ -296,23 +282,15 @@ def build_allowlist(repos: "set[str] | str | None" = None) -> dict[str, ActionSp
         # Standing-brains attach. (a)/(b) stay neutral (INTERNO, no flag) so
         # approval input (e) is the ONE deciding factor: a template that isn't
         # provably read-only parks for the owner's tap (risk stamped upstream
-        # by the sense — see actionpack/_standing.py + security/approval.py).
+        # by the sense; see actionpack/_standing.py + security/approval.py).
         "attach_project_template": ActionSpec(
             objetivos=WILDCARD,
             min_trust=TrustLevel.INTERNO,
             requires_approval=False,
         ),
-        # Knowledge-graph sync — read-only fact/episode scan + local graph
+        # Knowledge-graph sync; read-only fact/episode scan + local graph
         # write; same $0 hygiene tier as ingest_knowledge.
         "kg_sync": ActionSpec(
-            objetivos=WILDCARD,
-            min_trust=TrustLevel.INTERNO,
-            requires_approval=False,
-        ),
-        # Research-note drafting: local instrument reads + ONE routine-model
-        # pass + a write confined to doc/notes/drafts (a draft is never
-        # published by the brain — the header says review-before-publishing).
-        "draft_research_note": ActionSpec(
             objetivos=WILDCARD,
             min_trust=TrustLevel.INTERNO,
             requires_approval=False,
@@ -324,7 +302,7 @@ def build_allowlist(repos: "set[str] | str | None" = None) -> dict[str, ActionSp
         ),
         # Project alta. INTERNO + no approval covers the owner's explicit door
         # (CLI/chat, HUMANO origin); the DETECTOR proposes with a MUNDO origin,
-        # which the trust model itself parks at the approval frontier — the
+        # which the trust model itself parks at the approval frontier; the
         # deny-by-default lives in the origin, not in this flag.
         "create_project": ActionSpec(
             objetivos=WILDCARD,
@@ -332,7 +310,7 @@ def build_allowlist(repos: "set[str] | str | None" = None) -> dict[str, ActionSp
             requires_approval=False,
         ),
         # Feedback → autonomy: reads the episode log, adjusts streaks in the
-        # local DB — the same $0 hygiene tier as distill_memory; its own
+        # local DB; the same $0 hygiene tier as distill_memory; its own
         # invariants (never high-risk, never protected-root actions, negative
         # wins, idempotent per window) live in security/autonomy.apply_feedback.
         "apply_feedback": ActionSpec(
@@ -343,7 +321,7 @@ def build_allowlist(repos: "set[str] | str | None" = None) -> dict[str, ActionSp
         # Natural-language settings changes. The frontier is the settings
         # service itself (EDITABLE allowlist, coercion, provider guard; secrets
         # unreachable), and the chat door only mints from the owner's own
-        # HUMANO/telegram messages — so no extra approval hop.
+        # HUMANO/telegram messages; so no extra approval hop.
         "set_config": ActionSpec(
             objetivos=WILDCARD,
             min_trust=TrustLevel.INTERNO,
@@ -351,6 +329,44 @@ def build_allowlist(repos: "set[str] | str | None" = None) -> dict[str, ActionSp
         ),
     }
 
+
+# Policy rows declared by capability packs for their OWN actions (see
+# ``register_action_spec``). Kept apart so ``build_allowlist`` can rebuild the
+# table without losing them, and so a pack can never shadow a core row.
+PACK_SPECS: dict[str, ActionSpec] = {}
+
+
+def register_action_spec(name: str, spec: ActionSpec) -> ActionSpec:
+    """Declare the policy row for an action a capability pack ships.
+
+    Deny-by-default is unchanged: an action with no row (a pack that declares
+    none, or a pack not installed) is still refused by :func:`allow`. A pack
+    may only describe its own actions: a name that core's table already owns
+    raises, so installing a pack can never relax or replace core policy.
+    Re-registering the same name with an equal spec is a no-op (tests and
+    reloads import packs twice); a different spec for it raises.
+    """
+    if name in _CORE_NAMES:
+        raise ValueError(f"action {name!r} is core policy; a pack cannot redefine it")
+    existing = PACK_SPECS.get(name)
+    if existing is not None:
+        if existing != spec:
+            raise ValueError(f"action {name!r} already has a different pack policy")
+        return existing
+    PACK_SPECS[name] = spec
+    ALLOWLIST[name] = spec
+    return spec
+
+
+def build_allowlist(repos: "set[str] | str | None" = None) -> dict[str, ActionSpec]:
+    """The full policy table: core rows plus every installed pack's own rows."""
+    table = _core_allowlist(repos)
+    for name, spec in PACK_SPECS.items():
+        table.setdefault(name, spec)
+    return table
+
+
+_CORE_NAMES: frozenset[str] = frozenset(_core_allowlist(WILDCARD))
 
 # The canonical policy table. Rebuild via ``build_allowlist`` if config changes.
 ALLOWLIST: dict[str, ActionSpec] = build_allowlist()
@@ -368,7 +384,7 @@ def _objetivo_allowed(objetivo: str, objetivos: "set[str] | str") -> bool:
 def allow(task: Task, *, public_key=None) -> AllowDecision:
     """Decide whether a machine may execute ``task``. Deny-by-default.
 
-    Checks, in the brief's order — action listed → objetivo allowed →
+    Checks, in the brief's order; action listed → objetivo allowed →
     trust >= min_trust → signature verifies. The first failure denies with a
     clear reason. ``public_key`` defaults to the local public key
     (``signing.load_public_key()``); pass one to pin a specific brain identity.

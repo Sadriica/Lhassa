@@ -1,16 +1,16 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""RBAC — a small, explicit role→permission matrix for the organizational layer.
+"""RBAC; a small, explicit role→permission matrix for the organizational layer.
 
-Pure and table-driven: no I/O, no DB, no LLM. It answers one question — "may this
-ROLE perform this ACTION on this RESOURCE?" — from a closed permission table, so
+Pure and table-driven: no I/O, no DB, no LLM. It answers one question; "may this
+ROLE perform this ACTION on this RESOURCE?": from a closed permission table, so
 the policy is auditable at a glance (the brief's "qué rol puede hacer qué sobre
 qué datos", §3-Fase 7).
 
 The two roles of the minimal two-brain case:
-  - ``general``    — the coordinator/curator. Routes (assigns) typed tasks,
+  - ``general``   : the coordinator/curator. Routes (assigns) typed tasks,
     collects results, and is the SOLE writer of the commons. It coordinates; it
     does not execute department work, and that asymmetry lives in the matrix.
-  - ``department`` — an executor. Reads the commons, owns (reads+writes) its OWN
+  - ``department``: an executor. Reads the commons, owns (reads+writes) its OWN
     private memory, and handles tasks the general assigns. It may NOT write the
     commons, may NOT assign tasks, and may NOT touch ANOTHER department's data.
 
@@ -19,13 +19,13 @@ governs WHAT a role may do. Multi-person approval (separating who proposes from
 who approves) is enforced in ``coordinator`` on top of these permissions.
 """
 
-# Resources the matrix governs (kept as plain strings — table-driven, no I/O):
-#   "commons"          — the read-only cross-cutting source of truth
-#   "task"             — a unit of routed work
-#   "own_memory"       — a brain's OWN private memory/data
-#   "department"       — any/another department's private data (cross-cutting read)
-#   "message"          — the typed inter-brain queue
-#   "status"           — status reporting
+# Resources the matrix governs (kept as plain strings; table-driven, no I/O):
+#   "commons"         : the read-only cross-cutting source of truth
+#   "task"            : a unit of routed work
+#   "own_memory"      : a brain's OWN private memory/data
+#   "department"      : any/another department's private data (cross-cutting read)
+#   "message"         : the typed inter-brain queue
+#   "status"          : status reporting
 #
 # Each role maps to the closed set of (action, resource) pairs it is allowed.
 _MATRIX: dict[str, set[tuple[str, str]]] = {
@@ -54,7 +54,7 @@ def can(role: str, action: str, resource: str) -> bool:
     """Return ``True`` iff ``role`` is permitted ``action`` on ``resource``.
 
     Pure table lookup against ``_MATRIX``. An unknown role (or any pair not
-    explicitly granted) is denied — deny-by-default.
+    explicitly granted) is denied; deny-by-default.
     """
     return (action, resource) in _MATRIX.get(role, set())
 

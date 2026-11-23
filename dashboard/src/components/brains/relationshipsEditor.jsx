@@ -74,7 +74,7 @@ export function RelationshipsEditor({ node, nodes, relationships, relKinds, onAd
 
   return (
     <div className="pt-2 space-y-2" style={{ borderTop: '1px solid var(--lh-border)' }}>
-      <span className="lh-label">relationships — typed overlay (not command)</span>
+      <span className="lh-label">relationships; typed overlay (not command)</span>
       {empty ? (
         <p className="text-[11px]" style={{ color: 'var(--lh-text-faint)' }}>
           No typed relationships yet. Add one below (e.g. who this brain reads, notifies, or reviews).

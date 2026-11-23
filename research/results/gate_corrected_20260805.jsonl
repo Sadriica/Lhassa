@@ -1,0 +1,54 @@
+{"arm": "a", "task": "hello", "seed": 0, "passed": true, "tokens_in": 11203, "tokens_out": 241, "tokens_cache": 40832, "latency_ms": 15267, "detail": "OK\n"}
+{"arm": "c", "task": "hello", "seed": 0, "passed": true, "tokens_in": 7440, "tokens_out": 267, "tokens_cache": 29184, "latency_ms": 12845, "detail": "OK\n"}
+{"arm": "d", "task": "hello", "seed": 0, "passed": true, "tokens_in": 7074, "tokens_out": 248, "tokens_cache": 19712, "latency_ms": 11377, "detail": ""}
+{"arm": "a", "task": "hello", "seed": 1, "passed": true, "tokens_in": 11852, "tokens_out": 271, "tokens_cache": 43008, "latency_ms": 15678, "detail": "OK\n"}
+{"arm": "c", "task": "hello", "seed": 1, "passed": true, "tokens_in": 7394, "tokens_out": 392, "tokens_cache": 38784, "latency_ms": 16348, "detail": "OK\n"}
+{"arm": "d", "task": "hello", "seed": 1, "passed": true, "tokens_in": 7396, "tokens_out": 701, "tokens_cache": 57344, "latency_ms": 23805, "detail": "----------------------------------------------------------------------\nRan 1 test in 0.000s\n\nOK\n"}
+{"arm": "a", "task": "hello", "seed": 2, "passed": true, "tokens_in": 11721, "tokens_out": 233, "tokens_cache": 28928, "latency_ms": 12216, "detail": "OK\n"}
+{"arm": "c", "task": "hello", "seed": 2, "passed": true, "tokens_in": 7295, "tokens_out": 225, "tokens_cache": 29056, "latency_ms": 12979, "detail": "OK\n"}
+{"arm": "d", "task": "hello", "seed": 2, "passed": true, "tokens_in": 7463, "tokens_out": 381, "tokens_cache": 38272, "latency_ms": 15569, "detail": "OK\n"}
+{"arm": "a", "task": "fib", "seed": 0, "passed": true, "tokens_in": 11139, "tokens_out": 260, "tokens_cache": 27648, "latency_ms": 11869, "detail": "OK\n"}
+{"arm": "c", "task": "fib", "seed": 0, "passed": true, "tokens_in": 7495, "tokens_out": 229, "tokens_cache": 29184, "latency_ms": 12732, "detail": "OK\n"}
+{"arm": "d", "task": "fib", "seed": 0, "passed": true, "tokens_in": 7443, "tokens_out": 204, "tokens_cache": 28800, "latency_ms": 14116, "detail": "(cheap degraded to recorder) OK\n"}
+{"arm": "a", "task": "fib", "seed": 1, "passed": true, "tokens_in": 11609, "tokens_out": 234, "tokens_cache": 41856, "latency_ms": 13898, "detail": "OK\n"}
+{"arm": "c", "task": "fib", "seed": 1, "passed": true, "tokens_in": 7325, "tokens_out": 230, "tokens_cache": 29184, "latency_ms": 13568, "detail": "OK\n"}
+{"arm": "d", "task": "fib", "seed": 1, "passed": true, "tokens_in": 6983, "tokens_out": 275, "tokens_cache": 19840, "latency_ms": 11330, "detail": "(cheap degraded to recorder) All tests passed\n"}
+{"arm": "a", "task": "fib", "seed": 2, "passed": true, "tokens_in": 11691, "tokens_out": 269, "tokens_cache": 41984, "latency_ms": 14689, "detail": "OK\n"}
+{"arm": "c", "task": "fib", "seed": 2, "passed": true, "tokens_in": 7416, "tokens_out": 246, "tokens_cache": 29184, "latency_ms": 13162, "detail": "OK\n"}
+{"arm": "d", "task": "fib", "seed": 2, "passed": true, "tokens_in": 7012, "tokens_out": 292, "tokens_cache": 19712, "latency_ms": 12070, "detail": "(cheap degraded to recorder) "}
+{"arm": "a", "task": "countwords", "seed": 0, "passed": true, "tokens_in": 11912, "tokens_out": 296, "tokens_cache": 43392, "latency_ms": 15930, "detail": "OK\n"}
+{"arm": "c", "task": "countwords", "seed": 0, "passed": true, "tokens_in": 7473, "tokens_out": 267, "tokens_cache": 29440, "latency_ms": 12394, "detail": "OK\n"}
+{"arm": "d", "task": "countwords", "seed": 0, "passed": true, "tokens_in": 7540, "tokens_out": 268, "tokens_cache": 29184, "latency_ms": 11793, "detail": "OK\n"}
+{"arm": "a", "task": "countwords", "seed": 1, "passed": true, "tokens_in": 11298, "tokens_out": 239, "tokens_cache": 40704, "latency_ms": 12837, "detail": "OK\n"}
+{"arm": "c", "task": "countwords", "seed": 1, "passed": true, "tokens_in": 7731, "tokens_out": 253, "tokens_cache": 29056, "latency_ms": 11898, "detail": "OK\n"}
+{"arm": "d", "task": "countwords", "seed": 1, "passed": true, "tokens_in": 7269, "tokens_out": 237, "tokens_cache": 20224, "latency_ms": 9716, "detail": "OK\n"}
+{"arm": "a", "task": "countwords", "seed": 2, "passed": true, "tokens_in": 11213, "tokens_out": 290, "tokens_cache": 27648, "latency_ms": 11635, "detail": "OK\n"}
+{"arm": "c", "task": "countwords", "seed": 2, "passed": true, "tokens_in": 7394, "tokens_out": 271, "tokens_cache": 29184, "latency_ms": 12222, "detail": "OK\n"}
+{"arm": "d", "task": "countwords", "seed": 2, "passed": true, "tokens_in": 7539, "tokens_out": 218, "tokens_cache": 29184, "latency_ms": 12986, "detail": "OK\n"}
+{"arm": "a", "task": "stats", "seed": 0, "passed": true, "tokens_in": 11924, "tokens_out": 257, "tokens_cache": 43392, "latency_ms": 13416, "detail": "OK\n"}
+{"arm": "c", "task": "stats", "seed": 0, "passed": true, "tokens_in": 7123, "tokens_out": 328, "tokens_cache": 19968, "latency_ms": 10092, "detail": ""}
+{"arm": "d", "task": "stats", "seed": 0, "passed": true, "tokens_in": 7343, "tokens_out": 250, "tokens_cache": 29184, "latency_ms": 11693, "detail": "(cheap degraded to recorder) OK\n"}
+{"arm": "a", "task": "stats", "seed": 1, "passed": true, "tokens_in": 11430, "tokens_out": 351, "tokens_cache": 41984, "latency_ms": 13567, "detail": "OK\n"}
+{"arm": "c", "task": "stats", "seed": 1, "passed": true, "tokens_in": 7350, "tokens_out": 235, "tokens_cache": 29184, "latency_ms": 11731, "detail": "OK\n"}
+{"arm": "d", "task": "stats", "seed": 1, "passed": true, "tokens_in": 7015, "tokens_out": 313, "tokens_cache": 19840, "latency_ms": 10500, "detail": "(cheap degraded to recorder) All tests passed\n"}
+{"arm": "a", "task": "stats", "seed": 2, "passed": true, "tokens_in": 11650, "tokens_out": 206, "tokens_cache": 28800, "latency_ms": 11564, "detail": "OK\n"}
+{"arm": "c", "task": "stats", "seed": 2, "passed": true, "tokens_in": 7243, "tokens_out": 189, "tokens_cache": 19968, "latency_ms": 10031, "detail": "OK\n"}
+{"arm": "d", "task": "stats", "seed": 2, "passed": true, "tokens_in": 6956, "tokens_out": 338, "tokens_cache": 19968, "latency_ms": 11132, "detail": "(cheap degraded to recorder) All tests passed\n"}
+{"arm": "a", "task": "palindrome", "seed": 0, "passed": true, "tokens_in": 11219, "tokens_out": 253, "tokens_cache": 40704, "latency_ms": 13077, "detail": "OK\n"}
+{"arm": "c", "task": "palindrome", "seed": 0, "passed": true, "tokens_in": 7624, "tokens_out": 269, "tokens_cache": 29184, "latency_ms": 12764, "detail": "OK\n"}
+{"arm": "d", "task": "palindrome", "seed": 0, "passed": true, "tokens_in": 7561, "tokens_out": 297, "tokens_cache": 29312, "latency_ms": 13200, "detail": "OK\n"}
+{"arm": "a", "task": "palindrome", "seed": 1, "passed": true, "tokens_in": 10772, "tokens_out": 233, "tokens_cache": 27264, "latency_ms": 10703, "detail": "OK\n"}
+{"arm": "c", "task": "palindrome", "seed": 1, "passed": true, "tokens_in": 7443, "tokens_out": 257, "tokens_cache": 29184, "latency_ms": 13025, "detail": "OK\n"}
+{"arm": "d", "task": "palindrome", "seed": 1, "passed": true, "tokens_in": 7392, "tokens_out": 245, "tokens_cache": 29184, "latency_ms": 12803, "detail": "OK\n"}
+{"arm": "a", "task": "palindrome", "seed": 2, "passed": true, "tokens_in": 11219, "tokens_out": 247, "tokens_cache": 40832, "latency_ms": 12642, "detail": "OK\n"}
+{"arm": "c", "task": "palindrome", "seed": 2, "passed": true, "tokens_in": 7582, "tokens_out": 268, "tokens_cache": 29056, "latency_ms": 11919, "detail": "OK\n"}
+{"arm": "d", "task": "palindrome", "seed": 2, "passed": true, "tokens_in": 7491, "tokens_out": 276, "tokens_cache": 29312, "latency_ms": 12558, "detail": "OK\n"}
+{"arm": "a", "task": "fizzbuzz", "seed": 0, "passed": true, "tokens_in": 11220, "tokens_out": 297, "tokens_cache": 41088, "latency_ms": 15707, "detail": "OK\n"}
+{"arm": "c", "task": "fizzbuzz", "seed": 0, "passed": true, "tokens_in": 7521, "tokens_out": 221, "tokens_cache": 29440, "latency_ms": 12499, "detail": "OK\n"}
+{"arm": "d", "task": "fizzbuzz", "seed": 0, "passed": true, "tokens_in": 7116, "tokens_out": 367, "tokens_cache": 19968, "latency_ms": 12561, "detail": "(cheap degraded to recorder) OK\n"}
+{"arm": "a", "task": "fizzbuzz", "seed": 1, "passed": true, "tokens_in": 12079, "tokens_out": 255, "tokens_cache": 43264, "latency_ms": 14047, "detail": "OK\n"}
+{"arm": "c", "task": "fizzbuzz", "seed": 1, "passed": true, "tokens_in": 7702, "tokens_out": 288, "tokens_cache": 29312, "latency_ms": 12988, "detail": "OK\n"}
+{"arm": "d", "task": "fizzbuzz", "seed": 1, "passed": true, "tokens_in": 7262, "tokens_out": 569, "tokens_cache": 38528, "latency_ms": 16045, "detail": "(cheap degraded to recorder) "}
+{"arm": "a", "task": "fizzbuzz", "seed": 2, "passed": true, "tokens_in": 10797, "tokens_out": 82, "tokens_cache": 14592, "latency_ms": 9090, "detail": "OK\n"}
+{"arm": "c", "task": "fizzbuzz", "seed": 2, "passed": true, "tokens_in": 7294, "tokens_out": 213, "tokens_cache": 20096, "latency_ms": 10519, "detail": "OK\n"}
+{"arm": "d", "task": "fizzbuzz", "seed": 2, "passed": true, "tokens_in": 7044, "tokens_out": 340, "tokens_cache": 19968, "latency_ms": 11525, "detail": "(cheap degraded to recorder) "}

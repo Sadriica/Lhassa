@@ -1,4 +1,4 @@
-"""The Telegram research bridge — the [[research: …]] marker + research_reply.
+"""The Telegram research bridge; the [[research: …]] marker + research_reply.
 
 The chat think is tool-less; these tests pin the two halves that make its "I'll
 look it up" promise REAL: the poller turns the marker into a minted task (and
@@ -9,7 +9,7 @@ All offline: search and delivery are monkeypatched fakes.
 import asyncio
 from types import SimpleNamespace
 
-from lhassa.notify import telegram_inbound
+from lhassa.chat import markers
 
 
 def _cfg(**over):
@@ -45,7 +45,7 @@ def _patch_mint(monkeypatch, *, raise_exc=None):
 def test_marker_mints_a_research_task_and_is_stripped(monkeypatch):
     calls = _patch_mint(monkeypatch)
     reply = asyncio.run(
-        telegram_inbound._apply_research_marker(
+        markers.apply_research_marker(
             "Voy a buscarlo.\n[[research: China AI satellite launch 2026]]",
             instance_id="inst_personal",
             config=_cfg(),
@@ -56,26 +56,26 @@ def test_marker_mints_a_research_task_and_is_stripped(monkeypatch):
     assert calls[0]["params"] == {"query": "China AI satellite launch 2026"}
     assert "[[" not in reply and "research:" not in reply
     assert "Voy a buscarlo." in reply
-    assert telegram_inbound._RESEARCH_ACK in reply
+    assert markers._RESEARCH_ACK in reply
 
 
 def test_marker_only_reply_gets_the_ack_as_body(monkeypatch):
     _patch_mint(monkeypatch)
     reply = asyncio.run(
-        telegram_inbound._apply_research_marker(
+        markers.apply_research_marker(
             "[[research: latest python release]]",
             instance_id="inst_personal",
             config=_cfg(),
         )
     )
-    assert reply == telegram_inbound._RESEARCH_ACK
+    assert reply == markers._RESEARCH_ACK
 
 
 def test_no_marker_passes_through_untouched(monkeypatch):
     calls = _patch_mint(monkeypatch)
     text = "The wheel turns; nothing to look up."
     reply = asyncio.run(
-        telegram_inbound._apply_research_marker(
+        markers.apply_research_marker(
             text, instance_id="inst_personal", config=_cfg()
         )
     )
@@ -86,29 +86,29 @@ def test_no_marker_passes_through_untouched(monkeypatch):
 def test_mint_failure_degrades_without_a_false_promise(monkeypatch):
     _patch_mint(monkeypatch, raise_exc=RuntimeError("db down"))
     reply = asyncio.run(
-        telegram_inbound._apply_research_marker(
+        markers.apply_research_marker(
             "Déjame ver.\n[[research: something]]",
             instance_id="inst_personal",
             config=_cfg(),
         )
     )
-    # The marker is gone, the visible text survives, and — crucially — the
+    # The marker is gone, the visible text survives, and (crucially) the
     # follow-up promise is NOT made (the task was never minted).
     assert "[[" not in reply
     assert "Déjame ver." in reply
-    assert telegram_inbound._RESEARCH_ACK not in reply
+    assert markers._RESEARCH_ACK not in reply
 
 
 def test_marker_query_is_capped_and_whitespace_collapsed(monkeypatch):
     calls = _patch_mint(monkeypatch)
     long_query = "palabra " * 100
     asyncio.run(
-        telegram_inbound._apply_research_marker(
+        markers.apply_research_marker(
             f"[[research: {long_query}]]", instance_id="inst_personal", config=_cfg()
         )
     )
     q = calls[0]["params"]["query"]
-    assert len(q) <= telegram_inbound._RESEARCH_MAX_QUERY
+    assert len(q) <= markers._RESEARCH_MAX_QUERY
     assert "  " not in q
 
 
@@ -141,20 +141,12 @@ def _patch_search(monkeypatch, results):
 
 
 def _patch_send(monkeypatch):
-    sent = []
+    # research_reply goes through org.deliver -> notify.dispatch, which only fans
+    # out to a channel that reports itself configured: a recording "telegram"
+    # channel (configured, no real credentials, no pack needed) captures it.
+    from tests.chat_fakes import RecordingChannel, install_channel
 
-    async def fake_send(text, *, config=None, **kwargs):
-        sent.append(text)
-        return True
-
-    import lhassa.notify.telegram as telegram_mod
-
-    monkeypatch.setattr(telegram_mod, "send", fake_send)
-    # research_reply now goes through org.deliver -> notify.dispatch, which only
-    # fans out to a channel that reports itself configured. Force that check
-    # deterministic here rather than depending on real credentials in .env.
-    monkeypatch.setattr(telegram_mod, "is_configured", lambda config: True)
-    return sent
+    return install_channel(monkeypatch, RecordingChannel("telegram")).sent
 
 
 def test_research_reply_sends_sourced_results(monkeypatch):
@@ -178,7 +170,7 @@ def test_research_reply_sends_sourced_results(monkeypatch):
 
 def test_research_reply_delivers_through_org_deliver_root_hop(monkeypatch):
     """research_reply now sends via ``org.deliver.deliver`` (an empty
-    ``origin_department`` — research is Lhassa's own hand, not delegated work) —
+    ``origin_department``: research is Lhassa's own hand, not delegated work);
     a single root-attributed ``org-deliver`` Episode should land alongside the
     Telegram send, same as ``send_reminder``."""
     from lhassa.actionpack._research import research_reply
@@ -261,7 +253,7 @@ def test_research_reply_found_nothing_says_so_honestly(monkeypatch):
 
 
 def test_news_intent_routes_to_the_news_vertical_first(monkeypatch):
-    """"noticias de hoy" is answerable because the NEWS vertical answers it —
+    """"noticias de hoy" is answerable because the NEWS vertical answers it;
     the routing a general search engine does internally."""
     from lhassa.actionpack._research import research_reply
 

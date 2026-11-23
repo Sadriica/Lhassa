@@ -43,7 +43,7 @@ async def handle_read_emails(params: FunctionCallParams):
             subject = e.get("subject", "(no subject)")
             preview = e.get("bodyPreview", "")[:100]
             date = e.get("receivedDateTime", "")[:10]
-            lines.append(f"[{date}] From: {sender} — {subject}. {preview}")
+            lines.append(f"[{date}] From: {sender}; {subject}. {preview}")
 
         await params.result_callback("\n\n".join(lines))
     except RuntimeError as e:

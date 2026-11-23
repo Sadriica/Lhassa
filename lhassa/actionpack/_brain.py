@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """Brain/cross-cutting actions: notify, add_task, set_task_state, list_approvals,
-check_health, git_status_repos, compile_cv.
+check_health, git_status_repos. (``compile_cv`` ships with the cv pack.)
 """
 
 from __future__ import annotations
@@ -8,8 +8,6 @@ from __future__ import annotations
 from lhassa.config import Config
 from lhassa.core import db as _db
 from lhassa.core import dispatch as _dispatch
-from lhassa.cv.compile import compile_pdf
-from lhassa.cv.paths import base_path
 from lhassa.health.checks import check_git_status, format_digest, run_all
 from lhassa.notify.dispatch import notify as _notify
 from lhassa.security import approval as _approval
@@ -28,12 +26,12 @@ _HEALTH_OUTPUT_CAP = 1500
 async def notify(params: dict) -> str:
     """Fan out a notification to every configured channel.
 
-    Wraps ``lhassa.notify.dispatch.notify``. Never raises — a delivery failure
+    Wraps ``lhassa.notify.dispatch.notify``. Never raises; a delivery failure
     is reported as a string, not an exception.
 
     params:
-        text  (required)  — the notification message.
-        level             — severity hint: "info" | "warning" | "error"
+        text  (required) ; the notification message.
+        level            ; severity hint: "info" | "warning" | "error"
                             (default "info").
 
     Returns "notify: delivered" or "notify: no channel delivered" or an error
@@ -56,18 +54,18 @@ async def add_task(params: dict) -> str:
     """Mint a new fixed-action task through the security machinery.
 
     Uses ``core.dispatch.mint_task`` (extracted refactor) so the full approval
-    frontier + signing + DB write path is applied — exactly the same as the
+    frontier + signing + DB write path is applied; exactly the same as the
     judgment dispatcher. accion must be in ACTIONS; unknown names are refused.
 
     Origin trust: TrustLevel.INTERNO, actor_id="action:add_task", degraded by
     the calling task's trust if params carry "origen_trust".
 
     params:
-        accion       (required)  — a registered action name.
-        objetivo                 — task objective string.
-        params                   — dict of params for the minted task.
-        instance_id              — defaults to Config.instance_id.
-        origen_trust             — int trust level (for contagion degradation).
+        accion       (required) ; a registered action name.
+        objetivo                ; task objective string.
+        params                  ; dict of params for the minted task.
+        instance_id             ; defaults to Config.instance_id.
+        origen_trust            ; int trust level (for contagion degradation).
 
     Never raises.
     """
@@ -120,12 +118,12 @@ async def set_task_state(params: dict) -> str:
     """Update a task's state to one of the allowed terminal values.
 
     Allowed states: "hecha", "rechazada". "pendiente" is explicitly forbidden
-    — an action must not be able to resurrect completed work.
+   ; an action must not be able to resurrect completed work.
 
     params:
-        id          (required)  — the task id.
-        estado      (required)  — "hecha" or "rechazada".
-        instance_id             — defaults to Config.instance_id.
+        id          (required) ; the task id.
+        estado      (required) ; "hecha" or "rechazada".
+        instance_id            ; defaults to Config.instance_id.
 
     Never raises.
     """
@@ -160,7 +158,7 @@ async def list_approvals(params: dict) -> str:
     human-readable summary.
 
     params:
-        instance_id  — defaults to Config.instance_id.
+        instance_id ; defaults to Config.instance_id.
 
     Never raises.
     """
@@ -184,7 +182,7 @@ async def list_approvals(params: dict) -> str:
             lines.append(f"{ap_id} [{label}]")
 
         more = f" …+{len(rows) - 10}" if len(rows) > 10 else ""
-        return f"list_approvals: {len(rows)} pending — " + ", ".join(lines) + more
+        return f"list_approvals: {len(rows)} pending; " + ", ".join(lines) + more
 
     except Exception as exc:
         return f"list_approvals: error: {exc}"
@@ -197,7 +195,7 @@ def check_health(params: dict) -> str:
     formats the result via ``health.checks.format_digest``.
 
     params:
-        out_dir  — optional snapshot directory override (default ~/.lhassa/health).
+        out_dir ; optional snapshot directory override (default ~/.lhassa/health).
 
     Never raises.
     """
@@ -228,27 +226,3 @@ def git_status_repos(params: dict) -> str:
 
     except Exception as exc:
         return f"git_status_repos: error: {exc}"
-
-
-def compile_cv(params: dict) -> str:
-    """Compile the CV .tex to PDF via the configured LaTeX engine.
-
-    Uses ``cv.compile.compile_pdf``. The tex path comes from params or falls
-    back to the CV seam default (``cv.paths.base_path()``). Returns the PDF
-    path on success, or an explanatory message if the engine is missing / the
-    compile fails. Never raises.
-
-    params:
-        tex_path  — path to a .tex file (default: ~/.lhassa/cv/cv_largo.tex).
-    """
-    try:
-        tex_path_raw = params.get("tex_path") or None
-        tex_path = str(tex_path_raw) if tex_path_raw else str(base_path())
-
-        pdf = compile_pdf(tex_path)
-        if pdf is None:
-            return f"compile_cv: compile failed or engine not found for {tex_path}"
-        return f"compile_cv: {pdf}"
-
-    except Exception as exc:
-        return f"compile_cv: error: {exc}"

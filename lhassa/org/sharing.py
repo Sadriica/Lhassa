@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Cross-instance sharing — Stream 6 Phase A ("one brain per person, shared resources").
+"""Cross-instance sharing. Stream 6 Phase A ("one brain per person, shared resources").
 
 Lhassa's org layer already models 1..N brains WITHIN one instance
 (:mod:`lhassa.org.topology`) plus a typed overlay of relationships BETWEEN them
 (:mod:`lhassa.org.relationships`). This module is the one level up: 1..N
 INSTANCES (one brain per person), each sovereign, optionally sharing a small,
-CLOSED set of resources — skills, flows, templates, knowledge — while memory
+CLOSED set of resources (skills, flows, templates, knowledge) while memory
 (facts, episodes) and identity stay private BY CONSTRUCTION (there is no
 column or code path in this module that can name a fact or an episode as a
 shareable resource; see the ``shared_resources`` table in
@@ -15,34 +15,34 @@ The gate is the SAME seam every other org permission question goes through:
 :func:`lhassa.org.relationships.permits`, extended with one new directed,
 INSTANCE-scoped kind, :data:`lhassa.org.relationships.SHARES`
 ("A may discover/subscribe to B's shared resources"). Nothing here bypasses
-it — every read or write that crosses an instance boundary calls
+it; every read or write that crosses an instance boundary calls
 :func:`_check_permit` first, deny-by-default: no edge, no access, and that
 denial is itself a logged, $0 episode (never a silent drop).
 
 Every cross-instance hop logs its own Episode (the standing hierarchy
 principle: "every brain in a chain logs its own hop", extended here to every
-brain-to-INSTANCE hop), attributed ``dominio=Config.root_admin_id`` — sharing
+brain-to-INSTANCE hop), attributed ``dominio=Config.root_admin_id``: sharing
 is an act the root administrator performs on behalf of the instance, mirroring
 how every other org-wide governance op (topology edits, relationship edits) is
 attributed at the root. Trust is never promoted by a subscription: content
 pulled from another instance is exactly as trusted as content from any other
-external source (MUNDO) — callers that turn a subscribed resource into an
+external source (MUNDO); callers that turn a subscribed resource into an
 action must apply :func:`lhassa.security.trust.degrade` themselves, same as
 any other MUNDO input.
 
-Everything here is $0, offline (no network — a real multi-machine transport is
+Everything here is $0, offline (no network; a real multi-machine transport is
 future work; today this operates over one shared ``core.db`` DB_PATH holding
 multiple instances' rows, or is invoked identically once each instance grows
 its own DB and a sync/transport layer is added later). PRODUCT DECISION (Phase
 A, no live transport exists yet to arbitrate otherwise): the SHARES grant
 registry (``config.org_relationships_file``) is likewise a file SHARED across
-every instance on one box — a grant instance A writes naming instance B must
+every instance on one box; a grant instance A writes naming instance B must
 be readable when B asks "am I permitted?", which today means the same
 physical relationships file, exactly like the shared DB_PATH already implies.
 Once instances run on separate machines this becomes a real question
 (replicate the grant, or have the requester ask the provider directly over a
-future transport) — flagged here rather than decided silently. NEVER raises to a
-caller — every function returns a small result dict with an explicit
+future transport); flagged here rather than decided silently. NEVER raises to a
+caller; every function returns a small result dict with an explicit
 ``ok``/``reason``.
 """
 
@@ -61,7 +61,7 @@ if TYPE_CHECKING:
     pass
 
 #: The closed, deliberately small set of resource kinds that MAY cross an
-#: instance boundary. Facts and episodes are never in this set — memory and
+#: instance boundary. Facts and episodes are never in this set; memory and
 #: identity stay private by default (Stream 6 Phase A decision).
 SHAREABLE_TYPES: frozenset[str] = frozenset({"skill", "flow", "template", "knowledge"})
 
@@ -119,7 +119,7 @@ def _validate_type(resource_type: str) -> "Optional[str]":
 def _resource_exists(resource_type: str, resource_name: str, config: "Config") -> bool:
     """Best-effort local existence check for the named resource.
 
-    Never raises — an existence check failing (e.g. a store misconfigured) is
+    Never raises; an existence check failing (e.g. a store misconfigured) is
     treated as "does not exist" rather than crashing the publish call; the
     caller sees a clear refusal instead of a 500.
     """
@@ -164,7 +164,7 @@ async def publish(
     Deny-by-default at the CONTENT level, not the permission level: publishing
     never requires a grant (an instance always controls its own offerings), but
     the resource_type must be in the closed :data:`SHAREABLE_TYPES` set and the
-    named resource must actually exist locally — refuses (never crashes)
+    named resource must actually exist locally; refuses (never crashes)
     otherwise. Logs one ``cross-instance-share`` episode either way.
     """
     cfg = _resolve_config(config)
@@ -235,7 +235,7 @@ async def grant(
     requester_instance_id: str, *, actor_id: str, note: str = "", config: "Optional[Config]" = None
 ) -> dict:
     """Grant a remote instance permission to discover/subscribe to THIS instance's
-    shared resources — adds a :data:`lhassa.org.relationships.SHARES` edge
+    shared resources; adds a :data:`lhassa.org.relationships.SHARES` edge
     ``(requester_instance_id, local_instance_id)``. Trust is never promoted by a
     grant; it only OPENS a door the deny-by-default gate would otherwise refuse.
     """
@@ -290,7 +290,7 @@ async def _check_permit(
     ``provider_instance_id``'s shared resources?
 
     Pure read over :func:`lhassa.org.relationships.permits`; an edge lookup
-    failure (e.g. a corrupt relationships file) degrades to DENY, never allow —
+    failure (e.g. a corrupt relationships file) degrades to DENY, never allow;
     the fail-safe direction for a permission gate.
     """
     try:
@@ -311,7 +311,7 @@ async def list_offerings(
     permitted (deny-by-default). Logs one hop either way (allow or refuse).
 
     A request for one's OWN offerings never needs a grant (you always see your
-    own list) — the permit check only guards a genuinely cross-instance read.
+    own list); the permit check only guards a genuinely cross-instance read.
     """
     cfg = _resolve_config(config)
     local_id = _local_instance_id(cfg)
@@ -334,7 +334,7 @@ async def list_offerings(
     await db.init_db()
     offerings = await db.list_shared_resources(provider_instance_id)
     # Defense in depth: filter to the closed shareable set even though publish()
-    # is the only writer today — a row inserted by any future/other path (a
+    # is the only writer today; a row inserted by any future/other path (a
     # migration, a direct db.publish_resource call, manual DB surgery) must
     # still never surface a fact/episode through this read, not just be
     # prevented from being written by this one call site.
@@ -443,7 +443,7 @@ async def unsubscribe(
 
 
 async def list_subscriptions(*, config: "Optional[Config]" = None) -> list[dict]:
-    """THIS instance's own live subscriptions — no permit needed for your own list."""
+    """THIS instance's own live subscriptions; no permit needed for your own list."""
     cfg = _resolve_config(config)
     instance_id = _local_instance_id(cfg)
     await db.init_db()

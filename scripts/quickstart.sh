@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
-# Lhassa — quickstart: talking to it in about two minutes.
+# Lhassa; quickstart: talking to it in about two minutes.
 #
-# This is the LIGHT on-ramp for a curious stranger cloning the repo — it is
+# This is the LIGHT on-ramp for a curious stranger cloning the repo; it is
 # NOT the always-on installer (that's scripts/install.sh: systemd + Docker).
 # Quickstart only:
-#   - resolves the Python venv (uv sync, no dashboard build, no voice extra),
+#   - resolves the Python venv (uv sync, no dashboard build, no voice runtime),
 #   - makes sure a .env exists,
 #   - detects whether ANY model backend is configured (an API key, or a local
 #     model via Ollama), and if not, explains the two easiest paths and stops,
 #   - if a backend IS configured, runs a quick sanity check and prints the
-#     next two commands to run — it does not launch an interactive TUI itself.
+#     next two commands to run; it does not launch an interactive TUI itself.
 #
 # It is idempotent: safe to re-run after adding a key or installing Ollama.
 #
@@ -31,7 +31,7 @@ warn() { printf '%swarn%s %s\n' "$(_c '1;33')" "$(_c 0)" "$*" >&2; }
 err()  { printf '%s err%s %s\n' "$(_c '1;31')" "$(_c 0)" "$*" >&2; }
 die()  { err "$*"; exit 1; }
 
-log "Lhassa quickstart — repo: $REPO_ROOT"
+log "Lhassa quickstart; repo: $REPO_ROOT"
 
 # ── 1. Python + uv ─────────────────────────────────────────────────────────────
 log "Checking Python and uv"
@@ -43,15 +43,15 @@ if command -v python3 >/dev/null 2>&1; then
     if [ "$PYMAJOR" -gt 3 ] || { [ "$PYMAJOR" -eq 3 ] && [ "$PYMINOR" -ge 11 ]; }; then
         ok "python3: $PYVER"
     else
-        warn "python3: $PYVER (Lhassa's pyproject.toml asks for 3.13+ — uv will fetch its own"
+        warn "python3: $PYVER (Lhassa's pyproject.toml asks for 3.13+; uv will fetch its own"
         warn "  interpreter if needed, so this is informational, not a hard blocker)"
     fi
 else
-    warn "python3 not found on PATH — uv can still provision one for you"
+    warn "python3 not found on PATH; uv can still provision one for you"
 fi
 
 if ! command -v uv >/dev/null 2>&1; then
-    err "uv not found — Lhassa's toolchain (dependency resolution + venv) needs it."
+    err "uv not found. Lhassa's toolchain (dependency resolution + venv) needs it."
     err "  Install it: curl -LsSf https://astral.sh/uv/install.sh | sh"
     err "  Docs: https://docs.astral.sh/uv/  (or see https://astral.sh/uv)"
     err "Then re-run: bash scripts/quickstart.sh"
@@ -59,21 +59,21 @@ if ! command -v uv >/dev/null 2>&1; then
 fi
 ok "uv: $(uv --version 2>&1)"
 
-# ── 2. Dependencies (no dashboard build — that's for the full app) ────────────
+# ── 2. Dependencies (no dashboard build; that's for the full app) ────────────
 log "Installing Python dependencies (uv sync)"
-( cd "$REPO_ROOT" && uv sync ) || die "uv sync failed — see the error above"
+( cd "$REPO_ROOT" && uv sync ) || die "uv sync failed; see the error above"
 ok "venv ready at $REPO_ROOT/.venv"
 
 # ── 3. .env ─────────────────────────────────────────────────────────────────
 log "Checking .env"
 if [ -f "$ENV_FILE" ]; then
-    ok ".env already exists — leaving it as is"
+    ok ".env already exists; leaving it as is"
 else
     if [ -f "$ENV_EXAMPLE" ]; then
         cp "$ENV_EXAMPLE" "$ENV_FILE"
         ok "created .env from .env.example"
     else
-        warn ".env.example not found — skipping .env creation"
+        warn ".env.example not found; skipping .env creation"
         touch "$ENV_FILE"
     fi
 fi
@@ -83,7 +83,7 @@ log "Looking for a model backend"
 
 _env_value() {
     # Read KEY from the process environment first, then from .env (uncommented,
-    # non-empty). Never echoes secrets to the terminal — only used for presence.
+    # non-empty). Never echoes secrets to the terminal; only used for presence.
     local key="$1" val=""
     val="$(printenv "$key" 2>/dev/null || true)"
     if [ -z "$val" ] && [ -f "$ENV_FILE" ]; then
@@ -123,17 +123,17 @@ fi
 if [ "$BACKEND_READY" -eq 0 ]; then
     cat <<'EOF'
 
-Lhassa needs a brain to think with — it doesn't ship one. Bring your own,
+Lhassa needs a brain to think with; it doesn't ship one. Bring your own,
 either path is fine and both are quick:
 
   (a) A free/cheap API key (easiest start)
       Groq has a generous free tier: https://console.groq.com
       Grab a key, then add it to .env:
           GROQ_API_KEY=your-key-here
-      (Anthropic / OpenAI / OpenRouter / Cerebras keys work too — Lhassa
+      (Anthropic / OpenAI / OpenRouter / Cerebras keys work too. Lhassa
       auto-detects whichever one you set, no extra config needed.)
 
-  (b) Fully local, $0, no key at all — Ollama
+  (b) Fully local, $0, no key at all. Ollama
       Install:  https://ollama.com
       Then:     ollama pull llama3.2
       Lhassa will find it automatically at http://localhost:11434.
@@ -142,7 +142,7 @@ Add one of the two, then re-run:
     bash scripts/quickstart.sh
 
 EOF
-    ok "dependencies are installed — you're one step away."
+    ok "dependencies are installed; you're one step away."
     exit 0
 fi
 
@@ -151,14 +151,14 @@ log "Running a quick sanity check"
 if ( cd "$REPO_ROOT" && uv run --extra dev python -m scripts.check ); then
     ok "sanity check passed"
 else
-    warn "scripts/check.py flagged some items above — most (DEEPGRAM/CARTESIA/audio)"
+    warn "scripts/check.py flagged some items above; most (DEEPGRAM/CARTESIA/audio)"
     warn "  are about the OPT-IN voice pipeline and don't block text chat over the CLI"
 fi
 
 # ── 6. What's next ──────────────────────────────────────────────────────────────
 cat <<EOF
 
-$(_c '1;32')You're set.$(_c 0) A model backend is configured — next:
+$(_c '1;32')You're set.$(_c 0) A model backend is configured; next:
 
   1. Teach it a few founding facts about you (~5 quick questions):
        uv run lhassa onboard
@@ -167,12 +167,12 @@ $(_c '1;32')You're set.$(_c 0) A model backend is configured — next:
        uv run lhassa
 
 First things to try once it's up:
-  - just talk to it — anything, plain language
+  - just talk to it; anything, plain language
   - uv run lhassa recall <text>       search its own past episodes
   - uv run lhassa memory <query>      search durable facts
   - uv run lhassa capabilities        what's wired, what's on/off
 
-Want it always-on — a heartbeat that keeps ticking while you sleep, Telegram,
+Want it always-on; a heartbeat that keeps ticking while you sleep, Telegram,
 systemd + Docker? That's a separate, heavier step:
     bash scripts/install.sh
 

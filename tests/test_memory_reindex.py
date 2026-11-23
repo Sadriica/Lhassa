@@ -4,7 +4,7 @@
 
 Fully offline: the brain DB is redirected to a tmp file, and ``Config`` is
 forced onto the offline hashing embedder (``embedder_backend = "hash"``) so no
-real network call happens — determinism regardless of whether a real Ollama
+real network call happens; determinism regardless of whether a real Ollama
 happens to be running on the machine executing the tests.
 """
 
@@ -44,7 +44,7 @@ def test_reindex_all_reembeds_facts_and_answer_cache(tmp_path, monkeypatch):
         await facts.add_fact(INSTANCE, "dato", "uno")
         await facts.add_fact(INSTANCE, "dato", "dos")
 
-        # Simulate two answer_cache rows written by a DIFFERENT (stale) embedder —
+        # Simulate two answer_cache rows written by a DIFFERENT (stale) embedder;
         # a mismatched dimension is the smoking gun a reindex must fix.
         await db.insert_answer_cache(
             {
@@ -150,7 +150,7 @@ def test_reindex_answer_cache_is_best_effort_per_row(tmp_path, monkeypatch):
 def _force_hash_backend(monkeypatch):
     # ``reindex_cmd`` does ``from lhassa.config import Config`` INSIDE the
     # function (lazy, like the rest of the CLI), so it always reads whatever
-    # class currently sits at ``lhassa.config.Config`` — which some OTHER
+    # class currently sits at ``lhassa.config.Config``: which some OTHER
     # test's ``importlib.reload(lhassa.config)`` may have swapped out from
     # under a module-level import. Patch through the live module binding so
     # this test stays correct regardless of collection/execution order.

@@ -1,18 +1,18 @@
 import { useEffect } from 'react'
 
 /**
- * MobileNav — the < 1024px nav chrome that sits alongside NavRail: the hamburger
+ * MobileNav; the < 1024px nav chrome that sits alongside NavRail: the hamburger
  * top bar (with the current section's title) and the scrim behind the open
  * drawer. The drawer itself is the shared `lh-nav` element rendered by NavRail;
  * this component only renders the mobile-only affordances (both are `lg:hidden`
  * via CSS media queries) and owns the Esc-to-close behavior.
  *
  * Props:
- *   sections : [{ id, label }]  — used to resolve the active section's title.
- *   section  : string           — the active section id.
- *   navOpen  : boolean          — drawer open state.
- *   onOpen   : () => void       — open the drawer (hamburger).
- *   onClose  : () => void       — close the drawer (scrim / Esc).
+ *   sections : [{ id, label }] ; used to resolve the active section's title.
+ *   section  : string          ; the active section id.
+ *   navOpen  : boolean         ; drawer open state.
+ *   onOpen   : () => void      ; open the drawer (hamburger).
+ *   onClose  : () => void      ; close the drawer (scrim / Esc).
  */
 export default function MobileNav({ sections, section, navOpen, onOpen, onClose }) {
   // Esc closes the mobile nav drawer. Selecting a section also closes it (via onNavigate).
@@ -25,7 +25,7 @@ export default function MobileNav({ sections, section, navOpen, onOpen, onClose 
 
   return (
     <>
-      {/* Mobile top bar — hamburger + current section (sidebar is a drawer < 1024px) */}
+      {/* Mobile top bar; hamburger + current section (sidebar is a drawer < 1024px) */}
       <div className="lh-topbar lg:hidden">
         <button
           type="button"

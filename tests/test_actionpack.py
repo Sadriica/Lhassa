@@ -1,4 +1,4 @@
-"""Tests for lhassa/actionpack — Phase 3.
+"""Tests for lhassa/actionpack. Phase 3.
 
 All tests are fully offline: httpx, subprocess, quarantine, notify, cv, health,
 and memory operations are monkeypatched. No real network, no real DB writes (where
@@ -8,7 +8,6 @@ possible), no real filesystem outside tmpdir.
 from __future__ import annotations
 
 import asyncio
-from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -30,7 +29,7 @@ def _run(coro):
 
 
 # ---------------------------------------------------------------------------
-# register_all — idempotency
+# register_all; idempotency
 # ---------------------------------------------------------------------------
 
 
@@ -46,7 +45,7 @@ def test_register_all_idempotent():
     # First call
     ap.register_all()
     count1 = len(ACTIONS)
-    # Second call — must not raise (registry raises on true duplicate)
+    # Second call; must not raise (registry raises on true duplicate)
     ap.register_all()
     count2 = len(ACTIONS)
     assert count1 == count2
@@ -56,7 +55,7 @@ def test_register_all_idempotent():
 
 
 def test_register_all_registers_expected_actions():
-    """All 15 Phase-3 actions are registered after register_all()."""
+    """The core Phase-3 actions are registered after register_all() (compile_cv is the cv pack's)."""
     import lhassa.actionpack as ap
     ap._REGISTERED = False
     ap.register_all()
@@ -68,7 +67,7 @@ def test_register_all_registers_expected_actions():
         "run_command", "system_snapshot", "power_mode",
         "add_fact", "backup_memory", "consolidate_memory",
         "notify", "add_task", "set_task_state", "list_approvals",
-        "check_health", "git_status_repos", "compile_cv",
+        "check_health", "git_status_repos",
     }
     for name in expected:
         assert name in ACTIONS, f"Action {name!r} not in ACTIONS after register_all()"
@@ -89,7 +88,7 @@ def test_allowlist_has_all_15_actions():
         "run_command", "system_snapshot", "power_mode",
         "add_fact", "backup_memory", "consolidate_memory",
         "notify", "add_task", "set_task_state", "list_approvals",
-        "check_health", "git_status_repos", "compile_cv",
+        "check_health", "git_status_repos",
     }
     for name in phase3_actions:
         assert name in al, f"Action {name!r} missing from allowlist"
@@ -110,7 +109,7 @@ def test_other_actions_do_not_require_approval():
         "web_fetch", "ping_url", "system_snapshot", "power_mode",
         "add_fact", "backup_memory", "consolidate_memory",
         "notify", "add_task", "set_task_state", "list_approvals",
-        "check_health", "git_status_repos", "compile_cv",
+        "check_health", "git_status_repos",
     }
     for name in no_approval:
         assert not al[name].requires_approval, f"{name!r} should not require approval"
@@ -227,7 +226,7 @@ def test_web_fetch_ssrf_refused():
 
 @patch("httpx.AsyncClient")
 def test_web_fetch_timeout_returns_string(mock_client_cls):
-    """web_fetch returns an error string on timeout — never raises."""
+    """web_fetch returns an error string on timeout; never raises."""
     import httpx
 
     mock_client = AsyncMock()
@@ -729,42 +728,6 @@ def test_git_status_repos_error_returns_string():
 
 
 # ---------------------------------------------------------------------------
-# compile_cv
-# ---------------------------------------------------------------------------
-
-
-def test_compile_cv_happy_path(tmp_path):
-    pdf_path = tmp_path / "cv_largo.pdf"
-    with patch("lhassa.actionpack._brain.compile_pdf", return_value=pdf_path), \
-         patch("lhassa.actionpack._brain.base_path", return_value=tmp_path / "cv_largo.tex"):
-        from lhassa.actionpack._brain import compile_cv
-        result = compile_cv({})
-
-    assert str(pdf_path) in result
-    assert isinstance(result, str)
-
-
-def test_compile_cv_engine_not_found():
-    with patch("lhassa.actionpack._brain.compile_pdf", return_value=None), \
-         patch("lhassa.actionpack._brain.base_path", return_value=Path("/tmp/cv.tex")):
-        from lhassa.actionpack._brain import compile_cv
-        result = compile_cv({})
-
-    assert "failed" in result.lower() or "not found" in result.lower()
-    assert isinstance(result, str)
-
-
-def test_compile_cv_custom_path(tmp_path):
-    tex = tmp_path / "custom.tex"
-    pdf = tmp_path / "custom.pdf"
-    with patch("lhassa.actionpack._brain.compile_pdf", return_value=pdf):
-        from lhassa.actionpack._brain import compile_cv
-        result = compile_cv({"tex_path": str(tex)})
-    assert str(pdf) in result
-    assert isinstance(result, str)
-
-
-# ---------------------------------------------------------------------------
 # mint_task (dispatch refactor)
 # ---------------------------------------------------------------------------
 
@@ -868,8 +831,8 @@ def test_send_reminder_never_raises_on_notify_error():
 
 
 def test_send_reminder_writes_the_root_hop_episode(monkeypatch):
-    """A reminder has no owning department — it takes the root-only hop, same as
-    ``research_reply`` — so one ``org-deliver`` Episode lands on ``lhassa``
+    """A reminder has no owning department; it takes the root-only hop, same as
+    ``research_reply``: so one ``org-deliver`` Episode lands on ``lhassa``
     alongside the actual delivery."""
     from lhassa.actionpack._reminder import send_reminder
     from lhassa.core import db

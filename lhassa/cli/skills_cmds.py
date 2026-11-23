@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""``lhassa skills`` — the admin surface for first-class SKILLS.
+"""``lhassa skills``: the admin surface for first-class SKILLS.
 
 A small, mostly-OFFLINE management sub-app over the skill store
 (``config.skills_dir``): create skills (blank template or drafted WITH AI),
@@ -9,8 +9,8 @@ assign a skill to a brain, and import/export skill folders. Every command takes
 
 Only the AI commands (``create --ai`` / ``improve --ai``) touch a model, and they
 DEGRADE with a clear message when no provider/creds are available (they never
-crash the CLI). Everything else — list/show/recommend/assign/who-has/import/
-export/delete/seed — is deterministic and offline.
+crash the CLI). Everything else; list/show/recommend/assign/who-has/import/
+export/delete/seed; is deterministic and offline.
 
 The integrator registers this onto the main Typer ``app`` as a sub-app
 (``app.add_typer(skills_cmds.skills_app, name="skills")``).
@@ -132,7 +132,7 @@ def create_cmd(
     ),
     json_out: bool = typer.Option(False, "--json", help="Emit the new skill as JSON."),
 ) -> None:
-    """Create a skill — a blank template, or drafted WITH AI from a brief."""
+    """Create a skill; a blank template, or drafted WITH AI from a brief."""
     from lhassa.skills import ai as ai_mod
     from lhassa.skills.skillmd import template_skill
 

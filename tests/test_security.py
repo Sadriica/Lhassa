@@ -1,4 +1,4 @@
-"""Tests for the Phase-0 security primitives (§2.6) — offline, deterministic.
+"""Tests for the Phase-0 security primitives (§2.6); offline, deterministic.
 
 Covers: Ed25519 signing round-trip, the trust-degrades-never-promotes invariant,
 the Task canonical-bytes bridge, and the deny-by-default task-level allowlist.

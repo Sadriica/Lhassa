@@ -1,6 +1,6 @@
-# Concepts — why Lhassa is built this way
+# Concepts; why Lhassa is built this way
 
-This is the *why* document. For the *how* — layers, data paths, module map — read
+This is the *why* document. For the *how* (layers, data paths, module map) read
 [`architecture.md`](architecture.md); for the phase-by-phase build log read
 [`decisions.md`](decisions.md); for the full spec read [`lhassa-brief.md`](lhassa-brief.md)
 (Spanish, living doc). Getting the brain running is [`getting-started.md`](getting-started.md).
@@ -10,15 +10,15 @@ This is the *why* document. For the *how* — layers, data paths, module map —
 Lhassa's one hammered claim is **build the brain, rent the body**. The distinction is
 between what is *durable* and what is *rented by the hour*:
 
-- **Durable** — identity (the persona and its directives, `lhassa/persona.py`), memory
+- **Durable**: identity (the persona and its directives, `lhassa/persona.py`), memory
   (`memory/`), judgment (the deterministic policy + router path), and the trust record
-  (`security/` — an append-only ledger of what was allowed, approved, denied). This is
+  (`security/`: an append-only ledger of what was allowed, approved, denied). This is
   *who Lhassa is*, and it never depends on which model happens to answer today.
-- **Rented** — the models (`llm/provider.py`'s `ModelProvider` registry: gateway, local,
+- **Rented**: the models (`llm/provider.py`'s `ModelProvider` registry: gateway, local,
   opencode, claude, codex, zen) and the agentic harnesses (`harness/adapter.py`'s
   `HarnessAdapter` registry: OpenCode, Claude Code, Codex). Both sit behind a registry
   (`registry.py`) so a new one drops in with `@register_provider("x")` /
-  `@register_adapter("x")` — no core edit, no surgery to swap a model out from under
+  `@register_adapter("x")`: no core edit, no surgery to swap a model out from under
   the brain.
 
 The practical result: `core/step.py` and `memory/load.py` never import a specific model
@@ -29,64 +29,64 @@ rewrite. The brain is the product; the body is plumbing.
 ## Do-and-sleep: the heartbeat, the watchlist, the reflexes
 
 Lhassa is **state on disk + a `step()` function** (`core/step.py`) that advances it one
-tick and returns. Nothing runs continuously in the foreground — a systemd timer
+tick and returns. Nothing runs continuously in the foreground; a systemd timer
 (`scripts/systemd/lhassa-heartbeat.timer`) fires `lhassa-heartbeat.service` every 2
 minutes (`OnUnitActiveSec=2min`, `AccuracySec=15s`), and each firing is a **fresh, one-shot
 process** (`Type=oneshot`) that re-reads `.env`/`settings.env`, calls
 `core/heartbeat.py:beat()`, and exits. There is no long-lived daemon holding state in
-memory between beats — the state is the SQLite "grande" (`~/.lhassa/brain.db`), and the
+memory between beats; the state is the SQLite "grande" (`~/.lhassa/brain.db`), and the
 process is disposable.
 
 Inside one tick, three deterministic layers run **before** a single token is spent:
 
-1. **The watchlist** (`core/watchlist.check()`) — zero tokens. It looks for triggers:
+1. **The watchlist** (`core/watchlist.check()`); zero tokens. It looks for triggers:
    a due task, a finished job, a repo change, a health signal. No triggers → the brain
    sleeps, no episode is even written.
-2. **Fixed actions** (`core/actions.py`) — if a trigger maps directly to a deterministic
+2. **Fixed actions** (`core/actions.py`); if a trigger maps directly to a deterministic
    action (`trigger.maps_to_fixed_action()`), it just runs. Still zero tokens.
-3. **Reflexes** (`core/policy.py`) — for everything else, `policy.evaluate(trigger)`
+3. **Reflexes** (`core/policy.py`); for everything else, `policy.evaluate(trigger)`
    inspects the trigger's *content*, not just its shape, and returns a `PolicyDecision`
    before the judgment path even loads memory. A reflex is a pure function
    `(Trigger) -> PolicyDecision | None`; the first to match wins, in a registry that
    mirrors `core/actions.ACTIONS`. Three built-ins ship today:
-   - `_job_review` — a job that finished cleanly (`estado in ("done","success","ok")`,
-     no error signal, cost ≤ `$0.01`) is auto-triaged (`kind="skip"`) — logged, no model
+   - `_job_review`: a job that finished cleanly (`estado in ("done","success","ok")`,
+     no error signal, cost ≤ `$0.01`) is auto-triaged (`kind="skip"`); logged, no model
      touched. A failed or costly job still gets judgment.
-   - `_repo_changed` — a repo on `LHASSA_AUTO_SYNC_REPOS` gets `sync_repo` run directly
+   - `_repo_changed`: a repo on `LHASSA_AUTO_SYNC_REPOS` gets `sync_repo` run directly
      (`kind="action"`); anything else falls to judgment.
-   - `_health_alert` — a `"warn"`-level health digest is just notified
+   - `_health_alert`: a `"warn"`-level health digest is just notified
      (`kind="action"`, the `notify` action); only `"alert"`-level needs judgment, and it
      is marked `hard=True` so the smart model handles it.
-   - `_default` — the catch-all: `kind="think"`, `context_tier="minimal"`, not hard.
+   - `_default`: the catch-all: `kind="think"`, `context_tier="minimal"`, not hard.
 
    `policy.evaluate()` **never raises**: a broken reflex is skipped and logged at debug,
    and a total failure degrades to the same safe default the catch-all returns.
 
 Only when a reflex actually returns `kind="think"` does `llm/router.py:decide()` pick a
-provider and `memory/load.py:load()` build a context — and even then, the reflex already
+provider and `memory/load.py:load()` build a context; and even then, the reflex already
 decided how *much* context to load (`context_tier`: `"minimal"` ≈600 tokens / `"full"` ≈2000
 tokens, via `config.context_token_budget_minimal` / `config.context_token_budget`) and
 whether this judgment is hard enough to deserve the smart model (`hard=True`).
 
 **The economics.** A routine day is ≈720 heartbeats (2-minute cadence × 24h). The
 overwhelming majority resolve at the watchlist (nothing to do) or a fixed action/reflex
-(zero tokens). A handful of triggers — a handful, not hundreds — actually reach judgment,
+(zero tokens). A handful of triggers (a handful, not hundreds) actually reach judgment,
 and even those default to the cheap model unless a reflex or an escalation marks them
 `hard`. The digest and the ledger (`llm/gateway.py`'s ledger, `check_spend` action,
 `/api/llm/ledger`) turn this into a number, not an adjective: a normal day's total spend
 sits in **fractions of a cent**. Thinking is the exception, budgeted and logged; sleeping
 is $0 and the default.
 
-If judgment can't run — no configured provider (`ProviderNotConfigured`) or the daily
-budget is spent (`BudgetExceeded`) — `core/step.py:_judge()` walks the fallback chain
+If judgment can't run; no configured provider (`ProviderNotConfigured`) or the daily
+budget is spent (`BudgetExceeded`); `core/step.py:_judge()` walks the fallback chain
 (below) and, failing everything, **degrades the episode to `"deferred"` rather than
 crashing the tick**. `db.sweep_deferred_tasks()` retries deferred tasks with backoff each
 subsequent beat, up to `LHASSA_DEFERRED_MAX_RETRIES`, then marks them `rechazada`
-(rejected) — a tick never throws away work silently, and it never blocks on it either.
+(rejected); a tick never throws away work silently, and it never blocks on it either.
 
 Long agentic work (a harness run, not a think) is handled the same do-and-sleep way:
 `router.decide()` can return `kind="delegate"`, `core/step.py:_delegate()` launches the
-harness as a **separate process** (`harness/runner.launch`) and returns immediately — the
+harness as a **separate process** (`harness/runner.launch`) and returns immediately; the
 episode records the job id and PID, and a *later* tick's `runner.supervise()` reaps the
 result from disk. `step()` never blocks on a job.
 
@@ -95,27 +95,27 @@ result from disk. `step()` never blocks on a job.
 Lhassa keeps two model seats deliberately distinct, because "chat" and "routine thinking"
 have different cost profiles and different owners:
 
-- **Chat** — the CLI, voice, and the built-in agent use `llm_provider` + `model`. This can
+- **Chat**: the CLI, voice, and the built-in agent use `llm_provider` + `model`. This can
   be a metered API (Anthropic/OpenAI/Groq/OpenRouter/Cerebras, one key is enough to
   auto-detect) *or* a $0 CLI subscription already paid for (`claude`, `codex`, `opencode`)
   *or* `ollama` for a fully local model.
-- **Heartbeat** — routine, unattended thinking uses `heartbeat_provider` independently
+- **Heartbeat**: routine, unattended thinking uses `heartbeat_provider` independently
   (`auto` / `local` / `cloud` / `opencode` / `claude` / `codex`). `llm/router.py:pick_provider()`
   makes the routine (non-`hard`) path prefer the **local** model when `local_model_url` is
   set, else the `opencode` CLI when it's on `PATH`, before ever reaching for the cloud
-  gateway — the owner's already-paid subscriptions come first.
+  gateway; the owner's already-paid subscriptions come first.
 
 Both seats share one **fallback chain** (`llm/router.py:fallback_chain()`, config
 `fallback_providers`, default `"claude,codex,default"`): when the primary provider throws
 `ProviderNotConfigured` or `BudgetExceeded`, the chain is walked in order, skipping any CLI
 whose binary isn't installed (`shutil.which`) and never retrying the same provider kind
-twice. This is the concrete meaning of "subscriptions before APIs" — `opencode → claude →
-codex → cloud` — and it's the same chain `core/step.py`'s judgment path and the Telegram
-inbound bridge (`notify/telegram_inbound.py`) both walk.
+twice. This is the concrete meaning of "subscriptions before APIs": `opencode → claude →
+codex → cloud`: and it's the same chain `core/step.py`'s judgment path and the chat
+engine's tool-less think (`chat/think.py`, behind the Telegram poller) both walk.
 
 A **budget soft-limit** (`router.decide()`, `config.budget_soft_pct`, default `0.8`) sits
 in front of both seats: once today's spend crosses 80% of the daily token budget, `hard`
-is forced back to `False` regardless of what the reflex asked for — which both picks the
+is forced back to `False` regardless of what the reflex asked for; which both picks the
 cheap model *and* re-enters the routine provider preference (local/opencode before cloud).
 Spend pressure steers the brain toward $0 providers automatically, before the hard
 `BudgetExceeded` kill-switch ever trips.
@@ -126,62 +126,62 @@ Memory is not one store; it's a stack of layers with an explicit priority order,
 assembled by `memory/load.py:load()` and trimmed to a token budget by `truncate()`
 (`PRIORITY = ["pinned", "recent", "tags", "semantic", "recall"]`, dropped from the tail):
 
-1. **The grande** (`core/db.py` + `memory/facts.py`) — the durable, append-only fact
+1. **The grande** (`core/db/` + `memory/facts.py`); the durable, append-only fact
    store. Every fact is typed `dato` (a fact about the world/owner) or `directiva` (a
    standing instruction that changes *how* the brain behaves). Facts are **never
    destructively overwritten**: superseding one means inserting a new row with a newer
    `actualizado_en` and possibly a different `confianza`. Reading back a single "current"
-   view is `facts.resolve()`'s job — it collapses same-content conflicts and the winner is
+   view is `facts.resolve()`'s job; it collapses same-content conflicts and the winner is
    the **most recent, with confianza as the tiebreaker** (`_conflict_key` +
    `(actualizado_en, confianza)` ranking, `memory/facts.py:153`). Pinned facts and *all*
-   `directiva` facts load **always**, as identity — this is the layer that never
+   `directiva` facts load **always**, as identity; this is the layer that never
    truncates, even if it alone exceeds the token budget (`memory/load.py:truncate()`,
    the "mandatory core").
-2. **The chica** (`memory/chica.py`) — a persistent working cache with threshold-LRU
+2. **The chica** (`memory/chica.py`); a persistent working cache with threshold-LRU
    `consolidate` (it never evicts pinned facts or directivas) and a `regenerate` path that
    rebuilds it from the grande. `memory/backup.py` does WAL-safe online backup/restore.
-3. **Layer 4 — semantic** (`memory/embeddings.py`) — facts ranked by cosine similarity to
+3. **Layer 4; semantic** (`memory/embeddings.py`); facts ranked by cosine similarity to
    the active `query`, via a pluggable `Embedder` (`HashingEmbedder` offline default,
    `RemoteEmbedder` for a real endpoint). Off unless `config.memory_layer4_enabled` **and**
    a query is given **and** the fact has been indexed (`memory/load.py:index_facts()`).
    It is the lowest-but-one priority layer, so it truncates before recency/tags but after
    layer 5.
-4. **Layer 5 — episodic recall** (`core/db.py:search_episodes`, FTS5) — the top few past
+4. **Layer 5; episodic recall** (`core/db:search_episodes`, FTS5); the top few past
    episodes whose text matches the active query, via SQLite's `episodes_fts` virtual
    table (an external-content FTS5 index over `decision`/`accion`/`resultado`/
    `despertar_por`, kept in sync by triggers, ranked with `bm25()`). $0, deterministic,
-   no model. It is the **lowest-priority** layer — dropped first under budget — and fully
+   no model. It is the **lowest-priority** layer (dropped first under budget) and fully
    defensive: any failure (a stripped SQLite without FTS5, a bad DB state) yields an
    empty layer rather than disturbing the rest of the context build.
 
 `core/step.py:_judge()` feeds `load()` both a `query` (the trigger's `objetivo`) and
 `active_tags=[trigger.kind]`, so the tag and semantic/recall layers actually have
-something to match against — a judgment isn't just "recent episodes plus identity", it
+something to match against; a judgment isn't just "recent episodes plus identity", it
 can genuinely recall a related fact or a related past decision.
 
 Sitting on top of all five layers, `memory/graph.py` is a deterministic **knowledge
 graph read-model**: it derives entities from fact tags and a simple capitalized/quoted-
 term regex, links them by co-occurrence in the same fact or episode, and answers "what
 do I know about X?" (`what_do_i_know`), "what do I track?" (`entities`), and "the story
-of one thing" (`timeline`) — all `$0`, all pure reads over the grande, never a model
+of one thing" (`timeline`); all `$0`, all pure reads over the grande, never a model
 call. It is the brain reasoning over its own memory without spending a token.
 
 Why the identity core never truncates: a brain that forgets its own standing directives
 under context pressure isn't a brain with amnesia about facts, it's a brain that stops
-being *itself*. Everything else — recency, tags, semantic hits, episodic recall — is
+being *itself*. Everything else (recency, tags, semantic hits, episodic recall) is
 disposable per-turn context; the directives are the constant.
 
 ## Episodes: observability as a first principle
 
 Every wake-up produces a structured `Episode` (`core/episode.py`): what woke it
 (`despertar_por`), the decision made, the action taken, the result, and its cost. Episodes
-are `begin()`-ed, `finish()`-ed, and `append()`-ed to the grande — **append-only, written
-once, never mutated** — and every row carries an `instance_id` from the first commit, so a
+are `begin()`-ed, `finish()`-ed, and `append()`-ed to the grande; **append-only, written
+once, never mutated**: and every row carries an `instance_id` from the first commit, so a
 future org of many brains never needs to retrofit multi-tenancy into the log.
 
 This is not an afterthought bolted onto logging: `core/step.py` opens an episode for
 *every* trigger, whether it resolves as a fixed action, a reflex skip, a judgment, a
-delegation, or a deferral — the four `PolicyDecision` kinds and the delegate path all
+delegation, or a deferral; the four `PolicyDecision` kinds and the delegate path all
 write through the same `Episode.finish()` shape. The `episodes_fts` FTS5 index (layer 5,
 above) turns this log into a live memory, not just an audit trail: the brain's own past
 decisions become retrievable context for its future ones. The digest
@@ -193,14 +193,14 @@ different views over this one append-only table.
 The same core scales from a single instance to a hierarchy without a second codebase.
 `org/topology.py:Topology` is a validated tree of `BrainNode`s (unique ids, one root,
 acyclic); **Lhassa is the permanent root administrator** (`config.root_admin_id`, default
-`"lhassa"`) — `_ensure_admin()` re-parents any other root under it and synthesizes the
+`"lhassa"`); `_ensure_admin()` re-parents any other root under it and synthesizes the
 node if it's missing, so "administrator" and "root" are enforced to be the same node on
 every load, never removed or demoted.
 
 `org/coordinator.py` encodes the one rule that keeps this from turning into an
 uncontrolled swarm: **only leaves execute**. `GeneralBrain.assign()` sends a typed
 `TASK_ASSIGN` message down and `collect()` gathers `TASK_RESULT`s back up by
-correlation id — "the general never runs the work itself." `DepartmentBrain.handle()` is
+correlation id; "the general never runs the work itself." `DepartmentBrain.handle()` is
 the only place that calls an executor (`org/executor.py:brain_executor`, the real
 one-turn brain path, gated behind `LHASSA_ORG_LIVE` so it's offline/$0 by default), and
 the tree-walk (`_walk()`) enforces this structurally: a coordinator node is always
@@ -213,7 +213,7 @@ Which department gets a goal is **deterministic and table-driven, not an LLM cal
 the goal text is scored against every department by whole-word match count, the highest
 scorer wins, ties break by registration order, and an unmatched goal falls back to a
 default department. A tie (or an explicit `params={"multi": True}`) fans out to the top-3
-departments and synthesizes their results — offline as a deterministic $0 concatenation
+departments and synthesizes their results; offline as a deterministic $0 concatenation
 unless `LHASSA_ORG_LIVE` is set, in which case one extra think merges them (falling back
 to the offline merge on any error).
 
@@ -223,47 +223,47 @@ never tangle: closed edge kinds `reads`/`notifies`/`reviews` (directed) and
 `collaborates` (symmetric), with `permits(from, to, kind)` as the pure runtime read seam.
 
 **The monitor role.** Any brain can be made a monitor (`make_brain_monitor`, applied by
-default to `interns` — "everyone reports to it"). `org/monitor.py:gather_signals()` is a
+default to `interns`: "everyone reports to it"). `org/monitor.py:gather_signals()` is a
 read-only, $0 sweep (recent episodes, health, flows, approvals, failures); `monitor_pass()`
 turns that into `{observations, risks, improvements, delegations}`, offline/stub by
 default. `org/watcher.py:watch_loop()` is the always-on "ear": it diffs two
 `gather_signals()` snapshots for *transitions* (`detect_events()`) and runs on an
-**elastic cadence** — idle at `monitor_idle_interval` (300s default) while nothing is
+**elastic cadence**: idle at `monitor_idle_interval` (300s default) while nothing is
 running, active at `monitor_active_interval` (15s default) while an `agent_runs` job is in
-flight — logging a monitor episode always, but only alerting (de-duped, over Telegram) on
+flight; logging a monitor episode always, but only alerting (de-duped, over Telegram) on
 IMPORTANT transitions (failures, a worsened health level, a new approval). A token is
 spent only under `LHASSA_MONITOR_THINK` + `LHASSA_ORG_LIVE`; idle watching is $0 by
 construction.
 
 ## The project: a typed workspace, never silently created
 
-A **project** (`core/projects.py`) is a named, TYPED unit of the owner's work — a
-code repo, a research effort, an ops surface — scoped by `kind` (`code` / `research`
+A **project** (`core/projects.py`) is a named, TYPED unit of the owner's work; a
+code repo, a research effort, an ops surface; scoped by `kind` (`code` / `research`
 / `ops` / `personal` / `generic`, an open vocabulary like `dominio`). `kind` is not
 decoration: it is a POLICY key. A project's `kind` maps (`org.templates.kind_template_map`,
 overridable via `LHASSA_KIND_TEMPLATES`) to an org template, and a $0 watchlist sense
-(`actionpack/_standing.py`) proposes attaching that template's brains — a `code`
+(`actionpack/_standing.py`) proposes attaching that template's brains; a `code`
 project gets a reviewer + security-reviewer pair standing by, without being asked.
 Existing tables already reference a project through one namespaced-string convention
 (`runs.entity_id = "project:<id>"`, `artifacts.metadata.project_id`) rather than new
-columns — schema sprawl is deferred until the convention actually proves insufficient.
+columns; schema sprawl is deferred until the convention actually proves insufficient.
 
 The project entity never appears by magic. A repo on `LHASSA_AUTO_SYNC_REPOS` with no
 matching project row is *detected*, not created: `actionpack/_projects.py`'s watchlist
-sense mints a `create_project` task with **`MUNDO`** origin — world-derived content is
+sense mints a `create_project` task with **`MUNDO`** origin; world-derived content is
 never trusted to act on its own (`doc/security.md`), so the owner's tap is the actual
 act of creation. The same principle governs the standing-brains attach itself: whether
 it needs a human OK depends on whether the target template is *provably* read-only
-(every brain in it carries `limits.read_only: True`) — anything else, including "can't
+(every brain in it carries `limits.read_only: True`); anything else, including "can't
 tell," gates fail-closed.
 
 Runs and tasks scoped to a project carry an **evidence rung** (`memory/evidence.py`),
 the repo's honesty contract for "did this actually happen": **prepared** (intent
-recorded, no outcome — the default for anything unrecognized, never an inflated
+recorded, no outcome; the default for anything unrecognized, never an inflated
 claim), **observed** (a finished status asserts an outcome, uncorroborated), or
-**verified** (observed AND independently corroborated — a passing `Verifier` result,
+**verified** (observed AND independently corroborated; a passing `Verifier` result,
 or a resolved, linked approval). It is a pure derived read over columns already on
-`runs`/`tasks` — no new storage, and never a stronger claim than the evidence
+`runs`/`tasks`: no new storage, and never a stronger claim than the evidence
 actually supports.
 
 ## Work-flows run through the hierarchy
@@ -271,23 +271,23 @@ actually supports.
 A work-flow (`flows/`) is a DAG wiring `trigger → task → gate → output` (+ `branch`),
 persisted at `~/.lhassa/flows.json`. The standing principle: **a flow is never run bare**.
 `POST /api/flows/{id}/run`, the Telegram bridge, and any future caller go through
-`org/delegate.py:delegate_flow()`, not the engine directly — it resolves the flow's owning
+`org/delegate.py:delegate_flow()`, not the engine directly; it resolves the flow's owning
 department, walks the command path from Lhassa down to that department, logs one
 deterministic $0 `org-delegate` episode, and *then* runs the flow. A topology failure
-degrades to a direct run rather than blocking the work — the hierarchy hop is a
+degrades to a direct run rather than blocking the work; the hierarchy hop is a
 deliberate audit trail at no extra token cost, not a hard dependency.
 
 The org chart is a ledger in both directions: who did what, when, with which
 files. Work flows down through `org/delegate.py`; whatever a leaf produces flows
-back up through its mirror, `org/deliver.py` — the CV a department tailored, the
+back up through its mirror, `org/deliver.py`: the CV a department tailored, the
 report it wrote, any file the owner ends up receiving. The department doesn't
 send it directly: `deliver()` re-walks the very command chain the down-hop used,
-and every brain it passes through — the department, any coordinator in between,
-Lhassa at the root — writes its own `org-deliver` episode narrating the hop
+and every brain it passes through; the department, any coordinator in between,
+Lhassa at the root; writes its own `org-deliver` episode narrating the hop
 before the root actually sends. The delivered file itself becomes one row in the
 `artifacts` registry (`core/artifacts.py`), an append-only record of paths +
 metadata + origin department, so a delivery is reconstructable later purely from
-what got logged — the same "audit is best-effort, delivery is not" rule that
+what got logged; the same "audit is best-effort, delivery is not" rule that
 governs `delegate`: a broken hop is swallowed and degraded, but the send always
 goes through.
 
@@ -295,14 +295,14 @@ goes through.
 
 Repetition is the trigger. `agents/repetition.py:detect_repetition()` is a **pure SQL
 aggregation** over the episodes table (`GROUP BY despertar_por, accion HAVING COUNT(*) >=
-threshold AND SUM(costo_usd) > 0`, default threshold 5) — it never calls a model, and it
+threshold AND SUM(costo_usd) > 0`, default threshold 5); it never calls a model, and it
 only flags patterns that both repeated *and* actually cost money (a free pattern isn't
 worth automating). The `detect_repetition` action parks a `mint_action` approval and
-notifies, de-duplicated via `watch_state` — it never mints or executes anything on its
+notifies, de-duplicated via `watch_state`: it never mints or executes anything on its
 own.
 
 Authoring is the response. `agents/author.py:author_candidate()` has the **routine (cheap)
-model** — never the smart one — write a candidate tool plus its test, as a small JSON
+model** (never the smart one) write a candidate tool plus its test, as a small JSON
 payload of files; any budget/provider failure or malformed reply degrades to an empty
 result, never to executing whatever came back. `propose_tool()` then chains:
 `versioning.create_candidate()` commits the files to a local-git branch
@@ -314,14 +314,14 @@ streak) still says yes.
 The four gates (`agents/gates.py`), in order, stopping at the first failure
 (deny-by-default):
 
-1. **Segura** — runs caged in `security/quarantine.py` (no network, no real data).
-2. **Correcta** — a `Verifier` (`agents/verify.py`) proves it works — a
+1. **Segura**: runs caged in `security/quarantine.py` (no network, no real data).
+2. **Correcta**: a `Verifier` (`agents/verify.py`) proves it works; a
    command/test/lint/health/regex/metric check that exits clean. Verifiers never call an
    LLM; this is the árbitro principle.
-3. **Mejor** — it must beat a concrete baseline on a concrete metric
+3. **Mejor**: it must beat a concrete baseline on a concrete metric
    (tokens/time/steps). No baseline given → cannot prove "better" → fail. There is no
    partial credit.
-4. **Retiro** — continuous, not inline: `should_retire()` demotes a graduated tool back to
+4. **Retiro**: continuous, not inline: `should_retire()` demotes a graduated tool back to
    quarantine if it went unused (zero recorded uses) or its production failure rate
    crosses 50% over at least 3 uses. The `review_tools` action runs this sweep.
 
@@ -329,29 +329,29 @@ The four gates (`agents/gates.py`), in order, stopping at the first failure
 
 Past a single think, Lhassa's second unit of work is the **loop**: not "call the
 model until it feels done," but a bounded, deterministic state machine
-(`loops` table, `lhassa/core/db.py`) that terminates on an OBJECTIVE verdict, not
+(`loops` table, `lhassa/core/db/`) that terminates on an OBJECTIVE verdict, not
 a self-judgment. Two callers share the same substrate:
 
 - **The forge iterates.** `agents/author.py:propose_tool(..., max_turns=3)` no
-  longer authors once and gives up on the first failing gate — each turn's
+  longer authors once and gives up on the first failing gate; each turn's
   failing gate detail (never the model's own opinion of its work) threads into
   the *next* authoring turn as feedback, up to `max_turns`. One exception is
   deliberately non-retryable: a "mejor" failure with no baseline/metric to
-  compare against stops the loop immediately — no amount of feedback can
+  compare against stops the loop immediately; no amount of feedback can
   conjure a baseline that was never given. Every turn is its own Episode.
 - **Standing goals get a real termination.** `/goal --verify command:…|regex:…
   --turns N` (Telegram, see `doc/telegram.md`) attaches an objective verifier to
   a recurring judgment task: `core/step.py:_judge()` runs the verifier after
   each judgment turn and either clears the recurrence on a pass or feeds the
   verifier's failure detail into the next occurrence's prompt
-  (`trigger.params["_loop_feedback"]`) on a fail — the same trigger object the
+  (`trigger.params["_loop_feedback"]`) on a fail; the same trigger object the
   recurrence-mint already copies forward, so no new minting path was needed.
 
 The one rule that makes this safe rather than an unbounded token sink: **caps
 are checked before any model call.** `_judge()` reads the loop's turn count
 against its `max_turns` first; a capped loop stops the recurrence and notifies
 the owner once, without spending a single token on that tick. A missing or
-broken loop row degrades to a normal, unbounded judgment turn — loops are an
+broken loop row degrades to a normal, unbounded judgment turn; loops are an
 enhancement to standing goals, not a new failure mode.
 
 This is also where the árbitro principle (above) extends past self-written
@@ -362,32 +362,32 @@ model grading its own homework.
 
 `harness/context_pack.py` gives every rented-body run (`lhassa code`, the
 dashboard's Run section) a small, generated-just-in-time briefing instead of an
-empty working directory. For a project, it renders four files —
-`VISION.md`, `ARCHITECTURE.md`, `RULES.md`, `MEMORY.md` — into
+empty working directory. For a project, it renders four files;
+`VISION.md`, `ARCHITECTURE.md`, `RULES.md`, `MEMORY.md`: into
 `~/.lhassa/projects/<id>/context/`, built $0 from the project row, its facts,
 its recent runs, and pending work; `MEMORY.md` in particular renders as
-TRIED / VERIFIED / OPEN — the loop-engineering ladder made into a file a CLI
+TRIED / VERIFIED / OPEN; the loop-engineering ladder made into a file a CLI
 agent can actually read.
 
 Generation is staleness-gated, not re-run on every launch: a digest header
 (`source_digest`, hashed from the project/fact/run timestamps) makes `ensure()`
 a cheap no-op when the pack is already fresh, and a full regeneration only when
-something underneath it changed. The pack's own pointer — not its content — is
+something underneath it changed. The pack's own pointer (not its content) is
 prepended to the CLI prompt, so the agent knows where to look without the pack
 itself bloating the prompt. And the design leans the same way as everything
 else here: a missing or failed pack (unknown project, any internal error)
-never blocks the launch — `ensure()` returns `None` and the run proceeds
+never blocks the launch; `ensure()` returns `None` and the run proceeds
 unbriefed. Context is a gift, not a gate.
 
-**PTC — Programmatic Tool Calling** (`agents/ptc.py`) is the "one-think-many-actions"
+**PTC. Programmatic Tool Calling** (`agents/ptc.py`) is the "one-think-many-actions"
 device: a script runs fully quarantined (its own temp workdir, scrubbed env, process
 group), and its *only* door out is a Unix-domain-socket RPC back to the parent process,
-which dispatches **one deterministic Lhassa action at a time** — every single RPC call is
+which dispatches **one deterministic Lhassa action at a time**: every single RPC call is
 re-checked against the exact same `security/allowlist.py:allow()` gate a normal task
 dispatch uses, with a signed `Task` (actor `"ptc"`, trust `INTERNO`). Hard caps: a 300s
 wall-clock timeout (`_kill_group()` SIGKILLs the whole process group), a 50-call cap
 enforced inside the RPC handler, and truncated stdout/stderr. Because one script can drive
-many actions, `run_script` itself always requires human approval to invoke — even though
+many actions, `run_script` itself always requires human approval to invoke; even though
 each action *inside* it is separately re-checked, entering PTC at all crosses the approval
 frontier.
 </content>

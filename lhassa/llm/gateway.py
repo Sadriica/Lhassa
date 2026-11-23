@@ -1,19 +1,19 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """
-LedgerGateway — the single chokepoint every cloud-LLM call routes through.
+LedgerGateway; the single chokepoint every cloud-LLM call routes through.
 
 Three responsibilities, all backed by one SQLite file:
 
-  1. Cache   — identical prompts return a stored answer without hitting the cloud.
-  2. Budget  — a per-UTC-day output-token ceiling refuses calls once spent.
-  3. Ledger  — every call is costed and recorded (tokens + estimated USD).
+  1. Cache  ; identical prompts return a stored answer without hitting the cloud.
+  2. Budget ; a per-UTC-day output-token ceiling refuses calls once spent.
+  3. Ledger ; every call is costed and recorded (tokens + estimated USD).
 
 Live spend is mirrored into ``state.metrics`` so the dashboard reflects it in
 real time. The provider call itself goes through ``get_agent_client`` and
 supports both the Anthropic client and the OpenAI-compatible client.
 
 This is Phase-1 "minimize AI usage" infrastructure: nothing calls a model
-directly — they go through here so cost is always visible and bounded.
+directly; they go through here so cost is always visible and bounded.
 """
 
 from __future__ import annotations
@@ -34,12 +34,12 @@ from lhassa.state import state
 if TYPE_CHECKING:
     from lhassa.config import Config
 
-# Default ledger location — mirrors lhassa.memory.store's ~/.lhassa layout.
+# Default ledger location; mirrors lhassa.memory.store's ~/.lhassa layout.
 DEFAULT_DB_PATH = Path.home() / ".lhassa" / "llm_gateway.db"
 
 # Runtime cost limits that must survive a restart (the daily token budget set
 # from the dashboard). A tiny JSON next to the ledger DB. The kill-switch is
-# deliberately NOT persisted — it defaults from config (LHASSA_KILL_SWITCH) on
+# deliberately NOT persisted; it defaults from config (LHASSA_KILL_SWITCH) on
 # every boot so a hard stop is always an explicit, in-session decision.
 DEFAULT_LIMITS_PATH = Path.home() / ".lhassa" / "llm_limits.json"
 
@@ -54,7 +54,7 @@ def _env_flag(name: str, default: bool = False) -> bool:
 # Pricing in USD per 1M tokens, as (input_rate, output_rate). Matched by
 # substring against the model id, so dated suffixes (…-20251101) still resolve.
 # Metered APIs (Anthropic, Groq) carry real list prices. Subscription CLIs
-# (claude / codex / opencode) and local/ollama stay at 0.0 BY DESIGN — they have
+# (claude / codex / opencode) and local/ollama stay at 0.0 BY DESIGN; they have
 # no marginal cash cost per call. Editable: add a row, or LHASSA_PRICING_JSON to
 # override/extend without a code edit. Anything unlisted costs 0.
 PRICING: dict[str, tuple[float, float]] = {
@@ -67,7 +67,7 @@ PRICING: dict[str, tuple[float, float]] = {
     # Groq list prices (metered API).
     "llama-3.3-70b-versatile": (0.59, 0.79),
     "llama-3.1-8b-instant": (0.05, 0.08),
-    # DeepSeek list prices (metered API; cache-miss input rate — cache hits cost
+    # DeepSeek list prices (metered API; cache-miss input rate; cache hits cost
     # ~50x less, so the ledger over-counts input conservatively).
     "deepseek-v4-flash": (0.14, 0.28),
     "deepseek-v4-pro": (0.435, 0.87),
@@ -78,7 +78,7 @@ def _parse_pricing_json(raw: str) -> dict[str, tuple[float, float]]:
     """Parse LHASSA_PRICING_JSON into {model_id.lower(): (in_rate, out_rate)}.
 
     Shape: a JSON object ``{"model-name": [input_per_1M, output_per_1M]}``. Any
-    malformed JSON, non-object payload, or bad row is logged and skipped — this
+    malformed JSON, non-object payload, or bad row is logged and skipped; this
     never raises, so a typo can never crash the gateway.
     """
     raw = (raw or "").strip()
@@ -130,7 +130,7 @@ class BudgetExceeded(Exception):
 
 
 class KillSwitchActive(BudgetExceeded):
-    """Raised when the manual kill-switch is engaged — a hard stop, independent
+    """Raised when the manual kill-switch is engaged; a hard stop, independent
     of the daily token budget. Subclasses ``BudgetExceeded`` so existing degrade
     paths that already catch a spent budget also catch a kill-switch halt.
     """
@@ -138,7 +138,7 @@ class KillSwitchActive(BudgetExceeded):
 
 @dataclass
 class CompletionResult:
-    """Outcome of a gateway call — text plus the costing metadata that was logged."""
+    """Outcome of a gateway call; text plus the costing metadata that was logged."""
 
     text: str
     provider: str
@@ -151,7 +151,7 @@ class CompletionResult:
 
 @dataclass
 class ToolTurnResult:
-    """Outcome of one tool-aware round-trip — text, any tool calls, and costing.
+    """Outcome of one tool-aware round-trip; text, any tool calls, and costing.
 
     ``tool_calls`` are provider-normalized: each is ``{"id", "name", "input"}``
     where ``input`` is the parsed argument object. An empty list means the model
@@ -175,6 +175,46 @@ def _resolve_provider(config: "Config") -> str:
     return "anthropic" if config.llm_provider == "anthropic" else "openai"
 
 
+# ── Reasoning models on the OpenAI-compatible path ───────────────────────────
+# DeepSeek V4 (flash / pro) and deepseek-reasoner are REASONING models: they
+# spend the output budget on ``message.reasoning_content`` FIRST and leave
+# ``message.content`` empty when the budget runs out. Every bounded call Lhassa
+# makes (the notify persona pass, the digest re-voicing, a Telegram chat reply,
+# a routine judgment) therefore arrived blank or cut mid-sentence: measured, a
+# 20-token call returns content="" and 1024 tokens returns "ok". The API
+# supports ``reasoning_effort="none"``, which buys the WHOLE max_tokens for the
+# answer; that is the default here, so a bounded call spends its budget on
+# words the owner reads. ``LHASSA_DEEPSEEK_REASONING`` re-opens it.
+_REASONING_MODEL_MARKERS = ("deepseek-v4", "deepseek-reasoner")
+
+
+def _is_reasoning_model(model: str) -> bool:
+    """True if ``model`` emits ``reasoning_content`` before its answer."""
+    m = (model or "").strip().lower()
+    return any(marker in m for marker in _REASONING_MODEL_MARKERS)
+
+
+def _reasoning_kwargs(config: "Config", model: str, max_tokens: int) -> dict:
+    """Extra call kwargs that keep a reasoning model's answer from being eaten.
+
+    ``{"reasoning_effort": "none"}`` when the reasoning pass should be off, an
+    empty dict otherwise (a non-reasoning model, or reasoning deliberately on).
+    ``config.deepseek_reasoning``: ``off`` never reasons, ``on`` always does,
+    ``auto`` (the default) reasons only when the caller gave a budget big enough
+    (``deepseek_reasoning_min_tokens``) that the answer still fits after it.
+    """
+    if not _is_reasoning_model(model):
+        return {}
+    mode = (getattr(config, "deepseek_reasoning", "auto") or "auto").strip().lower()
+    if mode in ("on", "1", "true", "yes"):
+        return {}
+    if mode == "auto":
+        floor = getattr(config, "deepseek_reasoning_min_tokens", 2048) or 2048
+        if max_tokens >= floor:
+            return {}
+    return {"reasoning_effort": "none"}
+
+
 def estimate_cost(model: str, input_tokens: int, output_tokens: int) -> float:
     """Estimated USD for a call, from the per-1M PRICING table (0.0 if unknown)."""
     in_rate, out_rate = price_for(model)
@@ -196,7 +236,7 @@ def _now() -> datetime:
 
 
 def _today() -> str:
-    """Current UTC calendar day as YYYY-MM-DD — the budget bucket key."""
+    """Current UTC calendar day as YYYY-MM-DD; the budget bucket key."""
     return _now().strftime("%Y-%m-%d")
 
 
@@ -232,7 +272,7 @@ def _tools_cache_key(
     max_tokens: int,
     system: Optional[str],
 ) -> str:
-    """Stable SHA-256 for a tool-aware turn — includes the tool schemas.
+    """Stable SHA-256 for a tool-aware turn; includes the tool schemas.
 
     Distinct from ``_cache_key`` (the ``kind`` discriminator prevents a plain
     completion and a tool turn with the same messages from colliding). ``default=str``
@@ -299,7 +339,7 @@ class LedgerGateway:
         self._kill_switch = bool(value)
         self._kill_switch_overridden = True
         logger.warning(
-            f"LLM gateway: kill-switch {'ENGAGED — all cloud-LLM calls halted' if value else 'released'}"
+            f"LLM gateway: kill-switch {'ENGAGED; all cloud-LLM calls halted' if value else 'released'}"
         )
 
     def _assert_live(self, config: "Config | None" = None) -> None:
@@ -309,7 +349,7 @@ class LedgerGateway:
             self._kill_switch or config_default
         )
         if active:
-            logger.warning("LLM gateway: call refused — kill-switch is engaged")
+            logger.warning("LLM gateway: call refused; kill-switch is engaged")
             raise KillSwitchActive(
                 "LLM kill-switch is engaged; all cloud-LLM calls are halted. "
                 "Release it from the dashboard to resume."
@@ -410,6 +450,34 @@ class LedgerGateway:
 
     # ── Budget bookkeeping ────────────────────────────────────────────────────
 
+    def daily_output_tokens_sync(self, day: str | None = None) -> int:
+        """Synchronous, read-only sibling of :meth:`daily_output_tokens`.
+
+        Exists for callers that cannot await (the router's ``decide`` is
+        synchronous and is called both with and without a running event loop,
+        so it cannot safely ``asyncio.run`` the async ledger read). Opens the
+        ledger with the stdlib ``sqlite3`` module directly; a plain read, no
+        schema writes; so it works even against a DB file that a concurrent
+        ``aiosqlite`` connection is using (SQLite handles concurrent readers).
+        Returns ``0`` if the DB/table doesn't exist yet or on any error;
+        never raises.
+        """
+        import sqlite3
+
+        day = day or _today()
+        if not self.db_path.exists():
+            return 0
+        try:
+            with sqlite3.connect(str(self.db_path), timeout=1.0) as db:
+                cur = db.execute(
+                    "SELECT output_tokens FROM daily_spend WHERE day=?", (day,)
+                )
+                row = cur.fetchone()
+            return int(row[0]) if row else 0
+        except Exception as exc:
+            logger.debug(f"LLM gateway: daily_output_tokens_sync failed: {exc}")
+            return 0
+
     async def daily_output_tokens(self, day: str | None = None) -> int:
         """Output tokens already spent on the given UTC day (default today)."""
         await self._ensure_db()
@@ -433,13 +501,13 @@ class LedgerGateway:
         return float(row[0]) if row else 0.0
 
     async def spend_summary(self, config: "Config | None" = None) -> dict:
-        """Give the brain visibility into its own spend — "spend as a signal".
+        """Give the brain visibility into its own spend; "spend as a signal".
 
         Returns ``{"day", "output_tokens", "budget", "pct_used", "cost_usd"}`` for
         today (UTC): today's output-token spend, the effective daily budget
         (runtime override if set, else ``config.llm_daily_token_budget``; 0 =
         unlimited), the fraction of that budget already used (``0.0`` when
-        unlimited), and today's real cost in USD from the ledger. Never raises —
+        unlimited), and today's real cost in USD from the ledger. Never raises;
         a query error degrades to a zeroed summary so a caller (e.g. the
         ``check_spend`` action) can always report *something*.
         """
@@ -564,7 +632,7 @@ class LedgerGateway:
             await db.commit()
 
     async def ledger_rows(self) -> list[dict]:
-        """Return every recorded call, oldest first — for inspection and tests."""
+        """Return every recorded call, oldest first; for inspection and tests."""
         await self._ensure_db()
         async with aiosqlite.connect(self.db_path) as db:
             db.row_factory = aiosqlite.Row
@@ -609,9 +677,27 @@ class LedgerGateway:
         kwargs = {"model": model, "messages": chat_messages, "max_tokens": max_tokens}
         if temperature is not None:
             kwargs["temperature"] = temperature
+        kwargs.update(_reasoning_kwargs(config, model, max_tokens))
         resp = await client.chat.completions.create(**kwargs)
-        text = resp.choices[0].message.content or ""
-        return text, resp.usage.prompt_tokens, resp.usage.completion_tokens
+        msg = resp.choices[0].message
+        text = msg.content or ""
+        in_tokens, out_tokens = resp.usage.prompt_tokens, resp.usage.completion_tokens
+
+        # The safety net: a reasoning model that burned the whole budget on
+        # thinking returns an EMPTY answer. Retry ONCE with reasoning off so the
+        # caller gets words instead of silence; both calls are billed honestly.
+        if not text.strip() and getattr(msg, "reasoning_content", None):
+            logger.warning(
+                f"LLM gateway: {model} returned an empty answer after "
+                f"{out_tokens} reasoning tokens; retrying with reasoning off"
+            )
+            kwargs["reasoning_effort"] = "none"
+            resp = await client.chat.completions.create(**kwargs)
+            text = resp.choices[0].message.content or ""
+            in_tokens += resp.usage.prompt_tokens
+            out_tokens += resp.usage.completion_tokens
+
+        return text, in_tokens, out_tokens
 
     async def _default_tools_completion(
         self,
@@ -672,6 +758,7 @@ class LedgerGateway:
             tools=tools,
             tool_choice="auto",
             max_tokens=max_tokens,
+            **_reasoning_kwargs(config, model, max_tokens),
         )
         choice = resp.choices[0]
         msg = choice.message
@@ -825,14 +912,14 @@ class LedgerGateway:
         once per loop iteration instead of hitting the raw provider client, then
         execute any returned tool calls and feed results back on the next call.
 
-        Caching is deliberately limited to *deterministic* turns — only a turn that
+        Caching is deliberately limited to *deterministic* turns; only a turn that
         returns no tool calls is stored (tool outputs are non-deterministic, so a
         tool-calling turn must never be served from cache). The cache key includes
         the tool schemas, so changing the available tools invalidates it.
 
         Args:
             messages: chat messages (provider-native role/content dicts, no system).
-            tools: tool schemas in the shape the resolved provider expects — Anthropic
+            tools: tool schemas in the shape the resolved provider expects. Anthropic
                 ``input_schema`` form for Anthropic, OpenAI ``function`` form otherwise.
             config: Config to use; a fresh Config() is created if omitted.
             model: model id override; defaults to ``config.model``.
@@ -969,7 +1056,7 @@ class LedgerGateway:
         )
 
 
-# Module-level default instance — import from anywhere via
+# Module-level default instance; import from anywhere via
 # `from lhassa.llm.gateway import gateway`.
 gateway = LedgerGateway()
 

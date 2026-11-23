@@ -1,4 +1,4 @@
-"""Tests for lhassa.org.topology — the config-driven org CHART (Fase 7, slice E).
+"""Tests for lhassa.org.topology; the config-driven org CHART (Fase 7, slice E).
 
 A topology is a TREE of brains: one standalone brain up to an arbitrary-depth
 hierarchy. These tests cover the default derivation (standalone vs flat), the JSON
@@ -27,7 +27,7 @@ class _Cfg:
 
 
 def test_default_standalone_single_admin_brain():
-    # The default/main brain IS Lhassa — the permanent administrator at the root.
+    # The default/main brain IS Lhassa; the permanent administrator at the root.
     t = topo.default_topology(_Cfg(org_role=""))
     assert t.is_standalone()
     assert len(t.nodes()) == 1
@@ -88,7 +88,7 @@ def test_save_load_round_trip(tmp_path):
     assert {n["id"] for n in raw} == {"general", "ops", "dept:optimization"}
 
     # On load, the permanent administrator (Lhassa) is injected at the root and the
-    # loaded chart's old root ("general") becomes its child — the rest is intact.
+    # loaded chart's old root ("general") becomes its child; the rest is intact.
     reloaded = topo.load_topology(cfg)
     assert reloaded.root().id == "lhassa"
     assert [n.id for n in reloaded.nodes()] == [
@@ -286,7 +286,7 @@ async def test_coordinators_never_execute(tmp_path, monkeypatch):
         "reconcile the budget", by_actor="owner", topology=t,
         instance_id=INST, executor=executor,
     )
-    # ONLY the leaf department executed — never "general"/"ops"/"biz".
+    # ONLY the leaf department executed; never "general"/"ops"/"biz".
     assert seen_departments == ["finance"]
 
 
@@ -350,7 +350,7 @@ async def test_high_risk_self_approval_rejected_in_tree(tmp_path, monkeypatch):
     assert out["leaf"] == "dept:finance"
 
 
-# ── fan-out + synthesis (Etapa 3 — real delegation) ──────────────────────────────
+# ── fan-out + synthesis (Etapa 3; real delegation) ──────────────────────────────
 
 
 def test_route_scores_exposes_the_whole_ranking():
@@ -389,7 +389,7 @@ async def test_tied_departments_fan_out_and_synthesize_offline(tmp_path, monkeyp
         seen.append(department)
         return {"summary": f"handled by {department}"}
 
-    # "optimize" ties ops (optimization) and "budget" ties biz (finance) — 1-1 tie.
+    # "optimize" ties ops (optimization) and "budget" ties biz (finance); 1-1 tie.
     out = await run_goal(
         "optimize the budget", by_actor="owner", topology=t,
         instance_id=INST, executor=executor,
@@ -421,7 +421,7 @@ async def test_explicit_multi_forces_fan_out_without_a_tie(tmp_path, monkeypatch
         instance_id=INST, executor=executor, params={"multi": True},
     )
     assert out["multi"] is True
-    assert len(out["branches"]) == 2  # both ops and biz — capped at 2 children here
+    assert len(out["branches"]) == 2  # both ops and biz; capped at 2 children here
 
 
 @pytest.mark.asyncio

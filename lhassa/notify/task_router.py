@@ -1,19 +1,19 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """
-The versatile brain — Plan 4, Stream 1's composition seam.
+The versatile brain. Plan 4, Stream 1's composition seam.
 
 Wires the three deterministic, $0 axes together for one inbound message:
 
-  1. **task identification** — ``notify.intent.classify_work_type`` (regex,
+  1. **task identification**: ``notify.intent.classify_work_type`` (regex,
      what kind of work is this).
-  2. **working mode**        — ``notify.modes.resolve_mode`` (registry, how
+  2. **working mode**       : ``notify.modes.resolve_mode`` (registry, how
      should Lhassa go about it).
-  3. **effort level**        — ``core.effort.resolve_effort`` (table lookup +
+  3. **effort level**       : ``core.effort.resolve_effort`` (table lookup +
      an in-message ``--<level>`` marker, how much budget/loop/verifier/MoA).
 
 ``route()`` is the one function a caller (the Telegram chat think today; any
 future surface tomorrow) needs to call BEFORE spending anything. It never
-raises and never calls a model — every field on :class:`RoutingDecision` is
+raises and never calls a model; every field on :class:`RoutingDecision` is
 knowable for $0. :func:`describe` renders it into one line fit for an
 Episode's ``decision`` field, so the trajectory a request took (and the cost
 it declared before the think ran) is visible in the log, not just inferred
@@ -35,10 +35,10 @@ __all__ = ["RoutingDecision", "route", "describe"]
 class RoutingDecision:
     """The resolved trajectory for one message, BEFORE any spend.
 
-    ``work_type``    — the task-identification axis's verdict.
-    ``mode``          — the resolved :class:`~lhassa.notify.modes.WorkingMode`.
-    ``effort``        — the resolved :class:`~lhassa.core.effort.EffortProfile`.
-    ``text``          — the message with any ``--<level>`` effort marker
+    ``work_type``   : the task-identification axis's verdict.
+    ``mode``         : the resolved :class:`~lhassa.notify.modes.WorkingMode`.
+    ``effort``       : the resolved :class:`~lhassa.core.effort.EffortProfile`.
+    ``text``         : the message with any ``--<level>`` effort marker
                          stripped (what should actually reach the model).
     """
 
@@ -53,7 +53,7 @@ def route(text: str, *, effort_override: "str | None" = None) -> RoutingDecision
 
     A malformed/empty ``text`` degrades to the cheapest trajectory: work type
     ``"question"``, mode ``answer_directly``, effort ``minimal`` (via
-    ``classify_work_type``'s and ``resolve_effort``'s own safe defaults) —
+    ``classify_work_type``'s and ``resolve_effort``'s own safe defaults);
     never a silently expensive guess.
     """
     try:
@@ -72,7 +72,7 @@ def route(text: str, *, effort_override: "str | None" = None) -> RoutingDecision
 def describe(decision: RoutingDecision) -> str:
     """Render a routing decision into one Episode-ready line.
 
-    Declares the trajectory AND the pre-spend cost estimate — this is what
+    Declares the trajectory AND the pre-spend cost estimate; this is what
     makes "minimal vs. deep produced visibly different trajectories, cost
     declared before it was spent" checkable straight from the episode log,
     never only from a test.

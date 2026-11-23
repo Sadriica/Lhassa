@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from '../lib/toast'
 
-// The quarantine room (§2.9 — "sala de cuarentena"). Lists self-written tools by
+// The quarantine room (§2.9; "sala de cuarentena"). Lists self-written tools by
 // estado (cuarentena / graduada / rechazada) with their gate metric + usage info,
-// and lets a human graduate a candidate — "aprobación = merge": the server routes a
+// and lets a human graduate a candidate; "aprobación = merge": the server routes a
 // tool_graduation approval through the queue and merges the candidate branch.
 const ESTADO_STYLES = {
   cuarentena: 'bg-amber-900/40 text-amber-300 border-amber-700',

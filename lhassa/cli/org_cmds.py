@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""``lhassa org`` — manage the org TOPOLOGY (1..N brains, any hierarchy).
+"""``lhassa org``: manage the org TOPOLOGY (1..N brains, any hierarchy).
 
 A small, OFFLINE management surface over the topology file
 (``config.org_topology_file``): inspect the chart, add/remove brains, preview where
@@ -7,8 +7,8 @@ a goal would route, and run a goal end-to-end. No LLM and no network are touched
 the management commands; ``org run`` only thinks for real when ``LHASSA_ORG_LIVE=1``
 (otherwise the department executor returns its deterministic offline result).
 
-It is registered onto the main Typer ``app`` as a sub-app — see ``lhassa.cli.app``
-(``app.add_typer(org_cmds.org_app, name="org")``) — alongside, and without
+It is registered onto the main Typer ``app`` as a sub-app; see ``lhassa.cli.app``
+(``app.add_typer(org_cmds.org_app, name="org")``); alongside, and without
 disturbing, the default chat/REPL and the existing power subcommands.
 """
 
@@ -375,9 +375,9 @@ def move_cmd(
     parent: str = typer.Option(..., "--parent", help="The new parent brain id."),
     json_out: bool = typer.Option(False, "--json", help="Emit the chart as JSON."),
 ) -> None:
-    """Re-parent a brain — change WHO COMMANDS WHOM.
+    """Re-parent a brain; change WHO COMMANDS WHOM.
 
-    The permanent administrator (Lhassa) cannot be moved/demoted — that is rejected.
+    The permanent administrator (Lhassa) cannot be moved/demoted; that is rejected.
     """
     from lhassa.org import management, topology as topo
 
@@ -512,7 +512,7 @@ def apply_cmd(
     template_id: str = typer.Argument(..., help="Template id (see `lhassa org templates`)."),
     json_out: bool = typer.Option(False, "--json", help="Emit the updated chart as JSON."),
 ) -> None:
-    """Apply a template — create its brains under Lhassa (idempotent)."""
+    """Apply a template; create its brains under Lhassa (idempotent)."""
     from lhassa.org import templates
 
     config = _config()
@@ -556,7 +556,7 @@ def monitor_cmd(
     out = _out()
     live = report.get("live")
     out.print(
-        f"Monitor — {report.get('department', department)} "
+        f"Monitor; {report.get('department', department)} "
         f"({'live' if live else 'offline'})",
         style="bold",
     )

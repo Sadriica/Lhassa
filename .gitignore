@@ -8,6 +8,7 @@ wheels/
 
 # Virtual environment
 .venv/
+.venv-core/
 
 # Secrets — never commit
 .env
@@ -41,3 +42,8 @@ dashboard/playwright-report/
 
 # Agent worktrees — throwaway checkouts, never versioned
 .claude/worktrees/
+
+# Coverage (make cov)
+.coverage
+htmlcov/
+CLAUDE.md

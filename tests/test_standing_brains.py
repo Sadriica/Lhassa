@@ -1,4 +1,4 @@
-"""Standing brains (Wave 1) — a project's review brains attach AUTOMATICALLY.
+"""Standing brains (Wave 1); a project's review brains attach AUTOMATICALLY.
 
 Covers: kind->template map + env override parsing; ``template_is_read_only``
 true/false/unknown-fail-closed; the ``attach_project_template`` action attaches
@@ -48,7 +48,7 @@ def _fresh_topology(tmp_path, monkeypatch):
     """Redirect the org topology file so template instantiation is isolated.
 
     ``Config.org_topology_file`` is a class attribute evaluated at import time
-    (``os.getenv(...)``), so setting the env var post-import has no effect —
+    (``os.getenv(...)``), so setting the env var post-import has no effect;
     the attribute itself must be monkeypatched.
     """
     from lhassa.config import Config
@@ -171,7 +171,7 @@ def test_sense_mints_for_mapped_kind_only(brain):
     _create("proj-generic", kind="generic")
 
     out = _run_sense()
-    assert out == []  # the sense emits no triggers — it mints a task
+    assert out == []  # the sense emits no triggers; it mints a task
 
     tasks = asyncio.run(brain.list_tasks("inst_personal"))
     mine = [t for t in tasks if t["accion"] == "attach_project_template"]

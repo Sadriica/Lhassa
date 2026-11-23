@@ -1,29 +1,29 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """
-The knowledge graph — a deterministic READ-MODEL over what the grande already
+The knowledge graph; a deterministic READ-MODEL over what the grande already
 stores. No new heavy storage, no model call: entities and edges are derived on
 the fly from fact tags/contenido and the episode log (via the existing FTS5
 recall index), so "what do I know about X?" is answered from stored facts
 without ever spending a token.
 
 Entity extraction (simple, documented, $0):
-  - every fact **tag** is an entity (the strongest signal — a human tagged it).
+  - every fact **tag** is an entity (the strongest signal; a human tagged it).
   - a lightweight regex over fact ``contenido`` (and, for co-occurrence, episode
     text) pulls out capitalized-multiword terms ("Sezzle", "Ana Torres") and
     quoted terms ('"the Q3 report"'), lowercased tags aside.
-  - honest limits: this is NOT NLP — no lemmatization, no coreference ("my
+  - honest limits: this is NOT NLP; no lemmatization, no coreference ("my
     sister" and "Ana" are not linked unless a fact ties them together), no
     disambiguation between two entities that share a surface form, and a
     capitalized common word at a sentence start ("The owner likes...") can
     slip in as a false positive. It is deliberately just useful, not perfect.
 
 Edges are **co-occurrence**: two entities are "related" when they appear
-together in the same fact or episode. There is no separate edge table — the
+together in the same fact or episode. There is no separate edge table; the
 graph is computed at query time from the rows :func:`load_facts` /
 :func:`search_episodes` / :func:`load_recent_episodes` already return.
 
 Every function here is defensive: on any error (missing DB, bad state) it
-degrades to an empty result — it never raises and never calls a model.
+degrades to an empty result; it never raises and never calls a model.
 """
 
 from __future__ import annotations
@@ -35,7 +35,7 @@ from lhassa.config import Config
 from lhassa.core import db
 from lhassa.memory.facts import Fact, load_facts, resolve
 
-# A capitalized multiword term ("Sezzle", "Ana Torres", "San Francisco") — two+
+# A capitalized multiword term ("Sezzle", "Ana Torres", "San Francisco"); two+
 # letters starting with an uppercase, optionally chained by a space into further
 # capitalized words. Deliberately simple: no NLP, just a useful surface-form cue.
 _CAP_TERM_RE = re.compile(r"\b[A-Z][a-zA-Z0-9]+(?:\s+[A-Z][a-zA-Z0-9]+)*\b")
@@ -44,7 +44,7 @@ _CAP_TERM_RE = re.compile(r"\b[A-Z][a-zA-Z0-9]+(?:\s+[A-Z][a-zA-Z0-9]+)*\b")
 _QUOTED_RE = re.compile(r"[\"“]([^\"”]{2,60})[\"”]|'([^']{2,60})'")
 
 # Common leading words that are capitalized only by sentence position, not
-# because they name an entity — filtered out so they don't pollute the graph.
+# because they name an entity; filtered out so they don't pollute the graph.
 _STOPWORDS = {
     "The", "A", "An", "It", "I", "This", "That", "These", "Those", "My", "Its",
     "Owner", "Lhassa",
@@ -135,7 +135,7 @@ async def what_do_i_know(
         }
 
     An empty/blank query, or any internal failure, degrades to an empty
-    result — this never raises and never calls a model.
+    result; this never raises and never calls a model.
     """
     empty = {
         "query": query or "",
@@ -165,7 +165,7 @@ async def what_do_i_know(
             for term in _fact_terms(f):
                 if not _matches(query, {term}):
                     related[term] += 1
-        # Episode snippets are shorter/noisier — still worth a co-occurrence pass.
+        # Episode snippets are shorter/noisier; still worth a co-occurrence pass.
         for ep in episodes:
             for term in _extract_terms(_episode_text(ep)):
                 if not _matches(query, {term}):
@@ -200,12 +200,12 @@ async def what_do_i_know(
 
 async def entities(instance_id: str | None = None, *, config=None) -> list[dict]:
     """
-    The distinct entities the brain tracks — a map of what it knows about.
+    The distinct entities the brain tracks; a map of what it knows about.
 
     Each entry: ``{"term": str, "mentions": int, "last_seen": str, "source":
     "tag" | "text"}``. Built from fact tags (source ``"tag"``) and recurring
     capitalized/quoted terms across facts + recent episodes (source
-    ``"text"``, only kept if mentioned 2+ times — a single stray capitalized
+    ``"text"``, only kept if mentioned 2+ times; a single stray capitalized
     word is noise, not an entity worth surfacing). Sorted by mention count
     descending, then most-recently-seen. Never raises; degrades to ``[]``.
     """
@@ -222,7 +222,7 @@ async def entities(instance_id: str | None = None, *, config=None) -> list[dict]
             mentions[term] += 1
             if when and (term not in last_seen or when > last_seen[term]):
                 last_seen[term] = when
-            # A tag is the stronger signal — once tagged, stays tagged.
+            # A tag is the stronger signal; once tagged, stays tagged.
             if sources.get(term) != "tag":
                 sources[term] = source
 
@@ -278,7 +278,7 @@ async def timeline(instance_id: str | None, entity: str, *, config=None) -> list
 
         episodes = await _recent_episodes(instance_id)
         matched_episodes = [ep for ep in episodes if _matches(entity, _episode_terms(ep))]
-        # Also fold in FTS5 recall hits — they may reach further back than the
+        # Also fold in FTS5 recall hits; they may reach further back than the
         # bounded "recent" window above.
         try:
             recall_hits = await db.search_episodes(instance_id, entity, 50)
@@ -321,7 +321,7 @@ async def timeline(instance_id: str | None, entity: str, *, config=None) -> list
         return []
 
 
-# ── public extraction aliases (reused by memory/kg.py — behavior unchanged) ──
+# ── public extraction aliases (reused by memory/kg.py; behavior unchanged) ──
 #
 # The persisted knowledge graph (Wave 3, memory/kg.py) feeds off the SAME
 # deterministic extraction this read-model already uses, so entity terms are

@@ -1,30 +1,30 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Deterministic chat-intent classifier — the router for the answer cache.
+"""Deterministic chat-intent classifier; the router for the answer cache.
 
-"Thinking is the EXCEPTION" (§CLAUDE.md): before a Telegram turn spends a model
-call, this module answers one cheap ($0, no model, no embeddings) question —
-*what kind of message is this?* — so the caller (``notify.telegram_inbound``)
+"Thinking is the EXCEPTION" (doc/concepts.md): before a Telegram turn spends a model
+call, this module answers one cheap ($0, no model, no embeddings) question;
+*what kind of message is this?*; so the caller (``chat.think``)
 can decide whether an answer cache lookup even applies.
 
 Four buckets, in priority order (the first matching rule wins):
 
-  "command"    — starts with ``/`` (the slash-command registry already handles
+  "command"   : starts with ``/`` (the slash-command registry already handles
                  these before the brain is ever asked; this bucket exists so a
                  caller can short-circuit without re-deriving the check).
-  "live_data"  — time-sensitive: news, prices, weather, scores, "today"/"now"/
-                 "hoy"/"ahora" — anything whose correct answer changes over time.
+  "live_data" : time-sensitive: news, prices, weather, scores, "today"/"now"/
+                 "hoy"/"ahora": anything whose correct answer changes over time.
                  MUST NEVER be served from the answer cache (a cached "today's
-                 weather" is a lie tomorrow) — this is exactly what already
+                 weather" is a lie tomorrow); this is exactly what already
                  routes to the research bridge (``actionpack/_research.py``,
-                 ``notify.telegram_inbound``'s ``[[research: …]]`` marker).
-  "cacheable"  — a STABLE factual/how-to/definitional question: the answer
+                 ``chat.markers``' ``[[research: …]]`` marker).
+  "cacheable" : a STABLE factual/how-to/definitional question: the answer
                  doesn't rot (a capital city, a definition, "how do I install
                  X"). Safe to serve from a past answer once semantically
                  similar enough.
-  "judgment"   — everything else (small talk, opinions, anything about "my"
-                 state/plans, ambiguous asks) — always needs a real think.
+  "judgment"  : everything else (small talk, opinions, anything about "my"
+                 state/plans, ambiguous asks); always needs a real think.
 
-Pure rules + keyword/regex signals. No model, no embeddings, no I/O — a single
+Pure rules + keyword/regex signals. No model, no embeddings, no I/O; a single
 function call, always $0, never raises (a malformed/None input degrades to
 "judgment", the safest default: when in doubt, actually think).
 """
@@ -37,7 +37,7 @@ import re
 # Reuses the same news/today vocabulary as actionpack/_research.py (the
 # existing live-data router) plus prices/weather/scores, which that module
 # doesn't need to detect itself (the research bridge only sharpens an ALREADY
-# live-data query — this classifier is what routes it there in the first place).
+# live-data query; this classifier is what routes it there in the first place).
 _LIVE_DATA_RE = re.compile(
     r"\b("
     r"noticias?|news|headlines?|titulares|última hora|breaking|"
@@ -53,7 +53,7 @@ _LIVE_DATA_RE = re.compile(
 )
 
 # ── cacheable: stable factual / how-to / definitional questions ─────────────
-# A positive-signal list (NOT "any question is cacheable") — a question needs
+# A positive-signal list (NOT "any question is cacheable"); a question needs
 # to actually look definitional/how-to shaped to land here; anything else
 # (opinions, plans, small talk) falls through to judgment.
 _CACHEABLE_RE = re.compile(
@@ -76,7 +76,7 @@ _CACHEABLE_RE = re.compile(
     r")"
 )
 
-# "capital of France" / "capital de Francia" style — cacheable even mid-sentence.
+# "capital of France" / "capital de Francia" style; cacheable even mid-sentence.
 _CACHEABLE_ANYWHERE_RE = re.compile(
     r"\b(capital of|capital de|how (to|do i)|c[oó]mo (hago|instalo|configuro))\b",
     re.IGNORECASE,
@@ -88,7 +88,7 @@ def classify(text: str) -> str:
 
     Returns one of ``"command"``, ``"live_data"``, ``"cacheable"``, ``"judgment"``.
     Never raises: a falsy/non-string input is treated as ``"judgment"`` (the
-    safe default — an ambiguous message always gets a real think, never a bad
+    safe default; an ambiguous message always gets a real think, never a bad
     cache hit).
     """
     try:
@@ -101,7 +101,7 @@ def classify(text: str) -> str:
     if stripped.startswith("/"):
         return "command"
 
-    # live_data takes priority over cacheable — "what's the weather today"
+    # live_data takes priority over cacheable; "what's the weather today"
     # matches both a cacheable "what is" prefix AND a live-data keyword; the
     # correctness rule (never cache time-sensitive data) must win.
     if _LIVE_DATA_RE.search(stripped):
@@ -113,27 +113,27 @@ def classify(text: str) -> str:
     return "judgment"
 
 
-# ── work-type classification (Plan 4, Stream 1 — task identification) ───────
+# ── work-type classification (Plan 4, Stream 1; task identification) ───────
 #
 # A SECOND, independent $0 axis over the same inbound text: not "can this be
-# cached" but "what KIND of work is this" — the input to the working-mode
+# cached" but "what KIND of work is this": the input to the working-mode
 # registry (``notify.modes``) and the effort resolver (``core.effort``). Pure
 # regex + optional episode signals (never a model), same "never raises,
 # degrades to the safest default" contract as :func:`classify` above. The
 # default here is ``"question"`` (answer directly, minimal effort) rather than
-# ``classify``'s ``"judgment"`` — the safest default for THIS axis is the
+# ``classify``'s ``"judgment"``: the safest default for THIS axis is the
 # cheapest mode, not the most expensive one; a genuinely hard ask still gets
 # routed to real judgment inside its mode/effort, it just isn't assumed to be
 # expensive before there's any signal that it is.
 #
 # Six buckets, checked in priority order (most specific verb-shaped signal
 # first; "question" is both a positive match AND the catch-all):
-#   "build"       — write/implement/fix/create code or a concrete artifact.
-#   "review"      — look over/audit/critique existing work.
-#   "maintenance" — housekeeping: clean up, sync, archive, update in place.
-#   "decision"    — choose between options, a recommendation is requested.
-#   "research"    — investigate/find out/compare, an open-ended lookup.
-#   "question"    — a direct ask with a bounded answer (default).
+#   "build"      : write/implement/fix/create code or a concrete artifact.
+#   "review"     : look over/audit/critique existing work.
+#   "maintenance": housekeeping: clean up, sync, archive, update in place.
+#   "decision"   : choose between options, a recommendation is requested.
+#   "research"   : investigate/find out/compare, an open-ended lookup.
+#   "question"   : a direct ask with a bounded answer (default).
 WORK_TYPES = ("question", "research", "build", "review", "maintenance", "decision")
 
 _BUILD_RE = re.compile(
@@ -192,7 +192,7 @@ _RESEARCH_RE = re.compile(
 def classify_work_type(text: str) -> str:
     """Classify one message into a WORK TYPE (the task-identification axis).
 
-    Returns one of :data:`WORK_TYPES`. Pure regex, no model, never raises — a
+    Returns one of :data:`WORK_TYPES`. Pure regex, no model, never raises; a
     falsy/non-string input, or text matching none of the specific buckets,
     degrades to ``"question"`` (the cheapest mode/effort combination, never a
     silently expensive default).

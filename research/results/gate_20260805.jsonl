@@ -1,0 +1,54 @@
+{"arm": "a", "task": "hello", "seed": 0, "passed": false, "tokens_in": 5504, "tokens_out": 336, "tokens_cache": 65152, "latency_ms": 16174, "detail": "python3: can't open file '/tmp/fase2_arm_iiwhkm7m/repo/test_hello.py': [Errno 2] No such file or directory\n"}
+{"arm": "c", "task": "hello", "seed": 0, "passed": true, "tokens_in": 267, "tokens_out": 243, "tokens_cache": 26624, "latency_ms": 10274, "detail": "OK\n"}
+{"arm": "d", "task": "hello", "seed": 0, "passed": true, "tokens_in": 268, "tokens_out": 236, "tokens_cache": 26496, "latency_ms": 10344, "detail": "OK\n"}
+{"arm": "a", "task": "hello", "seed": 1, "passed": false, "tokens_in": 5396, "tokens_out": 338, "tokens_cache": 50816, "latency_ms": 15093, "detail": "python3: can't open file '/tmp/fase2_arm_0un4jpc_/repo/test_hello.py': [Errno 2] No such file or directory\n"}
+{"arm": "c", "task": "hello", "seed": 1, "passed": true, "tokens_in": 341, "tokens_out": 336, "tokens_cache": 35712, "latency_ms": 13311, "detail": "OK\n"}
+{"arm": "d", "task": "hello", "seed": 1, "passed": true, "tokens_in": 282, "tokens_out": 246, "tokens_cache": 26496, "latency_ms": 10783, "detail": "OK\n"}
+{"arm": "a", "task": "hello", "seed": 2, "passed": false, "tokens_in": 5626, "tokens_out": 341, "tokens_cache": 65408, "latency_ms": 16359, "detail": "python3: can't open file '/tmp/fase2_arm_7e8xv01d/repo/test_hello.py': [Errno 2] No such file or directory\n"}
+{"arm": "c", "task": "hello", "seed": 2, "passed": true, "tokens_in": 266, "tokens_out": 222, "tokens_cache": 26624, "latency_ms": 10491, "detail": "OK\n"}
+{"arm": "d", "task": "hello", "seed": 2, "passed": true, "tokens_in": 550, "tokens_out": 241, "tokens_cache": 35456, "latency_ms": 13984, "detail": "OK\n"}
+{"arm": "a", "task": "fib", "seed": 0, "passed": false, "tokens_in": 5260, "tokens_out": 182, "tokens_cache": 36736, "latency_ms": 11024, "detail": "python3: can't open file '/tmp/fase2_arm_bkzj4y5i/repo/test_fib.py': [Errno 2] No such file or directory\n"}
+{"arm": "c", "task": "fib", "seed": 0, "passed": true, "tokens_in": 1028, "tokens_out": 235, "tokens_cache": 36352, "latency_ms": 12057, "detail": "OK\n"}
+{"arm": "d", "task": "fib", "seed": 0, "passed": true, "tokens_in": 294, "tokens_out": 304, "tokens_cache": 26496, "latency_ms": 11104, "detail": "(cheap degraded to recorder) OK\n"}
+{"arm": "a", "task": "fib", "seed": 1, "passed": false, "tokens_in": 5425, "tokens_out": 353, "tokens_cache": 51072, "latency_ms": 14097, "detail": "python3: can't open file '/tmp/fase2_arm_c8g7hkaq/repo/test_fib.py': [Errno 2] No such file or directory\n"}
+{"arm": "c", "task": "fib", "seed": 1, "passed": true, "tokens_in": 816, "tokens_out": 232, "tokens_cache": 36480, "latency_ms": 12166, "detail": "OK\n"}
+{"arm": "d", "task": "fib", "seed": 1, "passed": true, "tokens_in": 212, "tokens_out": 325, "tokens_cache": 26624, "latency_ms": 11648, "detail": "(cheap degraded to recorder) OK\n"}
+{"arm": "a", "task": "fib", "seed": 2, "passed": false, "tokens_in": 5365, "tokens_out": 359, "tokens_cache": 50688, "latency_ms": 14457, "detail": "python3: can't open file '/tmp/fase2_arm_0n1yru97/repo/test_fib.py': [Errno 2] No such file or directory\n"}
+{"arm": "c", "task": "fib", "seed": 2, "passed": true, "tokens_in": 1104, "tokens_out": 281, "tokens_cache": 36736, "latency_ms": 12771, "detail": "OK\n"}
+{"arm": "d", "task": "fib", "seed": 2, "passed": true, "tokens_in": 107, "tokens_out": 327, "tokens_cache": 26752, "latency_ms": 11024, "detail": "(cheap degraded to recorder) OK\n"}
+{"arm": "a", "task": "countwords", "seed": 0, "passed": false, "tokens_in": 5629, "tokens_out": 326, "tokens_cache": 51584, "latency_ms": 13523, "detail": "python3: can't open file '/tmp/fase2_arm_dt5_h_oi/repo/test_countwords.py': [Errno 2] No such file or directory\n"}
+{"arm": "c", "task": "countwords", "seed": 0, "passed": true, "tokens_in": 991, "tokens_out": 294, "tokens_cache": 37120, "latency_ms": 12902, "detail": "OK\n"}
+{"arm": "d", "task": "countwords", "seed": 0, "passed": true, "tokens_in": 881, "tokens_out": 241, "tokens_cache": 36864, "latency_ms": 13095, "detail": "OK\n"}
+{"arm": "a", "task": "countwords", "seed": 1, "passed": false, "tokens_in": 5391, "tokens_out": 276, "tokens_cache": 51072, "latency_ms": 14725, "detail": "python3: can't open file '/tmp/fase2_arm_ryuyrfue/repo/test_countwords.py': [Errno 2] No such file or directory\n"}
+{"arm": "c", "task": "countwords", "seed": 1, "passed": true, "tokens_in": 817, "tokens_out": 243, "tokens_cache": 36608, "latency_ms": 13632, "detail": "OK\n"}
+{"arm": "d", "task": "countwords", "seed": 1, "passed": true, "tokens_in": 939, "tokens_out": 256, "tokens_cache": 36608, "latency_ms": 14236, "detail": "OK\n"}
+{"arm": "a", "task": "countwords", "seed": 2, "passed": false, "tokens_in": 5155, "tokens_out": 90, "tokens_cache": 22528, "latency_ms": 9528, "detail": "python3: can't open file '/tmp/fase2_arm_m_qk03rs/repo/test_countwords.py': [Errno 2] No such file or directory\n"}
+{"arm": "c", "task": "countwords", "seed": 2, "passed": true, "tokens_in": 658, "tokens_out": 147, "tokens_cache": 27136, "latency_ms": 9916, "detail": "OK\n"}
+{"arm": "d", "task": "countwords", "seed": 2, "passed": true, "tokens_in": 996, "tokens_out": 263, "tokens_cache": 36480, "latency_ms": 13527, "detail": "OK\n"}
+{"arm": "a", "task": "stats", "seed": 0, "passed": false, "tokens_in": 5996, "tokens_out": 450, "tokens_cache": 52352, "latency_ms": 17583, "detail": "python3: can't open file '/tmp/fase2_arm_b8ytq4tc/repo/test_stats.py': [Errno 2] No such file or directory\n"}
+{"arm": "c", "task": "stats", "seed": 0, "passed": true, "tokens_in": 1112, "tokens_out": 242, "tokens_cache": 36608, "latency_ms": 14012, "detail": "OK\n"}
+{"arm": "d", "task": "stats", "seed": 0, "passed": true, "tokens_in": 897, "tokens_out": 227, "tokens_cache": 36480, "latency_ms": 14641, "detail": "(cheap degraded to recorder) OK\n"}
+{"arm": "a", "task": "stats", "seed": 1, "passed": false, "tokens_in": 5750, "tokens_out": 506, "tokens_cache": 80128, "latency_ms": 18734, "detail": "python3: can't open file '/tmp/fase2_arm__xaku_0j/repo/test_stats.py': [Errno 2] No such file or directory\n"}
+{"arm": "c", "task": "stats", "seed": 1, "passed": true, "tokens_in": 987, "tokens_out": 224, "tokens_cache": 36736, "latency_ms": 12322, "detail": "OK\n"}
+{"arm": "d", "task": "stats", "seed": 1, "passed": true, "tokens_in": 929, "tokens_out": 211, "tokens_cache": 36352, "latency_ms": 11722, "detail": "(cheap degraded to recorder) OK\n"}
+{"arm": "a", "task": "stats", "seed": 2, "passed": false, "tokens_in": 5542, "tokens_out": 276, "tokens_cache": 51328, "latency_ms": 16671, "detail": "python3: can't open file '/tmp/fase2_arm_fr8ln4d4/repo/test_stats.py': [Errno 2] No such file or directory\n"}
+{"arm": "c", "task": "stats", "seed": 2, "passed": true, "tokens_in": 1117, "tokens_out": 263, "tokens_cache": 36736, "latency_ms": 14409, "detail": "OK\n"}
+{"arm": "d", "task": "stats", "seed": 2, "passed": true, "tokens_in": 882, "tokens_out": 215, "tokens_cache": 36480, "latency_ms": 14804, "detail": "(cheap degraded to recorder) OK\n"}
+{"arm": "a", "task": "palindrome", "seed": 0, "passed": false, "tokens_in": 5729, "tokens_out": 230, "tokens_cache": 50816, "latency_ms": 15539, "detail": "python3: can't open file '/tmp/fase2_arm___u4rek9/repo/test_palindrome.py': [Errno 2] No such file or directory\n"}
+{"arm": "c", "task": "palindrome", "seed": 0, "passed": true, "tokens_in": 1104, "tokens_out": 232, "tokens_cache": 36608, "latency_ms": 14443, "detail": "OK\n"}
+{"arm": "d", "task": "palindrome", "seed": 0, "passed": true, "tokens_in": 1187, "tokens_out": 278, "tokens_cache": 36992, "latency_ms": 14361, "detail": "OK\n"}
+{"arm": "a", "task": "palindrome", "seed": 1, "passed": false, "tokens_in": 5355, "tokens_out": 352, "tokens_cache": 51328, "latency_ms": 18349, "detail": "python3: can't open file '/tmp/fase2_arm_btwvpl9f/repo/test_palindrome.py': [Errno 2] No such file or directory\n"}
+{"arm": "c", "task": "palindrome", "seed": 1, "passed": true, "tokens_in": 905, "tokens_out": 258, "tokens_cache": 36736, "latency_ms": 13459, "detail": "OK\n"}
+{"arm": "d", "task": "palindrome", "seed": 1, "passed": true, "tokens_in": 1475, "tokens_out": 427, "tokens_cache": 48000, "latency_ms": 17437, "detail": "OK\n"}
+{"arm": "a", "task": "palindrome", "seed": 2, "passed": false, "tokens_in": 5154, "tokens_out": 330, "tokens_cache": 63744, "latency_ms": 18332, "detail": "python3: can't open file '/tmp/fase2_arm_4n_epdml/repo/test_palindrome.py': [Errno 2] No such file or directory\n"}
+{"arm": "c", "task": "palindrome", "seed": 2, "passed": true, "tokens_in": 2995, "tokens_out": 295, "tokens_cache": 40832, "latency_ms": 15633, "detail": "OK\n"}
+{"arm": "d", "task": "palindrome", "seed": 2, "passed": true, "tokens_in": 1091, "tokens_out": 292, "tokens_cache": 36736, "latency_ms": 13804, "detail": "OK\n"}
+{"arm": "a", "task": "fizzbuzz", "seed": 0, "passed": false, "tokens_in": 5875, "tokens_out": 376, "tokens_cache": 51712, "latency_ms": 16664, "detail": "python3: can't open file '/tmp/fase2_arm_17vy5fao/repo/test_fizzbuzz.py': [Errno 2] No such file or directory\n"}
+{"arm": "c", "task": "fizzbuzz", "seed": 0, "passed": true, "tokens_in": 1375, "tokens_out": 213, "tokens_cache": 36736, "latency_ms": 14667, "detail": "OK\n"}
+{"arm": "d", "task": "fizzbuzz", "seed": 0, "passed": true, "tokens_in": 1068, "tokens_out": 223, "tokens_cache": 36736, "latency_ms": 13269, "detail": "(cheap degraded to recorder) OK\n"}
+{"arm": "a", "task": "fizzbuzz", "seed": 1, "passed": false, "tokens_in": 5744, "tokens_out": 431, "tokens_cache": 51840, "latency_ms": 18661, "detail": "python3: can't open file '/tmp/fase2_arm__ggg3za0/repo/test_fizzbuzz.py': [Errno 2] No such file or directory\n"}
+{"arm": "c", "task": "fizzbuzz", "seed": 1, "passed": true, "tokens_in": 1102, "tokens_out": 257, "tokens_cache": 36992, "latency_ms": 13223, "detail": "OK\n"}
+{"arm": "d", "task": "fizzbuzz", "seed": 1, "passed": true, "tokens_in": 650, "tokens_out": 229, "tokens_cache": 35840, "latency_ms": 12307, "detail": "(cheap degraded to recorder) OK\n"}
+{"arm": "a", "task": "fizzbuzz", "seed": 2, "passed": false, "tokens_in": 5677, "tokens_out": 411, "tokens_cache": 51840, "latency_ms": 16789, "detail": "python3: can't open file '/tmp/fase2_arm_xa56cuqe/repo/test_fizzbuzz.py': [Errno 2] No such file or directory\n"}
+{"arm": "c", "task": "fizzbuzz", "seed": 2, "passed": true, "tokens_in": 1197, "tokens_out": 257, "tokens_cache": 37120, "latency_ms": 15555, "detail": "OK\n"}
+{"arm": "d", "task": "fizzbuzz", "seed": 2, "passed": true, "tokens_in": 1050, "tokens_out": 217, "tokens_cache": 36736, "latency_ms": 14282, "detail": "(cheap degraded to recorder) OK\n"}

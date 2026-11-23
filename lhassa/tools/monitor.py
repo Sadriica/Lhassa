@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """
-Proactive monitoring tools — watch processes and files in the background,
+Proactive monitoring tools; watch processes and files in the background,
 notify via voice (if active) or desktop when the condition is met.
 """
 
@@ -9,7 +9,7 @@ from pathlib import Path
 from loguru import logger
 
 from lhassa.state import state
-from lhassa.voice.notifier import notify
+from lhassa.tools.notifier import notify
 
 
 def _stat_signature(p: Path) -> tuple[int, int, int, int]:
@@ -39,7 +39,7 @@ async def _monitor_file_change(path: Path, display: str):
         if current != baseline:
             msg = f"File {display} changed."
             logger.info(f"[monitor] {msg}")
-            await notify(msg, title="Lhassa — File Monitor")
+            await notify(msg, title="Lhassa File Monitor")
             await state.broadcast({"type": "file_event", "path": str(path), "line": ""})
             return
 
@@ -87,7 +87,7 @@ async def _monitor_file_pattern(path: Path, display: str, pattern: str):
             if pattern_lower in line.lower():
                 msg = f"File {display}: {line[:200]}"
                 logger.info(f"[monitor] {msg}")
-                await notify(msg, title="Lhassa — File Monitor")
+                await notify(msg, title="Lhassa File Monitor")
                 await state.broadcast({"type": "file_event", "path": str(path), "line": line})
                 return
 
@@ -129,14 +129,14 @@ async def watch_process(
 
             message = f"Process {display} {status}."
             logger.info(f"[monitor] {message}")
-            await notify(message, title="Lhassa — Process Monitor")
+            await notify(message, title="Lhassa Process Monitor")
             await state.broadcast({"type": "process_done", "pid": proc.pid, "label": display})
 
         except Exception as e:
             logger.error(f"[monitor] watch_process error: {e}")
 
     asyncio.create_task(_monitor(), name=f"watch-pid-{proc.pid}")
-    return f"Watching {display} — I'll notify you when it finishes."
+    return f"Watching {display}; I'll notify you when it finishes."
 
 
 def _find_process(pid: int | None, name: str | None):
@@ -201,8 +201,8 @@ async def watch_file(
 
     asyncio.create_task(_monitor(), name=f"watch-file-{p.name}")
     if pattern:
-        return f"Watching {display} for '{pattern}' — I'll notify you when it appears."
-    return f"Watching {display} — I'll notify you when it changes."
+        return f"Watching {display} for '{pattern}': I'll notify you when it appears."
+    return f"Watching {display}; I'll notify you when it changes."
 
 
 # ── Command monitor ────────────────────────────────────────────────────────────
@@ -222,7 +222,7 @@ async def watch_command(
     # Same gate handle_shell crosses. This tool builds an identical
     # subprocess.run(..., shell=True) from model-supplied text, so skipping the
     # destructive-pattern check made `watch_command` a way around the guard the
-    # shell tool enforces — refuse before scheduling anything.
+    # shell tool enforces; refuse before scheduling anything.
     from lhassa.tools.guardrails import validate_shell_command
 
     validation_error = validate_shell_command(command)
@@ -250,7 +250,7 @@ async def watch_command(
                 if done:
                     msg = f"Command '{display}' completed. {output[:200]}" if output else f"Command '{display}' completed."
                     logger.info(f"[monitor] {msg}")
-                    await notify(msg, title="Lhassa — Command Monitor")
+                    await notify(msg, title="Lhassa Command Monitor")
                     await state.broadcast({"type": "command_done", "command": command, "output": output[:500]})
                     return
 

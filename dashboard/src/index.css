@@ -1,30 +1,30 @@
 @import "tailwindcss";
 
-/* ── Matte Obsidian — the Lhasa palette ────────────────────────────────────────
+/* ── Matte Obsidian; the Lhasa palette ────────────────────────────────────────
    A quiet-luxury dark theme drawn from the city of Lhasa: a DUOTONE of temple
    GOLD and monk-robe deep RED on warm-charcoal walls. Surfaces are FLAT and MATTE
    (no gradients, no blur, no colored glows); borders are warm-white HAIRLINES;
    shape is modest. Gold is a hairline accent (active bar, brand mark, small tags);
-   red is a real second voice (brand finial, section marks, the admin ring) — warm
+   red is a real second voice (brand finial, section marks, the admin ring); warm
    and regal, never an alarm. Sage GREEN means healthy. Typography is editorial:
    a transitional serif (Fraunces) for headings + the wordmark, Inter for UI,
    JetBrains Mono for ids/metrics. Everything themeable from :root + @theme.       */
 :root {
-  /* ── gold (restrained — hairline accent, never a fill/glow) ─────────────────── */
-  --lh-gold:        #d9a521;  /* temple gold — accent / active / focus             */
-  --lh-gold-soft:   #e8bf55;  /* lifted gold — hover text                          */
+  /* ── gold (restrained; hairline accent, never a fill/glow) ─────────────────── */
+  --lh-gold:        #d9a521;  /* temple gold; accent / active / focus             */
+  --lh-gold-soft:   #e8bf55;  /* lifted gold; hover text                          */
   --lh-gold-deep:   #b9881a;  /* pressed gold                                       */
 
-  /* ── red (a real co-accent — identity, used tastefully + sparingly) ─────────── */
-  --lh-red:         #a23e34;  /* monk-robe deep red — identity accent              */
-  --lh-red-deep:    #8f342b;  /* deeper red — fills / rings                         */
-  --lh-red-soft:    #c0584c;  /* lifted red — text on dark                         */
-  --lh-danger:      #cf5142;  /* clearer red — genuinely DESTRUCTIVE only          */
+  /* ── red (a real co-accent; identity, used tastefully + sparingly) ─────────── */
+  --lh-red:         #a23e34;  /* monk-robe deep red; identity accent              */
+  --lh-red-deep:    #8f342b;  /* deeper red; fills / rings                         */
+  --lh-red-soft:    #c0584c;  /* lifted red; text on dark                         */
+  --lh-danger:      #cf5142;  /* clearer red; genuinely DESTRUCTIVE only          */
 
   /* ── the rest of the five roles ─────────────────────────────────────────────── */
-  --lh-white:       #ece4d3;  /* warm snow-white — primary text                    */
-  --lh-green:       #7c9a5b;  /* sage — success / good cost / healthy              */
-  --lh-stone:       #8a8276;  /* muted stone — secondary / dim text                */
+  --lh-white:       #ece4d3;  /* warm snow-white; primary text                    */
+  --lh-green:       #7c9a5b;  /* sage; success / good cost / healthy              */
+  --lh-stone:       #8a8276;  /* muted stone; secondary / dim text                */
 
   /* ── canvas + warm-charcoal surfaces (matte, flat, never pure black) ────────── */
   --lh-bg:          #14110d;  /* deep warm-charcoal canvas                         */
@@ -55,7 +55,7 @@
   --lh-warn:        var(--lh-gold);
   --lh-alert:       var(--lh-red-soft);
 
-  /* ── focus ring (gold — a crisp ring, 0 blur, not a glow) ───────────────────── */
+  /* ── focus ring (gold; a crisp ring, 0 blur, not a glow) ───────────────────── */
   --lh-ring:        0 0 0 2px var(--lh-bg), 0 0 0 4px rgba(217, 165, 33, 0.5);
 
   /* ── shape + a single soft NEUTRAL matte shadow (low-opacity black, no spread) ─ */
@@ -74,7 +74,7 @@
 /* ── Tailwind v4 palette remap ─────────────────────────────────────────────────
    The panels use Tailwind named-color utilities (slate/amber/green/red/blue…).
    Remapping the scale here folds the WHOLE app into the matte Lhasa family with
-   zero JSX changes — neutrals → warm charcoal, amber/yellow → gold, green → sage,
+   zero JSX changes; neutrals → warm charcoal, amber/yellow → gold, green → sage,
    red/rose → monk-red, cool blues → gold.                                          */
 @theme {
   --font-sans: var(--lh-font-sans);
@@ -212,7 +212,7 @@ html, body {
     color: var(--lh-text-faint);
   }
 
-  /* ── Card — the elegant "block": flat matte surface, hairline border, modest
+  /* ── Card; the elegant "block": flat matte surface, hairline border, modest
      radius, a single soft neutral shadow. No gradient, no inner glow. ──────────── */
   .lh-card {
     position: relative;
@@ -240,10 +240,10 @@ html, body {
     letter-spacing: 0.005em;
     color: var(--lh-text);
   }
-  /* (kept as plain wrapper — the decorative crosshair grid is gone) */
+  /* (kept as plain wrapper; the decorative crosshair grid is gone) */
   .lh-precision-grid { position: relative; }
 
-  /* small eyebrow kicker — a restrained gold tag, hairline only */
+  /* small eyebrow kicker; a restrained gold tag, hairline only */
   .lh-kicker {
     display: inline-flex;
     align-items: center;
@@ -270,7 +270,7 @@ html, body {
     border-bottom: 1px solid var(--lh-hairline);
   }
 
-  /* Uppercase tracked section label — paired with a tiny red identity mark */
+  /* Uppercase tracked section label; paired with a tiny red identity mark */
   .lh-eyebrow {
     display: inline-flex;
     align-items: center;
@@ -293,7 +293,7 @@ html, body {
   /* Mono data treatment */
   .lh-mono { font-family: var(--lh-font-mono); font-feature-settings: "zero", "ss01"; }
 
-  /* Inset sub-card (rows inside a block) — flat, hairline */
+  /* Inset sub-card (rows inside a block); flat, hairline */
   .lh-row {
     background: var(--lh-surface-2);
     border: 1px solid var(--lh-border);
@@ -340,7 +340,7 @@ html, body {
     color: var(--lh-text-muted);
   }
 
-  /* Status pill — flat, no blur */
+  /* Status pill; flat, no blur */
   .lh-pill {
     display: inline-flex;
     align-items: center;
@@ -357,14 +357,14 @@ html, body {
     overflow: hidden;
     text-overflow: ellipsis;
   }
-  /* Status dots — solid matte, no colored glow */
+  /* Status dots; solid matte, no colored glow */
   .lh-dot { width: 7px; height: 7px; border-radius: 999px; background: var(--lh-text-faint); flex-shrink: 0; }
   .lh-dot-ok    { background: var(--lh-ok); }
   .lh-dot-accent{ background: var(--lh-gold); }
   .lh-dot-warn  { background: var(--lh-warn); }
   .lh-dot-alert { background: var(--lh-red); }
 
-  /* ── Buttons — quiet ghost/outlined, gold or red HAIRLINE, no glowing slabs ──── */
+  /* ── Buttons; quiet ghost/outlined, gold or red HAIRLINE, no glowing slabs ──── */
   .lh-btn {
     display: inline-flex;
     align-items: center;
@@ -404,13 +404,13 @@ html, body {
   }
   .lh-btn-danger:hover { background: rgba(207, 81, 66, 0.12); border-color: var(--lh-danger); }
 
-  /* ── Command hero — now a calm, flat content header (no gradients, no grid) ──── */
+  /* ── Command hero; now a calm, flat content header (no gradients, no grid) ──── */
   .lh-command-hero {
     position: relative;
     background: var(--lh-obsidian);
   }
 
-  /* Metric bar — solid gold fill, no glow */
+  /* Metric bar; solid gold fill, no glow */
   .lh-metric-bar {
     height: 4px;
     border-radius: 999px;
@@ -424,7 +424,7 @@ html, body {
     background: var(--lh-gold);
   }
 
-  /* Timeline — hairline spine, solid gold node, no glow */
+  /* Timeline; hairline spine, solid gold node, no glow */
   .lh-timeline {
     position: relative;
     padding-left: 1.05rem;
@@ -515,7 +515,7 @@ html, body {
   .lh-nav-item .lh-nav-icon { width: 16px; height: 16px; flex-shrink: 0; opacity: 0.7; }
   .lh-nav-item.active .lh-nav-icon { opacity: 1; color: var(--lh-gold); }
 
-  /* Sidebar — flat surface, hairline, soft neutral shadow, NO blur */
+  /* Sidebar; flat surface, hairline, soft neutral shadow, NO blur */
   .lh-sidebar {
     background: var(--lh-obsidian);
     border: 1px solid var(--lh-border);
@@ -527,7 +527,7 @@ html, body {
     gap: 0.5rem;
   }
 
-  /* Stat block (Overview budget/health/etc.) — flat, hairline */
+  /* Stat block (Overview budget/health/etc.); flat, hairline */
   .lh-nav-stat {
     padding: 0.75rem 0.85rem;
     border-radius: var(--lh-radius-sm);
@@ -551,13 +551,13 @@ html, body {
     overflow-wrap: anywhere;
   }
 
-  /* A thin rule — gold tipped with red (the duotone divider) */
+  /* A thin rule; gold tipped with red (the duotone divider) */
   .lh-rule {
     height: 1px;
     background: linear-gradient(90deg, var(--lh-red) 0 14%, rgba(217, 165, 33, 0.55) 14% 46%, var(--lh-border) 46% 100%);
   }
 
-  /* ── Brains canvas stage — full-width canvas with a floating inspector overlay ── */
+  /* ── Brains canvas stage; full-width canvas with a floating inspector overlay ── */
   .lh-canvas-stage { position: relative; }
 
   /* The inspector popup: on desktop/tablet it docks to the right edge of the canvas
@@ -595,7 +595,7 @@ html, body {
      and captures taps on mobile, where the inspector is a true modal bottom sheet. */
   .lh-inspector-scrim { display: none; }
 
-  /* ── Mobile top bar (hamburger) — only shown < 1024px (lg:hidden mirrors it) ──── */
+  /* ── Mobile top bar (hamburger); only shown < 1024px (lg:hidden mirrors it) ──── */
   .lh-topbar {
     display: flex;
     align-items: center;
@@ -643,7 +643,7 @@ html, body {
     cursor: pointer;
   }
 
-  /* ── Toast host — fixed, stacked action feedback. Matte surface + hairline +
+  /* ── Toast host; fixed, stacked action feedback. Matte surface + hairline +
      soft neutral shadow; a thin left mark carries the semantic color. Top-right
      on desktop; the responsive layer moves it to the bottom on phones. ────────── */
   .lh-toast-region {
@@ -724,7 +724,7 @@ html, body {
   }
   .lh-toast-close:hover { color: var(--lh-text); background: rgba(236, 228, 211, 0.06); }
 
-  /* ── Command palette (⌘K) — a dimmed backdrop + a matte modal launcher ───────── */
+  /* ── Command palette (⌘K); a dimmed backdrop + a matte modal launcher ───────── */
   .lh-cmdk-backdrop {
     position: fixed;
     inset: 0;
@@ -863,7 +863,7 @@ html, body {
 }
 
 /* ════════════════════════════════════════════════════════════════════════════
-   Responsive layer — the dashboard is mobile-first usable (phone → desktop).
+   Responsive layer; the dashboard is mobile-first usable (phone → desktop).
    Tailwind's lg: breakpoint is 1024px; these queries establish the drawer nav,
    the inspector bottom sheet, and touch-friendly sizing the utilities can't cover.
    ════════════════════════════════════════════════════════════════════════════ */
@@ -920,7 +920,7 @@ html, body {
     border-bottom: none;
     z-index: 50;
   }
-  /* The minimap crowds a small canvas — hide it (legend + controls stay reachable). */
+  /* The minimap crowds a small canvas; hide it (legend + controls stay reachable). */
   .lh-flow-canvas .react-flow__minimap { display: none; }
 
   /* Touch-friendly: comfortable tap targets and full-width form controls. */

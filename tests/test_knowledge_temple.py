@@ -1,7 +1,7 @@
-"""Temple wiring for ``ingest_knowledge`` — document perception.
+"""Temple wiring for ``ingest_knowledge``: document perception.
 
 Offline + $0. Trusts tests/test_org_temple.py for the generic down-execute-up
-loop mechanics — this file only asserts ingest_knowledge's OWN wiring: it's in
+loop mechanics; this file only asserts ingest_knowledge's OWN wiring: it's in
 the closed TEMPLE_ACTIONS set, resolve_worker attributes it to synchronizer,
 and the /temple command's keyword matcher routes to it without shadowing
 calendar_sync.

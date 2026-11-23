@@ -1,4 +1,4 @@
-"""Tests for lhassa.scheduler — the deprecated no-op shim.
+"""Tests for lhassa.scheduler; the deprecated no-op shim.
 
 The 30s poller is retired; reminders now go through core/db.py's tasks table
 + the heartbeat (see doc/scheduler.md). ``run_scheduler`` must degrade to a
@@ -15,7 +15,7 @@ async def test_run_scheduler_returns_immediately_and_logs_deprecation(monkeypatc
     messages = []
     monkeypatch.setattr(scheduler.logger, "info", lambda msg: messages.append(msg))
 
-    # Must not hang, sleep, or poll — a bounded await proves it returns.
+    # Must not hang, sleep, or poll; a bounded await proves it returns.
     await scheduler.run_scheduler()
 
     assert any("deprecated" in m.lower() for m in messages)

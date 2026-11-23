@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """
-review_capabilities — the utility tribunal's weekly sitting (deterministic, $0).
+review_capabilities; the utility tribunal's weekly sitting (deterministic, $0).
 
 The counterweight action to ``review_tools``/``curate_skills``: where those ask
 whether a TOOL still works or a SKILL still gets read, this asks whether a
@@ -9,7 +9,7 @@ CAPABILITY still serves the owner. Detection lives in
 no new storage); this module turns each finding into ONE parked approval and a
 single calm notification.
 
-It never retires anything. A registered action lives in code — the approval
+It never retires anything. A registered action lives in code; the approval
 records the recommendation and asks the owner to remove it or pin it. That is
 the same rule the project-detection sense follows: detection never acts, the
 owner's tap is the act.
@@ -24,7 +24,7 @@ from lhassa.notify.dispatch import notify as _notify
 from lhassa.security import approval as _approval
 
 # watch_state key prefix: a capability is put on the docket ONCE, not on every
-# weekly sweep — the same transition-dedup idiom detect_repetition uses.
+# weekly sweep; the same transition-dedup idiom detect_repetition uses.
 _SEEN_PREFIX = "utility:proposed:"
 
 # Never park more than this many approvals in a single sweep. The tribunal is
@@ -43,8 +43,8 @@ async def review_capabilities(params: dict) -> str:
     summary notification. Never raises; never calls an LLM.
 
     params:
-        instance_id  — defaults to Config.instance_id.
-        limit        — max approvals to park this run (default 5).
+        instance_id ; defaults to Config.instance_id.
+        limit       ; max approvals to park this run (default 5).
     """
     try:
         instance_id = params.get("instance_id") or Config.instance_id
@@ -69,9 +69,9 @@ async def review_capabilities(params: dict) -> str:
 
             state = row["state"]
             if state == _utility.STATE_UNUSED:
-                title = f"retire '{name}' — never used"
+                title = f"retire '{name}': never used"
             else:
-                title = f"retire '{name}' — only Lhassa itself uses it"
+                title = f"retire '{name}': only Lhassa itself uses it"
 
             payload = {
                 "accion": "retire_capability",
@@ -94,7 +94,7 @@ async def review_capabilities(params: dict) -> str:
         if proposed:
             msg = (
                 f"utility tribunal: {len(proposed)} capability(ies) have not "
-                f"earned their place — {', '.join(proposed)}. "
+                f"earned their place; {', '.join(proposed)}. "
                 "Approve to record the retirement, or pin them via "
                 "LHASSA_UTILITY_PINNED."
             )

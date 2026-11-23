@@ -1,4 +1,4 @@
-"""Tests for the MCP client — fully offline (no real MCP process or network).
+"""Tests for the MCP client; fully offline (no real MCP process or network).
 
 The SDK seams (``_sdk`` / ``_list_server_tools`` / ``_call_server_tool``) are
 monkeypatched, so connect + list_tools + call_tool are simulated in-process.
@@ -19,7 +19,7 @@ def _pipecat_available() -> bool:
     """Whether ``FunctionSchema`` can be imported.
 
     ``mcp_client._build_schema`` imports pipecat LAZILY and returns ``None``
-    when it is absent — the module is deliberately usable without the voice
+    when it is absent; the module is deliberately usable without the voice
     extra (``lhassa mcp list`` must work on a headless install). A test that
     asserts a schema unconditionally therefore encodes a dependency the code
     explicitly does not have, and fails on any base-deps environment while
@@ -48,7 +48,7 @@ class FakeTool:
 
 
 class FakeLLM:
-    """Stand-in for the pipecat LLM service — records registered functions."""
+    """Stand-in for the pipecat LLM service; records registered functions."""
 
     def __init__(self):
         self.functions = {}
@@ -58,7 +58,7 @@ class FakeLLM:
 
 
 class FakeParams:
-    """Stand-in for ``FunctionCallParams`` — captures the callback result."""
+    """Stand-in for ``FunctionCallParams``: captures the callback result."""
 
     def __init__(self, arguments):
         self.arguments = arguments
@@ -118,7 +118,7 @@ async def test_load_mcp_tools_namespaces(tmp_path, monkeypatch):
     names = {t["name"] for t in tools}
     assert names == {"mcp__files__read", "mcp__files__write"}
     read = next(t for t in tools if t["name"] == "mcp__files__read")
-    # Namespacing is this test's actual subject — always asserted.
+    # Namespacing is this test's actual subject; always asserted.
     assert read["server"] == "files" and read["tool"] == "read"
     # The pipecat schema is OPTIONAL by design (see _pipecat_available).
     if _pipecat_available():

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """
-Microsoft Graph client — Outlook email and calendar via MSAL device flow.
+Microsoft Graph client. Outlook email and calendar via MSAL device flow.
 
 First use: Lhassa prints a URL and code for the user to authenticate in a browser.
 The token is cached at ~/.lhassa/ms_token_cache.json and silently refreshed on
@@ -34,8 +34,8 @@ def _load_cache() -> msal.SerializableTokenCache:
         try:
             cache.deserialize(CACHE_PATH.read_text())
         except Exception:
-            # Corrupted cache — delete it and start fresh (user will re-authenticate)
-            logger.warning("Token cache corrupted — deleting and re-authenticating.")
+            # Corrupted cache; delete it and start fresh (user will re-authenticate)
+            logger.warning("Token cache corrupted; deleting and re-authenticating.")
             CACHE_PATH.unlink(missing_ok=True)
     return cache
 
@@ -64,7 +64,7 @@ def _acquire_token_sync(tenant_id: str, client_id: str) -> str:
     """
     app, cache = _build_app(tenant_id, client_id)
 
-    # Silent path — use cached/refreshed token
+    # Silent path; use cached/refreshed token
     accounts = app.get_accounts()
     if accounts:
         result = app.acquire_token_silent(SCOPES, account=accounts[0])
@@ -72,7 +72,7 @@ def _acquire_token_sync(tenant_id: str, client_id: str) -> str:
             _save_cache(cache)
             return result["access_token"]
 
-    # Interactive path — device flow
+    # Interactive path; device flow
     flow = app.initiate_device_flow(scopes=SCOPES)
     if "user_code" not in flow:
         raise RuntimeError(
@@ -110,7 +110,7 @@ async def get_access_token(tenant_id: str, client_id: str) -> str:
 
 # ── Graph API helpers ──────────────────────────────────────────────────────────
 
-# Cached client — reuses TCP connections across calls
+# Cached client; reuses TCP connections across calls
 _http: httpx.AsyncClient | None = None
 
 

@@ -3,13 +3,13 @@ import { getFlowRun, getFlowRunEvents, getFlowRuns } from '../../lib/api'
 import { shortWhen } from '../../lib/format'
 import { EmptyState, ErrorState, SectionHeader } from '../ui/common'
 
-// Durable flow runs — the client for `/api/flow-runs`, which had no surface at
+// Durable flow runs; the client for `/api/flow-runs`, which had no surface at
 // all until now. The list, one run's reconstructed record, and its append-only
 // event stream (RUN_CREATED → STEP_* → CHECKPOINT_SAVED → RUN_COMPLETED …).
 //
 // A run that has not reached a terminal status is POLLED every few seconds, so
 // the event stream fills in live without a WebSocket of its own. Polling stops
-// the moment the run terminates — an idle brain costs nothing to watch.
+// the moment the run terminates; an idle brain costs nothing to watch.
 //
 // Every payload value renders as a plain string child. Never
 // dangerouslySetInnerHTML: an event payload is data from the kernel, not markup.

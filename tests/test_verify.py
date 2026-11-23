@@ -1,9 +1,9 @@
 """
-Tests for ``lhassa.agents.verify`` — the objective gates that NEVER call an LLM.
+Tests for ``lhassa.agents.verify``: the objective gates that NEVER call an LLM.
 
 Fully offline: the ``_run`` subprocess seam and ``health.run_all`` are mocked, so
 nothing is spawned and no network/LLM is touched. A dedicated test patches the
-LLM provider to blow up and confirms the verifiers still run — proving the gate
+LLM provider to blow up and confirms the verifiers still run; proving the gate
 is model-free.
 """
 
@@ -180,68 +180,6 @@ def test_metric_error_is_failed():
     assert v.verify("x").passed is False
 
 
-# ── ResearchCorpusVerifier (shape/citations/experiment, no LLM) ─────────────
-
-def _valid_corpus():
-    return """## The idea in one sentence
-One bounded claim [S1].
-
-## Mechanics — down to the base
-The captured mechanism has two stages [S1].
-
-## Evidence the authors present
-- The authors report a result [S1].
-- A second claim is UNVERIFIED.
-
-## Sources
-- S1: https://example.test/paper; sha256=abc
-
-## Mapping to Lhassa
-No mapping has been verified.
-
-## Not yet verified by us — and the experiment that would
-Baseline: current route
-Instrument: LhassaBench
-Metric: verified pass rate
-Stop rule: 20 runs or the budget cap
-
-## Open questions
-- Does it generalize?
-"""
-
-
-def test_research_corpus_verifier_passes_complete_cited_draft():
-    result = V.verify(_valid_corpus(), spec={"type": "research_corpus"})
-    assert result.passed is True
-    assert "7 sections" in result.detail
-
-
-def test_research_corpus_verifier_rejects_unsupported_evidence_bullet():
-    text = _valid_corpus().replace(
-        "- The authors report a result [S1].",
-        "- The authors report a result.",
-    )
-    result = V.ResearchCorpusVerifier().verify(text)
-    assert result.passed is False
-    assert "lacks [S#] or UNVERIFIED" in result.detail
-
-
-def test_research_corpus_verifier_rejects_symbolic_last_heading_gate():
-    result = V.ResearchCorpusVerifier().verify("## Open questions\nAnything")
-    assert result.passed is False
-    assert "The idea in one sentence" in result.detail
-
-
-def test_idea_assessment_verifier_recomputes_the_budget():
-    import json
-
-    from tests.test_idea_assessments import document
-
-    result = V.IdeaAssessmentVerifier().verify(json.dumps(document(3)))
-    assert result.passed is True
-    assert "rigorous → experiment" in result.detail
-
-
 # ── dispatcher: make_verifier / verify ───────────────────────────────────────
 
 
@@ -267,7 +205,7 @@ def test_top_level_verify_runs_regex():
 
 
 def test_top_level_verify_degrades_on_bad_spec():
-    # Never raises — a bad spec is a failed result.
+    # Never raises; a bad spec is a failed result.
     assert V.verify("x", spec={"type": "nope"}).passed is False
     assert V.verify("x", spec={}).passed is False
 
@@ -280,9 +218,11 @@ def test_verifiers_registry_exposes_builtin_names():
     from lhassa.registry import Registry
 
     assert isinstance(V.VERIFIERS, Registry)
-    assert set(V.VERIFIERS.names()) == {
+    # Capability packs register their own gates when installed (the research
+    # pack adds research_corpus/idea_assessment); core's built-ins are fixed.
+    assert set(V.VERIFIERS.names()) >= {
         "command", "tests", "lint", "health", "regex", "metric",
-        "research_corpus", "idea_assessment", "contact_preserved",
+        "contact_preserved",
     }
     # The legacy ``_REGISTRY`` alias is a live read-only view of the same store.
     assert V._REGISTRY.get("regex") is V.RegexVerifier

@@ -1,4 +1,4 @@
-"""set_config — natural-language settings changes through the settings seam.
+"""set_config; natural-language settings changes through the settings seam.
 
 Offline, with the same isolation ``test_settings.py`` uses: HOME redirected so
 ``settings.env`` lands in a temp ``~/.lhassa``; every editable Config attr

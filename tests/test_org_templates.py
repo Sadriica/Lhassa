@@ -1,4 +1,4 @@
-"""Tests for lhassa.org.templates — use-case org presets.
+"""Tests for lhassa.org.templates; use-case org presets.
 
 Offline: a tiny Config stand-in redirects the topology file + skills dir to a tmp
 path (no real config/DB touched). Instantiation goes through the validated

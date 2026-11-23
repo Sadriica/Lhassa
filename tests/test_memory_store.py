@@ -1,4 +1,4 @@
-"""Tests for lhassa.memory.store — SQLite persistence layer."""
+"""Tests for lhassa.memory.store. SQLite persistence layer."""
 
 import pytest
 import pytest_asyncio  # noqa: F401

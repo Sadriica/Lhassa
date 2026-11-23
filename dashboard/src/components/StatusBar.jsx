@@ -18,7 +18,7 @@ function engineLabel(provider) {
 
 // The slim top bar: Lhassa wordmark + a provider/health status pill (pulled from
 // the existing /api/health) + live voice and WebSocket pills. A quiet, flat chrome
-// strip — matte, a hairline bottom divider, mono for the machine-y bits, a small
+// strip; matte, a hairline bottom divider, mono for the machine-y bits, a small
 // gold stupa mark with a monk-red finial.
 export default function StatusBar({ connected, voiceActive }) {
   const [health, setHealth] = useState(null)
@@ -49,7 +49,7 @@ export default function StatusBar({ connected, voiceActive }) {
       }}
     >
       <div className="flex items-center gap-3">
-        {/* Lhassa mark — the gold stupa with a monk-red finial */}
+        {/* Lhassa mark; the gold stupa with a monk-red finial */}
         <svg
           width="32" height="32" viewBox="0 0 48 48"
           className="rounded-[9px]"

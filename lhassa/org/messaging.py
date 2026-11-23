@@ -1,15 +1,15 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Typed inter-brain messaging — the task queue between brains (Fase 7).
+"""Typed inter-brain messaging; the task queue between brains (Fase 7).
 
 Inter-brain communication is **typed messages, never free prose**. A closed
 ``MessageKind`` enum is the whole vocabulary: a brain cannot invent a new kind of
 message, which is exactly what prevents collusion/contradiction and keeps the
-queue legible (the brief: "mensajes tipados entre instancias — NO prosa libre;
+queue legible (the brief: "mensajes tipados entre instancias. NO prosa libre;
 previene colusión/contradicción, es la cola de tareas entre cerebros").
 
 A ``Message`` is a frozen dataclass; ``corr_id`` threads a ``TASK_RESULT`` back to
 the ``TASK_ASSIGN`` it answers. Persistence is a thin layer over the instance-
-scoped ``org_messages`` helpers in :mod:`lhassa.core.db` — this is the durable
+scoped ``org_messages`` helpers in :mod:`lhassa.core.db`: this is the durable
 queue, not an in-memory bus.
 """
 
@@ -29,7 +29,7 @@ class UnknownMessageKind(ValueError):
 class MessageKind(str, Enum):
     """The CLOSED set of inter-brain message kinds. No free-prose kind exists.
 
-    Adding a kind is a deliberate schema change here — not something a brain can
+    Adding a kind is a deliberate schema change here; not something a brain can
     do at runtime. Each kind has a known payload shape (documented per producer).
     """
 
@@ -50,8 +50,8 @@ def _now() -> str:
 def coerce_kind(value: Union[MessageKind, str]) -> MessageKind:
     """Coerce ``value`` to a :class:`MessageKind`, rejecting anything unknown.
 
-    Accepts a ``MessageKind`` member or its string name/value. Any other token —
-    e.g. a free-prose "kind" — raises :class:`UnknownMessageKind`. This is the
+    Accepts a ``MessageKind`` member or its string name/value. Any other token;
+    e.g. a free-prose "kind": raises :class:`UnknownMessageKind`. This is the
     single choke point that enforces typed-only messaging.
     """
     if isinstance(value, MessageKind):
@@ -70,7 +70,7 @@ class Message:
     """One typed message on the inter-brain queue (immutable once created).
 
     Fields: ``id``, ``kind`` (a :class:`MessageKind`), ``from_instance`` /
-    ``to_instance`` (logical brain identities — e.g. ``"general"`` or
+    ``to_instance`` (logical brain identities; e.g. ``"general"`` or
     ``"dept:sales"``), ``payload`` (a dict, schema'd per kind), ``status``
     (pending/delivered/done), ``corr_id`` (correlates a result to its
     assignment) and ``creado_en``.

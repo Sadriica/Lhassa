@@ -1,4 +1,4 @@
-"""Tests for lhassa.core.policy — the deterministic "reflexes" triage layer.
+"""Tests for lhassa.core.policy; the deterministic "reflexes" triage layer.
 
 Fully offline: no DB, no LLM, no network. Each reflex is a pure function of a
 Trigger; ``evaluate`` is tested directly against synthetic triggers.

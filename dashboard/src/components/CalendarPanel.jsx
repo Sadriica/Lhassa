@@ -3,7 +3,7 @@ import { toast } from '../lib/toast'
 import { requireOk } from '../lib/api'
 import { SectionHeader, EmptyState, ErrorState } from './ui/common'
 
-// The Calendar section — two parts:
+// The Calendar section; two parts:
 //   General       → GET /api/calendar/events?hours=N, a day-grouped agenda.
 //   Configuration → GET/POST/DELETE /api/calendar/calendars, POST /api/calendar/primary,
 //                    POST /api/calendar/sync. Feed urls are SECRETS: the API only ever
@@ -270,7 +270,7 @@ function ConfigSection() {
         <p className="text-[11px]" style={{ color: 'var(--lh-text-muted)' }}>
           {primary
             ? `Checks every other calendar for events missing from "${primary.name}" and delivers each as a tappable .ics.`
-            : 'Set a primary calendar below before syncing — there is nothing to reconcile against yet.'}
+            : 'Set a primary calendar below before syncing; there is nothing to reconcile against yet.'}
         </p>
         {syncResult && (
           <div className="lh-row mt-2 text-[11px]" style={{ color: 'var(--lh-text)' }}>{syncResult}</div>
@@ -289,7 +289,7 @@ function ConfigSection() {
         ) : error ? (
           <ErrorState>{error}</ErrorState>
         ) : calendars.length === 0 ? (
-          <EmptyState>No calendars configured yet — add one below.</EmptyState>
+          <EmptyState>No calendars configured yet; add one below.</EmptyState>
         ) : (
           <ul className="space-y-1.5 mb-3">
             {calendars.map((c) => (
@@ -330,7 +330,7 @@ function ConfigSection() {
             />
             <input
               className="lh-input"
-              placeholder="https://… feed link (a secret — never shown again)"
+              placeholder="https://… feed link (a secret; never shown again)"
               value={url}
               disabled={busy}
               onChange={(e) => setUrl(e.target.value)}
@@ -342,7 +342,7 @@ function ConfigSection() {
           </div>
           <p className="text-[11px] mt-1.5" style={{ color: 'var(--lh-text-faint)' }}>
             The feed url grants read access to that calendar. Lhassa stores it locally and never
-            displays it again — only a masked tail is shown once added.
+            displays it again; only a masked tail is shown once added.
           </p>
         </form>
       </div>

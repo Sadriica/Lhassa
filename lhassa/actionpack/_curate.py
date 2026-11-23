@@ -1,12 +1,12 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""The ``curate_skills`` action — Fase 2's deterministic, $0 skill lifecycle sweep.
+"""The ``curate_skills`` action. Fase 2's deterministic, $0 skill lifecycle sweep.
 
 A thin ``(params) -> str`` wrapper over :func:`lhassa.skills.curator.run_transitions`
 so the curator's usage-driven ``active -> stale -> archived`` sweep fits the
 actionpack calling convention (every action is a plain callable, never raises,
 returns a short outcome string). Skips entirely while an agent run is active, so
 the curator never touches the skills directory mid-think. Minted as a recurring
-weekly task by the ``maintenance`` seed (mirrors ``review_tools``) — see
+weekly task by the ``maintenance`` seed (mirrors ``review_tools``); see
 :mod:`lhassa.seeds.maintenance`.
 """
 
@@ -24,12 +24,12 @@ async def curate_skills(params: dict) -> str:
     currently running, so the curator never mutates the skills directory
     mid-think.
 
-    params: (none required — ``config`` defaults to the process ``Config()``).
+    params: (none required; ``config`` defaults to the process ``Config()``).
     Never raises.
     """
     try:
         if _watcher.is_active():
-            return "curate_skills: skipped — agent run active"
+            return "curate_skills: skipped; agent run active"
 
         summary = _curator.run_transitions(Config())
         return (

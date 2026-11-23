@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Integrity Watcher — deterministic conformance to Lhassa/Witara contracts.
+"""Integrity Watcher; deterministic conformance to Lhassa/Witara contracts.
 
 This is not another reasoning agent. Each versioned contract returns observable
 evidence and a boolean verdict without an LLM. Runs/checks/findings are durable;
@@ -24,6 +24,7 @@ from typing import Awaitable, Callable
 from lhassa.config import Config
 from lhassa.core import db
 from lhassa.core.conformance import MANIFEST_VERSION, attestation as attestation
+from lhassa.registry import Registry
 
 
 
@@ -34,6 +35,48 @@ class Contract:
     severity: str
     description: str
     check: Callable[[Config, str], Awaitable[dict]]
+
+
+@dataclass(frozen=True)
+class PackRequirements:
+    """What a capability pack asks integrity to hold for it.
+
+    ``actions``/``verifiers`` join the ``runtime.capabilities.wired`` check;
+    ``canonical_flows(config)`` returns ``{flow_id: canonical Flow}`` for the
+    ``research.flows.canonical`` drift check; ``remedy`` is the command a drift
+    finding names. A pack that is not installed declares nothing, so core never
+    requires a capability it cannot have.
+    """
+
+    actions: frozenset = frozenset()
+    verifiers: frozenset = frozenset()
+    canonical_flows: Callable[[Config], dict] | None = None
+    remedy: str = ""
+
+
+PACK_REQUIREMENTS: Registry[PackRequirements] = Registry("integrity requirements")
+
+
+def register_pack_requirements(
+    pack: str,
+    *,
+    actions=(),
+    verifiers=(),
+    canonical_flows: Callable[[Config], dict] | None = None,
+    remedy: str = "",
+) -> PackRequirements:
+    """Declare a pack's integrity requirements. Re-registering is a no-op."""
+    existing = PACK_REQUIREMENTS.get_or_none(pack)
+    if existing is not None:
+        return existing
+    req = PackRequirements(
+        actions=frozenset(actions),
+        verifiers=frozenset(verifiers),
+        canonical_flows=canonical_flows,
+        remedy=remedy,
+    )
+    PACK_REQUIREMENTS.register(pack, req)
+    return req
 
 
 def _result(passed: bool, summary: str, **evidence) -> dict:
@@ -140,40 +183,36 @@ async def _research_artifacts(config: Config, instance_id: str) -> dict:
 
 async def _canonical_research_flows(config: Config, instance_id: str) -> dict:
     from lhassa.flows.store import FlowStore
-    from lhassa.seeds.research import (
-        DEFAULT_ASSESSMENT_FLOW_ID,
-        DEFAULT_RESEARCH_FLOW_ID,
-        _ASSESSMENT_FLOW_JSON,
-        _canonical_flow,
-    )
 
     store = FlowStore(config)
-    expected = {
-        getattr(config, "research_assessment_flow_id", None)
-        or DEFAULT_ASSESSMENT_FLOW_ID: _ASSESSMENT_FLOW_JSON,
-        getattr(config, "research_flow_id", None)
-        or DEFAULT_RESEARCH_FLOW_ID: None,
-    }
     drift: list[dict] = []
-    for flow_id, source in expected.items():
-        actual = store.get(flow_id)
-        canonical = (
-            _canonical_flow(flow_id, source)
-            if source is not None
-            else _canonical_flow(flow_id)
-        )
-        if actual is None:
-            drift.append({"flow_id": flow_id, "reason": "missing"})
-        elif actual.to_dict() != canonical.to_dict():
-            drift.append({"flow_id": flow_id, "reason": "drifted"})
+    remedies: list[str] = []
+    declared = 0
+    for req in PACK_REQUIREMENTS.all():
+        if req.canonical_flows is None:
+            continue
+        expected = req.canonical_flows(config) or {}
+        declared += len(expected)
+        before = len(drift)
+        for flow_id, canonical in expected.items():
+            actual = store.get(flow_id)
+            if actual is None:
+                drift.append({"flow_id": flow_id, "reason": "missing"})
+            elif actual.to_dict() != canonical.to_dict():
+                drift.append({"flow_id": flow_id, "reason": "drifted"})
+        if len(drift) > before and req.remedy:
+            remedies.append(req.remedy)
+    if not declared:
+        return _result(True, "no canonical flows declared (no pack owns one)", drift=[])
+    # A finding must NAME its remedy: this exact drift alerted the owner
+    # hourly for three days while the fix was one idempotent command the
+    # summary never mentioned. Counsel, not control; say what to type.
+    remedy = "; ".join(f"run `{r}` to restore" for r in remedies)
     return _result(
         not drift,
-        # A finding must NAME its remedy: this exact drift alerted the owner
-        # hourly for three days while the fix was one idempotent command the
-        # summary never mentioned. Counsel, not control — say what to type.
         "research flows canonical"
         if not drift
-        else f"{len(drift)} flow drift(s) — run `lhassa seed apply research` to restore",
+        else f"{len(drift)} flow drift(s)" + (f"; {remedy}" if remedy else ""),
         drift=drift,
     )
 
@@ -296,18 +335,17 @@ async def _capability_wiring(config: Config, instance_id: str) -> dict:
 
     actionpack.register_all()
     required_actions = {
-        "research_intake",
-        "draft_research_note",
         "org_run",
         "temple_run",
         "review_tools",
     }
     required_verifiers = {
-        "idea_assessment",
-        "research_corpus",
         "command",
         "metric",
     }
+    for req in PACK_REQUIREMENTS.all():
+        required_actions |= set(req.actions)
+        required_verifiers |= set(req.verifiers)
     missing_actions = sorted(required_actions - set(ACTIONS))
     missing_verifiers = sorted(required_verifiers - set(VERIFIERS.names()))
     passed = not missing_actions and not missing_verifiers

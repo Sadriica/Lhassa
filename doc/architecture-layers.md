@@ -1,9 +1,9 @@
-# Lhassa — architecture layers (the modularity guard)
+# Lhassa; architecture layers (the modularity guard)
 
 Lhassa must stay **fully elastic and highly modular**: clean layering that does
 **not** erode over time. This document describes the layers and the forbidden
 import directions between them. The rules are enforced mechanically by
-`tests/test_architecture.py` — a dependency-free pytest that parses every
+`tests/test_architecture.py`: a dependency-free pytest that parses every
 `lhassa/**/*.py` with the standard-library `ast` module and fails if a future
 change crosses a boundary. The rules were *measured from the current tree*, so
 they pass today and only trip on a **new** violation.
@@ -16,9 +16,10 @@ From the bottom (depends on nothing) to the top (the world-facing surfaces):
 | --- | --- | --- |
 | **Leaf infrastructure** | `registry.py`, `plugins.py` (and `config.py`) | Generic, reusable machinery. Imports no feature code. |
 | **Spine** | `core/` | The do-and-sleep loop (`step`, `heartbeat`, `episode`, `db`). Driven *by* the shells; never reaches up to them. |
-| **Interfaces (mid)** | `memory/`, `security/`, `llm/` | Reusable contracts (typed facts, trust/approval, model provider + router). Usable by any shell; depend on none. |
-| **Adapters (the hands)** | `harness/`, `tools/`, `agents/`, `remote/`, `health/` | The rentable "body" — harnesses, MCP/tools, specialist agents, the remote local-agent. |
-| **Shells (outer)** | `cli/`, `api/`, `voice/`, `notify/`, `org/`, `dashboard/` (JS) | The user/world surfaces. Allowed to compose everything below them. |
+| **Interfaces (mid)** | `memory/`, `security/`, `llm/`, `personal/` | Reusable contracts (typed facts, trust/approval, model provider + router, the personal agenda read-model). Usable by any shell; depend on none. |
+| **Adapters (the hands)** | `harness/`, `tools/`, `agents/`, `remote/`, `health/`, `bench/` | The rentable "body": harnesses, MCP/tools, specialist agents, the remote local-agent, the LhassaBench eval harness. |
+| **File-I/O seams** | `cv/`, `calendar/` | Leaf, stdlib-only seams (`.tex` CV, `.ics` calendar) used by shells; never reach into one. |
+| **Shells (outer)** | `cli/`, `api/`, `voice/`, `notify/`, `chat/`, `org/`, `actionpack/`, `flows/`, `views/`, `tui/`, `telegram/`, `dashboard/` (JS) | The user/world surfaces. Allowed to compose everything below them. `chat/` is the transport-agnostic chat engine (an `InboundMessage` in, a `Reply` out); `telegram/` (the `lhassa-telegram` pack) is one transport that drives it. `flows/` counts as a shell because its engine composes the org layer. `views/` holds the shell-level read-models the surfaces render (the overview aggregate behind `lhassa status` and `/api/overview`): they read the org chart and the flow store, so no inner layer may import them. `api/` ships in the api pack (`packages/lhassa-api`). `tui/` (the `lhassa-tui` pack) is a shell end to end, so it has no `surfaces/` split. |
 
 Principle: **inner layers never depend on outer shells.** Dependencies point
 "down" only. A shell may import the spine, interfaces and adapters; the spine and
@@ -26,37 +27,80 @@ the interfaces must not import a shell.
 
 ## Forbidden directions (encoded today)
 
-1. **spine-isolation** — `core/` must not import any shell
-   (`cli`, `api`, `voice`, `notify`, `org`, `dashboard`).
-2. **interface-isolation** — `memory/`, `security/`, `llm/` must not import any
-   shell.
-3. **adapter-isolation** — `harness/`, `tools/`, `agents/`, `remote/`, `health/`
-   must not import any shell (see the one whitelisted exception below).
-4. **swap-axis-independence** — `harness/` (the agentic-body axis) must not
+1. **spine-isolation**: `core/` must not import any shell
+   (`cli`, `api`, `voice`, `notify`, `chat`, `org`, `actionpack`, `flows`, `views`, `tui`,
+   `telegram`, `dashboard`).
+2. **interface-isolation**: `memory/`, `security/`, `llm/` must not import any
+   shell. **personal-isolation** applies the same rule to `personal/`.
+3. **adapter-isolation**: `harness/`, `tools/`, `agents/`, `remote/`, `health/`,
+   `bench/` must not import any shell (see the one whitelisted exception below).
+4. **swap-axis-independence**: `harness/` (the agentic-body axis) must not
    import `llm/` (the think-directly model-provider axis). The two swap axes stay
-   independent. The reverse edge — `llm/router.py` *choosing* a harness — is the
+   independent. The reverse edge; `llm/router.py` *choosing* a harness; is the
    intentional bridge seam and is **not** forbidden.
-5. **keystone-leaf** — `registry.py` and `plugins.py` must not import any
+5. **cv-infra-isolation** and **calendar-infra-isolation**: `cv/` and `calendar/`
+   must not import any shell.
+   `cv/` ships in the `lhassa-cv` pack (`packages/lhassa-cv`); its shell slice
+   (API router, chat commands, Telegram hook, flow entries, seed) lives under
+   `cv/surfaces/`, which the rule exempts.
+6. **keystone-leaf**: `registry.py` and `plugins.py` must not import any
    `lhassa.*` feature module (they are bottom-of-stack infrastructure).
+7. **research-isolation**: the research pack's inner modules (`research/`
+   outside `research/surfaces/`) must not import any shell.
 
 ## Allowed exceptions
 
 Precise, intentional edges that are whitelisted in the test (keyed on the exact
 `source-file → imported-module` pair, so they do not loosen the rest of the rule):
 
-- `tools/monitor.py` and `tools/registry.py` → `lhassa.voice.notifier` —
-  `voice/notifier.py` is the cross-platform **desktop notification router**
-  (`notify-send` / `osascript` / BurntToast), a shared utility, **not** the voice
-  conversation shell. Tools use it to surface alerts. The rest of the `voice`
-  package (`voice.pipeline`, `voice.brain_bridge`, …) stays forbidden to adapters.
-- `plugins.py` → `lhassa.config` — `config` is itself leaf infrastructure (pure
+- `plugins.py` → `lhassa.config`: `config` is itself leaf infrastructure (pure
   configuration, not a feature module), so the plugin loader reading `Config`
   does not break the keystone rule.
-- `health/checks.py` → `lhassa.notify.dispatch` — Etapa 2 unifies outbound alerts:
+- `health/checks.py` → `lhassa.notify.dispatch`: Etapa 2 unifies outbound alerts:
   `health/checks.py`'s `_notify` fans a check result out over every configured
   notify channel (desktop is then just one channel among Telegram/log/…) instead
   of hard-coding a desktop-only `notify-send` call. The import is lazy, inside the
   function body.
+
+- `personal/secretary.py` → `lhassa.org`, `lhassa.org.management`,
+  `lhassa.org.topology`, `lhassa.flows.model`, `lhassa.flows.store`: the personal
+  department is provisioned into the org chart together with its canonical
+  briefing flows (a seed-shaped bootstrap, not a runtime dependency).
+- `security/approval.py` → `lhassa.flows.durable`, `lhassa.flows.projection`: the
+  durable flow-gate bridge, so an approval can resume a paused flow run.
+
+## Capability packs
+
+A capability can leave the core tree and ship as its own distribution under
+`packages/lhassa-<x>/src/lhassa/<sub>` (contract: `packages/README.md`). The
+`lhassa` package is a pkgutil namespace, so import paths do not change when a
+module moves into a pack. Packs are discovered as plugins (`lhassa.plugins`
+entry points, loaded by `actionpack.register_all()`), and reach the surfaces
+through `lhassa/extensions.py` (`register_api_router`, `register_cli_app`,
+`register_cli_command`, `register_pack_migrations`, `register_pack`) plus the registries that already
+existed (actions, commands, seeds, channels, senses, providers).
+
+The guard walks `packages/*/src/lhassa` too and adds two rules on top of the
+layer rules (which still apply to a pack by its subpackage name):
+
+- **core-never-imports-a-pack**: nothing under `lhassa/` imports a pack.
+- **pack-isolation**: a pack imports another pack only when the edge is
+  declared in `PACK_DEPENDENCIES`.
+
+A pack's `surfaces/` subpackage is its shell slice (router, CLI sub-app, chat
+commands), so the shell-isolation rules do not apply to files under it.
+A pack whose subpackage IS a shell (`api`, `voice`, `tui`, `telegram`) needs no `surfaces/`: the
+shell rules never restrict a shell's own imports. Core still never imports it:
+what core needed from `lhassa.api` moved into core (the overview read-model to
+`views/overview.py`, the fleet read-model to `core/fleet.py`, the agentic run door
+to `agents/code_run.py`), and `lhassa serve` is mounted through
+`extensions.register_cli_command`. The telegram pack follows the same rule:
+the chat engine it drives stayed in core (`chat/`), the `telegram` channel is
+registered through `notify.channels.register_channel`, files reach the owner
+through the channel registry's optional `send_document` capability
+(`notify.channels.deliver_document`, called only by `org/deliver.py`), and
+`lhassa capabilities` reads the channel registry, not the pack.
+`make test-core` runs the root suite in an environment with no pack installed.
 
 ## How to evolve the rules
 
@@ -64,4 +108,4 @@ If you intentionally add a new allowed edge, add a precise entry to
 `ALLOWED_EXCEPTIONS` in `tests/test_architecture.py` **with a comment explaining
 why**. Prefer fixing the layering over adding an exception. If you add a new
 subpackage, slot it into the correct layer (and the rule sets) so the guard keeps
-covering it — `test_rules_reference_real_subpackages` guards against typos.
+covering it; `test_rules_reference_real_subpackages` guards against typos.

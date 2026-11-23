@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Lhassa — the brain's heartbeat runner (§2.1).
+# Lhassa; the brain's heartbeat runner (§2.1).
 #
 # Advances the persistent brain one tick under the "hace y duerme" pattern:
 # ensures the brain DB, runs step() once via core.heartbeat.beat(), prints a
-# one-line summary, and exits. No LLM, no cloud — a routine beat is deterministic
+# one-line summary, and exits. No LLM, no cloud; a routine beat is deterministic
 # and costs zero tokens. Fired by the systemd USER timer
 # (scripts/systemd/lhassa-heartbeat.timer).
 #

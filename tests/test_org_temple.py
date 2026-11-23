@@ -1,4 +1,4 @@
-"""Tests for lhassa.org.temple — the temple down-execute-up internal loop.
+"""Tests for lhassa.org.temple; the temple down-execute-up internal loop.
 
 Offline + $0: a tmp brain DB (monkeypatched ``db.DB_PATH``), a seeded topology
 (lhassa → temple, mirroring tests/test_org_delegate.py's shape), a fake
@@ -6,10 +6,10 @@ deterministic action registered under core.actions, and a fake ``deliver`` so
 nothing touches the network. LHASSA_ORG_LIVE is left off (the deterministic
 action path never needs it). Covers:
 
-  * the full loop — a DOWN org-delegate episode, an execution episode
+  * the full loop; a DOWN org-delegate episode, an execution episode
     attributed dominio="temple", a deliver() call with origin_department=
     "temple", and {"ok": True, ...} returned;
-  * a topology failure degrades to a direct run — the action still executes
+  * a topology failure degrades to a direct run; the action still executes
     and the result still comes back "ok";
   * a failing action still returns ok (delegate_internal never raises) with
     the error text as the result;
@@ -113,21 +113,21 @@ async def test_delegate_internal_full_loop(tmp_path, monkeypatch):
     }
     assert delivered_calls  # the up-hop actually sent something
 
-    # DOWN hop — one org-delegate episode.
+    # DOWN hop; one org-delegate episode.
     down = await _episodes("inst_personal", "org-delegate")
     assert len(down) == 1
     assert down[0]["accion"] == "delegate:lhassa→temple"
     assert "down to temple" in down[0]["decision"]
     assert float(down[0]["costo_usd"]) == 0.0
 
-    # EXECUTE hop — one temple-execute episode, dominio="temple".
+    # EXECUTE hop; one temple-execute episode, dominio="temple".
     exec_eps = await _episodes("inst_personal", "temple-execute")
     assert len(exec_eps) == 1
     assert exec_eps[0]["dominio"] == "temple"
     assert exec_eps[0]["resultado"] == "fake-result"
     assert exec_eps[0]["accion"] == "temple_test_action"
 
-    # UP hop — org-deliver episodes, originating at temple.
+    # UP hop; org-deliver episodes, originating at temple.
     up = await _episodes("inst_personal", "org-deliver")
     assert up, "expected org-deliver episodes for the up hop"
     assert up[0]["dominio"] == "temple"
@@ -268,7 +268,7 @@ async def test_delegate_internal_attributes_curate_skills_to_guardian(tmp_path, 
 
     monkeypatch.setattr(notify_dispatch, "notify", fake_notify)
 
-    # Mock the real curate_skills action — nothing should actually spend/touch disk.
+    # Mock the real curate_skills action; nothing should actually spend/touch disk.
     core_actions.register_action(
         "curate_skills", lambda params: "3 stale skills archived", override=True
     )
@@ -279,13 +279,13 @@ async def test_delegate_internal_attributes_curate_skills_to_guardian(tmp_path, 
     assert record["ok"] is True
     assert record["result"] == "3 stale skills archived"
 
-    # DOWN hop — the path names the owning monk.
+    # DOWN hop; the path names the owning monk.
     down = await _episodes("inst_personal", "org-delegate")
     assert len(down) == 1
     assert down[0]["accion"] == "delegate:lhassa→temple→guardian"
     assert "down to guardian" in down[0]["decision"]
 
-    # EXECUTE hop — attributed to the monk, reporting up through temple.
+    # EXECUTE hop; attributed to the monk, reporting up through temple.
     exec_eps = await _episodes("inst_personal", "temple-execute")
     assert len(exec_eps) == 1
     assert exec_eps[0]["dominio"] == "guardian"
@@ -293,7 +293,7 @@ async def test_delegate_internal_attributes_curate_skills_to_guardian(tmp_path, 
     assert "3 stale skills archived" in exec_eps[0]["resultado"]
     assert "reports ↑ temple" in exec_eps[0]["resultado"]
 
-    # UP hop — walks guardian → temple → lhassa, one episode per brain.
+    # UP hop; walks guardian → temple → lhassa, one episode per brain.
     up = await _episodes("inst_personal", "org-deliver")
     dominios = [e["dominio"] for e in up]
     # One hop per brain on the chain (guardian produces, temple forwards,
@@ -339,7 +339,7 @@ async def test_delegate_internal_degrades_to_temple_when_workers_missing(
 
     from lhassa.org import topology as topo_mod
 
-    # A topology WITHOUT the worker brains — curate_skills is mapped to
+    # A topology WITHOUT the worker brains; curate_skills is mapped to
     # "guardian" but it does not exist here, so it must degrade to temple.
     monkeypatch.setattr(topo_mod, "load_topology", lambda config=None: _topology())
 

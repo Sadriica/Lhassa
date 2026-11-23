@@ -1,14 +1,14 @@
-"""The Telegram [[action: …]] marker — chat-requested actions, allowlist-gated.
+"""The Telegram [[action: …]] marker; chat-requested actions, allowlist-gated.
 
 Mirrors test_research_bridge: the chat think stays tool-less; the marker is the
-signal, the poller mints the signed task (same HUMANO/telegram origin as /goal),
+signal, the chat engine mints the signed task (same HUMANO/telegram origin as /goal),
 and the ack is only ever written after the mint succeeded. All offline.
 """
 
 import asyncio
 from types import SimpleNamespace
 
-from lhassa.notify import telegram_inbound
+from lhassa.chat import markers
 
 
 def _cfg(**over):
@@ -40,7 +40,7 @@ def _patch_mint(monkeypatch, *, estado="pendiente", raise_exc=None):
 
 def _apply(reply, monkeypatch=None, **cfg):
     return asyncio.run(
-        telegram_inbound._apply_action_marker(
+        markers.apply_action_marker(
             reply, instance_id="inst_personal", config=_cfg(**cfg)
         )
     )

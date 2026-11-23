@@ -1,23 +1,23 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Evidence vocabulary — the oh-my-hermes-inspired claim ladder over a
+"""Evidence vocabulary; the oh-my-hermes-inspired claim ladder over a
 run-or-task-shaped row. A PURE DERIVED read, no new storage: everything it
 returns is computed off columns already on ``runs``/``tasks``/``run_steps``
 (``status``/``estado``) plus whatever ``context`` a caller chooses to pass.
 
 The evidence contract (three rungs, humblest-first)::
 
-    "prepared" — intent recorded, no outcome yet. ``status``/``estado`` is one
+    "prepared": intent recorded, no outcome yet. ``status``/``estado`` is one
                  of the in-flight states: queued / running / pendiente /
                  esperando_aprobacion. This is the DEFAULT for anything
-                 unrecognized — an unknown shape gets the humblest claim, never
+                 unrecognized; an unknown shape gets the humblest claim, never
                  an inflated one.
 
-    "observed" — an episode records what happened: ``status``/``estado`` is a
+    "observed": an episode records what happened: ``status``/``estado`` is a
                  finished state (completed/finished/hecha/failed/fallida/
                  cancelled/...). The row asserts an outcome, but nothing has
                  independently checked it.
 
-    "verified" — observed AND independently corroborated: either
+    "verified": observed AND independently corroborated: either
                  (a) the row/its ``raw`` payload carries a passing verify
                      outcome (a ``VerifyResult``-shaped dict/object with
                      ``passed`` truthy, or a nested ``verify``/``verification``
@@ -29,10 +29,10 @@ The evidence contract (three rungs, humblest-first)::
 ``context`` is optional and additive: callers who already loaded approvals or
 verification results for a batch of rows can pass them once
 (``{"approvals": [...], "verifications": [...]}``) instead of this module
-re-querying anything — this stays a pure function, no I/O.
+re-querying anything; this stays a pure function, no I/O.
 
 Never raises: any exception, missing key, or odd shape degrades to
-``"prepared"`` — the humblest claim is always the safe fallback.
+``"prepared"``: the humblest claim is always the safe fallback.
 """
 
 from __future__ import annotations
@@ -150,7 +150,7 @@ def _context_has_passing_verification(row: dict, context: dict) -> bool:
 def evidence_state(row: dict, context: Optional[dict] = None) -> str:
     """Derive ``"prepared"`` | ``"observed"`` | ``"verified"`` for one
     run-or-task-shaped ``row``. See the module docstring for the contract.
-    Never raises — an unrecognized shape returns ``"prepared"``.
+    Never raises; an unrecognized shape returns ``"prepared"``.
     """
     try:
         if not isinstance(row, dict):
@@ -160,7 +160,7 @@ def evidence_state(row: dict, context: Optional[dict] = None) -> str:
             return "prepared"
         if status not in _OBSERVED_STATUSES:
             # Unrecognized status string: neither known in-flight nor known
-            # finished — humblest claim.
+            # finished; humblest claim.
             return "prepared"
 
         # observed. Look for independent corroboration to promote to verified.

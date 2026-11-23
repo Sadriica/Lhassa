@@ -1,7 +1,7 @@
 """A skill name can never address anything outside the store.
 
 `SkillStore.folder_for` used to fall back to the RAW name when slugify returned
-"" — and slugify("..") is "". So `delete("..")` resolved to the store's parent
+"": and slugify("..") is "". So `delete("..")` resolved to the store's parent
 and rmtree'd it: on a real install that is ~/.lhassa, brain.db included. These
 tests pin the boundary at the one function every path goes through.
 """

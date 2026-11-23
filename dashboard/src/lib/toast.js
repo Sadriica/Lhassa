@@ -1,5 +1,5 @@
 /**
- * toast — the dashboard's single, dependency-free action-feedback channel.
+ * toast; the dashboard's single, dependency-free action-feedback channel.
  *
  * ── CONTRACT FOR PANEL AUTHORS ────────────────────────────────────────────────
  * Any panel can surface a global toast without importing UI or wiring props:
@@ -10,7 +10,7 @@
  *     toast.error('Could not save flow')
  *     toast.info('Reconnecting…')
  *
- * Full control (custom duration, or an optional action button — e.g. undo):
+ * Full control (custom duration, or an optional action button; e.g. undo):
  *
  *     toast.show({
  *       type: 'success',                 // 'success' | 'error' | 'info'
@@ -48,7 +48,7 @@ function emit() {
 }
 
 /**
- * subscribe(fn) — register a listener; it's called immediately with the current
+ * subscribe(fn); register a listener; it's called immediately with the current
  * list and again on every change. Returns an unsubscribe function.
  */
 export function subscribe(fn) {
@@ -61,7 +61,7 @@ export function subscribe(fn) {
   return () => subscribers.delete(fn)
 }
 
-/** dismiss(id) — remove a toast (and cancel its auto-dismiss timer). */
+/** dismiss(id); remove a toast (and cancel its auto-dismiss timer). */
 export function dismiss(id) {
   const timer = timers.get(id)
   if (timer) {

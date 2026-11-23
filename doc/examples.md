@@ -1,4 +1,4 @@
-# Examples — things to ask Lhassa
+# Examples; things to ask Lhassa
 
 A practical reference organised by **surface**: the CLI for one-shot
 questions, `lhassa code` for real agentic work, Telegram for the day-to-day
@@ -10,7 +10,7 @@ exists in the code today.
 
 ## CLI one-shots (`lhassa "..."`)
 
-With no subcommand, `lhassa` is a chat turn through the tool-calling loop —
+With no subcommand, `lhassa` is a chat turn through the tool-calling loop;
 one-shot from an argument, from piped stdin, or interactively in the REPL.
 The loop has the same tool surface voice does: web search, shell, files,
 reminders, email/calendar, GitHub, vision, process/file watching.
@@ -46,7 +46,7 @@ lhassa "summarize this repo" --json
 ```
 
 A prompt whose first word happens to match a subcommand name routes there
-instead — quote a longer sentence to force a chat turn. See `doc/cli.md` for
+instead; quote a longer sentence to force a chat turn. See `doc/cli.md` for
 the full subcommand reference (`status`, `watch`, `report`, `memory`,
 `tools`, `approvals`, `org`, `skills`, `config`, …).
 
@@ -119,11 +119,11 @@ remember: my new phone number is +34 600 123 456
 
 ## Work-flow examples (`lhassa flows`)
 
-Per `doc/boundaries.md`: **these four are the public presets** — a portable gallery
+Per `doc/boundaries.md`: **these four are the public presets**: a portable gallery
 anyone can apply, routing every task node by generic `skill` name rather than a
 pinned personal brain. Your customized instances (renamed, rewired, tailored to
 your own org chart) live in `~/.lhassa/flows.json` and never enter git; applying a
-template never overwrites one of yours — a taken id gets a fresh suffix instead.
+template never overwrites one of yours; a taken id gets a fresh suffix instead.
 
 ```bash
 lhassa flows templates          # the gallery: id, node count/kinds, what it teaches
@@ -132,21 +132,21 @@ lhassa flows list
 lhassa flows show daily-summary
 ```
 
-**`research-brief`** — trigger → task (research) → gate (an objective, LLM-free
+**`research-brief`**: trigger → task (research) → gate (an objective, LLM-free
 regex check that the answer actually cites a source) → output (notify). Teaches the
 engine's simplest VERIFIED pipeline: a `task → gate:verify → output` chain where a
 non-pass halts the path before anything reaches the owner.
 
-**`code-review-pass`** — trigger → task (code review) → branch on the verdict →
+**`code-review-pass`**: trigger → task (code review) → branch on the verdict →
 two distinct outputs (approved → notify; changes requested → log the follow-up).
 Teaches the `branch` node kind: one upstream result, routed by conditional edge
 `when` clauses (an unconditional edge is the implicit "else").
 
-**`daily-summary`** — trigger → task (summarize) → output (doc). The simplest
-possible three-node flow — no gate, no branch — the hello-world to read before the
+**`daily-summary`**: trigger → task (summarize) → output (doc). The simplest
+possible three-node flow (no gate, no branch) the hello-world to read before the
 other three.
 
-**`content-pipeline`** — trigger → task (draft) → task (critique) → gate (a human
+**`content-pipeline`**: trigger → task (draft) → task (critique) → gate (a human
 APPROVAL, parked via `/approve <id>`) → output (publish). Teaches a HITL gate
 *mid-flow*: two chained tasks feed a person before anything ships.
 
@@ -158,14 +158,14 @@ delegation seam and is offline/stubbed unless `LHASSA_ORG_LIVE=1`.
 
 ## Voice (opt-in appendix)
 
-Voice is one opt-in surface among CLI / Telegram / dashboard — off by
-default (`LHASSA_VOICE_ENABLED=0`), needs the `voice` extra installed
-(`uv sync --extra voice`) and the Deepgram/Cartesia keys. It is not the
+Voice is one opt-in surface among CLI / Telegram / dashboard; off by
+default (`LHASSA_VOICE_ENABLED=0`), needs the voice pack with its runtime
+(`uv sync --package lhassa-voice --extra runtime`) and the Deepgram/Cartesia keys. It is not the
 identity of the project; it is a rentable interaction mode with the same
 tool surface as the CLI.
 
 Once enabled, say "Lhassa" to wake it, then speak your request in plain
-language — the same categories as the CLI section above (web search, shell,
+language; the same categories as the CLI section above (web search, shell,
 files, reminders, delegating to a background agent, vision, GitHub, email/
 calendar) all work by voice too. See [`voice-interaction.md`](voice-interaction.md)
 for the wake-word system, the auto-sleep timeout, interruption, and

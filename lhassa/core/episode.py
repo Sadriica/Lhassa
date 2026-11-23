@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """
-The structured Episode — observability from the first commit (§2.10).
+The structured Episode; observability from the first commit (§2.10).
 
 An Episode records *why* the brain did something: what woke it, what memory it
 loaded, the options it weighed, the decision and action it took, the result and

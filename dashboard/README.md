@@ -6,7 +6,7 @@ drives the brain through the REST surface. Lhassa is a brain that orchestrates
 models and tools; this is one of its world-facing surfaces (alongside CLI and
 Telegram).
 
-In production the FastAPI app (`lhassa/api/server.py`) serves the built assets from
+In production the FastAPI app (`lhassa/api/server.py`, shipped by the api pack in `packages/lhassa-api`) serves the built assets from
 `dashboard/dist/` at `http://127.0.0.1:7766`. In development the app runs standalone
 on the Vite dev server and proxies the API + WebSocket to that same backend.
 
@@ -74,7 +74,7 @@ rebuild is what ships UI changes.
 
 ## Main endpoints it uses
 
-From the panels and the backend surface documented in the repo-root `CLAUDE.md`:
+From the panels and the backend surface documented in `doc/architecture.md` and `doc/dashboard.md`:
 
 - `/api/overview`, `/api/status`, `/api/metrics` — command-center aggregate, runtime status and metrics
 - `/api/org/*` (topology, brains, route, templates, relationships + `/kinds`)

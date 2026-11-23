@@ -1,4 +1,4 @@
-"""Tests for the approval frontier (§2.6, §2.9-(1), §3-Fase 3 DoD) — fully offline.
+"""Tests for the approval frontier (§2.6, §2.9-(1), §3-Fase 3 DoD); fully offline.
 
 Covers:
   - HITL per flow: a `mundo`-origin OR a `requires_approval` action → needs_approval
@@ -16,7 +16,6 @@ The brain DB + signing key are redirected to tmp dirs (the 0.1/0.4 seams); the A
 runs through httpx.ASGITransport against the FastAPI app (no live network).
 """
 
-import httpx
 import pytest
 import pytest_asyncio  # noqa: F401
 
@@ -58,7 +57,7 @@ def _task(*, accion="sync_repo", objetivo="proyecto_X", trust=TrustLevel.HUMANO,
     )
 
 
-# ── needs_approval — HITL per flow ───────────────────────────────────────────────
+# ── needs_approval. HITL per flow ───────────────────────────────────────────────
 
 def test_mundo_origin_needs_approval(knob_config):
     # A world-derived origin must wait for a human OK ("origen mundo espera tu OK").
@@ -293,7 +292,7 @@ async def test_knob_never_promotes_trust(tmp_path, monkeypatch, knob_config):
         )
     assert await autonomy.should_auto_approve("inst_personal", "sync_repo", "duenio") is True
 
-    # A MUNDO-origin task by the same actor still has MUNDO trust — the knob did not
+    # A MUNDO-origin task by the same actor still has MUNDO trust; the knob did not
     # promote it. needs_approval WITHOUT the knob still demands approval (trust low);
     # only passing the knob's verdict explicitly lowers the friction.
     task = _task(trust=TrustLevel.MUNDO, actor="duenio")
@@ -366,101 +365,6 @@ async def test_local_agent_auto_approves_after_streak(tmp_path, monkeypatch, kno
     reports = await la.run_tasks([task])
     assert reports[0]["outcome"] == "hecha"  # executed without parking
     assert await approval.pending("inst_personal") == []
-
-
-# ── API round-trip: GET queue, POST resolve, autonomy updates ────────────────────
-
-@pytest.mark.asyncio
-async def test_api_approvals_roundtrip(tmp_path, monkeypatch, knob_config):
-    db = await _init(tmp_path, monkeypatch)
-    from lhassa.api import server
-
-    payload = {"task_id": "t_001", "accion": "sync_repo", "actor_id": "duenio",
-               "objetivo": "proyecto_X", "origen_trust": int(TrustLevel.HUMANO)}
-    ap_id = await db.add_approval("inst_personal", "sync_repo", payload)
-
-    transport = httpx.ASGITransport(app=server.app)
-    async with httpx.AsyncClient(transport=transport, base_url="http://brain") as client:
-        listed = await client.get("/api/approvals")
-        assert listed.status_code == 200
-        body = listed.json()
-        assert len(body) == 1 and body[0]["id"] == ap_id
-
-        resolved = await client.post(f"/api/approvals/{ap_id}", json={"approved": True})
-        assert resolved.status_code == 200
-        assert resolved.json()["approved"] is True
-
-        repeated = await client.post(f"/api/approvals/{ap_id}", json={"approved": True})
-        assert repeated.status_code == 409
-        missing = await client.post("/api/approvals/ap_missing", json={"approved": True})
-        assert missing.status_code == 404
-
-        empty = await client.get("/api/approvals")
-        assert empty.json() == []
-
-    # The autonomy count updated from the resolved (HUMANO-origin) approval.
-    assert await autonomy.autonomy_level("inst_personal", "sync_repo", "duenio") == 1
-
-
-@pytest.mark.asyncio
-async def test_api_approvals_rejects_bad_body(tmp_path, monkeypatch, knob_config):
-    db = await _init(tmp_path, monkeypatch)
-    from lhassa.api import server
-
-    ap_id = await db.add_approval("inst_personal", "sync_repo", {"accion": "sync_repo"})
-    transport = httpx.ASGITransport(app=server.app)
-    async with httpx.AsyncClient(transport=transport, base_url="http://brain") as client:
-        missing = await client.post(f"/api/approvals/{ap_id}", json={})
-        assert missing.status_code == 400
-        wrong_type = await client.post(f"/api/approvals/{ap_id}", json={"approved": "yes"})
-        assert wrong_type.status_code == 400
-        bad_actor = await client.post(
-            f"/api/approvals/{ap_id}",
-            json={"approved": True, "by_actor": 42},
-        )
-        assert bad_actor.status_code == 400
-
-
-@pytest.mark.asyncio
-async def test_api_high_risk_actor_label_cannot_bypass_self_approval(
-    tmp_path, monkeypatch, knob_config
-):
-    db = await _init(tmp_path, monkeypatch)
-    from lhassa.api import server
-
-    ap_id = await db.add_approval(
-        "inst_personal", "task", {"accion": "move_money", "actor_id": "api"}
-    )
-    transport = httpx.ASGITransport(app=server.app)
-    async with httpx.AsyncClient(transport=transport, base_url="http://brain") as client:
-        response = await client.post(
-            f"/api/approvals/{ap_id}",
-            json={"approved": True, "by_actor": "totally-different-person"},
-        )
-
-    assert response.status_code == 409
-    assert "self-approval refused" in response.json()["detail"]
-    assert (await db.get_approval("inst_personal", ap_id))["estado"] == "pendiente"
-
-
-@pytest.mark.asyncio
-async def test_api_maps_untrusted_approver_to_403(tmp_path, monkeypatch, knob_config):
-    db = await _init(tmp_path, monkeypatch)
-    from lhassa.api import server
-
-    ap_id = await db.add_approval("inst_personal", "task", {"accion": "move_money"})
-
-    async def refuse(*args, **kwargs):
-        raise approval.UntrustedApproverError("authenticated identity required")
-
-    monkeypatch.setattr(approval, "resolve", refuse)
-    transport = httpx.ASGITransport(app=server.app)
-    async with httpx.AsyncClient(transport=transport, base_url="http://brain") as client:
-        response = await client.post(
-            f"/api/approvals/{ap_id}", json={"approved": True}
-        )
-    assert response.status_code == 403
-    assert response.json()["detail"] == "authenticated identity required"
 
 
 # ── describe(): the one human-readable render every queue surface uses ─────────────

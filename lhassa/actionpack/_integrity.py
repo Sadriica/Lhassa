@@ -38,7 +38,7 @@ async def check_integrity(params: dict) -> str:
 
 
 def _say(*, status: str, critical: int, warnings: int, run_id) -> str:
-    """One sentence a person can read — the actionpack convention.
+    """One sentence a person can read; the actionpack convention.
 
     This used to return ``json.dumps(...)`` because the watcher parsed it. That
     payload travelled all the way to the owner's screen as a raw dict, which is
@@ -55,4 +55,4 @@ def _say(*, status: str, critical: int, warnings: int, run_id) -> str:
     if warnings:
         bits.append(f"{warnings} warning")
     detail = " and ".join(bits) if bits else "no findings recorded"
-    return f"check_integrity: {status} — {detail}{where}"
+    return f"check_integrity: {status}; {detail}{where}"

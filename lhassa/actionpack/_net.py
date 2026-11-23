@@ -70,11 +70,11 @@ async def web_fetch(params: dict) -> str:
     private, or link-local address (SSRF guard). Content is capped at 500 KB
     before stripping; only the first 2000 chars of extracted text are returned.
 
-    TRUST: the returned content is MUNDO-trust — anything the caller derives
+    TRUST: the returned content is MUNDO-trust; anything the caller derives
     from it must degrade to TrustLevel.MUNDO.
 
     params:
-        url (required)  — the URL to fetch.
+        url (required) ; the URL to fetch.
 
     Returns a short string (URL + first 2000 chars of extracted text) on
     success, or an error string on any failure. Never raises.
@@ -88,7 +88,7 @@ async def web_fetch(params: dict) -> str:
 
         err = ssrf_check(url)
         if err:
-            return f"web_fetch: refused — {err}"
+            return f"web_fetch: refused; {err}"
 
         async with httpx.AsyncClient(
             follow_redirects=True,
@@ -132,7 +132,7 @@ async def ping_url(params: dict) -> str:
     Applies the same SSRF guard as web_fetch (shared helper). Never raises.
 
     params:
-        url (required)  — the URL to ping.
+        url (required) ; the URL to ping.
 
     Returns "ping_url <status> <url> <elapsed>ms" on success, or an error
     string. Never raises.
@@ -146,7 +146,7 @@ async def ping_url(params: dict) -> str:
 
         err = ssrf_check(url)
         if err:
-            return f"ping_url: refused — {err}"
+            return f"ping_url: refused; {err}"
 
         t0 = time.monotonic()
         async with httpx.AsyncClient(

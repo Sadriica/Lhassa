@@ -1,4 +1,4 @@
-"""Tests for lhassa.core.artifacts — the append-only work-product record.
+"""Tests for lhassa.core.artifacts; the append-only work-product record.
 
 Offline + $0: a tmp brain DB (monkeypatched ``db.DB_PATH``), no model, no network.
 Covers the register/get/list roundtrip, JSON survival of paths/metadata, newest-

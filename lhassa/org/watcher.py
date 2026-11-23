@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""The MONITOR WATCHER — an always-on, $0 "ear" for the environment.
+"""The MONITOR WATCHER; an always-on, $0 "ear" for the environment.
 
 Where :mod:`lhassa.org.monitor` provides the *capability* to gather signals and
 reason over them, this module is the standing **loop** that makes the monitor a
@@ -9,7 +9,7 @@ alerts the owner when something notable actually happens.
 Design (agreed with the owner):
 
   * **$0 while idle.** Each tick is deterministic signal-gathering
-    (:func:`lhassa.org.monitor.gather_signals` — read-only, no LLM) diffed against
+    (:func:`lhassa.org.monitor.gather_signals`: read-only, no LLM) diffed against
     the previous snapshot. Nothing is written and no token is spent unless a notable
     event is detected. The ONLY place a token could ever be spent is an optional
     live "think" (:func:`lhassa.org.monitor.monitor_pass`), OFF by default and
@@ -28,7 +28,7 @@ Design (agreed with the owner):
     health-alert / pending-approvals). A "last alerted" fingerprint de-dupes a
     STANDING condition so it never re-notifies every tick.
   * **Never crashes.** Every tick is wrapped: an error is logged and the loop backs
-    off (exponential, capped) — a monitoring failure is data, never a crash.
+    off (exponential, capped); a monitoring failure is data, never a crash.
 
 The loop is gated by ``monitor_enabled`` (default OFF, opt-in). The systemd service
 ``scripts/systemd/lhassa-monitor.service`` is how it is turned on; the module
@@ -40,6 +40,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import os
+import re
 from typing import Optional
 
 from loguru import logger
@@ -52,14 +53,14 @@ from lhassa.core.episode import Episode
 # / ``watcher.monitor_pass`` directly, mirroring the monitor's own test seams.
 from lhassa.org.monitor import gather_signals, monitor_pass
 
-# Truthy env values that flip a gate on — identical to the monitor/executor gate.
+# Truthy env values that flip a gate on; identical to the monitor/executor gate.
 _TRUTHY = {"1", "true", "yes", "on"}
 
 # Agent-run statuses that mean "something is executing right now" (see
 # :class:`lhassa.state.AgentRun`; terminal = done/error/stopped).
 _RUNNING_STATUSES = frozenset({"running"})
 
-# Health severity ladder — a higher number is worse. Used to detect a WORSENING.
+# Health severity ladder; a higher number is worse. Used to detect a WORSENING.
 _HEALTH_ORDER = {"info": 0, "ok": 0, "warn": 1, "alert": 2}
 
 # Event kinds the watcher emits, and which of them are "important" (→ notify).
@@ -75,9 +76,9 @@ _BACKOFF_CAP = 60.0
 
 # Loop state kept at module level so a series of ``once=True`` pokes chains snapshots
 # and de-dupes across calls exactly as the long-running loop would.
-#   prev             — the previous snapshot (``None`` until the first tick baselines)
-#   last_alert_fp    — fingerprint of the last important set we alerted on (de-dupe)
-#   delegated_fps     — fingerprints of monitor delegations already minted as
+#   prev            ; the previous snapshot (``None`` until the first tick baselines)
+#   last_alert_fp   ; fingerprint of the last important set we alerted on (de-dupe)
+#   delegated_fps    ; fingerprints of monitor delegations already minted as
 #                       org_run tasks, so a STANDING finding is not re-minted
 #                       every tick (mirrors ``last_alert_fp``'s de-dupe spirit).
 _STATE: dict = {
@@ -167,31 +168,55 @@ def _diff_runs(prev_runs: dict, curr_runs: dict) -> list[dict]:
     return events
 
 
+# Internal trail the temple's deliver seam appends to a resultado ("· reports ↑
+# temple"): true and worth logging, but it is Lhassa's own plumbing, not the
+# owner's news. Same for the correlation id a run carries.
+_HOP_TRAIL = re.compile(r"\s*·\s*reports\s*↑.*$", re.IGNORECASE)
+_RUN_ID = re.compile(r"\s*\(run\s+[A-Za-z0-9_]+\)")
+
+
+def _failure_reason(failure: dict, limit: int = 90) -> str:
+    """What actually went WRONG in a failure episode, in one short clause.
+
+    Reads ``resultado`` first: an episode's ``decision`` states what the brain
+    set out to do ("guardian executes check_integrity"), so an alert built from
+    it told the owner the INTENT and never the outcome; the failure that
+    prompted this read "check_integrity: fail; 1 critical and 1 warning". The
+    internal hop trail and the run id are stripped (plumbing, not news), and
+    ``decision``/``accion`` remain the fallback when a resultado is empty.
+    """
+    raw = str(failure.get("resultado") or "").strip()
+    raw = _RUN_ID.sub("", _HOP_TRAIL.sub("", raw)).strip(" ;·")
+    if not raw:
+        raw = str(failure.get("decision") or failure.get("accion") or "episode").strip()
+    return raw[:limit].rstrip(" ;,·")
+
+
 def detect_events(prev_signals: Optional[dict], curr_signals: dict) -> list[dict]:
     """Diff two :func:`gather_signals` snapshots into notable events.
 
-    Pure and deterministic — no I/O, no LLM. Each event is
+    Pure and deterministic; no I/O, no LLM. Each event is
     ``{kind, level, summary}``. Notable transitions:
 
-      * **NEW failures** — failure episodes not present in the previous snapshot,
+      * **NEW failures**: failure episodes not present in the previous snapshot,
         diffed by episode id and named in the summary (``failures_new``).
-      * **health WORSENED** — ``health.worst_level`` climbed to ``warn`` / ``alert``
+      * **health WORSENED**: ``health.worst_level`` climbed to ``warn`` / ``alert``
         (``health_worsened``; ``level`` carries the new worst level).
-      * **NEW pending approvals** — the pending-approval count rose (``approvals_new``).
-      * **run STARTED / FINISHED** — ``agent_runs`` changed (``run_started`` /
+      * **NEW pending approvals**: the pending-approval count rose (``approvals_new``).
+      * **run STARTED / FINISHED**: ``agent_runs`` changed (``run_started`` /
         ``run_finished``).
 
     ``prev_signals`` being ``None`` (the loop's first tick) or an identical snapshot
-    yields ``[]`` — the watcher reports change, never the standing baseline.
+    yields ``[]``: the watcher reports change, never the standing baseline.
     """
     if prev_signals is None or not isinstance(curr_signals, dict):
         return []
 
     events: list[dict] = []
 
-    # NEW failures — failure episodes whose id was NOT in the previous snapshot.
+    # NEW failures; failure episodes whose id was NOT in the previous snapshot.
     # Diffing by identity (not by count) means an old failure aging out of the
-    # freshness window can never mask — or masquerade as — a genuinely new one,
+    # freshness window can never mask (or masquerade as) a genuinely new one,
     # and the alert names only what happened in THIS tick; the standing total is
     # deliberately not quoted (it read as if it all just happened).
     prev_ids = {f.get("id") for f in (prev_signals.get("failures") or [])}
@@ -199,20 +224,30 @@ def detect_events(prev_signals: Optional[dict], curr_signals: dict) -> list[dict
         f for f in (curr_signals.get("failures") or []) if f.get("id") not in prev_ids
     ]
     if fresh:
+        # Failures arrive in batches that share ONE cause (five hygiene tasks
+        # refused by the same gate, say). Listing the identical reason three
+        # times and calling the rest "+1 more" hid both the count and the
+        # variety, so group by reason and quote each one once with its tally.
+        by_reason: dict[str, int] = {}
+        for f in fresh:
+            reason = _failure_reason(f)
+            by_reason[reason] = by_reason.get(reason, 0) + 1
+        ordered = sorted(by_reason.items(), key=lambda kv: (-kv[1], kv[0]))
         names = "; ".join(
-            str(f.get("decision") or f.get("accion") or "episode")[:60]
-            for f in fresh[:3]
+            f"{reason} ×{count}" if count > 1 else reason
+            for reason, count in ordered[:3]
         )
-        extra = f" (+{len(fresh) - 3} more)" if len(fresh) > 3 else ""
+        extra = f" (+{len(ordered) - 3} more)" if len(ordered) > 3 else ""
+        noun = "failure" if len(fresh) == 1 else "failures"
         events.append(
             {
                 "kind": _KIND_FAILURES,
                 "level": "alert",
-                "summary": f"{len(fresh)} new failure(s): {names}{extra}",
+                "summary": f"{len(fresh)} new {noun}: {names}{extra}",
             }
         )
 
-    # health WORSENED — worst level climbed into warn/alert territory.
+    # health WORSENED; worst level climbed into warn/alert territory.
     prev_h = (prev_signals.get("health") or {}).get("worst_level", "info")
     curr_h = (curr_signals.get("health") or {}).get("worst_level", "info")
     if (
@@ -229,7 +264,7 @@ def detect_events(prev_signals: Optional[dict], curr_signals: dict) -> list[dict
             }
         )
 
-    # NEW pending approvals — the parked-work queue grew.
+    # NEW pending approvals; the parked-work queue grew.
     prev_ap, curr_ap = _count(prev_signals, "approvals"), _count(curr_signals, "approvals")
     if curr_ap > prev_ap:
         new = curr_ap - prev_ap
@@ -241,7 +276,7 @@ def detect_events(prev_signals: Optional[dict], curr_signals: dict) -> list[dict
             }
         )
 
-    # run STARTED / FINISHED — agent_runs changed.
+    # run STARTED / FINISHED; agent_runs changed.
     events.extend(
         _diff_runs(prev_signals.get("agent_runs") or {}, curr_signals.get("agent_runs") or {})
     )
@@ -255,6 +290,11 @@ def _is_important(event: dict) -> bool:
     Important = new failures, a *health-alert* worsening, or new pending approvals.
     A health *warn* worsening and run start/finish are logged (episode) only.
     """
+    # An event the hierarchy ALREADY delivered to the owner is still an event
+    # (logged, and it can still become work through the delegation seam); it is
+    # simply not a second push. See the conformance event in `watch_loop`.
+    if event.get("already_delivered"):
+        return False
     kind = event.get("kind")
     if kind in (_KIND_FAILURES, _KIND_APPROVALS):
         return True
@@ -274,7 +314,7 @@ def _summarize(events: list[dict]) -> str:
     return "; ".join(str(e.get("summary") or e.get("kind")) for e in events)
 
 
-# ── monitor findings become work (Etapa 3 — findings become work) ─────────────────
+# ── monitor findings become work (Etapa 3; findings become work) ─────────────────
 
 
 async def _delegate_findings(
@@ -287,7 +327,7 @@ async def _delegate_findings(
     every tick) is minted exactly ONCE, not on every reaction. Minting itself is
     $0 (``mint_task`` only writes a task row); the org_run action actually spends
     anything only at its own next-tick execution, offline unless
-    ``LHASSA_ORG_LIVE``. Never raises — a minting failure is skipped, not fatal.
+    ``LHASSA_ORG_LIVE``. Never raises; a minting failure is skipped, not fatal.
     Returns short notes (``"minted org_run→<dept>: <fix>"``) for the caller to
     fold into the Telegram alert text.
     """
@@ -340,8 +380,8 @@ async def _approval_keyboard(instance_id: str) -> Optional[dict]:
     """An inline keyboard with an Approve/Deny row per pending approval, or ``None``.
 
     Callback data is the simple ``"approve:<id>"`` / ``"deny:<id>"`` encoding the
-    inbound Telegram poller parses (:mod:`lhassa.notify.telegram_inbound`). Never
-    raises — a lookup failure (or nothing pending) degrades to ``None`` (no keyboard
+    chat engine resolves (:mod:`lhassa.chat.callbacks`). Never
+    raises; a lookup failure (or nothing pending) degrades to ``None`` (no keyboard
     attached, the alert is still sent as plain text).
     """
     try:
@@ -373,19 +413,19 @@ async def react(events: list[dict], *, department: str, config: Optional[Config]
 
     Deterministic and $0 by default:
 
-      * **Episode** — one monitor ``Episode`` summarizing the events is always
+      * **Episode**: one monitor ``Episode`` summarizing the events is always
         appended (observability; no LLM, ``costo_usd=0``).
-      * **Notify** — if any event is *important* AND ``monitor_notify`` is on, a
+      * **Notify**: if any event is *important* AND ``monitor_notify`` is on, a
         concise deterministic message is pushed through :func:`notify`. A "last
         alerted" fingerprint DE-DUPES a standing condition: an identical important
         set does not re-notify. When no important event is present the fingerprint
         is cleared, so a cleared-then-recurring condition alerts again (transition,
         not persistence).
-      * **Think** — only when ``monitor_think`` AND ``LHASSA_ORG_LIVE`` are both on
+      * **Think**: only when ``monitor_think`` AND ``LHASSA_ORG_LIVE`` are both on
         is :func:`monitor_pass` called for a richer analysis (the sole token spend;
         OFF by default). Its failure never breaks the reaction.
-      * **Delegate** — when ``monitor_delegate`` is on, each delegation in the
-        monitor's report (the OFFLINE, deterministic one by default — still $0;
+      * **Delegate**: when ``monitor_delegate`` is on, each delegation in the
+        monitor's report (the OFFLINE, deterministic one by default; still $0;
         a richer live one if ``think`` also ran above) is minted as an
         ``org_run`` task, de-duped by fingerprint so a standing condition mints
         once, not every tick. Minted findings are folded into the Telegram alert
@@ -399,12 +439,12 @@ async def react(events: list[dict], *, department: str, config: Optional[Config]
     important = [e for e in events if _is_important(e)]
     notified = False
 
-    # 1) Episode — always, deterministic, $0.
+    # 1) Episode; always, deterministic, $0.
     with contextlib.suppress(Exception):
         await db.init_db()
         ep = Episode.begin(despertar_por="monitor", instance_id=instance_id)
         # Attribution: the alert below deliberately does NOT ride org/deliver's
-        # per-hop chain — the monitor is Lhassa's own $0 ear (same documented
+        # per-hop chain; the monitor is Lhassa's own $0 ear (same documented
         # exception class as health/checks.py), and wrapping every alert in
         # deliver hops would refill the episode log with the very paperwork
         # recall demotes. The audit trail is kept the cheap way instead: this
@@ -419,9 +459,9 @@ async def react(events: list[dict], *, department: str, config: Optional[Config]
         )
         await ep.append()
 
-    # 1.5) Delegate — findings become work. Reuses whatever report monitor_pass
+    # 1.5) Delegate; findings become work. Reuses whatever report monitor_pass
     # already produced for "think" (live) below when available; otherwise pulls
-    # the OFFLINE report fresh — deterministic, $0, no extra model call.
+    # the OFFLINE report fresh; deterministic, $0, no extra model call.
     delegate_notes: list[str] = []
     live_report: Optional[dict] = None
     if important and getattr(config, "monitor_think", False) and _live_enabled():
@@ -437,13 +477,19 @@ async def react(events: list[dict], *, department: str, config: Optional[Config]
                 report, department=department, instance_id=instance_id
             )
 
-    # 2) Notify — important only, de-duped against the last alerted fingerprint.
+    # 2) Notify; important only, de-duped against the last alerted fingerprint.
     if important:
         fp = _fingerprint(important)
         if getattr(config, "monitor_notify", True) and fp != _STATE.get("last_alert_fp"):
             from lhassa.persona import format_alert
 
-            body = f"monitor · {department}: {_summarize(important)}"
+            # The message says WHAT happened, not which internal seat noticed
+            # it. "monitor · interns: " prefixed every alert with the watcher's
+            # own name and its department, which is Lhassa's org plumbing and
+            # read as noise to the one person receiving it; the attribution
+            # still lives where it belongs, on the episode logged above
+            # (dominio=<department>, despertar_por="monitor").
+            body = _summarize(important)
             message = format_alert(
                 body,
                 level="alert" if any(e.get("level") == "alert" for e in important) else "warn",
@@ -493,16 +539,16 @@ def _capture(config: Config) -> dict:
 
 
 async def watch_loop(config: Optional[Config] = None, *, once: bool = False) -> float:
-    """The adaptive watch loop — gather, diff, react, sleep; never crashes.
+    """The adaptive watch loop; gather, diff, react, sleep; never crashes.
 
     Each iteration: capture a $0 snapshot, :func:`detect_events` against the previous
-    one, :func:`react` if anything is notable, then choose the sleep interval —
+    one, :func:`react` if anything is notable, then choose the sleep interval;
     ``monitor_active_interval`` when :func:`is_active`, else ``monitor_idle_interval``.
     Any error is logged and the loop backs off exponentially (capped at
     :data:`_BACKOFF_CAP`); it never raises out.
 
     ``once=True`` runs exactly ONE tick and RETURNS the interval it would have slept
-    (for tests + a manual poke — no real sleeping). The continuous loop persists the
+    (for tests + a manual poke; no real sleeping). The continuous loop persists the
     previous snapshot across iterations at module level so consecutive pokes chain.
     """
     config = _resolve_config(config)
@@ -542,12 +588,12 @@ async def watch_loop(config: Optional[Config] = None, *, once: bool = False) -> 
                     },
                     return_record=True,
                 )
-                # Read the structured verdict from the conformance_runs table —
-                # the source of truth — instead of parsing the action's return
+                # Read the structured verdict from the conformance_runs table;
+                # the source of truth; instead of parsing the action's return
                 # string (the string is what reaches the owner's screen, and a
                 # raw JSON dump is not a notification). One guard first: when
                 # the action ERRORED, no completed run row was written, so the
-                # latest row is a stale, possibly-green PREVIOUS run — reading
+                # latest row is a stale, possibly-green PREVIOUS run; reading
                 # it would mask the failure as a pass. An error therefore
                 # fails closed here and never consults the table.
                 integrity = {
@@ -586,8 +632,23 @@ async def watch_loop(config: Optional[Config] = None, *, once: bool = False) -> 
                                 f"{critical} critical, {warnings} warning finding(s) "
                                 f"(run {integrity.get('run_id') or 'unknown'})"
                             ),
+                            # The watcher is the CLOCK here, not the discoverer:
+                            # it delegated this run down the chart, and the
+                            # result came back up through `org.deliver`, which
+                            # already told the owner in the owner's own words
+                            # (`notify.voice.phrase`). Pushing this line too
+                            # sent a second toast about one run, worded by the
+                            # machine and carrying a run id: the owner saw both
+                            # side by side and read them as contradicting.
+                            "already_delivered": True,
                         }
                     )
+                # The episodes that run just wrote (temple-execute + the deliver
+                # hops) are OURS. Re-capturing folds them into the baseline the
+                # tail of this loop stores, so the next tick does not rediscover
+                # them as a brand-new failure and send a THIRD message about one
+                # run. The watcher reports what it finds, never what it caused.
+                curr = _capture(config)
             if events:
                 await react(events, department=getattr(config, "monitor_department", "interns"), config=config)
             _STATE["prev"] = curr
@@ -598,7 +659,7 @@ async def watch_loop(config: Optional[Config] = None, *, once: bool = False) -> 
                 else getattr(config, "monitor_idle_interval", 300.0)
             )
         except Exception as exc:  # a monitoring failure is data, never a crash
-            logger.error("monitor watcher: tick failed — {}", exc)
+            logger.error("monitor watcher: tick failed; {}", exc)
             interval = min(backoff, _BACKOFF_CAP)
             backoff = min(backoff * 2, _BACKOFF_CAP)
 
@@ -608,10 +669,10 @@ async def watch_loop(config: Optional[Config] = None, *, once: bool = False) -> 
 
 
 def run_forever(config: Optional[Config] = None) -> int:
-    """Entry point for ``python -m lhassa.org.watcher`` — the always-on ear.
+    """Entry point for ``python -m lhassa.org.watcher``: the always-on ear.
 
     Gated by ``monitor_enabled`` (default OFF): when disabled it logs once and exits
-    cleanly (return 0) without touching signals or the network — the systemd service
+    cleanly (return 0) without touching signals or the network; the systemd service
     is how the watcher is opted in. Otherwise it runs :func:`watch_loop` forever.
     """
     from lhassa import actionpack
@@ -620,7 +681,7 @@ def run_forever(config: Optional[Config] = None) -> int:
     config = _resolve_config(config)
     if not getattr(config, "monitor_enabled", False):
         logger.info(
-            "monitor watcher disabled (LHASSA_MONITOR_ENABLED off) — exiting."
+            "monitor watcher disabled (LHASSA_MONITOR_ENABLED off); exiting."
         )
         return 0
 

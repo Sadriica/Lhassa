@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""``lhassa capabilities`` (alias ``doctor``) — surface Lhassa's elasticity.
+"""``lhassa capabilities`` (alias ``doctor``); surface Lhassa's elasticity.
 
 Lhassa is built to be **fully elastic and highly modular**: every swap point sits
 behind an interface + a uniform :class:`~lhassa.registry.Registry`, and
-capabilities drop in without editing core. This command makes that visible — it
+capabilities drop in without editing core. This command makes that visible; it
 reports, in one place, **what is wired** (every registry's registered names) and
 **what is on/off** (the active configuration + which adapters/channels are actually
 available/configured) plus the drop-in plugins discovered.
@@ -11,7 +11,7 @@ available/configured) plus the drop-in plugins discovered.
 It is **LLM-free and offline**: it never constructs a provider, never calls a
 model, and touches the network only insofar as plugin discovery / health already
 might. :func:`collect_capabilities` is a pure gather (no printing) that is
-**defensive end to end** — a missing or degraded subsystem is *reported*, never
+**defensive end to end**: a missing or degraded subsystem is *reported*, never
 fatal. :func:`render` turns that mapping into a clean, sectioned report.
 
 Lives under ``lhassa/cli/`` (a shell layer) so the architecture guard stays green.
@@ -49,7 +49,7 @@ def _safe(errors: dict, label: str, fn: Callable[[], Any], default: Any = None) 
     ``default`` (so one degraded subsystem is reported, never fatal)."""
     try:
         return fn()
-    except Exception as exc:  # never raise — a limited subsystem is reported
+    except Exception as exc:  # never raise; a limited subsystem is reported
         errors[label] = f"{type(exc).__name__}: {exc}"
         return default
 
@@ -107,7 +107,14 @@ def _collect_registries(errors: dict, config: Any) -> dict:
     def _actions() -> dict:
         from lhassa.core import actions
 
-        return {"registered": list(actions.ACTIONS)}
+        # `blocked` names actions that are registered but structurally cannot
+        # act right now (a flag off, nothing configured). They are skipped by
+        # the heartbeat WITHOUT leaving an episode, so this is where "why isn't
+        # it running?" gets its answer.
+        return {
+            "registered": list(actions.ACTIONS),
+            "blocked": actions.blocked_actions(),
+        }
 
     def _departments() -> dict:
         from lhassa.org import routing
@@ -133,7 +140,7 @@ def _collect_registries(errors: dict, config: Any) -> dict:
 
 
 def _collect_active_config(errors: dict, config: Any) -> dict:
-    """What is on/off right now — mirrored off plain config, no model call."""
+    """What is on/off right now; mirrored off plain config, no model call."""
     out: dict[str, Any] = {}
 
     def _routine() -> dict:
@@ -154,15 +161,22 @@ def _collect_active_config(errors: dict, config: Any) -> dict:
     out["llm_kill_switch"] = bool(getattr(config, "llm_kill_switch", False))
 
     def _telegram() -> dict:
-        from lhassa.notify import telegram
+        # The telegram pack registers the "telegram" channel; ask the channel
+        # registry rather than the pack, so core reports "absent" without it.
+        from lhassa.notify.channels import CHANNELS
 
+        channel = CHANNELS.get_or_none("telegram")
         return {
-            "configured": bool(telegram.is_configured(config)),
+            "installed": channel is not None,
+            "configured": bool(channel is not None and channel.is_configured(config)),
             "poll_enabled": bool(getattr(config, "telegram_poll_enabled", False)),
         }
 
     out["telegram"] = _safe(
-        errors, "telegram", _telegram, {"configured": False, "poll_enabled": False}
+        errors,
+        "telegram",
+        _telegram,
+        {"installed": False, "configured": False, "poll_enabled": False},
     )
 
     def _org() -> dict:
@@ -210,8 +224,13 @@ def _collect_plugins(errors: dict, config: Any) -> dict:
         raw = getattr(config, "plugins_dir", "") or ""
         path = Path(str(raw)).expanduser() if raw else None
         exists = bool(path and path.is_dir())
+        from lhassa.extensions import PACKS
+
         return {
             "loaded": loaded,
+            "packs": [
+                {"name": p.name, "summary": p.summary} for p in PACKS.all()
+            ],
             "plugins_dir": str(path) if path else "",
             "plugins_dir_exists": exists,
         }
@@ -220,14 +239,14 @@ def _collect_plugins(errors: dict, config: Any) -> dict:
         errors,
         "plugins",
         _do,
-        {"loaded": [], "plugins_dir": "", "plugins_dir_exists": False},
+        {"loaded": [], "packs": [], "plugins_dir": "", "plugins_dir_exists": False},
     )
 
 
 def collect_capabilities(config: Optional[Any] = None) -> dict:
     """Gather Lhassa's capability picture: wired registries + on/off config + plugins.
 
-    Pure (no printing) and **defensive end to end** — never raises. A missing or
+    Pure (no printing) and **defensive end to end**: never raises. A missing or
     degraded subsystem is reported under ``errors`` and replaced with a safe
     placeholder, so the report is always complete. LLM-free: no provider is
     constructed and no model is called.
@@ -236,10 +255,13 @@ def collect_capabilities(config: Optional[Any] = None) -> dict:
     errors: dict[str, str] = {}
     cfg = _safe(errors, "config", lambda: _config(config), None)
 
+    # Plugins first: loading them is what registers a pack's channels, commands
+    # and actions, so the registries below report what a pack plugged in.
+    plugins = _collect_plugins(errors, cfg)
     return {
         "registries": _collect_registries(errors, cfg),
         "active_config": _collect_active_config(errors, cfg),
-        "plugins": _collect_plugins(errors, cfg),
+        "plugins": plugins,
         "errors": errors,
     }
 
@@ -292,6 +314,16 @@ def render(data: dict) -> str:
     _row("Departments", "departments")
     console.print(table)
 
+    blocked = (reg.get("actions", {}) or {}).get("blocked", {}) or {}
+    if blocked:
+        console.print()
+        console.print(
+            "[dim]Blocked; registered, skipped while they cannot act "
+            "(no episode is logged):[/dim]"
+        )
+        for name, reason in sorted(blocked.items()):
+            console.print(f"  [dim]{name}; {reason}[/dim]")
+
     # Channels: also show the configured subset (distinct from active order).
     chan = reg.get("channels", {}) or {}
     if chan.get("registered"):
@@ -315,6 +347,8 @@ def render(data: dict) -> str:
         f"  dir={pdir}  [{_mark(bool(plugins.get('plugins_dir_exists')))} exists]"
     )
     console.print(f"  loaded: {_names_line(plugins.get('loaded', []))}")
+    packs = [p.get("name", "") for p in plugins.get("packs", [])]
+    console.print(f"  packs: {_names_line(packs)}")
 
     # ── Active config (what's on/off) ──────────────────────────────────────────
     console.print("\n[bold]Active config (on/off)[/bold]")
@@ -325,6 +359,7 @@ def render(data: dict) -> str:
         ("memory layer 4", _mark(active.get("memory_layer4_enabled"))),
         ("voice", _mark(active.get("voice_enabled"))),
         ("llm kill-switch", _mark(active.get("llm_kill_switch"))),
+        ("telegram pack", _mark(tg.get("installed"))),
         ("telegram configured", _mark(tg.get("configured"))),
         ("telegram poll", _mark(tg.get("poll_enabled"))),
     ]

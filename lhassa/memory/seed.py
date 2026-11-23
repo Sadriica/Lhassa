@@ -10,7 +10,7 @@ is append-only, so we only insert what is missing).
 from lhassa.config import Config
 from lhassa.memory.facts import add_fact, load_facts
 
-# Apéndice B — the four seed facts (tipo, contenido, pinned, tags).
+# Apéndice B; the four seed facts (tipo, contenido, pinned, tags).
 SEED_FACTS = [
     ("dato", "le gusta el chocolate con menta", False, ["gustos"]),
     ("dato", "prefiere herramientas de código libre", True, ["tooling"]),

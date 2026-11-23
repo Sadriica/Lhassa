@@ -1,64 +1,64 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""The $0 feedback signal — did an answer land, WITHOUT ever asking the owner.
+"""The $0 feedback signal; did an answer land, WITHOUT ever asking the owner.
 
 Lhassa never shows a thumbs-up/down. This module infers, from behavior already
-sitting in the episode log, whether a past answer probably landed or not — pure
+sitting in the episode log, whether a past answer probably landed or not; pure
 SQL + Python over ``episodes``/``approvals``, no LLM call, never raises. It is a
 **consumer** of the grande, same posture as :mod:`lhassa.agents.repetition`
 (which reads episodes to find repeated *thinks*; this reads them to find
 repeated *answers*).
 
 Honest limitation up front: the episode schema (see :mod:`lhassa.core.episode`)
-has **no column for the owner's raw input text** — only a synthesized
+has **no column for the owner's raw input text**: only a synthesized
 ``decision`` (e.g. ``"think: provider=X model=Y"`` or ``"cache-hit: ..."``) and
 the assistant's own ``resultado`` (its reply). Every heuristic below works
 within that constraint and is documented as an approximation, not ground
-truth — this module infers a *probability the answer landed*, it does not know.
+truth; this module infers a *probability the answer landed*, it does not know.
 
 Four heuristics, each producing a per-episode ``{episode_id, signal, reason,
 confidence}``:
 
-1. **Re-ask** (negative) — a later "responder" episode serves a near-identical
+1. **Re-ask** (negative); a later "responder" episode serves a near-identical
    (or literally cache-served, ``decision`` starting with ``"cache-hit:"``)
    answer shortly after. Since the answer text recurring implies the
    *question* recurred (the owner asked essentially the same thing again),
    the ORIGINAL answer probably didn't land. Example: episode A replies
    "It's 18°C in Santiago." at 10:00; episode B replies the same text (a
    cache hit, ``decision="cache-hit: served past answer (sim=0.94)"``) at
-   10:20 — A gets a negative "re-ask" signal.
+   10:20. A gets a negative "re-ask" signal.
    *Risk*: two genuinely different questions that happen to get a similarly
    short/canned answer ("Yes.", "Done.") can false-positive as a re-ask.
 
-2. **Correction** (negative) — the very next answer episode's own recorded
-   text (``decision`` + ``resultado`` combined — see the limitation above)
+2. **Correction** (negative); the very next answer episode's own recorded
+   text (``decision`` + ``resultado`` combined; see the limitation above)
    opens with a correction phrase ("no", "wrong", "en realidad", "más
    bien", …). Example: episode A answers a question; episode B's text
-   begins "No, en realidad quería..." — A gets a negative "correction"
+   begins "No, en realidad quería...": A gets a negative "correction"
    signal. *Honest caveat*: none of the currently-wired channels
    (telegram/voice) log the owner's raw follow-up into an episode field
    today (see the module limitation), so on live data this heuristic is
-   presently dormant — it activates the moment any channel starts
+   presently dormant; it activates the moment any channel starts
    recording the follow-up text there. The logic itself is exercised and
    correct against seeded episodes.
 
-3. **Silence-after** (weak positive) — no re-ask, no correction, and enough
+3. **Silence-after** (weak positive); no re-ask, no correction, and enough
    time (``silence_window_minutes``) has passed since the answer with
    nothing following (or the next answer on record is well past the
    window) → probably landed. Example: episode A answers at 09:00; the
    next chat episode is at 14:00 the same day (or there is none yet and
-   hours have passed) — A gets a weak-positive "silence-after" signal.
+   hours have passed); A gets a weak-positive "silence-after" signal.
    *Risk*: silence can also mean the owner gave up, not that they were
-   satisfied — this is why the signal is WEAK, not strong.
+   satisfied; this is why the signal is WEAK, not strong.
 
-4. **Acted-on** (positive) — a concrete action followed shortly after: a
+4. **Acted-on** (positive); a concrete action followed shortly after: a
    later episode in the window with a real (non-"responder") ``accion``,
    or an approval created and resolved ``"aprobada"`` in the window.
    Example: episode A answers "/code ..." parks a ``code_run`` approval;
-   minutes later that approval is approved — A gets a positive "acted-on"
+   minutes later that approval is approved. A gets a positive "acted-on"
    signal (they used it). *Risk*: an unrelated action happening to fall in
    the same window (busy period) can be misattributed.
 
-:func:`summary` aggregates counts + a ``net_score`` — a cheap "am I landing?"
+:func:`summary` aggregates counts + a ``net_score``: a cheap "am I landing?"
 health read for the owner/dashboard, still $0.
 """
 
@@ -73,7 +73,7 @@ from loguru import logger
 from lhassa._vendor import aiosqlite
 from lhassa.core import db as _db
 
-# ── tunables (kept local — no Config edit needed for this first cut) ───────────
+# ── tunables (kept local; no Config edit needed for this first cut) ───────────
 
 DEFAULT_DAYS = 7
 ANSWER_ACCION = "responder"
@@ -89,7 +89,7 @@ ACTED_ON_WINDOW_MINUTES = 30
 SILENCE_WINDOW_MINUTES = 60
 
 # Correction-trigger prefixes (English + Spanish), matched at the START of the
-# (lowercased, stripped) follow-up text — see the module docstring's caveat on
+# (lowercased, stripped) follow-up text; see the module docstring's caveat on
 # where this text currently comes from.
 _CORRECTION_PREFIXES = (
     "no,",
@@ -202,14 +202,14 @@ async def derive_signals(
     """Infer a feedback signal for each recent "answer" episode. Never raises.
 
     Walks ``accion == "responder"`` episodes (chat/voice answers) in the last
-    ``days`` and, for each, checks the heuristics in order — re-ask >
+    ``days`` and, for each, checks the heuristics in order; re-ask >
     correction > acted-on > silence-after > neutral (first match wins, most
     specific/negative first so a real problem is never masked by a coincidental
     later action). ``config`` is accepted for a consistent call shape with the
     rest of the codebase; no setting is read from it yet.
 
     Returns a list of ``{episode_id, signal, reason, confidence}`` dicts, one
-    per scored answer episode (dropping cache-hit episodes themselves — their
+    per scored answer episode (dropping cache-hit episodes themselves; their
     signal is attributed to the ORIGINAL episode they re-served, see
     :data:`REASK_WINDOW_MINUTES`). An empty/degenerate log returns ``[]``.
     """
@@ -232,7 +232,7 @@ async def derive_signals(
                 continue
             decision = ep.get("decision") or ""
             if _norm_text(decision).startswith("cache-hit"):
-                # This episode IS a re-ask event for an earlier one — its own
+                # This episode IS a re-ask event for an earlier one; its own
                 # signal is attributed to whichever earlier episode it re-served.
                 continue
 
@@ -257,7 +257,7 @@ async def derive_signals(
                         ep["id"],
                         "negative",
                         "re-ask: a near-duplicate/cache-served answer recurred "
-                        f"shortly after (similarity={reask_ratio:.2f}) — the "
+                        f"shortly after (similarity={reask_ratio:.2f}); the "
                         "question probably came back because the first answer "
                         "didn't land",
                         0.85 if reask_ratio >= 0.99 else 0.6,
@@ -317,7 +317,7 @@ async def derive_signals(
                         ep["id"],
                         "positive",
                         "acted-on: a concrete action/approval followed shortly "
-                        "after — the owner used the answer",
+                        "after; the owner used the answer",
                         0.65,
                     )
                 )
@@ -336,7 +336,7 @@ async def derive_signals(
                         ep["id"],
                         "positive",
                         "silence-after: no re-ask/correction followed within the "
-                        "window — probably landed (weak: silence can also mean "
+                        "window; probably landed (weak: silence can also mean "
                         "the owner gave up)",
                         0.4,
                     )

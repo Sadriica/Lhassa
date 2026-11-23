@@ -1,0 +1,12 @@
+{"arm": "a", "task_id": "hidden_spec", "seed": 0, "passed": true, "tokens_in": 10510, "tokens_out": 958, "tokens_cache": 49920, "latency_ms": 83553, "spec_carried": "spec-in-prompt", "detail": ""}
+{"arm": "c", "task_id": "hidden_spec", "seed": 0, "passed": false, "tokens_in": 9152, "tokens_out": 1386, "tokens_cache": 44032, "latency_ms": 58757, "spec_carried": "none", "detail": ""}
+{"arm": "d", "task_id": "hidden_spec", "seed": 0, "passed": true, "tokens_in": 9603, "tokens_out": 756, "tokens_cache": 44800, "latency_ms": 80167, "spec_carried": "spec-in-prompt", "detail": ""}
+{"arm": "b", "task_id": "hidden_spec", "seed": 0, "passed": true, "tokens_in": 644, "tokens_out": 889, "tokens_cache": 32512, "latency_ms": 55605, "spec_carried": "n/a(native-session)", "detail": "clean"}
+{"arm": "a", "task_id": "hidden_spec", "seed": 1, "passed": true, "tokens_in": 10653, "tokens_out": 738, "tokens_cache": 37888, "latency_ms": 62866, "spec_carried": "spec-in-prompt", "detail": ""}
+{"arm": "c", "task_id": "hidden_spec", "seed": 1, "passed": false, "tokens_in": 9452, "tokens_out": 1682, "tokens_cache": 45056, "latency_ms": 91879, "spec_carried": "none", "detail": ""}
+{"arm": "d", "task_id": "hidden_spec", "seed": 1, "passed": true, "tokens_in": 11458, "tokens_out": 7656, "tokens_cache": 112384, "latency_ms": 193148, "spec_carried": "spec-in-prompt", "detail": ""}
+{"arm": "b", "task_id": "hidden_spec", "seed": 1, "passed": true, "tokens_in": 9252, "tokens_out": 1121, "tokens_cache": 25088, "latency_ms": 43456, "spec_carried": "n/a(native-session)", "detail": "clean"}
+{"arm": "a", "task_id": "hidden_spec", "seed": 2, "passed": true, "tokens_in": 10731, "tokens_out": 967, "tokens_cache": 50176, "latency_ms": 93349, "spec_carried": "spec-in-prompt", "detail": ""}
+{"arm": "c", "task_id": "hidden_spec", "seed": 2, "passed": true, "tokens_in": 16257, "tokens_out": 4916, "tokens_cache": 133376, "latency_ms": 167347, "spec_carried": "none", "detail": ""}
+{"arm": "d", "task_id": "hidden_spec", "seed": 2, "passed": true, "tokens_in": 9426, "tokens_out": 1130, "tokens_cache": 45824, "latency_ms": 76871, "spec_carried": "spec-in-prompt", "detail": ""}
+{"arm": "b", "task_id": "hidden_spec", "seed": 2, "passed": true, "tokens_in": 9683, "tokens_out": 1452, "tokens_cache": 24576, "latency_ms": 49455, "spec_carried": "n/a(native-session)", "detail": "clean"}

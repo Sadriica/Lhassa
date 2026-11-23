@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""The PERSISTED knowledge graph (Wave 3, "LightRAG-lite") — entities + typed
+"""The PERSISTED knowledge graph (Wave 3, "LightRAG-lite"); entities + typed
 edges written to ``kg_entities``/``kg_edges`` (migration 6, ``core/db.py``), fed
 $0 from the SAME deterministic extraction :mod:`lhassa.memory.graph` already
 uses for its on-the-fly read-model. Where ``memory/graph.py`` recomputes
@@ -16,43 +16,43 @@ the one symmetric kind so A↔B never duplicates as two rows.
 Entity **kind** (the ``kg_entities.kind`` column) is the hook that gives
 ``mentions`` real meaning without a second table:
 
-  - ``tag``  — an entity that came from a fact's own ``tags`` list. The
-    strongest signal (a human tagged it) — mirrors ``memory/graph.py``'s
+  - ``tag`` : an entity that came from a fact's own ``tags`` list. The
+    strongest signal (a human tagged it); mirrors ``memory/graph.py``'s
     ``entities()``, where a tag source "wins" over a text source.
-  - ``term`` — an entity pulled out of free text via
+  - ``term``: an entity pulled out of free text via
     :func:`lhassa.memory.graph.extract_terms` (capitalized/quoted terms).
 
 **Edge kinds**:
 
-  - ``co_occurs`` (SYMMETRIC) — two entities appeared in the same fact or the
+  - ``co_occurs`` (SYMMETRIC); two entities appeared in the same fact or the
     same episode. Weight accumulates once per co-occurring pair per source row
     (the db helper adds on conflict), so a pair seen in 5 facts ends up weight
-    5 — a cheap, durable "how related are these" signal.
-  - ``mentions`` (DIRECTED, term → tag) — a text-extracted TERM entity and a
+    5; a cheap, durable "how related are these" signal.
+  - ``mentions`` (DIRECTED, term → tag); a text-extracted TERM entity and a
     TAG entity appeared in the *same fact*. This is the minimal-but-defensible
     design point of this module: a generic term↔term co-occurrence is already
     ``co_occurs``, so ``mentions`` is reserved for the one relationship that
-    carries EXTRA structure — "this free-text term showed up under a fact the
-    owner explicitly tagged X" — rather than being a second, redundant
+    carries EXTRA structure; "this free-text term showed up under a fact the
+    owner explicitly tagged X": rather than being a second, redundant
     co-occurrence edge. Episodes have no tags, so episodes never produce
     ``mentions`` edges, only ``co_occurs`` ones.
-  - ``derived_from`` (DIRECTED) — reserved for future provenance edges (e.g. a
+  - ``derived_from`` (DIRECTED); reserved for future provenance edges (e.g. a
     distilled/consolidated fact derived from a raw episode). Part of the closed
     vocabulary so :func:`add_edge` already validates it, but :func:`sync` does
-    not emit it yet — no current feeder needs it.
-  - ``asserts`` (DIRECTED, subject → object) — OPT-IN (``config.kg_triples_enabled``,
+    not emit it yet; no current feeder needs it.
+  - ``asserts`` (DIRECTED, subject → object); OPT-IN (``config.kg_triples_enabled``,
     ``LHASSA_KG_TRIPLES``, off by default), fed by a cheap-model pass over the
     SAME new rows the regex pass already gathered (see :func:`sync`). The edge
     schema has no predicate column and this module may not alter it, so the
     predicate rides inside the edge's own ``source`` string, appended after the
     usual provenance: ``"fact:<id>|pred:<verb>"`` / ``"episode:<id>|pred:<verb>"``.
-    It is a schema-free, honestly-documented hack rather than a real column —
+    It is a schema-free, honestly-documented hack rather than a real column;
     a reader that wants the predicate splits on ``"|pred:"``.
 
 :func:`sync` is the $0 feeder: it walks facts + recent episodes SINCE the last
-sync (a ``watch_state`` marker, ``kg_sync:last`` — the same house dedup pattern
+sync (a ``watch_state`` marker, ``kg_sync:last``: the same house dedup pattern
 as the watchlist senses), extracts terms, upserts entities and edges, and
-advances the marker. It NEVER calls a model and NEVER raises — any failure
+advances the marker. It NEVER calls a model and NEVER raises; any failure
 degrades to a zeroed summary. It is also a no-op (zeroed summary, nothing
 scanned) when ``config.memory_graph_enabled`` is off, matching the flag's role
 as the single on/off switch for the whole feature. With ``kg_triples_enabled``
@@ -70,7 +70,7 @@ edges from pass one always stand regardless of what the model pass does.
 finds candidate duplicate pairs among same-kind entities, EXACT normalized
 matches merge immediately with no model, and the remaining fuzzy candidates
 are only merged when a routine-model judgment call says they are the same
-entity — never guessed. See its docstring for the exact prefilter rule.
+entity; never guessed. See its docstring for the exact prefilter rule.
 """
 
 from __future__ import annotations
@@ -80,6 +80,8 @@ import json
 import re
 import unicodedata
 from itertools import combinations
+
+from loguru import logger
 
 from lhassa.config import Config
 from lhassa.core import db
@@ -97,7 +99,7 @@ ASSERTS = "asserts"
 
 EDGE_KINDS: tuple[str, ...] = (CO_OCCURS, MENTIONS, DERIVED_FROM, ASSERTS)
 
-#: Which kinds are SYMMETRIC — stored canonically (ids sorted) so A↔B never
+#: Which kinds are SYMMETRIC; stored canonically (ids sorted) so A↔B never
 #: duplicates as a second row, mirrors ``org/relationships.py:SYMMETRIC_KINDS``.
 SYMMETRIC_KINDS: frozenset[str] = frozenset({CO_OCCURS})
 
@@ -110,23 +112,23 @@ ENTITY_TERM = "term"
 _SYNC_MARKER_KEY = "kg_sync:last"
 
 #: Bounded recent-episode scan per sync pass (mirrors memory/graph.py's
-#: ``_recent_episodes`` default of 200 — kept a bit wider since this feeder
+#: ``_recent_episodes`` default of 200; kept a bit wider since this feeder
 #: also filters by the marker, so most of the scan is usually a cheap no-op).
 _EPISODE_SCAN = 500
 
-#: Cheap-model triple extraction (kg_triples_enabled) — one completion per
+#: Cheap-model triple extraction (kg_triples_enabled); one completion per
 #: batch of up to this many source items (facts + episodes combined).
 _TRIPLE_BATCH_SIZE = 20
 _TRIPLE_MAX_TOKENS = 800
 
-#: Entity-resolution (resolve()) — one bounded completion judging up to this
+#: Entity-resolution (resolve()); one bounded completion judging up to this
 #: many fuzzy candidate pairs.
 _RESOLVE_MAX_TOKENS = 600
 #: A pair is a fuzzy CANDIDATE (not auto-merged, needs a model or a human) when
 #: their normalized names' difflib ratio reaches this.
 _RESOLVE_RATIO_THRESHOLD = 0.6
 #: ...or when they share a normalized token at least this long (a surname,
-#: a distinctive word) — catches "Buzz Aldrin"/"Edwin Aldrin" even though
+#: a distinctive word); catches "Buzz Aldrin"/"Edwin Aldrin" even though
 #: their overall ratio is unremarkable.
 _RESOLVE_SHARED_TOKEN_MIN_LEN = 3
 
@@ -149,7 +151,7 @@ def _resolve_instance(instance_id: str | None, config) -> str:
 
 
 def _canonical(from_id: str, to_id: str, kind: str) -> tuple[str, str]:
-    """Order the endpoints for storage — sorted for a symmetric kind."""
+    """Order the endpoints for storage; sorted for a symmetric kind."""
     if kind in SYMMETRIC_KINDS and to_id < from_id:
         return to_id, from_id
     return from_id, to_id
@@ -160,7 +162,7 @@ async def upsert_entity(
 ) -> str:
     """Insert-or-touch one entity by ``(instance_id, name)``. Returns its id.
 
-    Thin wrapper over ``db.upsert_kg_entity`` — a fresh id is minted only when
+    Thin wrapper over ``db.upsert_kg_entity``: a fresh id is minted only when
     the name doesn't already exist (the db helper looks it up first).
     """
     when = when or db._now()
@@ -188,10 +190,10 @@ async def add_edge(
     """Validate then persist one edge (or accumulate its weight on conflict).
 
     Raises :class:`KGValidationError` for an unknown ``kind`` or a self-edge
-    (``from_id == to_id``) — the same discipline as
+    (``from_id == to_id``); the same discipline as
     ``org/relationships.py``'s mutating ops, so a bad call fails loudly and
     NEVER corrupts storage. Callers that walk untrusted/derived input (like
-    :func:`sync`) should call this inside their own try/except — this
+    :func:`sync`) should call this inside their own try/except; this
     function itself does not swallow errors, it IS the validation gate.
     """
     if kind not in EDGE_KINDS:
@@ -232,7 +234,7 @@ def _extract_json_array(text: str) -> list:
     """Best-effort parse of a JSON array out of a model answer. Never raises.
 
     Copied (not imported) from :func:`lhassa.memory.consolidate._extract_json_array`
-    — same module layer (``memory`` -> ``memory``), but kept local so this
+   ; same module layer (``memory`` -> ``memory``), but kept local so this
     module has no dependency on another module's private helper. Handles a
     bare array, a ```json fenced block, or an array embedded in prose.
     """
@@ -267,7 +269,7 @@ def _extract_json_array(text: str) -> list:
 
 
 def _triple_source_items(new_facts: list, new_episodes: list) -> list[dict]:
-    """Reuse the SAME incremental rows the regex pass already gathered — one
+    """Reuse the SAME incremental rows the regex pass already gathered; one
     ``{"source", "text"}`` item per fact/episode with non-empty text."""
     items: list[dict] = []
     for f in new_facts:
@@ -286,7 +288,7 @@ def _triple_messages(items: list[dict]) -> list[dict]:
     prompt = (
         "Extract simple subject-predicate-object facts explicitly stated in the "
         "texts below, each labeled `- <source_id>: <text>`. Do NOT infer or "
-        "guess — only facts the text actually says. Return ONLY a JSON array of "
+        "guess; only facts the text actually says. Return ONLY a JSON array of "
         'the form [{"subject": "...", "predicate": "...", "object": "...", '
         '"source": "<source_id>"}], reusing EXACTLY one of the given <source_id> '
         "values for each item's \"source\" field. If nothing can be extracted, "
@@ -295,10 +297,21 @@ def _triple_messages(items: list[dict]) -> list[dict]:
     return [{"role": "user", "content": prompt}]
 
 
-def _parse_triples(text: str, valid_sources: set) -> list[dict]:
-    """Parse+validate the model's triple array: every field non-empty, the
-    ``source`` must be one of the ids actually offered in the prompt (a
-    hallucinated source is dropped, not trusted), and subject != object."""
+def _parse_triples(
+    text: str, source_texts: dict[str, str], *, dropped: list[str] | None = None
+) -> list[dict]:
+    """Parse+validate the model's triple array.
+
+    Every field must be non-empty, ``source`` must be one of the ids actually
+    offered in the prompt (a hallucinated source is dropped, not trusted), and
+    subject != object. Beyond that, the GROUNDING guard: subject AND object
+    must each appear (case/accent-insensitive substring) somewhere in the cited
+    source's own text; a triple naming something the source never said is a
+    model hallucination of CONTENT, not just of the source id, and is dropped
+    the same way. Dropped triples are counted into ``dropped`` (honest toward
+    the log) but never surfaced to the caller; the model never learns which
+    ones were rejected.
+    """
     out: list[dict] = []
     for raw in _extract_json_array(text):
         if not isinstance(raw, dict):
@@ -307,10 +320,17 @@ def _parse_triples(text: str, valid_sources: set) -> list[dict]:
         predicate = str(raw.get("predicate") or "").strip()
         obj = str(raw.get("object") or "").strip()
         source = str(raw.get("source") or "").strip()
-        if not subject or not predicate or not obj or source not in valid_sources:
+        if not subject or not predicate or not obj or source not in source_texts:
+            if dropped is not None:
+                dropped.append(source or "<missing-source>")
             continue
         if subject.casefold() == obj.casefold():
             continue  # would be a self-edge
+        source_norm = _normalize_name(source_texts[source])
+        if _normalize_name(subject) not in source_norm or _normalize_name(obj) not in source_norm:
+            if dropped is not None:
+                dropped.append(source)
+            continue  # ungrounded; subject/object never actually appear in the source
         out.append({"subject": subject, "predicate": predicate, "object": obj, "source": source})
     return out
 
@@ -331,7 +351,7 @@ async def _run_triple_extraction(
     Mirrors :mod:`lhassa.memory.consolidate`'s cheap-model call pattern:
     ``llm.router`` resolves the provider/model (unless injected for tests),
     ``BudgetExceeded``/``ProviderNotConfigured`` (and any other failure)
-    degrade to skipping — the regex-derived edges :func:`sync` already wrote
+    degrade to skipping; the regex-derived edges :func:`sync` already wrote
     stand regardless. Returns the number of ``asserts`` edges written.
     """
     if not items:
@@ -359,8 +379,14 @@ async def _run_triple_extraction(
         except Exception:
             continue
 
-        valid_sources = {it["source"] for it in batch}
-        triples = _parse_triples(completion.text, valid_sources)
+        source_texts = {it["source"]: it["text"] for it in batch}
+        dropped: list[str] = []
+        triples = _parse_triples(completion.text, source_texts, dropped=dropped)
+        if dropped:
+            logger.debug(
+                f"kg._run_triple_extraction: dropped {len(dropped)} ungrounded/"
+                f"hallucinated triple(s) (sources={dropped})"
+            )
         when = db._now()
         for t in triples:
             try:
@@ -394,29 +420,29 @@ async def sync(
     Per fact: tag terms (``fact.tags``, entity kind ``"tag"``) and text terms
     (:func:`lhassa.memory.graph.extract_terms` over ``contenido``, entity kind
     ``"term"``) are combined into ``co_occurs`` edges (every pair, symmetric),
-    plus one ``mentions`` edge per (text term → tag) pair in that fact — see
+    plus one ``mentions`` edge per (text term → tag) pair in that fact; see
     the module docstring for why ``mentions`` is scoped to that one
     relationship. Per episode: only text terms (episodes carry no tags), so
     only ``co_occurs`` edges. Entities are upserted TEXT-terms-first,
     TAG-terms-second within a sync pass, so a name that is both a tag and a
-    text term ends the pass with ``kind="tag"`` — the stronger signal wins,
+    text term ends the pass with ``kind="tag"``: the stronger signal wins,
     mirroring ``memory/graph.py``'s own "once tagged, stays tagged" rule.
 
     With ``config.kg_triples_enabled`` on, a THIRD pass (:func:`_run_triple_extraction`)
     asks the routine model for grounded subject/predicate/object triples over the
-    same new facts/episodes and writes them as ``asserts`` edges — see the module
+    same new facts/episodes and writes them as ``asserts`` edges; see the module
     docstring. Off (the default), this pass never runs and behavior is
     byte-identical to before it existed. ``provider``/``model``/``completion_fn``
     are test-injection seams for that pass only; the regex passes above never
     touch a provider.
 
-    Returns ``{"entities": n, "edges": n, "scanned": n}`` — ``entities`` counts
+    Returns ``{"entities": n, "edges": n, "scanned": n}``: ``entities`` counts
     distinct names touched this pass (existing entities re-touched count too,
     same as the db upsert semantics), ``edges`` counts edge-write operations
     (weight accumulations included, ``asserts`` edges from the triples pass
     included too), ``scanned`` counts new fact+episode rows considered. A
     disabled ``memory_graph_enabled`` flag, or any internal failure, degrades to
-    a zeroed summary — this never raises.
+    a zeroed summary; this never raises.
     """
     zero = {"entities": 0, "edges": 0, "scanned": 0}
     try:
@@ -432,7 +458,7 @@ async def sync(
         if scanned == 0:
             return zero
 
-        # Two passes so tag terms are upserted LAST (kind priority — see docstring).
+        # Two passes so tag terms are upserted LAST (kind priority; see docstring).
         text_terms_by_fact: list[tuple[set, set, str, str]] = []  # (text, tag, when, source)
         for f in new_facts:
             text_terms = _graph.extract_terms(f.contenido)
@@ -453,7 +479,7 @@ async def sync(
             touched_names.add(name)
             return eid
 
-        # Pass 1 — text terms (fact + episode), kind "term".
+        # Pass 1; text terms (fact + episode), kind "term".
         for text_terms, _tags, when, _src in text_terms_by_fact:
             for name in text_terms:
                 await _ensure(name, ENTITY_TERM, when)
@@ -461,14 +487,14 @@ async def sync(
             for name in terms:
                 await _ensure(name, ENTITY_TERM, when)
 
-        # Pass 2 — tag terms, kind "tag" (overwrites any same-name term entity).
+        # Pass 2; tag terms, kind "tag" (overwrites any same-name term entity).
         for _text, tag_terms, when, _src in text_terms_by_fact:
             for name in tag_terms:
                 await _ensure(name, ENTITY_TAG, when)
 
         edges = 0
 
-        # co_occurs — every pair within a fact's combined term set, and within
+        # co_occurs; every pair within a fact's combined term set, and within
         # an episode's text-term set.
         for text_terms, tag_terms, when, source in text_terms_by_fact:
             combined = sorted(text_terms | tag_terms)
@@ -481,7 +507,7 @@ async def sync(
                     edges += 1
                 except KGValidationError:
                     continue
-            # mentions — directed text term → tag, same fact only.
+            # mentions; directed text term → tag, same fact only.
             for text_name in text_terms:
                 for tag_name in tag_terms:
                     try:
@@ -505,7 +531,7 @@ async def sync(
                 except KGValidationError:
                     continue
 
-        # Optional third pass — cheap-model triple extraction (see docstring).
+        # Optional third pass; cheap-model triple extraction (see docstring).
         # Runs INSIDE the same try/except as everything above: any failure
         # here degrades this pass alone, never the regex edges already written.
         if getattr(config, "kg_triples_enabled", False):
@@ -536,7 +562,7 @@ async def sync(
 
 
 def _normalize_name(name: str) -> str:
-    """Casefold + accent-strip a name for comparison — NOT persisted, only
+    """Casefold + accent-strip a name for comparison. NOT persisted, only
     used as the resolve() comparison key."""
     if not name:
         return ""
@@ -553,7 +579,7 @@ def _is_fuzzy_candidate(name_a: str, name_b: str) -> bool:
     e.g. "buzz aldrin" / "edwin aldrin") OR their overall
     ``difflib.SequenceMatcher`` ratio reaches :data:`_RESOLVE_RATIO_THRESHOLD`
     (catches near-identical single-token names / typos). Deliberately
-    permissive — a false-positive candidate only costs an extra line in the
+    permissive; a false-positive candidate only costs an extra line in the
     model prompt (or is silently skipped with no model); it is never
     auto-merged without either an exact match or an explicit "same" judgment.
     """
@@ -600,7 +626,7 @@ def _resolve_messages(pairs: list[tuple[dict, dict]]) -> list[dict]:
     prompt = (
         "For each candidate pair below, judge whether the two names refer to "
         "the SAME real-world entity. Return ONLY a JSON array of the form "
-        '[{"a": "<id>", "b": "<id>", "same": true|false}] — one entry per pair, '
+        '[{"a": "<id>", "b": "<id>", "same": true|false}]; one entry per pair, '
         "reusing the exact ids given (do not invent new ones).\n\nPairs:\n"
         + "\n".join(lines)
     )
@@ -626,26 +652,26 @@ async def resolve(
 ) -> dict:
     """Merge duplicate entities: deterministic prefilter + optional model judgment.
 
-    1. **Prefilter** (:func:`_candidate_pairs`) — among same-``kind`` entities,
+    1. **Prefilter** (:func:`_candidate_pairs`); among same-``kind`` entities,
        normalize each name (casefold + accent-strip) and pair up: EXACT
        normalized matches, and FUZZY candidates (a shared ≥3-char token, e.g. a
        surname, OR a ``difflib`` ratio ≥0.6). Capped at ``max_pairs`` total.
-    2. **Exact pairs merge immediately** — no model needed, they are trivially
+    2. **Exact pairs merge immediately**: no model needed, they are trivially
        safe (:func:`lhassa.core.db.merge_kg_entities`, keeping the earlier-seen
        entity of the two).
     3. **Fuzzy pairs** only merge WITH a routine model available (also gated on
-       ``config.kg_triples_enabled`` — the same "cheap model may run" flag the
+       ``config.kg_triples_enabled``: the same "cheap model may run" flag the
        triples pass uses) AND that model's judgment for that specific pair says
-       ``"same": true``. With no model (flag off, or the provider unavailable —
+       ``"same": true``. With no model (flag off, or the provider unavailable;
        ``BudgetExceeded``/``ProviderNotConfigured`` degrade the same way as
-       :func:`_run_triple_extraction`), fuzzy candidates are left untouched —
+       :func:`_run_triple_extraction`), fuzzy candidates are left untouched;
        never guessed.
 
     ``provider``/``model``/``completion_fn`` are test-injection seams (mirrors
-    :func:`_run_triple_extraction`) — when omitted, the routine model is
+    :func:`_run_triple_extraction`); when omitted, the routine model is
     resolved through ``llm.router`` exactly like the triples pass does.
 
-    Returns ``{"merged": n, "candidates": n, "skipped": n}`` — ``candidates`` is
+    Returns ``{"merged": n, "candidates": n, "skipped": n}``: ``candidates`` is
     every pair the prefilter found (exact + fuzzy), ``merged`` is how many pairs
     were actually merged, ``skipped`` is fuzzy candidates that were NOT merged
     (no model, model unavailable, or judged not-same). Never raises.

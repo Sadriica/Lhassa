@@ -1,9 +1,9 @@
 """Tests for the Lhassa CLI action commands (status/version/serve/beat/watch).
 
 Offline: ``status`` is driven against a canned overview (the aggregate itself is
-covered by test_overview_api); ``beat``/``watch`` run against a tmp brain DB;
-``serve`` is smoke-tested for arg parsing with its bind patched away (it never binds
-a port).
+covered by test_views_overview); ``beat``/``watch`` run against a tmp brain DB;
+``serve`` ships in the api pack (its arg parsing is tested there); here only the
+"pack absent" stub is.
 """
 
 import asyncio
@@ -111,22 +111,20 @@ def test_version_pretty():
     assert "Lhassa" in res.output
 
 
-# ── serve (arg parsing only — never binds a port) ─────────────────────────────────
+# ── serve (the real command ships in the api pack) ─────────────────────────────
 
-def test_serve_parses_args_without_binding():
-    with patch("lhassa.cli.extra_cmds._serve") as m:
-        res = runner.invoke(app, ["serve", "--host", "0.0.0.0", "--port", "9123"])
-    assert res.exit_code == 0
-    m.assert_called_once_with("0.0.0.0", 9123)
-    # The URL hint uses 'localhost' for a wildcard bind.
-    assert "9123" in res.output
+def test_serve_absent_stub_says_how_to_install():
+    # Without the api pack, core attaches this stub as ``lhassa serve``.
+    import typer
 
+    from lhassa.cli import extra_cmds
 
-def test_serve_default_args():
-    with patch("lhassa.cli.extra_cmds._serve") as m:
-        res = runner.invoke(app, ["serve"])
-    assert res.exit_code == 0
-    m.assert_called_once_with("127.0.0.1", 7766)
+    stub = typer.Typer()
+    stub.command("serve")(extra_cmds.serve_absent_cmd)
+    stub.command("other")(lambda: None)
+    res = runner.invoke(stub, ["serve"])
+    assert res.exit_code == 1
+    assert "lhassa-api" in res.output
 
 
 # ── beat (one heartbeat tick against a tmp DB) ────────────────────────────────────

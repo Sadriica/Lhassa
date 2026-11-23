@@ -1,17 +1,17 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""The scheduled operative digest — Lhassa's twice-daily check-in message.
+"""The scheduled operative digest. Lhassa's twice-daily check-in message.
 
 Composes a compact snapshot of the brain's day: the monitor's environment
 signals (:func:`lhassa.org.monitor.gather_signals`), today's LLM spend, pending
 approvals, a recent-episodes summary, running/finished agent job counts, and
 tasks due soon. The template is written in Lhassa's own first-person voice, but
-:func:`build_digest` stays deterministic and $0 — NO LLM is ever called there;
+:func:`build_digest` stays deterministic and $0. NO LLM is ever called there;
 every section is a read of state already on disk, and every timestamp is shown
 in the OWNER's local timezone (the raw rows are UTC).
 
 ``digest_style = "persona"`` adds one optional cheap-model pass in
 :func:`send_digest` that re-voices the plain text as Lhassa (same facts, warmer
-words); ANY failure there degrades to the plain text — the digest always arrives.
+words); ANY failure there degrades to the plain text; the digest always arrives.
 
 :func:`build_digest` is the pure composer; :func:`send_digest` is the actionpack
 action wired into the allowlist (see :mod:`lhassa.actionpack._digest`) so it can be
@@ -54,7 +54,7 @@ def _instance_id(config) -> str:
 def _local_hhmm(dt: datetime) -> str:
     """Render a (UTC) datetime as HH:MM in the machine's LOCAL timezone.
 
-    The DB stores UTC; the owner reads the digest on their phone — showing raw
+    The DB stores UTC; the owner reads the digest on their phone; showing raw
     UTC here is how "your 21:00 digest" ends up labelled "02:00".
     """
     if dt.tzinfo is None:
@@ -64,18 +64,18 @@ def _local_hhmm(dt: datetime) -> str:
 
 def _digest_slot() -> str:
     """Return the local digest slot name."""
-    hour = datetime.now().hour  # local — the digest hours are configured local too
+    hour = datetime.now().hour  # local; the digest hours are configured local too
     return "morning" if hour < 14 else "evening"
 
 
 def _greeting(slot: Optional[str] = None) -> str:
     """A deterministic header that matches the send slot (morning vs evening)."""
     slot = slot or _digest_slot()
-    return f"🧭 Lhassa — {slot} check-in. I kept the wheel turning at $0."
+    return f"🧭 Lhassa {slot} check-in. I kept the wheel turning at $0."
 
 
 def _signals_section(config, instance_id: str) -> list[str]:
-    """The monitor's environment snapshot — health, failures, flows. Never raises.
+    """The monitor's environment snapshot; health, failures, flows. Never raises.
 
     Lazy-imports ``org`` (both ``notify`` and ``org`` are shells, so this edge is
     architecturally fine per the layering rules; the lazy import is kept anyway as
@@ -112,7 +112,7 @@ def _signals_section(config, instance_id: str) -> list[str]:
 
 
 async def _spend_section(config) -> list[str]:
-    """Today's LLM spend — reuses the /status command's ledger helper."""
+    """Today's LLM spend; reuses the /status command's ledger helper."""
     try:
         from lhassa.notify.commands import _today_spend
 
@@ -138,7 +138,7 @@ async def _approvals_section(instance_id: str) -> list[str]:
         names = "; ".join(_approval.describe(r)["title"] for r in rows[:2])
         more = f" …+{len(rows) - 2}" if len(rows) > 2 else ""
         return [
-            f"⏳ I am waiting on you for {len(rows)} approval(s): {names}{more} — /approvals shows the queue."
+            f"⏳ I am waiting on you for {len(rows)} approval(s): {names}{more}; /approvals shows the queue."
         ]
     except Exception as exc:
         logger.debug(f"digest: approvals section unavailable: {exc}")
@@ -224,7 +224,7 @@ async def _due_soon_section(instance_id: str) -> list[str]:
 async def _kilometraje_window(instance_id: str, since_hours: float) -> dict:
     """Raw counters for the kilometraje section over the last ``since_hours``.
 
-    A small targeted aggregate query over the ``episodes`` table — the existing
+    A small targeted aggregate query over the ``episodes`` table; the existing
     ``core.db`` helpers only cover recency/count, not this cost/decision
     breakdown, so this reads the same table with the same connection pattern
     ``core.db`` itself uses (``aiosqlite`` against ``db.DB_PATH``) rather than
@@ -272,7 +272,7 @@ async def _kilometraje_window(instance_id: str, since_hours: float) -> dict:
 
 
 async def _kilometraje_section(instance_id: str) -> list[str]:
-    """The brain's own mileage — how much of its work was free, and whether the
+    """The brain's own mileage; how much of its work was free, and whether the
     answer cache and self-improvement loop are actually pulling weight.
 
     Deterministic, $0, reads only the episode log over the last 24h and 7d.
@@ -387,7 +387,7 @@ async def build_digest(config: Optional[object] = None) -> str:
     cost ledger, the approvals queue, the episode log, tracked agent jobs, and the
     task table); a source that errors degrades to an omitted or "unavailable" line
     rather than breaking the whole digest. The wording is Lhassa's first-person
-    voice, but it is a fixed template — the optional model re-voicing lives in
+    voice, but it is a fixed template; the optional model re-voicing lives in
     :func:`send_digest` (``digest_style = "persona"``), never here.
     """
     cfg = _resolve_config(config)
@@ -410,28 +410,29 @@ async def build_digest(config: Optional[object] = None) -> str:
 async def _persona_pass(text: str, config) -> str:
     """Re-voice the plain digest as Lhassa via ONE cheap, fast model call.
 
-    Uses the API gateway with the routine (cheap) model — the same fast seat the
-    Telegram chat pin uses — and the instance's persona block as the system
+    Uses the API gateway with the routine (cheap) model; the same fast seat the
+    Telegram chat pin uses; and the instance's persona block as the system
     prompt. The model must keep every fact; it only changes the voice. Raises on
-    failure — :func:`send_digest` catches and falls back to the plain text.
+    failure; :func:`send_digest` catches and falls back to the plain text.
     """
     from lhassa.llm import router
     from lhassa.llm.provider import get_model_provider
+    from lhassa import persona as persona_mod
     from lhassa.persona import load_identity
 
     provider = get_model_provider(config)
     model = router.pick_model(provider, hard=False, config=config)
     identity = load_identity(_instance_id(config))
-    lang = (getattr(config, "digest_language", "") or "").strip()
-    lang_line = f" Write it in {lang}." if lang else ""
     system = (
         identity.persona_block
         + "\n\n"
         + "Rewrite the check-in digest below as yourself speaking to your owner: "
           "first person, warm, calm and BRIEF (under 120 words). Use the monk's "
           "register: patient, frugal, attentive, humble. Keep every fact, number "
-          "and time exactly as given — never invent or drop one. Keep the emoji "
-          "section markers." + lang_line
+          "and time exactly as given; never invent or drop one. Keep the emoji "
+          "section markers. Never use an em dash; use a colon, a semicolon or a "
+          "comma. Answer with the rewritten digest ONLY, no preamble. "
+        + persona_mod.language_directive(config)
     )
     completion = await provider.complete(
         [{"role": "user", "content": text}],
@@ -439,7 +440,7 @@ async def _persona_pass(text: str, config) -> str:
         max_tokens=400,
         system=system,
     )
-    out = (completion.text or "").strip()
+    out = persona_mod.scrub_dashes((completion.text or "").strip())
     return out or text
 
 
@@ -469,12 +470,12 @@ async def send_digest(params: Optional[dict] = None, *, config: Optional[object]
 
     With ``digest_style = "persona"`` the plain text is first re-voiced by
     :func:`_persona_pass`; any failure there silently degrades to the plain
-    text — a missing/broken model NEVER costs the owner their digest.
+    text; a missing/broken model NEVER costs the owner their digest.
 
     The actionpack ``send_digest`` action (see :mod:`lhassa.actionpack._digest`) is a
     thin ``(params) -> str`` wrapper over this so it fits the deterministic-action
     calling convention; this function is the reusable core, callable directly too.
-    Never raises — a delivery failure is reported as a string, not an exception.
+    Never raises; a delivery failure is reported as a string, not an exception.
     """
     cfg = _resolve_config(config)
     try:

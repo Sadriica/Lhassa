@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """
-Semantic consolidation — the cheap-LLM second pass over the chica (§2.3, Fase 2).
+Semantic consolidation; the cheap-LLM second pass over the chica (§2.3, Fase 2).
 
 The brief splits "bajar / consolidar" into two layers, by **threshold** (the chica
 filled up), never by a clock:
@@ -14,16 +14,16 @@ filled up), never by a clock:
   2. **Semantic (second pass, the cheap LLM).** This module. A CHEAP model
      (router ``pick_model(..., hard=False)``) is asked to:
        - **summarize clusters** of similar evictable items into ONE compact item
-         (the originals are dropped, the summary is kept — fewer items, same gist);
+         (the originals are dropped, the summary is kept; fewer items, same gist);
        - **flag contradictions** among the facts (``detect_contradictions``).
 
 The semantic pass **only touches the chica** (it may, optionally, record a derived
-summary *fact* in the grande as provenance — off by default). The grande stays the
+summary *fact* in the grande as provenance; off by default). The grande stays the
 append-only source of truth, so nothing is ever truly lost.
 
 Everything is threshold-driven: :func:`consolidate_semantic` is a no-op when the
 feature is off (``LHASSA_SEMANTIC_CONSOLIDATION``), or when the chica is at/below
-its threshold — unless explicitly forced. Every model call goes **through the
+its threshold; unless explicitly forced. Every model call goes **through the
 provider** (so the gateway meters cost), and only the cheap model is used. The
 model call is fully injectable (``provider`` / ``completion_fn``) so the whole
 module is offline-testable with canned responses.
@@ -63,8 +63,8 @@ def _resolve_provider_model(
 ) -> tuple[ModelProvider, str]:
     """Pick the CHEAP model on the ROUTINE provider (the heartbeat seat).
 
-    The provider comes from ``router.pick_provider(hard=False)`` — the same
-    resolution every routine/heartbeat think uses — so ``heartbeat_provider``
+    The provider comes from ``router.pick_provider(hard=False)``: the same
+    resolution every routine/heartbeat think uses; so ``heartbeat_provider``
     (local / opencode / claude / codex / cloud) steers consolidation too, instead
     of hardwiring the API gateway. ``model`` overrides the router; otherwise
     ``router.pick_model(hard=False)`` selects the cheap routine model (for a CLI
@@ -258,11 +258,11 @@ async def consolidate_semantic(
     force: bool = False,
     record_provenance: bool = False,
 ) -> dict:
-    """Cheap-LLM second pass over the chica — cluster+summarize, flag contradictions.
+    """Cheap-LLM second pass over the chica; cluster+summarize, flag contradictions.
 
     Threshold-driven (never on a clock): a NO-OP when
     ``config.semantic_consolidation`` is off, or when the chica is at/below
-    ``max_items`` (defaults to ``config.chica_max_items``) — unless ``force=True``
+    ``max_items`` (defaults to ``config.chica_max_items``); unless ``force=True``
     (an explicit call). This complements, and never replaces, the mechanical LRU
     in :func:`lhassa.memory.chica.consolidate`, which remains the first line and
     still handles raw overflow afterwards.
@@ -285,14 +285,14 @@ async def consolidate_semantic(
     instance_id = _resolve_instance(instance_id, config)
 
     if not getattr(config, "semantic_consolidation", True):
-        logger.debug("consolidate_semantic: disabled by config — no-op")
+        logger.debug("consolidate_semantic: disabled by config; no-op")
         return _empty()
 
     max_items = max_items if max_items is not None else config.chica_max_items
     total = await chica.size(instance_id)
     if not force and total <= max_items:
         logger.debug(
-            f"consolidate_semantic: below threshold ({total} <= {max_items}) — no-op"
+            f"consolidate_semantic: below threshold ({total} <= {max_items}); no-op"
         )
         return _empty()
 
@@ -300,7 +300,7 @@ async def consolidate_semantic(
     cost = 0.0
 
     # (1) evictable items = NON-pinned, NON-directiva. Pinned + directivas (identity)
-    # are never candidates — exactly like the mechanical LRU protects them.
+    # are never candidates; exactly like the mechanical LRU protects them.
     all_items = await chica.items(instance_id)
     evictable = [
         it
@@ -396,7 +396,7 @@ async def distill_episodes(
     Skips facts whose exact ``contenido`` already exists in the grande
     (case-insensitive). Tags distilled facts with ``["distilled"]``.
 
-    Returns a short summary string. Degrades gracefully — never raises:
+    Returns a short summary string. Degrades gracefully; never raises:
     - ``BudgetExceeded`` → ``"distill deferred: budget exceeded"``
     - ``ProviderNotConfigured`` → ``"distill deferred: provider not configured"``
     - Malformed JSON reply → no writes, returns a note string.
@@ -405,7 +405,7 @@ async def distill_episodes(
     """
     # Boundary gate, mirroring consolidate_semantic's own flag check: this is
     # one of the very few memory functions that may spend tokens, so the toggle
-    # lives HERE, not only in whichever caller happens to schedule it — a future
+    # lives HERE, not only in whichever caller happens to schedule it; a future
     # action/CLI/flow cannot spend without an explicit switch.
     if not getattr(config, "memory_distill_enabled", True):
         return {"distilled": 0, "skipped": "memory_distill_enabled off"}

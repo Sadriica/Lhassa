@@ -13,7 +13,7 @@ export function Inspector({ node, nodes, departments, installedSet, onInstall, o
   const [department, setDepartment] = useState(node.department || '')
   const [pickedSkills, setPickedSkills] = useState(node.skills || [])
   const [limitRows, setLimitRows] = useState(limitsToRows(node.limits))
-  // The Move dropdown pre-selects the CURRENT parent — if it already reports to
+  // The Move dropdown pre-selects the CURRENT parent; if it already reports to
   // someone, that relationship is shown selected. After a successful move the node
   // prop updates but this component is NOT remounted (key is node.id), so `moveTo`
   // keeps reflecting the chosen parent rather than snapping back to a placeholder.
@@ -26,7 +26,7 @@ export function Inspector({ node, nodes, departments, installedSet, onInstall, o
   // by node.id so a new selection remounts it fresh; this effect is the explicit
   // belt-and-suspenders re-init so no field can ever show the previously-selected
   // brain's data (stale skills/limits/department/role/parent). It keys on node.id
-  // only, so it fires on SELECTION change — not on a save of the same node (which
+  // only, so it fires on SELECTION change; not on a save of the same node (which
   // must keep in-progress edits).
   useEffect(() => {
     setRole(node.role || '')
@@ -38,9 +38,9 @@ export function Inspector({ node, nodes, departments, installedSet, onInstall, o
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [node.id])
 
-  // #10 — skills are now mutated INSTANTLY (the recommended assign AND the ✕ remove are
+  // #10; skills are now mutated INSTANTLY (the recommended assign AND the ✕ remove are
   // optimistic backend ops), so keep the assigned-skills view in lockstep with the
-  // authoritative topology whenever THIS node's skill set changes — including an
+  // authoritative topology whenever THIS node's skill set changes; including an
   // optimistic frame, a rollback, or an Undo. Role/department/limits still re-init on
   // selection only, so in-progress edits to those are never disturbed.
   useEffect(() => {
@@ -57,7 +57,7 @@ export function Inspector({ node, nodes, departments, installedSet, onInstall, o
   }, [confirmDelete])
 
   // Recommended skills for THIS brain, ranked by its department (or, if it has
-  // none, its id/role) — the recommend endpoint scores catalog skills by those
+  // none, its id/role); the recommend endpoint scores catalog skills by those
   // words. Refetched whenever the selected brain or its department changes.
   useEffect(() => {
     const ctx = (node.department || node.id || node.role || '').trim()
@@ -99,7 +99,7 @@ export function Inspector({ node, nodes, departments, installedSet, onInstall, o
         <span className="lh-label">skills</span>
         {pickedSkills.length === 0 ? (
           <p className="text-[11px]" style={{ color: 'var(--lh-text-faint)' }}>
-            No skills assigned yet — add one from “recommended” below.
+            No skills assigned yet; add one from “recommended” below.
           </p>
         ) : (
           <div className="flex flex-wrap gap-1.5">
@@ -119,12 +119,12 @@ export function Inspector({ node, nodes, departments, installedSet, onInstall, o
           </div>
         )}
         <p className="text-[10px]" style={{ color: 'var(--lh-text-faint)' }}>
-          The skills this brain carries. ✕ removes one immediately — an Undo toast lets you put it back.
+          The skills this brain carries. ✕ removes one immediately; an Undo toast lets you put it back.
         </p>
       </div>
 
       <div className="space-y-1">
-        <span className="lh-label">carried — install status</span>
+        <span className="lh-label">carried; install status</span>
         <CarriedSkills skills={pickedSkills} installedSet={installedSet} onInstall={onInstall} />
       </div>
 
@@ -164,7 +164,7 @@ export function Inspector({ node, nodes, departments, installedSet, onInstall, o
         )}
         <p className="text-[10px]" style={{ color: 'var(--lh-text-faint)' }}>
           Suggested from this brain&apos;s {node.department ? 'department' : 'name'}. Click to install and
-          assign it — this is saved immediately (no need to press Save changes).
+          assign it; this is saved immediately (no need to press Save changes).
         </p>
       </div>
 
@@ -193,7 +193,7 @@ export function Inspector({ node, nodes, departments, installedSet, onInstall, o
       {isAdmin ? (
         <div className="pt-2" style={{ borderTop: '1px solid var(--lh-border)' }}>
           <p className="text-[11px]" style={{ color: 'var(--lh-text-faint)' }}>
-            Lhassa is the permanent administrator — it orbits everything and is anchored at the root.
+            Lhassa is the permanent administrator; it orbits everything and is anchored at the root.
             It can't be moved, promoted, or deleted.
           </p>
         </div>
@@ -203,7 +203,7 @@ export function Inspector({ node, nodes, departments, installedSet, onInstall, o
             className="pt-2 mt-1"
             style={{ borderTop: '1px solid var(--lh-border)' }}
           >
-            <span className="lh-label">move — change who it reports to</span>
+            <span className="lh-label">move; change who it reports to</span>
             <p className="text-[10px] mt-0.5" style={{ color: 'var(--lh-text-faint)' }}>
               Drag a node onto another, right-click → Move under, or pick a parent here.
             </p>
@@ -240,7 +240,7 @@ export function Inspector({ node, nodes, departments, installedSet, onInstall, o
               ↑ Promote to root
             </button>
             {(node.children?.length || 0) > 0 ? (
-              // Subtree/force delete — effectively irreversible → keep the two-step
+              // Subtree/force delete; effectively irreversible → keep the two-step
               // confirm and offer no Undo (the success toast says the subtree was removed).
               confirmDelete ? (
                 <div className="flex gap-1.5 flex-1">
@@ -261,7 +261,7 @@ export function Inspector({ node, nodes, departments, installedSet, onInstall, o
                 </button>
               )
             ) : (
-              // Leaf — optimistic + undoable, so a single click is safe (Undo recreates it).
+              // Leaf; optimistic + undoable, so a single click is safe (Undo recreates it).
               <button
                 type="button" className="lh-btn lh-btn-danger" disabled={busy}
                 onClick={() => onDelete(node.id, false)}
@@ -284,7 +284,7 @@ export function Inspector({ node, nodes, departments, installedSet, onInstall, o
 }
 
 // ── inspector popup shell ───────────────────────────────────────────────────
-// The inspector is no longer a permanent column — it appears only when a node is
+// The inspector is no longer a permanent column; it appears only when a node is
 // selected. On desktop/tablet (≥768px) it docks as a floating overlay on the right
 // edge of the canvas (it sits ABOVE the canvas, never reflowing it). On mobile
 // (<768px) the same content becomes a bottom sheet with a dimmed backdrop. Esc,
@@ -299,7 +299,7 @@ export function InspectorPopup({ onClose, children }) {
 
   return (
     <>
-      {/* Backdrop — only visible (and dimming) on mobile; inert on desktop. */}
+      {/* Backdrop; only visible (and dimming) on mobile; inert on desktop. */}
       <div className="lh-inspector-scrim" onClick={onClose} aria-hidden="true" />
       <aside className="lh-inspector-pop" role="dialog" aria-modal="true" aria-label="Brain inspector">
         <div className="lh-inspector-pop-head">

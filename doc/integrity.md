@@ -1,4 +1,4 @@
-# Integrity Watcher — executable Witara/Lhassa contracts
+# Integrity Watcher; executable Witara/Lhassa contracts
 
 The ordinary monitor watches operational transitions: failures, health, runs
 and approvals. Integrity watches a different question:
@@ -27,6 +27,14 @@ Manifest version 1 contains:
 | `runtime.capabilities.wired` | critical | Required research, org, temple actions and objective verifiers are registered. |
 | `architecture.import_boundaries` | critical | Core, interfaces and adapters do not reach into world-facing shells. |
 | `operations.approvals.fresh` | warn | Pending approvals have not silently aged past 72 hours. |
+
+Two contracts read what installed capability packs declare through
+`org/integrity.py:register_pack_requirements`: `runtime.capabilities.wired`
+adds each pack's required actions and verifiers, and `research.flows.canonical`
+compares each pack's canonical flows (the `lhassa-research` pack declares the
+assessment and corpus flows, remedy `lhassa seed apply research`). With the
+pack absent nothing is required and the flow check passes with "no canonical
+flows declared".
 
 The registry is intentionally small and executable. A new philosophical claim
 becomes a contract only when code can observe evidence for it.

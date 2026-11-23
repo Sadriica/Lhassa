@@ -15,7 +15,7 @@ on, and raises :class:`FlowValidationError` on the first problem:
   * every edge references real, distinct nodes and nothing points back INTO the
     trigger,
   * every ``loop`` node declares a positive ``config.max_iterations`` and a real
-    ``config.body`` node — bounded and verifier-terminated, mirroring
+    ``config.body`` node; bounded and verifier-terminated, mirroring
     :func:`lhassa.agents.author.propose_tool`'s ``max_turns`` loop,
   * the graph is acyclic apart from a loop's own declared body back-edge (an edge
     from a node inside that loop's body back into the loop node itself); ANY
@@ -42,7 +42,7 @@ class NodeKind(str, Enum):
     """The CLOSED set of node kinds a work-flow may contain.
 
     A ``str`` enum so a kind serialises to its plain value (``"task"``) and compares
-    equal to that string — JSON-friendly and ergonomic.
+    equal to that string. JSON-friendly and ergonomic.
     """
 
     TRIGGER = "trigger"
@@ -79,7 +79,7 @@ class FlowNode:
     ``config`` is a free-form dict whose shape depends on ``kind``:
 
       * ``trigger`` → ``{"type": "manual"|"schedule"|"event", ...}``
-      * ``task``    → HYBRID routing — ``{"skill"?: str, "brain"?: str,
+      * ``task``    → HYBRID routing; ``{"skill"?: str, "brain"?: str,
         "prompt"?: str}``; ``brain`` PINS a specific brain, otherwise ``skill``
         (or the prompt text) auto-routes through the org topology.
       * ``gate``    → ``{"type": "verify"|"approval", "spec": {...}}``
@@ -89,12 +89,12 @@ class FlowNode:
         "verify"?: {...same spec shape as a verify gate...}}``. The engine runs
         the ``body`` node's chain (using its own outgoing edges) once per
         iteration, up to ``max_iterations``, stopping early the moment
-        ``verify`` passes — bounded and verifier-terminated, never an unbounded
+        ``verify`` passes; bounded and verifier-terminated, never an unbounded
         "call the model until it feels done". The BODY's own edges close the
         cycle back into this node (see :meth:`Flow.validate`); an edge from
         this node itself is its normal, non-cyclic EXIT of the loop.
       * ``wait``    → ``{}`` (same payload shape as an ``approval`` gate). Parks
-        the run for an external event and resumes exactly like an approval —
+        the run for an external event and resumes exactly like an approval;
         a generalisation of the same park/resume seam, not a new one.
       * ``subflow`` → ``{"flow_id": str}``. Composes another flow inline (bounded
         by a recursion-depth guard); its output becomes this node's data.
@@ -231,7 +231,7 @@ class Flow:
                 raise FlowValidationError("no edge may point back into the trigger")
 
         # Every ``loop`` node is bounded (mandatory max_iterations) and names a
-        # real body entry — mirroring agents/author.py's max_turns loop.
+        # real body entry; mirroring agents/author.py's max_turns loop.
         for n in self.nodes:
             if n.kind != NodeKind.LOOP:
                 continue
@@ -260,7 +260,7 @@ class Flow:
 
         For each ``loop`` node, BFS forward from its declared ``config.body``
         WITHOUT continuing past an edge that lands back on the loop node itself
-        (arriving there ends one iteration) — every edge from that reachable body
+        (arriving there ends one iteration); every edge from that reachable body
         set back into the loop is a declared, legal back-edge. Anything else that
         closes a cycle into (or through) a loop node is still rejected.
         """
@@ -293,7 +293,7 @@ class Flow:
         return legal
 
     def _assert_acyclic(self) -> None:
-        """DFS cycle check — acyclic except a loop node's own declared back-edge."""
+        """DFS cycle check; acyclic except a loop node's own declared back-edge."""
         adj: dict[str, list[str]] = {n.id: [] for n in self.nodes}
         for e in self.edges:
             adj[e.from_node].append(e.to_node)
@@ -306,7 +306,7 @@ class Flow:
             for nxt in adj[node_id]:
                 if color[nxt] == GREY:
                     if (node_id, nxt) in legal_back_edges:
-                        continue  # a loop's own declared body back-edge — not a bug
+                        continue  # a loop's own declared body back-edge; not a bug
                     cycle = " → ".join([*stack, node_id, nxt])
                     raise FlowValidationError(f"flow has a cycle: {cycle}")
                 if color[nxt] == WHITE:
