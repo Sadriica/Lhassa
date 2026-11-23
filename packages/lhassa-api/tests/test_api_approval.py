@@ -76,6 +76,27 @@ async def test_api_approvals_roundtrip(tmp_path, monkeypatch, knob_config):
 
 
 @pytest.mark.asyncio
+async def test_api_resolving_an_approval_pokes_the_waybar_refresh(tmp_path, monkeypatch, knob_config):
+    db = await _init(tmp_path, monkeypatch)
+    from lhassa.api import server
+    from lhassa.views import waybar_state
+
+    pokes = []
+    monkeypatch.setattr(waybar_state, "request_refresh", lambda: pokes.append(1))
+    payload = {"task_id": "t_002", "accion": "sync_repo", "actor_id": "duenio",
+               "objetivo": "proyecto_X", "origen_trust": int(TrustLevel.HUMANO)}
+    ap_id = await db.add_approval("inst_personal", "sync_repo", payload)
+
+    transport = httpx.ASGITransport(app=server.app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://brain") as client:
+        missing = await client.post("/api/approvals/ap_missing", json={"approved": True})
+        assert missing.status_code == 404 and pokes == []
+        done = await client.post(f"/api/approvals/{ap_id}", json={"approved": False})
+        assert done.status_code == 200
+    assert pokes == [1]
+
+
+@pytest.mark.asyncio
 async def test_api_approvals_rejects_bad_body(tmp_path, monkeypatch, knob_config):
     db = await _init(tmp_path, monkeypatch)
     from lhassa.api import server

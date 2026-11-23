@@ -285,8 +285,16 @@ async def run_api_server(host: str = "127.0.0.1", port: int = 7766):
     server = uvicorn.Server(config)
     display_host = "localhost" if host in ("0.0.0.0", "::") else host
     logger.info(f"Dashboard available at http://{display_host}:{port}")
+    # The always-up process also keeps the Waybar state file fresh (a no-op
+    # when LHASSA_WAYBAR_STATE=0). See doc/waybar.md.
+    from lhassa.views import waybar_state
+
+    waybar_task = asyncio.create_task(waybar_state.run_loop(), name="waybar-state")
     try:
         await server.serve()
     except asyncio.CancelledError:
         logger.info("API server stopped.")
         raise
+    finally:
+        waybar_task.cancel()
+        await asyncio.gather(waybar_task, return_exceptions=True)
