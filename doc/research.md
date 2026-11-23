@@ -1,12 +1,10 @@
 # Lhassa's research line
 
-Witara (the house) declares five research fields; privacy engineering, calm
-computing, systems optimization, safe autonomy, deterministic systems
-(`witara/docs/soul/03-investigacion.md`). Those are the HOUSE's. Each product
-carries its **own line** underneath them. This file declares Lhassa's.
-
-> Owner TODO (other repo): mirror the "one line per product" structure into
-> `witara/docs/soul/03-investigacion.md`.
+Witara (the house) declares five research fields: privacy engineering, calm
+computing, systems optimization, safe autonomy, deterministic systems. Those are
+the HOUSE's; its founding documents are private and this repo does not link to
+them. Each product carries its **own line** underneath them. This file declares
+Lhassa's.
 
 The line's code ships as the `lhassa-research` capability pack
 (`packages/lhassa-research`, subpackage `lhassa.research`): the `/idea` intake,

@@ -9,13 +9,14 @@ together end to end for Lhassa's INTERNAL functions; docs, internal creation
 distill/check_integrity); through the ``temple`` department (Lhassa's inner temple, distinct
 from ``interns``/``personal``, see :mod:`lhassa.seeds.temple`).
 
-**The monks.** ``temple`` has five leaf worker brains under it (created by
+**The monks.** ``temple`` has six leaf worker brains under it (created by
 :mod:`lhassa.seeds.temple`), each OWNING a sub-domain: ``scribe`` (docs),
 ``artificer`` (internal creation; tools/skills/flows authoring), ``synchronizer``
 (sync (repo/calendar/memory), ``guardian`` (self-maintenance) curate/review/
-distill/conformance) and ``oracle`` (the consciousness; repetition detection, self-routing
-proposals). :data:`ACTION_OWNERS` maps each of the five deterministic maintenance
-actions to the monk that owns it; an unmapped action (or a topology missing the
+distill/conformance), ``oracle`` (the consciousness; repetition detection, self-routing
+proposals) and ``geshe`` (the research line). :data:`ACTION_OWNERS` maps each of the
+deterministic maintenance actions (the maintenance seed mints eleven recurring ones;
+the map also covers ``check_integrity`` and ``draft_research_note``) to the monk that owns it; an unmapped action (or a topology missing the
 resolved worker) falls back to ``temple`` itself; the department never fails to
 have SOMEONE attributed.
 
@@ -86,7 +87,7 @@ ORACLE = "oracle"  # the consciousness; repetition detection, self-routing
 # how Lhassa writes, drafts, builds and focuses its research.
 GESHE = "geshe"  # the research line; method, evidence-cited notes, focus
 
-#: All five monks, in a stable order (docs, creation, sync, maintenance, mind).
+#: All six monks, in a stable order (docs, creation, sync, maintenance, mind, research).
 TEMPLE_WORKERS: tuple[str, ...] = (SCRIBE, ARTIFICER, SYNCHRONIZER, GUARDIAN, ORACLE, GESHE)
 
 #: The geshe's AIDES; the research support department under the scholar-monk

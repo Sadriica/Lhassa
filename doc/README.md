@@ -15,6 +15,7 @@ you are trying to do, not by subsystem.
 - [`security.md`](security.md); trust, approvals, the allowlist, quarantine and the gates.
 - [`architecture.md`](architecture.md); current high-level overview (layers, data dir, phases, diagrams).
 - [`architecture-layers.md`](architecture-layers.md); the modularity guard: layers + forbidden import directions.
+- [`../packages/README.md`](../packages/README.md); the capability-pack contract: what a pack is, how it registers, how to install one.
 - [`boundaries.md`](boundaries.md); what is public code and what stays the owner's (read before committing anything).
 - [`research.md`](research.md); Lhassa's research line: the bench as tribunal, drafted notes.
 - [`integrity.md`](integrity.md); the integrity watcher: executable architecture and sovereignty contracts.

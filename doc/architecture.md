@@ -225,10 +225,10 @@ seed apply temple`); distinct from `interns` (the CV pipeline's workers) and
 docs, internal creation (tools/skills/flows authoring, the consciousness
 proposals), synchronization (repo/calendar/memory), and self-maintenance.
 
-The same seed also creates temple's five leaf WORKER brains; its **monks**, each
+The same seed also creates temple's six leaf WORKER brains; its **monks**, each
 owning a sub-domain: `scribe` (docs), `artificer` (internal creation; tools/
 skills/flows authoring), `synchronizer` (sync; repo/calendar/memory), `guardian`
-(self-maintenance) and `oracle` (the consciousness). `org/temple.py:ACTION_OWNERS`
+(self-maintenance), `oracle` (the consciousness) and `geshe` (the research line). `org/temple.py:ACTION_OWNERS`
 is the deterministic action→monk ownership map for the maintenance seed's
 hygiene actions (a representative subset shown below; the map has grown
 past this list without every addition being echoed here):

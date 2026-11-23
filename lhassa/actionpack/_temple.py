@@ -15,7 +15,7 @@ own ``dominio=<worker>`` episode, reporting up through temple), and the result
 travels back UP via ``org.deliver``.
 
 ``_TEMPLE_ACTIONS`` is a closed set on purpose: ``temple_run`` is a thin,
-deterministic, $0 front for the maintenance seed's own five actions, NOT a
+deterministic, $0 front for the maintenance seed's own eleven recurring actions (plus ``check_integrity`` and ``draft_research_note``), NOT a
 generic "run any action via temple" bypass; an action that carries its OWN
 approval gate (e.g. ``run_script``, ``run_command``) stays OUT of this set, so
 wrapping never becomes a way to dodge an existing HITL frontier.

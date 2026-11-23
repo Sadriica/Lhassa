@@ -46,7 +46,7 @@ cd Lhassa
 bash scripts/install.sh
 ```
 
-This preflights `python3`/`uv`/`docker`, runs `uv sync`, builds the dashboard
+This preflights `python3`/`uv`/`docker`, runs `uv sync --all-packages --extra runtime`, builds the dashboard
 if `dashboard/dist` is missing, builds and smoke-tests a Docker image,
 installs the systemd **user** units (app + heartbeat + health timer + the
 always-on $0 monitor watcher, plus the Telegram poller if a token is already

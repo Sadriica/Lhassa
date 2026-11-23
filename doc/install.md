@@ -48,7 +48,7 @@ That single command:
 
 1. **Preflight**: checks `python3`, `uv`, and `docker`, prints versions, and
    fails early with a helpful message if anything is missing.
-2. **Sync**: runs `uv sync` to resolve the `.venv`, and builds the dashboard
+2. **Sync**: runs `uv sync --all-packages --extra runtime` (core, every capability pack and the voice runtime) to resolve the `.venv`, and builds the dashboard
    (`npm ci && npm run build`) if `dashboard/dist` is missing.
 3. **Docker build + smoke test**: `docker build -t lhassa:latest .`, then two
    smoke checks: `import lhassa, main` inside the image, and starting the API to
@@ -94,11 +94,19 @@ Individual units can also be installed via `make`: `make install-heartbeat`,
 `make install-health`, `make install-telegram`, `make install-monitor`,
 `make install-ollama`.
 
-The unit files in `scripts/systemd/` assume the clone lives at `~/Code/lhassa`
-(`%h/Code/lhassa`). `scripts/install.sh` rewrites that path to your real checkout
-when it copies them; the `make install-*` targets copy the files verbatim, so on
-any other checkout path edit `WorkingDirectory=` and `ExecStart=` in the installed
-units (or use `install.sh`).
+The unit files in `scripts/systemd/` are templates: they hardcode the placeholder
+checkout path `%h/Code/lhassa`, which only exists if you cloned the repo exactly
+there (a clone nested elsewhere, e.g. `%h/Code/<tree>/lhassa/app`, has a different
+real path). Only the installers rewrite
+the placeholder: `scripts/install.sh` (`sed "s|%h/Code/lhassa|$REPO_ROOT|g"`) and
+`lhassa setup` (`_REPO_PLACEHOLDER` in `lhassa/cli/setup_cmds.py`) substitute the
+real checkout root when they copy the units. The `make install-*` targets copy
+the files verbatim, so after using them (or when copying by hand) replace every
+`%h/Code/lhassa` in the installed `WorkingDirectory=` and `ExecStart=` lines with
+your checkout root, e.g.
+`sed -i "s|%h/Code/lhassa|$PWD|g" ~/.config/systemd/user/lhassa-*.service`, then
+`systemctl --user daemon-reload`. Making the `make install-*` targets do this
+substitution themselves is still open.
 
 The voice pipeline (`make run` / `main.py`) is **not** run as a service; it
 needs host audio and the Deepgram/Cartesia keys. The always-on path is API-only
@@ -219,7 +227,9 @@ is a clear "not supported yet" instead of a guess), installs `uv` if missing
 (leaving an existing install alone), clones the repo into
 `~/.local/share/lhassa` (override with `LHASSA_DIR`, or the source with
 `LHASSA_REPO_URL`) or updates it if already cloned, runs `uv sync` headless
-(no voice runtime; pass `--voice` to include it), and drops a `lhassa` shim
+(core only: no capability packs and no voice runtime; pass `--voice` for
+`uv sync --all-packages --extra runtime`, or run `uv sync --all-packages`
+yourself afterwards to add the packs without the voice runtime), and drops a `lhassa` shim
 into `~/.local/bin` so the command is on `PATH`. It is idempotent: re-running
 it updates the clone and re-syncs instead of duplicating anything.
 

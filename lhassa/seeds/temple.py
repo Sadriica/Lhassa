@@ -19,7 +19,7 @@ plus its six leaf WORKER brains (the "monks"), each owning a sub-domain:
 
 :mod:`lhassa.org.temple` owns the ACTION→WORKER ownership map
 (:data:`lhassa.org.temple.ACTION_OWNERS`) and the down-execute-up loop that
-routes each of the five maintenance actions through its owning monk; this
+routes each of the eleven recurring maintenance actions through its owning monk; this
 module is only responsible for CREATING the department and its workers (this
 is where every tool's home in the hierarchy is provisioned; see
 :mod:`lhassa.seeds.maintenance` for the recurring hygiene tasks that flow
@@ -121,7 +121,7 @@ def seed_temple(config: "Optional[Config]" = None) -> dict:
 
     ``created``/``existing`` describe the department itself (back-compatible
     with the pre-workers seed shape); the workers are reported separately since
-    a fresh env creates the department AND all five monks in one pass, while a
+    a fresh env creates the department AND all six monks in one pass, while a
     later re-run of the seed (department already existing) still creates any
     monk that is still missing (e.g. after a partial prior run). Never raises
     destructively; a failure is recorded under ``errors``, never fatal.
@@ -157,7 +157,7 @@ def seed_temple(config: "Optional[Config]" = None) -> dict:
         summary["errors"].append(f"{type(exc).__name__}: {exc}")
         return summary  # no department to hang workers under; stop here
 
-    # The five monks; each a leaf under temple, sharing its department label
+    # The six monks; each a leaf under temple, sharing its department label
     # (mirrors lhassa.cv.surfaces.seed's worker brains, which share INTERNS_DEPARTMENT
     # too); lhassa.org.temple resolves a SPECIFIC monk by its own id, not by
     # this shared department string, so the sharing is harmless.

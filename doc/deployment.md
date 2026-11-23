@@ -15,7 +15,7 @@ Multi-stage `Dockerfile`:
 1. **`dashboard-build`** (`node:22-slim`); `npm ci` + `npm run build` produces
    the static React/Vite bundle in `dashboard/dist`.
 2. **`runtime`** (`python:3.13-slim`); installs `uv` (pinned to the lockfile's
-   version), `uv sync --frozen --no-dev` (no dev/test deps in the runtime image),
+   version), `uv sync --frozen --no-dev --all-packages` (no dev/test deps in the runtime image; every capability pack is installed, the voice pack without its `runtime` extra),
    copies the source + the built `dashboard/dist`, runs as a **non-root** user
    (`lhassa`, uid 10001), and serves the API on port **7766**.
 
@@ -32,8 +32,8 @@ Key facts:
 - **Healthcheck:** `GET /api/status` via stdlib `urllib` (no extra packages).
 - **Lean:** `.dockerignore` excludes `.venv`, `.git`, `dashboard/node_modules`,
   the prior `dashboard/dist`, `__pycache__`, `.env`, `*.db`, logs and test caches.
-- **No voice deps:** the image installs `uv sync --frozen --no-dev`: core
-  only, no `lhassa-voice` pack and no `runtime` extra: so `pipecat`/`torch`/`pyaudio`
+- **No voice deps:** the image installs `uv sync --frozen --no-dev --all-packages`: core
+  plus every pack, but not the `lhassa-voice` pack's `runtime` extra: so `pipecat`/`torch`/`pyaudio`
   are never resolved or installed. Every import site that touches them (the
   voice pack's speaker, the `tools/handlers/*.py` type hints, `main.py`'s load of
   `lhassa.voice.pipeline`) is guarded
@@ -129,7 +129,7 @@ Copy `.env.example` to `.env` and set what you use:
    container by default** (the `api` role never starts it); and, since the
    image is built without the voice pack runtime, `pipecat`/`torch`/`pyaudio`
    aren't even installed. To run voice in a container you'd need a separate
-   image built with `RUN uv sync --frozen --no-dev --package lhassa-voice --extra runtime`, pass the
+   image built with `RUN uv sync --frozen --no-dev --all-packages --extra runtime`, pass the
    host audio through (e.g. `--device /dev/snd` plus the PulseAudio/PipeWire
    socket; `-v /run/user/1000/pulse:/run/user/1000/pulse -e
    PULSE_SERVER=...`), or use `--network host`. This is host-specific and not

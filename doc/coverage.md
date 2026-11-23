@@ -9,7 +9,7 @@ on purpose; instrumentation slows the run, so `make test` never pays for it.
 
 `[tool.coverage.run]`/`[tool.coverage.report]` in `pyproject.toml` scope
 `source` to `lhassa` and omit `lhassa/_vendor/*` (vendored third-party code)
-and `lhassa/voice/*` (the pipecat/torch audio pipeline; needs a mic/speaker,
+and `*/lhassa/voice/*` (the voice pack's pipecat/torch audio pipeline; needs a mic/speaker,
 never exercised by the unit suite).
 
 ## Baseline. 2026-08-04

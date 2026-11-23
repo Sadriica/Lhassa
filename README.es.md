@@ -131,7 +131,8 @@ cd Lhassa
 make quickstart
 ```
 
-`make quickstart` resuelve el venv (`uv sync`, sin compilar el dashboard todavía),
+`make quickstart` resuelve el venv (`uv sync`: solo el core, sin capability packs ni dashboard todavía;
+agrégalos luego con `uv sync --all-packages`),
 se asegura de que exista un `.env`, y revisa si puede encontrar un cerebro con
 el que pensar. **Trae el tuyo**: ya sea una API key gratis o barata (**[el
 free tier de Groq](https://console.groq.com)** es el arranque más fácil;
@@ -177,7 +178,7 @@ cd Lhassa
 bash scripts/install.sh
 ```
 
-Verifica `python3`/`uv`/`docker`, corre `uv sync`, compila el dashboard,
+Verifica `python3`/`uv`/`docker`, corre `uv sync --all-packages --extra runtime`, compila el dashboard,
 construye y prueba la imagen Docker, instala las units **user** de systemd (app +
 heartbeat + timer de salud + el monitor `$0` siempre encendido, más el poller de
 Telegram si hay token) y habilita el lingering. El dashboard queda en
@@ -261,6 +262,32 @@ por defecto; los servicios siempre-encendidos corren solo-API (sin audio).
 
 ---
 
+## Capability packs
+
+El core (la distribución `lhassa`) corre solo; cada capacidad grande viaja como un
+**pack** opcional en `packages/lhassa-<nombre>/`, descubierto por el grupo de
+entry-points `lhassa.plugins`. El core nunca importa un pack: si falta, sus
+comandos imprimen una pista de instalación y el dashboard oculta sus secciones.
+El contrato está en [`packages/README.md`](packages/README.md).
+
+| Pack | Agrega | Tests |
+|---|---|---|
+| `lhassa-api` | servidor FastAPI REST/WebSocket, `lhassa serve`, el host del dashboard | 140 |
+| `lhassa-bench` | fixtures y runner de LhassaBench, `lhassa bench` | 14 |
+| `lhassa-calendar` | feeds ICS, el reconcile del calendario maestro, `lhassa calendar`, `calendar_sync` | 177 |
+| `lhassa-cv` | el work-flow del CV, `/cv`, el panel Postulaciones, `lhassa seed apply cv` | 65 |
+| `lhassa-research` | intake `/idea`, custodia de evidencia, borradores de notas, `lhassa research` | 35 |
+| `lhassa-telegram` | cliente de la Bot API, el poller (`python -m lhassa.telegram.poller`), el canal de notificación | 40 |
+| `lhassa-tui` | el dashboard Textual, `lhassa tui` (módulo `lhassa.tui`) | 40 |
+| `lhassa-voice` | el pipeline wake-word/STT/TTS; dependencias pesadas tras su extra `runtime` | 9 |
+
+```bash
+uv sync --all-packages                   # core + todos los packs
+uv sync --all-packages --extra runtime   # igual, más el runtime de voz (pipecat, torch)
+uv sync --package lhassa-tui             # core + un pack
+uv sync                                  # solo el core (lo que hace `make quickstart`)
+```
+
 ## Configuración
 
 Todo se maneja por entorno; un **`.env`** gitignoreado (copia de `.env.example`)
@@ -295,7 +322,7 @@ hace fallar cualquier import que cruce capas. El mapa completo:
 ## Estado y honestidad
 
 Lhassa es un proyecto joven con un primer usuario exigente: su autor. Todo lo
-descrito arriba corre hoy y está cubierto por ~2,700 tests; lo que aún no corre
+descrito arriba corre hoy y está cubierto por ~2,850 tests; lo que aún no corre
 no está en esta página. Vive en una laptop y está construida para mudarse a un
 VPS pequeño sin cirugía.
 
