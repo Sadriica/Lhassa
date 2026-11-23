@@ -378,6 +378,7 @@ sections. The contract is in [`packages/README.md`](packages/README.md).
 | `lhassa-api` | FastAPI REST/WebSocket server, `lhassa serve`, the dashboard host | 140 |
 | `lhassa-bench` | LhassaBench fixtures and runner, `lhassa bench` | 14 |
 | `lhassa-calendar` | ICS feeds, the master-calendar reconcile, `lhassa calendar`, `calendar_sync` | 177 |
+| `lhassa-ledger` | standalone, stdlib-only agent audit ledger: the `ledger` CLI, the never-keep policy, Claude Code and Hermes adapters | 93 |
 | `lhassa-cv` | the CV work-flow, `/cv`, the Postulaciones panel, `lhassa seed apply cv` | 65 |
 | `lhassa-research` | `/idea` intake, evidence custody, note drafts, `lhassa research` | 35 |
 | `lhassa-telegram` | Bot API client, the poller (`python -m lhassa.telegram.poller`), the notify channel | 40 |

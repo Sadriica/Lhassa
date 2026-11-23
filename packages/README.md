@@ -68,6 +68,16 @@ packages/lhassa-<name>/
    isolation, including the autouse fixture that keeps tests off the real
    `~/.lhassa/brain.db`.
 
+## Standalone packs
+
+`lhassa-ledger` is the one pack that does not follow the layout above, on
+purpose: it ships the top-level `agent_ledger` library (stdlib only, Python
+3.10+), has no `src/lhassa`, no `lhassa.plugins` entry point and no dependency
+on `lhassa`, because its hook and plugins load inside other programs. Core
+never imports it, and `tests/test_architecture.py` needs no entry for it (the
+guard only walks `packages/*/src/lhassa`). Its tests still re-export core's
+`conftest.py` (rule 8). See `packages/lhassa-ledger/README.md`.
+
 ## Installing
 
 ```bash
