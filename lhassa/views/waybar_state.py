@@ -82,6 +82,7 @@ def _count(value: object) -> "int | None":
 def build_state(snap: dict, now: "float | None" = None, url: str = DEFAULT_DASHBOARD_URL) -> dict:
     """Pure: turn a :func:`lhassa.views.status.gather` snapshot into the file payload."""
     failing = snap.get("health_failing")
+    alerting = snap.get("health_alert")
     return {
         "v": SCHEMA_VERSION,
         "written_at": float(time.time() if now is None else now),
@@ -94,6 +95,7 @@ def build_state(snap: dict, now: "float | None" = None, url: str = DEFAULT_DASHB
         "tasks": _count(snap.get("tasks")),
         "beat_age": _count(snap.get("beat_age")),
         "health_failing": None if failing is None else [str(n) for n in failing],
+        "health_alert": [] if alerting is None else [str(n) for n in alerting],
         "dashboard_url": url,
     }
 

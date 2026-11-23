@@ -33,8 +33,9 @@ def main() -> int:
     if not quiet:
         print(format_digest(digest))
 
-    # Exit non-zero when something needs attention, so systemd/cron can react.
-    return 0 if digest["ok"] else 1
+    # Exit non-zero only at ALERT, so a unit that runs this on a timer is not marked
+    # failed by an ordinary warning (those already notify and show in the digest).
+    return 1 if digest["worst_level"] == "alert" else 0
 
 
 if __name__ == "__main__":

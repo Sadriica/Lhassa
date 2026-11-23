@@ -148,6 +148,33 @@ def parse_failed_units(text: str) -> list[str]:
     return units
 
 
+_OWN_UNIT_PREFIX = "lhassa-"
+
+
+def split_failed_units(units: list[str]) -> tuple[list[str], list[str]]:
+    """Split failed unit names into ``(own, other)``: Lhassa's own services vs the rest.
+
+    Only Lhassa's own units are Lhassa's business to alarm on. A failed unit that
+    belongs to the machine (a mirror-refresh timer, a printer service) is worth
+    mentioning but must not keep the status bar red.
+    """
+    own = [u for u in units if u.startswith(_OWN_UNIT_PREFIX)]
+    return own, [u for u in units if not u.startswith(_OWN_UNIT_PREFIX)]
+
+
+def _failed_units_result(units: list[str]) -> dict:
+    """Level the failed units: own ones warn (alert from three), others only notice."""
+    own, other = split_failed_units(units)
+    if own:
+        level = "alert" if len(own) >= 3 else "warn"
+        summary = f"{len(own)} failed Lhassa unit(s): " + ", ".join(own[:5])
+        if other:
+            summary += f"; also failed (not Lhassa): {', '.join(other[:3])}"
+        return _result("failed_units", level, summary, units)
+    summary = f"{len(other)} failed systemd unit(s), none of them Lhassa's: " + ", ".join(other[:5])
+    return _result("failed_units", "notice", summary, units)
+
+
 def check_failed_units() -> dict:
     """Count failed managed services (thin collector around the pure parser).
 
@@ -166,29 +193,31 @@ def check_failed_units() -> dict:
             )
         if not services:
             return _result("failed_units", "info", "No failed managed services.", [])
-        level = "alert" if len(services) >= 3 else "warn"
-        summary = f"{len(services)} failed service(s): " + ", ".join(services[:5])
-        return _result("failed_units", level, summary, services)
+        return _failed_units_result(list(services))
 
     if not shutil.which("systemctl"):
         return _result("failed_units", "info", "systemctl not available.", [])
-    try:
-        proc = subprocess.run(
-            ["systemctl", "--failed", "--no-legend", "--plain"],
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-    except (OSError, subprocess.SubprocessError) as exc:
-        logger.debug("systemctl --failed failed: {}", exc)
+    # Lhassa's own services are USER units; the system manager only knows the rest.
+    units: list[str] = []
+    queried = 0
+    for scope in ([], ["--user"]):
+        try:
+            proc = subprocess.run(
+                ["systemctl", *scope, "--failed", "--no-legend", "--plain"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+        except (OSError, subprocess.SubprocessError) as exc:
+            logger.debug("systemctl {} --failed failed: {}", " ".join(scope), exc)
+            continue
+        queried += 1
+        units += [u for u in parse_failed_units(proc.stdout) if u not in units]
+    if not queried:
         return _result("failed_units", "info", "Could not query systemd.", [])
-
-    units = parse_failed_units(proc.stdout)
     if not units:
         return _result("failed_units", "info", "No failed systemd units.", [])
-    level = "alert" if len(units) >= 3 else "warn"
-    summary = f"{len(units)} failed systemd unit(s): " + ", ".join(units[:5])
-    return _result("failed_units", level, summary, units)
+    return _failed_units_result(units)
 
 
 # ── git_status ───────────────────────────────────────────────────────────────

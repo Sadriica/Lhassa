@@ -94,6 +94,7 @@ def test_health_failing_reads_the_digest(tmp_path):
         "disk": {"level": "alert"}, "temp": {"level": "ok"}, "mem": {"level": "warn"},
     }}))
     assert status.health_failing(Cfg) == ("disk", "mem")
+    assert status.health_failing(Cfg, ("alert",)) == ("disk",)
     (tmp_path / "digest.json").write_text("[]")
     assert status.health_failing(Cfg) is None
 

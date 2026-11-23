@@ -10,8 +10,8 @@ lhassa/views/waybar_state.py and doc/waybar.md); it never imports Lhassa, never
 touches the network and never changes anything, so it starts in a few ms and
 degrades to a calm "no brain" when Lhassa is down.
 
-Classes: ok, warn (approvals waiting or budget at the soft limit), alert
-(failing health checks or budget exhausted), idle (no state file), stale
+Classes: ok, warn (approvals waiting, a health check warning, or budget at the
+soft limit), alert (a health check at alert level or budget exhausted), idle (no state file), stale
 (state file too old, so Lhassa stopped updating it).
 """
 
@@ -123,12 +123,14 @@ def render(path, now, env):
     tasks = data.get("tasks") if isinstance(data.get("tasks"), int) else None
     failing = data.get("health_failing")
     failing = [str(n) for n in failing] if isinstance(failing, list) else []
+    alerting = data.get("health_alert")
+    alerting = [str(n) for n in alerting] if isinstance(alerting, list) else []
     budget_on = num("budget") > 0
 
     cls = "ok"
-    if approvals or (budget_on and pct >= soft):
+    if approvals or failing or (budget_on and pct >= soft):
         cls = "warn"
-    if failing or (budget_on and pct >= 1.0):
+    if alerting or (budget_on and pct >= 1.0):
         cls = "alert"
 
     text = "%s $%.2f" % (WHEEL, cost)

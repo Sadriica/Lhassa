@@ -76,10 +76,23 @@ def test_unlimited_budget_never_warns(tmp_path):
     assert "Budget used" not in out["tooltip"]
 
 
-def test_bad_health_alert_beats_warn(tmp_path):
-    out = render(tmp_path, state(approvals=1, health_failing=["disk", "net"]))
+def test_a_health_check_at_alert_level_beats_warn(tmp_path):
+    out = render(tmp_path, state(approvals=1, health_failing=["disk", "net"], health_alert=["disk"]))
     assert out["class"] == "alert"
     assert "Health: disk, net" in out["tooltip"]
+
+
+def test_a_health_warning_alone_is_a_warn_not_an_alert(tmp_path):
+    """A failing check below alert level (e.g. a system unit that is not Lhassa's)."""
+    out = render(tmp_path, state(health_failing=["failed_units"], health_alert=[]))
+    assert out["class"] == "warn"
+    assert "Health: failed_units" in out["tooltip"]
+
+
+def test_an_older_state_file_without_health_alert_degrades_to_warn(tmp_path):
+    payload = state(health_failing=["disk"])
+    payload.pop("health_alert", None)
+    assert render(tmp_path, payload)["class"] == "warn"
 
 
 def test_old_file_is_stale(tmp_path):

@@ -117,7 +117,7 @@ def _note_missing_channel(name: str) -> None:
     if name in _PACK_CHANNELS:
         logger.debug(
             f"notify: channel {name!r} comes from the {_PACK_CHANNELS[name]} pack, "
-            "which is not installed (skipped)"
+            "which is not loaded in this process (not installed, or not imported here); skipped"
         )
         return
     logger.warning(

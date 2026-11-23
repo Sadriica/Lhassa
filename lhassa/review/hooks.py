@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shlex
 from pathlib import Path
 
 from lhassa.review import gitscan
@@ -109,6 +110,33 @@ def _git_target(command: str) -> tuple[str, str] | None:
     return m.group(2), directory.strip("'\"")
 
 
+_HEREDOC = re.compile(r"<<-?\s*(['\"]?)(\w+)\1[^\n]*\n(.*?)\n\s*\2\b", re.DOTALL)
+_MSG_FLAG = re.compile(r"^-[A-Za-z]*m$|^--message$")
+
+
+def _commit_message_text(command: str) -> str:
+    """The commit message text carried by a ``git commit`` shell command.
+
+    Only what ends up in the message is returned: ``-m`` / ``--message`` values
+    (including combined flags such as ``-am``, and ``--message=...``) and heredoc
+    bodies. The rest of the command (a ``grep`` pattern, a path, an ``echo``) is
+    not part of the commit, so a rule must not fire on it. A message passed with
+    ``-F <file>`` is not visible here; the ``commit-msg`` git hook scans it.
+    """
+    parts = [m.group(3) for m in _HEREDOC.finditer(command)]
+    stripped = _HEREDOC.sub(" ", command)
+    try:
+        tokens = shlex.split(stripped, posix=True)
+    except ValueError:
+        tokens = stripped.split()
+    for i, tok in enumerate(tokens):
+        if _MSG_FLAG.match(tok) and i + 1 < len(tokens):
+            parts.append(tokens[i + 1])
+        elif tok.startswith("--message="):
+            parts.append(tok.split("=", 1)[1])
+    return "\n".join(parts)
+
+
 def _upstream_revs(repo: str) -> list[str]:
     up = gitscan.git(repo, "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}",
                      check=False).strip()
@@ -122,8 +150,10 @@ def _bash_findings(command: str, cwd: str, cfg: ReviewConfig) -> list[Finding]:
     verb, directory = target
     repo = directory if os.path.isabs(directory) else os.path.join(cwd, directory) if directory else cwd
     if verb == "commit":
-        # The whole command text carries the message (-m, heredoc): scan it as one.
-        findings = check_text(command, subject="commit-command", cfg=cfg, kind="message")
+        # Only the message text of the command (-m, heredoc), not the rest of it.
+        findings = check_text(
+            _commit_message_text(command), subject="commit-command", cfg=cfg, kind="message"
+        )
         for role, name, email in gitscan.current_identities(repo):
             findings += check_identity(role, name, email, cfg, "identity")
         staged = gitscan.git(repo, "diff", "--cached", "-U0", "--no-ext-diff", "--no-color",

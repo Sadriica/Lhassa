@@ -245,6 +245,28 @@ def test_pretooluse_warns_without_granting_permission(corpus, capsys):
     assert log_entries()[-1]["outcome"] == "warn"
 
 
+@pytest.mark.parametrize(
+    "cmd",
+    [
+        "git commit -m 'fix: a " + EM + " b'",
+        "git commit -am 'fix: a " + EM + " b'",
+        'git commit --message="fix: a ' + EM + ' b"',
+        "git commit -m \"$(cat <<'EOF'\nfix: a " + EM + " b\nEOF\n)\"",
+    ],
+)
+def test_the_message_forms_of_a_commit_command_are_scanned(corpus, capsys, cmd):
+    repo, _ = corpus
+    rc, out = pre({"tool_name": "Bash", "cwd": str(repo), "tool_input": {"command": cmd}}, capsys)
+    assert rc == 0 and "emdash" in out["hookSpecificOutput"]["additionalContext"]
+
+
+def test_a_dash_elsewhere_in_a_commit_command_is_not_a_finding(corpus, capsys):
+    """The em dash is in a grep pattern, not in the commit message."""
+    repo, _ = corpus
+    cmd = "grep -rn '" + EM + "' docs && git commit -m 'docs: tidy'"
+    assert pre({"tool_name": "Bash", "cwd": str(repo), "tool_input": {"command": cmd}}, capsys) == (0, None)
+
+
 def test_pretooluse_ignores_unrelated_calls_and_clean_commits(corpus, capsys):
     repo, _ = corpus
     for payload in (

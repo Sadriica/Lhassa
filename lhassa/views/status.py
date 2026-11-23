@@ -68,8 +68,11 @@ def format_duration(seconds: "int | None") -> str:
     return f"{hours // 24}d{hours % 24}h"
 
 
-def health_failing(config=None) -> "tuple[str, ...] | None":
-    """Failing checks from the last health digest; ``None`` if there is none."""
+def health_failing(config=None, levels: tuple = ("warn", "alert")) -> "tuple[str, ...] | None":
+    """Failing checks from the last health digest; ``None`` if there is none.
+
+    ``levels`` picks which severities count: both by default, ``("alert",)`` for
+    the checks that need attention now."""
     try:
         if config is None:
             from lhassa.config import Config as config
@@ -84,7 +87,7 @@ def health_failing(config=None) -> "tuple[str, ...] | None":
         return tuple(
             name
             for name, r in results.items()
-            if isinstance(r, dict) and r.get("level") in ("warn", "alert")
+            if isinstance(r, dict) and r.get("level") in levels
         )
     except Exception:
         return None
@@ -111,6 +114,7 @@ async def gather(instance_id: "str | None" = None) -> dict:
         "tasks": None,
         "beat_age": None,
         "health_failing": health_failing(Config),
+        "health_alert": health_failing(Config, ("alert",)),
     }
     try:
         from lhassa.llm.gateway import spend_summary

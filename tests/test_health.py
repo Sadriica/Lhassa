@@ -240,3 +240,43 @@ def test_format_digest_is_plain_text(tmp_path):
     assert "Lhassa PC state check" in text
     for name in checks.CHECKS:
         assert name in text
+
+
+# ── failed units: Lhassa's own vs the machine's ──────────────────────────────
+
+def test_split_failed_units_separates_lhassa_from_the_rest():
+    own, other = checks.split_failed_units(["lhassa-app.service", "reflector.service", "lhassa-health.service"])
+    assert own == ["lhassa-app.service", "lhassa-health.service"]
+    assert other == ["reflector.service"]
+
+
+def test_a_failed_unit_that_is_not_lhassas_is_a_notice_not_a_warning():
+    r = checks._failed_units_result(["reflector.service"])
+    assert r["level"] == "notice" and r["ok"] is True
+    assert "none of them Lhassa" in r["summary"] and r["detail"] == ["reflector.service"]
+
+
+def test_a_failed_lhassa_unit_warns_and_three_alert():
+    assert checks._failed_units_result(["lhassa-app.service", "reflector.service"])["level"] == "warn"
+    three = [f"lhassa-{n}.service" for n in "abc"]
+    assert checks._failed_units_result(three)["level"] == "alert"
+
+
+def test_check_failed_units_asks_both_the_system_and_the_user_manager(monkeypatch):
+    calls = []
+
+    class Done:
+        def __init__(self, out):
+            self.stdout = out
+
+    def fake_run(argv, **kw):
+        calls.append(argv)
+        return Done("lhassa-telegram.service loaded failed failed x\n" if "--user" in argv
+                    else "reflector.service loaded failed failed y\n")
+
+    monkeypatch.setattr(checks.subprocess, "run", fake_run)
+    monkeypatch.setattr(checks.shutil, "which", lambda n: "/usr/bin/" + n)
+    monkeypatch.setattr("lhassa.host.current_platform_name", lambda: "linux")
+    r = checks.check_failed_units()
+    assert any("--user" in c for c in calls) and any("--user" not in c for c in calls)
+    assert r["level"] == "warn" and "lhassa-telegram.service" in r["summary"]

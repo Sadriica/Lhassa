@@ -22,6 +22,7 @@ SNAP = {
     "tasks": None,
     "beat_age": 30,
     "health_failing": ("disk",),
+    "health_alert": (),
 }
 
 
@@ -39,6 +40,7 @@ def test_build_state_shape():
         "tasks": None,
         "beat_age": 30,
         "health_failing": ["disk"],
+        "health_alert": [],
         "dashboard_url": "http://127.0.0.1:7766",
     }
     json.dumps(payload)
