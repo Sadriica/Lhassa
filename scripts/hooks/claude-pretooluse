@@ -1,0 +1,8 @@
+#!/bin/sh
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Claude Code PreToolUse adapter for lhassa review. Fails open: whatever goes
+# wrong here, the tool call is allowed (exit 0, no output). The engine itself
+# only denies for rules the owner listed in block_on in the review config.
+. "$(dirname "$(readlink -f "$0")")/_common.sh"
+lhassa_review hook pretooluse 2>/dev/null || true
+exit 0

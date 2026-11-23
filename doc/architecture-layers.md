@@ -47,6 +47,9 @@ the interfaces must not import a shell.
    `lhassa.*` feature module (they are bottom-of-stack infrastructure).
 7. **research-isolation**: the research pack's inner modules (`research/`
    outside `research/surfaces/`) must not import any shell.
+8. **review-isolation**: `review/` (the deterministic pre-flight review engine and
+   its hook adapters, stdlib-only so a git hook starts fast) must not import any
+   shell; its CLI sub-app lives in `cli/review_cmds.py`.
 
 ## Allowed exceptions
 

@@ -1,0 +1,13 @@
+#!/bin/sh
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Stand-in for every git hook this directory does not review. Once core.hooksPath
+# points here, git stops looking in .git/hooks, so each standard hook name is a
+# symlink to this file that hands control back to the repo's own hook (if any).
+. "$(dirname "$(readlink -f "$0")")/_common.sh"
+name="$(basename "$0")"
+tmp=""
+if [ ! -t 0 ]; then
+  tmp="$(mktemp 2>/dev/null)" && cat > "$tmp" && trap 'rm -f "$tmp"' EXIT
+fi
+LHASSA_STDIN_FILE="$tmp" lhassa_delegate "$name" "$@"
+exit $?

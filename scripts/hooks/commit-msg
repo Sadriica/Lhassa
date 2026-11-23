@@ -1,0 +1,11 @@
+#!/bin/sh
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# lhassa review: commit-msg hook (warn mode; exit 0 unless LHASSA_REVIEW_STRICT=1).
+. "$(dirname "$(readlink -f "$0")")/_common.sh"
+msgfile="$1"
+case "$msgfile" in /*) ;; *) msgfile="$PWD/$msgfile" ;; esac
+review_rc=0
+lhassa_review hook commit-msg "$msgfile" --repo "$PWD" || review_rc=$?
+[ "$review_rc" -eq 1 ] || review_rc=0   # only a strict verdict (1) may block
+lhassa_delegate commit-msg "$@" || exit $?
+exit "$review_rc"

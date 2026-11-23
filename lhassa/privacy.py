@@ -36,6 +36,8 @@ _SECRET = re.compile(
     r"|[A-Za-z0-9_\-]{32,}"
     r")\b"
 )
+#: Public alias: the review engine reuses this exact pattern to DETECT (not scrub).
+SECRET_PATTERN = _SECRET
 # Phone numbers: an optional + and country code, then groups of digits with the
 # usual separators, at least ~7 digits total. Word boundaries avoid swallowing
 # adjacent letters.
