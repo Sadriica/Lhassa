@@ -228,11 +228,13 @@ def call_openai(url: str, model: str, prompt: str, max_tokens: int, num_ctx: int
 
 
 class OpenVinoBackend:
-    def __init__(self, model_dir: str, device: str):
+    def __init__(self, model_dir: str, device: str, vlm: bool = False):
         import openvino_genai as ov
 
         t0 = time.perf_counter()
-        self.pipe = ov.LLMPipeline(model_dir, device)
+        # Multimodal checkpoints (Gemma 4) load through VLMPipeline, text only.
+        self.vlm = vlm
+        self.pipe = (ov.VLMPipeline if vlm else ov.LLMPipeline)(model_dir, device)
         self.load_s = time.perf_counter() - t0
         self.ov = ov
 
@@ -251,7 +253,10 @@ class OpenVinoBackend:
 
         self.pipe.start_chat()  # applies the model's chat template
         try:
-            res = self.pipe.generate(prompt, cfg, streamer)
+            if self.vlm:
+                res = self.pipe.generate(prompt, generation_config=cfg, streamer=streamer)
+            else:
+                res = self.pipe.generate([prompt], cfg, streamer)  # a list returns DecodedResults
         finally:
             self.pipe.finish_chat()
         wall = time.perf_counter() - t0
@@ -292,7 +297,7 @@ def run(args) -> None:
     elif args.backend == "openai":
         call = call_openai
     else:
-        call = OpenVinoBackend(args.model_dir, args.device)
+        call = OpenVinoBackend(args.model_dir, args.device, args.vlm)
     pid = args.server_pid or (os.getpid() if args.backend == "openvino" else None)
     out = Path(args.out)
     load = os.getloadavg()
@@ -312,7 +317,7 @@ def run(args) -> None:
                 # A short unique tag in front defeats server-side prefix reuse
                 # (every prompt in a task shares a long header), so ttft is a
                 # cold-prefill number on every backend.
-                prompt = f"[req {args.run_offset + rep}-{idx}]\n" + fx["prompt"]
+                prompt = f"[req {args.run_offset + rep}-{idx}]\n" + fx["prompt"] + args.prompt_suffix
                 with Sampler(pid) as s:
                     try:
                         r = call(args.url, args.model, prompt, max_tokens, args.num_ctx)
@@ -324,7 +329,7 @@ def run(args) -> None:
                 rec = {
                     **meta, "run": args.run_offset + rep, "load_1m": round(os.getloadavg()[0], 2), "pkg_temp_c": package_temp_c(), "task": fx["task"], "fixture": fx["id"],
                     "passed": bool(res.passed), "detail": res.detail[:160], "error": err,
-                    "answer": r["text"][:300],
+                    "answer": r["text"][:2000],
                     **{k: r.get(k) for k in ("ttft_s", "wall_s", "gen_tokens", "gen_tps",
                                               "prompt_tokens", "prefill_tps", "load_s")},
                     "peak_rss_mb": round(s.peak_rss, 1), "cpu_busy_pct": round(s.cpu_busy_pct, 1),
@@ -355,11 +360,19 @@ def _lenient(fixture: dict, answer: str) -> bool:
 
 def summary(path: str) -> None:
     rows = [json.loads(line) for line in Path(path).read_text().splitlines() if line.strip()]
+    # A re-run of the same (label, run, fixture) replaces the earlier row.
+    rows = list({(r["label"], r["run"], r["fixture"]): r for r in rows}.values())
     fixtures = {f["id"]: f for f in load_fixtures(None)}
+    # Re-score from the stored answer with the CURRENT fixture spec (rows
+    # written before an answer-length cap change keep their stored verdict if
+    # the answer was truncated).
+    for r in rows:
+        if len(r.get("answer", "")) < 300 and r["fixture"] in fixtures:
+            r["passed"] = bool(score(fixtures[r["fixture"]], r["answer"]).passed)
     labels = sorted({r["label"] for r in rows})
     tasks = sorted({r["task"] for r in rows})
-    print("| label | " + " | ".join(tasks) + " | all | label-tasks lenient | ttft p50 (s) | gen tok/s p50 | peak RSS MB | power W |")
-    print("|---|" + "---|" * (len(tasks) + 6))
+    print("| label | " + " | ".join(tasks) + " | all | label-tasks lenient | ttft p50 (s) | gen tok/s p50 | peak RSS MB | power W | pkg temp C p50 | load1 p50 |")
+    print("|---|" + "---|" * (len(tasks) + 8))
 
     def pct(sub):
         runs = sorted({r["run"] for r in sub})
@@ -381,7 +394,9 @@ def summary(path: str) -> None:
         med = lambda xs, f: f"{statistics.median(xs):{f}}" if xs else "n/a"  # noqa: E731
         rss = max(r["peak_rss_mb"] for r in rs)
         pwr = f"{statistics.fmean(pw):.1f}" if pw else "n/a"
-        print(f"| {lab} | " + " | ".join(cells) + f" | {lenient} | {med(ttft, '.2f')} | {med(tps, '.1f')} | {rss:.0f} | {pwr} |")
+        temps = [r["pkg_temp_c"] for r in rs if r.get("pkg_temp_c")]
+        loads = [r["load_1m"] for r in rs if r.get("load_1m") is not None]
+        print(f"| {lab} | " + " | ".join(cells) + f" | {lenient} | {med(ttft, '.2f')} | {med(tps, '.1f')} | {rss:.0f} | {pwr} | {med(temps, '.0f')} | {med(loads, '.1f')} |")
 
 
 def main() -> None:
@@ -391,6 +406,7 @@ def main() -> None:
     ap.add_argument("--model", default="")
     ap.add_argument("--model-dir", default="", help="openvino: exported model directory")
     ap.add_argument("--device", default="CPU", help="openvino: CPU, GPU or NPU")
+    ap.add_argument("--vlm", action="store_true", help="openvino: use VLMPipeline (multimodal checkpoints, text only)")
     ap.add_argument("--label", default="", help="row label, e.g. 'qwen3.5-4b ollama-cpu'")
     ap.add_argument("--quant", default="", help="recorded only (e.g. Q4_K_M)")
     ap.add_argument("--runtime", default="", help="recorded only (e.g. ollama 0.40.17)")
@@ -399,6 +415,7 @@ def main() -> None:
     ap.add_argument("--runs", type=int, default=3)
     ap.add_argument("--run-offset", type=int, default=0, help="added to the run index (interleaved sweeps)")
     ap.add_argument("--max-temp", type=float, default=80.0, help="wait (max 5 min) for package temp below this before starting")
+    ap.add_argument("--prompt-suffix", default="", help="appended to every prompt (e.g. ' /no_think' for Qwen3 via OpenVINO)")
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--num-ctx", type=int, default=4096)
     ap.add_argument("--out", default="small-models-results.jsonl")

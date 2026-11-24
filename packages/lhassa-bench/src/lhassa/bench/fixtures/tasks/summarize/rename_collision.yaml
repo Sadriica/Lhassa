@@ -17,7 +17,7 @@ verify:
   - '2 '
   - report-2025.pdf
   - notes.txt
-  - collision|already exist
+  - collision|exist|conflict|clash
   max_words: 60
 tags:
 - task
