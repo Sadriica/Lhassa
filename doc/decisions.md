@@ -1,5 +1,42 @@
 # Lhassa; decisions log
 
+## 2026-11-24. The utility tribunal is redesigned after the owner rejected all of it
+
+The first months of the tribunal parked 37 `retire_capability` proposals, the
+repetition detector 11 `mint_script` and 2 `mint_memory`; the owner rejected
+every one. Measured defects, all fixed:
+
+- **"self_driven" lied.** It meant "no owner use in 30 days" but the title said
+  "only Lhassa itself uses it"; 8 of 21 had owner uses. Now four states:
+  `unused`, `dormant_owner` (the owner used it, long ago), `self_driven` (only
+  Lhassa or its seed), `active`; titles come from the real counts.
+- **Machinery on trial.** Seeded maintenance actions, the temple's fronted
+  actions and a closed `INFRASTRUCTURE` set (`temple_run`, `send_digest`,
+  `notify`, `set_task_state`, `sync_repo`, `run_script`, ...) are never judged.
+  An `unused` verdict also needs an instrumented door (a terminal command, a
+  chat tool or an allowlisted dispatch action, derived from the live maps): a
+  zero without a door is missing instrumentation, not disuse.
+- **Grace per capability**, not per instance: `utility:seen:<cap>` is stamped on
+  first observation and `unused` waits `LHASSA_UTILITY_CAPABILITY_GRACE_DAYS`
+  (30) from it.
+- **One row per capability, but bounded**: at most 5 per sweep and never past
+  `approval_pending_cap` pending (a summary row would still need per-capability
+  resolution). A pending proposal whose capability revived, or left the
+  registry, closes as `rejected-by-revived` / `rejected-by-gone` (not a human
+  decision).
+- **Answers mean something.** Approve records the capability in
+  `utility:retired_candidates` (`lhassa utility candidates`); nothing is removed.
+  A human rejection pins it (`utility:pinned:<cap>`); queue closures never pin.
+- **Mint proposals.** Chains with `requires_approval` actions (never runnable by
+  PTC) and the capability-use bookkeeping rows are excluded; occurrences are
+  counted without overlap; rotations/sub-chains collapse to one canonical chain;
+  denied chains are honoured; `mint_memory` needs a storable answer in the
+  payload and >= 2 distinct days. Closures `rejected-by-*` no longer count as
+  denials, so an expired proposal may return and a refused one never does.
+- **Briefs by rules** for `retire_capability` and `mint_*` (no model that only
+  saw the title), and the texts no longer claim approving stores or creates
+  anything.
+
 ## 2026-10-20. The chat engine stays in core; Telegram becomes a pack
 
 `notify/telegram_inbound.py` mixed two things: what to answer (commands,

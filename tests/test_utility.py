@@ -45,6 +45,11 @@ def caps(monkeypatch):
     """Pin the capability registry to a small, known set."""
     names = ["alpha", "beta", "gamma"]
     monkeypatch.setattr(utility, "_registered_capabilities", lambda: sorted(names))
+    # The fake names are not in the real allowlist/door maps, so declare that they
+    # have an instrumented door; and switch the per-capability grace off by default
+    # (tests of that grace set it back explicitly).
+    monkeypatch.setattr(utility, "_door_names", lambda: set(names))
+    monkeypatch.setattr(utility.Config, "utility_capability_grace_days", 0, raising=False)
     return names
 
 
@@ -132,9 +137,11 @@ async def test_stale_owner_use_falls_out_of_the_window(brain, caps, monkeypatch)
     monkeypatch.setattr(utility.Config, "utility_pinned", "", raising=False)
 
     # A human used it; but 90 days ago. Used once ≠ still earning its place.
+    # It is NOT "self_driven" (Lhassa never used it alone): the owner did, so it
+    # is the distinct state dormant_owner.
     await _seed(brain, accion="alpha", despertar_por="telegram", when=_iso(90))
     rows = {r["capability"]: r for r in await survey_now()}
-    assert rows["alpha"]["state"] == utility.STATE_SELF_DRIVEN
+    assert rows["alpha"]["state"] == utility.STATE_DORMANT_OWNER
     assert rows["alpha"]["owner_uses"] == 1
     assert rows["alpha"]["days_since_owner_use"] == pytest.approx(90, abs=1)
 
@@ -337,6 +344,8 @@ async def test_review_capabilities_caps_the_docket_and_reports_the_remainder(
 
     many = [f"cap{i}" for i in range(10)]
     monkeypatch.setattr(utility, "_registered_capabilities", lambda: sorted(many))
+    monkeypatch.setattr(utility, "_door_names", lambda: set(many))
+    monkeypatch.setattr(utility.Config, "utility_capability_grace_days", 0, raising=False)
     monkeypatch.setattr(utility.Config, "instance_id", "inst_test", raising=False)
     monkeypatch.setattr(utility.Config, "utility_grace_days", 14, raising=False)
     monkeypatch.setattr(utility.Config, "utility_pinned", "", raising=False)
@@ -396,4 +405,362 @@ def test_describe_renders_retire_capability():
     )
     assert "gamma" in self_driven["title"]
     assert "47d" in self_driven["detail"]
-    assert "12×" in self_driven["detail"]
+    assert "×12" in self_driven["detail"]
+    assert "approving records it as a retirement candidate; nothing is removed" in self_driven["detail"]
+
+
+# ══ tribunal redesign: states, exclusions, per-capability grace, closures, pins ══
+
+
+async def _sweep_env(monkeypatch, action_mod, names, *, real_approvals=True):
+    """Wire a deterministic sweep: fixed registry, doors for all, no grace."""
+    monkeypatch.setattr(utility, "_registered_capabilities", lambda: sorted(names))
+    monkeypatch.setattr(utility, "_door_names", lambda: set(names))
+    for attr, val in (
+        ("instance_id", "inst_test"),
+        ("utility_grace_days", 14),
+        ("utility_dormant_days", 30),
+        ("utility_capability_grace_days", 0),
+        ("utility_pinned", ""),
+        ("approval_pending_cap", 20),
+    ):
+        monkeypatch.setattr(utility.Config, attr, val, raising=False)
+        monkeypatch.setattr(action_mod.Config, attr, val, raising=False)
+
+    async def _notify(msg, level="info"):
+        return None
+
+    monkeypatch.setattr(action_mod, "_notify", _notify)
+
+    async def _no_brief(*a, **k):
+        return None
+
+    monkeypatch.setattr(action_mod._approval, "_stamp_english_brief", _no_brief)
+
+
+@pytest.mark.asyncio
+async def test_four_states_distinguish_owner_dormant_from_self_driven(brain, caps, monkeypatch):
+    monkeypatch.setattr(utility.Config, "instance_id", "inst_test", raising=False)
+    monkeypatch.setattr(utility.Config, "utility_dormant_days", 30, raising=False)
+    monkeypatch.setattr(utility.Config, "utility_pinned", "", raising=False)
+    await _seed(brain, accion="alpha", despertar_por="telegram", when=_iso(80))  # owner, old
+    await _seed(brain, accion="beta", despertar_por="task:beta", when=_iso(2))  # only Lhassa
+    rows = {r["capability"]: r for r in await survey_now()}
+    assert rows["alpha"]["state"] == utility.STATE_DORMANT_OWNER
+    assert rows["beta"]["state"] == utility.STATE_SELF_DRIVEN
+    assert rows["gamma"]["state"] == utility.STATE_UNUSED
+
+
+@pytest.mark.asyncio
+async def test_seeded_and_infrastructure_actions_are_never_on_the_docket(brain, monkeypatch):
+    names = ["temple_run", "send_digest", "notify", "distill_memory", "review_capabilities",
+             "set_task_state", "real_cap"]
+    monkeypatch.setattr(utility, "_registered_capabilities", lambda: sorted(names))
+    monkeypatch.setattr(utility, "_door_names", lambda: set(names))
+    for attr, val in (("instance_id", "inst_test"), ("utility_grace_days", 14),
+                      ("utility_capability_grace_days", 0), ("utility_pinned", "")):
+        monkeypatch.setattr(utility.Config, attr, val, raising=False)
+    await _seed(brain, accion="x", despertar_por="telegram", when=_iso(60))
+    docket = {r["capability"] for r in await utility.find_dormant("inst_test")}
+    assert docket == {"real_cap"}
+    # ...but they are still SURVEYED, tagged with why they are exempt.
+    rows = {r["capability"]: r for r in await survey_now()}
+    assert rows["temple_run"]["excluded"] == "infrastructure"
+    assert rows["distill_memory"]["excluded"] == "seeded"
+    assert rows["real_cap"]["excluded"] is None
+
+
+def test_exclusions_are_derived_from_the_real_seed_and_temple_sets():
+    import lhassa.actionpack._utility  # noqa: F401  (registers the shell-side sources)
+    from lhassa.actionpack._temple import TEMPLE_ACTIONS
+    from lhassa.seeds.maintenance import _RECURRING_ACTIONS
+
+    for a, _ in _RECURRING_ACTIONS:
+        assert utility.excluded_reason(a) == "seeded"
+    for a in TEMPLE_ACTIONS:
+        assert utility.excluded_reason(a) is not None
+    for a in ("add_fact", "add_task", "org_run", "run_script", "set_task_state", "sync_repo"):
+        assert utility.excluded_reason(a) is not None  # the measured instrumentation gaps
+
+
+@pytest.mark.asyncio
+async def test_unused_without_an_instrumented_door_is_never_judged(brain, monkeypatch):
+    monkeypatch.setattr(utility, "_registered_capabilities", lambda: ["with_door", "no_door"])
+    monkeypatch.setattr(utility, "_door_names", lambda: {"with_door"})
+    for attr, val in (("instance_id", "inst_test"), ("utility_grace_days", 14),
+                      ("utility_capability_grace_days", 0), ("utility_pinned", "")):
+        monkeypatch.setattr(utility.Config, attr, val, raising=False)
+    await _seed(brain, accion="x", despertar_por="telegram", when=_iso(60))
+    docket = {r["capability"] for r in await utility.find_dormant("inst_test")}
+    assert docket == {"with_door"}
+
+
+def test_the_door_set_is_derived_from_the_real_maps():
+    import lhassa.actionpack._utility  # noqa: F401  (registers the shell-side sources)
+    doors = utility._door_names()
+    from lhassa.cli.capability_log import COMMAND_CAPABILITY
+
+    assert set(COMMAND_CAPABILITY.values()) <= doors
+    assert "run_command" in doors  # chat/code door, though it requires approval
+
+
+@pytest.mark.asyncio
+async def test_per_capability_grace_shields_a_newly_seen_capability(brain, caps, monkeypatch):
+    monkeypatch.setattr(utility.Config, "instance_id", "inst_test", raising=False)
+    monkeypatch.setattr(utility.Config, "utility_grace_days", 14, raising=False)
+    monkeypatch.setattr(utility.Config, "utility_pinned", "", raising=False)
+    monkeypatch.setattr(utility.Config, "utility_capability_grace_days", 30, raising=False)
+    await _seed(brain, accion="alpha", despertar_por="telegram", when=_iso(60))  # old instance
+    await _seed(brain, accion="alpha", despertar_por="telegram", when=_iso(0))  # alpha is active
+
+    now = datetime.now(timezone.utc)
+    # First sight: the unused ones get a mark and are NOT judged, however old the instance.
+    assert await utility.find_dormant("inst_test", now=now) == []
+    assert await brain.get_watch_state("inst_test", "utility:seen:gamma")
+    # 29 days later still shielded; at 31 days they are judged.
+    assert await utility.find_dormant("inst_test", now=now + timedelta(days=29)) == []
+    later = await utility.find_dormant("inst_test", now=now + timedelta(days=31))
+    # (alpha's own use has aged past the 30d dormant window by then: also judged.)
+    assert {r["capability"] for r in later} == {"alpha", "beta", "gamma"}
+
+
+def test_capability_grace_days_defaults_to_30():
+    # (Not reloaded with the env var: reloading lhassa.config swaps the Config
+    # class under every module that already imported it and corrupts other tests.)
+    from lhassa.config import Config
+
+    assert Config.utility_capability_grace_days == 30
+
+
+@pytest.mark.asyncio
+async def test_titles_follow_the_real_state_and_counts(brain, caps, monkeypatch):
+    from lhassa.actionpack import _utility as action_mod
+
+    await _sweep_env(monkeypatch, action_mod, ["alpha", "beta", "gamma"])
+    await _seed(brain, accion="alpha", despertar_por="telegram", when=_iso(80))
+    await _seed(brain, accion="alpha", despertar_por="telegram", when=_iso(70))
+    await _seed(brain, accion="beta", despertar_por="task:beta", when=_iso(5))
+    await action_mod.review_capabilities({"instance_id": "inst_test"})
+    rows = {r["payload"]["capability"]: r["payload"]
+            for r in await brain.load_pending_approvals("inst_test")}
+    assert "only Lhassa" not in rows["alpha"]["title"]  # the owner used it 2x
+    assert "you used it 2x" in rows["alpha"]["title"]
+    assert "only Lhassa itself used it" in rows["beta"]["title"]
+    assert rows["gamma"]["title"] == "retire 'gamma': never used by anyone"
+
+
+@pytest.mark.asyncio
+async def test_pending_cap_stops_the_tribunal(brain, monkeypatch):
+    from lhassa.actionpack import _utility as action_mod
+
+    names = [f"cap{i}" for i in range(8)]
+    await _sweep_env(monkeypatch, action_mod, names)
+    monkeypatch.setattr(action_mod.Config, "approval_pending_cap", 3, raising=False)
+    await _seed(brain, accion="x", despertar_por="telegram", when=_iso(60))
+    out = await action_mod.review_capabilities({"instance_id": "inst_test", "limit": 5})
+    assert "3 proposed" in out  # room = cap - pending = 3
+    out2 = await action_mod.review_capabilities({"instance_id": "inst_test", "limit": 5})
+    assert "0 proposed" in out2 and "cap 3" in out2
+    pend = await brain.load_pending_approvals("inst_test")
+    assert len([a for a in pend if a["tipo"] == "retire_capability"]) == 3
+
+
+@pytest.mark.asyncio
+async def test_a_revived_capability_closes_its_approval_without_a_pin(brain, caps, monkeypatch):
+    from lhassa.actionpack import _utility as action_mod
+
+    await _sweep_env(monkeypatch, action_mod, ["alpha", "beta", "gamma"])
+    await _seed(brain, accion="alpha", despertar_por="telegram", when=_iso(60))
+    await action_mod.review_capabilities({"instance_id": "inst_test"})
+    ap = [a for a in await brain.load_pending_approvals("inst_test")
+          if a["payload"]["capability"] == "gamma"][0]
+    # The owner uses gamma today.
+    await _seed(brain, accion="gamma", despertar_por="telegram", when=_iso(0))
+    out = await action_mod.review_capabilities({"instance_id": "inst_test"})
+    assert "closed 1 revived" in out
+    row = await brain.get_approval("inst_test", ap["id"])
+    assert row["estado"] == "rechazada"
+    assert row["payload"]["resolution"] == "rejected-by-revived"
+    assert not await brain.get_watch_state("inst_test", "utility:pinned:gamma")
+    assert "gamma" not in await utility.load_pinned("inst_test")
+
+
+@pytest.mark.asyncio
+async def test_a_capability_gone_from_the_registry_closes_its_approval(brain, monkeypatch):
+    from lhassa.actionpack import _utility as action_mod
+
+    await _sweep_env(monkeypatch, action_mod, ["alpha", "beta"])
+    await _seed(brain, accion="alpha", despertar_por="telegram", when=_iso(60))
+    await action_mod.review_capabilities({"instance_id": "inst_test"})
+    ap = (await brain.load_pending_approvals("inst_test"))[0]
+    assert ap["payload"]["capability"] == "beta"
+    monkeypatch.setattr(utility, "_registered_capabilities", lambda: ["alpha"])
+    out = await action_mod.review_capabilities({"instance_id": "inst_test"})
+    assert "1 gone" in out
+    row = await brain.get_approval("inst_test", ap["id"])
+    assert row["payload"]["resolution"] == "rejected-by-gone"
+
+
+@pytest.mark.asyncio
+async def test_a_human_rejection_pins_and_queue_closures_do_not(brain, caps, monkeypatch):
+    from lhassa.actionpack import _utility as action_mod
+    from lhassa.security import approval
+
+    await _sweep_env(monkeypatch, action_mod, ["alpha", "beta", "gamma"])
+    await _seed(brain, accion="alpha", despertar_por="telegram", when=_iso(60))
+    await action_mod.review_capabilities({"instance_id": "inst_test"})
+    by_cap = {a["payload"]["capability"]: a["id"]
+              for a in await brain.load_pending_approvals("inst_test")}
+
+    # A queue closure (the cap/timeout path) leaves no pin.
+    await brain.close_approval("inst_test", by_cap["beta"], "rejected-by-timeout")
+    assert "beta" not in await utility.load_pinned("inst_test")
+    # A human "no" pins it, and the tribunal never lists it again.
+    await approval.resolve("inst_test", by_cap["gamma"], approved=False)
+    assert "gamma" in await utility.load_pinned("inst_test")
+    assert utility.pinned_capabilities(utility.Config, {"gamma"}) >= {"gamma"}
+    docket = {r["capability"] for r in await utility.find_dormant("inst_test")}
+    assert "gamma" not in docket
+
+
+@pytest.mark.asyncio
+async def test_env_pins_still_work_alongside_persisted_pins(brain, caps, monkeypatch):
+    monkeypatch.setattr(utility.Config, "instance_id", "inst_test", raising=False)
+    monkeypatch.setattr(utility.Config, "utility_pinned", "alpha", raising=False)
+    await brain.set_watch_state("inst_test", "utility:pinned:beta", "1")
+    assert await utility.load_pinned("inst_test") == {"alpha", "beta"}
+
+
+@pytest.mark.asyncio
+async def test_approving_records_a_candidate_and_removes_nothing(brain, caps, monkeypatch):
+    from lhassa.actionpack import _utility as action_mod
+    from lhassa.security import approval
+
+    await _sweep_env(monkeypatch, action_mod, ["alpha", "beta", "gamma"])
+    await _seed(brain, accion="alpha", despertar_por="telegram", when=_iso(60))
+    await _seed(brain, accion="alpha", despertar_por="telegram", when=_iso(0))
+    await action_mod.review_capabilities({"instance_id": "inst_test"})
+    ids = [a["id"] for a in await brain.load_pending_approvals("inst_test")]
+    for ap_id in ids:
+        await approval.resolve("inst_test", ap_id, approved=True)
+    assert sorted(await utility.retired_candidates("inst_test")) == ["beta", "gamma"]
+    # Approving twice never duplicates; and nothing was pinned.
+    await utility.add_retired_candidate("inst_test", "beta")
+    assert sorted(await utility.retired_candidates("inst_test")) == ["beta", "gamma"]
+    assert await utility.load_pinned("inst_test") == set()
+
+
+def test_utility_candidates_command_lists_the_recorded_candidates(tmp_path, monkeypatch):
+    import asyncio
+    import json
+
+    from typer.testing import CliRunner
+
+    import lhassa.core.db as db
+    from lhassa.cli.utility_cmds import utility_app
+    from lhassa.config import Config
+
+    monkeypatch.setattr(db, "DB_PATH", tmp_path / "brain.db")
+    asyncio.run(db.init_db())
+    asyncio.run(utility.add_retired_candidate(Config.instance_id, "zeta"))
+    res = CliRunner().invoke(utility_app, ["candidates", "--json"])
+    assert res.exit_code == 0, res.output
+    assert json.loads(res.output) == ["zeta"]
+    human = CliRunner().invoke(utility_app, ["candidates"])
+    assert "zeta" in human.output and "nothing is removed" in human.output
+
+
+# ── the brief is deterministic for self-proposals ─────────────────────────────
+
+
+def test_retire_brief_is_rule_based_and_matches_the_data():
+    from lhassa.security.approval import deterministic_brief
+
+    unused = deterministic_brief("retire_capability", {"capability": "g", "state": "unused", "total_uses": 0})
+    assert unused["recommendation"].startswith("Approve") and "no use by anyone" in unused["recommendation"]
+
+    recent = deterministic_brief("retire_capability", {
+        "capability": "a", "state": "dormant_owner", "owner_uses": 4, "self_uses": 0,
+        "total_uses": 4, "days_since_owner_use": 40.0})
+    assert recent["recommendation"].startswith("Reject") and "40 days ago" in recent["recommendation"]
+    assert "4 by you" in recent["summary"]
+
+    old = deterministic_brief("retire_capability", {
+        "capability": "a", "state": "dormant_owner", "owner_uses": 1, "total_uses": 1,
+        "days_since_owner_use": 200.0})
+    assert old["recommendation"].startswith("Approve") and "200 days" in old["recommendation"]
+
+    selfd = deterministic_brief("retire_capability", {
+        "capability": "b", "state": "self_driven", "owner_uses": 0, "self_uses": 9, "total_uses": 9})
+    assert "only Lhassa used it (9 times)" in selfd["recommendation"]
+
+
+def test_mint_briefs_are_rule_based():
+    from lhassa.security.approval import deterministic_brief
+
+    good = deterministic_brief("mint_script", {"chain": ["a", "b"], "count": 6, "days_seen": 3})
+    assert good["recommendation"].startswith("Approve")
+    burst = deterministic_brief("mint_script", {"chain": ["a", "b"], "count": 6, "days_seen": 1})
+    assert burst["recommendation"].startswith("Reject")
+    mem = deterministic_brief("mint_memory", {"despertar_por": "telegram", "count": 5, "days_seen": 3, "answer": "x"})
+    assert mem["recommendation"].startswith("Approve") and "Nothing is stored" in mem["summary"]
+    assert deterministic_brief("mint_memory", {"count": 5, "days_seen": 3})["recommendation"].startswith("Reject")
+    assert deterministic_brief("task", {}) is None
+
+
+@pytest.mark.asyncio
+async def test_request_approval_stamps_the_deterministic_brief_without_an_llm(brain, monkeypatch):
+    import json
+    import sqlite3
+
+    from lhassa.llm.gateway import gateway
+    from lhassa.security import approval
+
+    async def _boom(*a, **k):
+        raise AssertionError("the LLM must not be consulted for a retire_capability brief")
+
+    monkeypatch.setattr(gateway, "complete", _boom)
+    ap_id = await approval.request_approval(
+        "inst_test", tipo="retire_capability",
+        payload={"accion": "retire_capability", "capability": "g", "state": "unused", "total_uses": 0},
+    )
+    con = sqlite3.connect(brain.DB_PATH)
+    raw = con.execute("SELECT brief FROM approvals WHERE id = ?", (ap_id,)).fetchone()[0]
+    con.close()
+    assert json.loads(raw)["recommendation"].startswith("Approve")
+
+
+def test_describe_texts_no_longer_promise_what_approval_does_not_do():
+    from lhassa.security.approval import describe
+
+    for tipo, payload in (
+        ("retire_capability", {"capability": "x", "state": "unused"}),
+        ("mint_script", {"chain": ["a", "b"], "count": 3}),
+        ("mint_memory", {"despertar_por": "t", "count": 3}),
+    ):
+        detail = describe({"tipo": tipo, "payload": payload})["detail"]
+        assert "durable" not in detail and "stores a" not in detail
+    assert "nothing is removed" in describe({"tipo": "retire_capability", "payload": {"capability": "x"}})["detail"]
+    assert "no script is created or run" in describe({"tipo": "mint_script", "payload": {"chain": ["a", "b"]}})["detail"]
+    assert "nothing is stored" in describe({"tipo": "mint_memory", "payload": {"despertar_por": "t"}})["detail"]
+
+
+@pytest.mark.asyncio
+async def test_the_briefs_route_fills_self_proposals_without_the_llm(brain, monkeypatch):
+    """The dashboard's batch-brief endpoint used to send retire/mint rows to a
+    cheap model that saw only the title; it now fills them by rules."""
+    from lhassa.api import approval_routes
+    from lhassa.config import Config
+    from lhassa.llm.gateway import gateway
+
+    async def _boom(*a, **k):
+        raise AssertionError("no LLM call expected for self-proposals")
+
+    monkeypatch.setattr(gateway, "complete", _boom)
+    await brain.add_approval(
+        Config.instance_id, "retire_capability",
+        {"accion": "retire_capability", "capability": "g", "state": "unused", "total_uses": 0},
+    )
+    out = await approval_routes.get_approval_briefs()
+    assert out[0]["recomendacion"].startswith("Approve")
+    assert "retirement candidate" in out[0]["resumen"]

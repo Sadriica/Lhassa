@@ -29,12 +29,29 @@ NLP, in the same spirit as the knowledge graph's entity extraction.
 
 **It proposes; it never retires.** A registered action lives in code; this
 module cannot and must not delete it. :func:`find_dormant` returns candidates
-and the ``review_capabilities`` action parks ONE approval each, once ever. The
-owner's tap is the actual act, exactly as with the project-detection sense.
+and the ``review_capabilities`` action parks ONE summary approval per sweep.
+Approving records the capabilities as *retirement candidates*
+(:func:`retired_candidates`); nothing is removed or disabled. Rejecting pins
+them (:func:`pinned_capabilities`) so they are never asked about again.
+
+**Four states, because "no owner use" is not one thing.** ``unused`` (nobody
+ever used it), ``dormant_owner`` (the owner used it, but not within the dormant
+window), ``self_driven`` (only Lhassa or its seed uses it) and ``active``.
+The old single ``self_driven`` bucket mixed the second and third, and the
+tribunal's titles told the owner "only Lhassa itself uses it" about things he
+used himself.
+
+**Who is never put on trial.** Seeded maintenance machinery, the temple's
+fronted actions and a closed set of structural actions are infrastructure by
+definition (:func:`excluded_reason`). A capability with no instrumented door
+cannot be judged ``unused``: its zero would be missing instrumentation, not
+disuse. Every capability also gets its OWN grace period from the first time it
+was observed (``utility:seen:<cap>``), not just the instance's.
 """
 
 from __future__ import annotations
 
+import json
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Any, Optional
 
@@ -48,6 +65,18 @@ if TYPE_CHECKING:  # pragma: no cover - typing only
     pass
 
 __all__ = [
+    "INFRASTRUCTURE",
+    "STATE_DORMANT_OWNER",
+    "SEEN_PREFIX",
+    "PINNED_PREFIX",
+    "RETIRED_KEY",
+    "excluded_reason",
+    "has_instrumented_door",
+    "load_pinned",
+    "pin_capability",
+    "retired_candidates",
+    "add_retired_candidate",
+    "mark_seen",
     "WAKE_OWNER",
     "WAKE_SELF",
     "WAKE_UNKNOWN",
@@ -105,9 +134,48 @@ SELF_WAKES = (
 STATE_ACTIVE = "active"
 STATE_SELF_DRIVEN = "self_driven"
 STATE_UNUSED = "unused"
+#: The owner used it at least once, but not inside the dormant window.
+STATE_DORMANT_OWNER = "dormant_owner"
 
 DEFAULT_DORMANT_DAYS = 30
 DEFAULT_GRACE_DAYS = 14
+DEFAULT_CAPABILITY_GRACE_DAYS = 30
+
+# watch_state keys (all scoped by instance_id by the db layer).
+#: ``utility:seen:<cap>`` -> ISO timestamp the capability was first observed.
+SEEN_PREFIX = "utility:seen:"
+#: ``utility:pinned:<cap>`` -> "1"; written when a HUMAN rejects a retirement.
+PINNED_PREFIX = "utility:pinned:"
+#: JSON list of capabilities whose retirement the owner approved (candidates only).
+RETIRED_KEY = "utility:retired_candidates"
+
+#: Structural / plumbing actions that are infrastructure by definition, on top of
+#: the seeded ones (``seeds.maintenance._RECURRING_ACTIONS`` and
+#: ``actionpack._temple.TEMPLE_ACTIONS``, read live). Either Lhassa's own
+#: machinery (the temple wrapper, the digest, the notifier) or an action that
+#: other code calls DIRECTLY instead of through dispatch, so it never leaves an
+#: episode naming itself: a "0 uses" there measures missing instrumentation, not
+#: disuse. Measured: add_fact, add_task, org_run, run_script, set_task_state and
+#: sync_repo all read "never used" while being called constantly.
+INFRASTRUCTURE = frozenset(
+    {
+        "temple_run",
+        "send_digest",
+        "notify",
+        "set_task_state",
+        "sync_repo",
+        "run_script",
+        "org_run",
+        "add_fact",
+        "add_task",
+        "check_health",
+        "consolidate_memory",
+        "backup_memory",
+        "system_snapshot",
+        "list_approvals",
+        "git_status_repos",
+    }
+)
 
 
 def classify_wake(despertar_por: Optional[str]) -> str:
@@ -135,15 +203,158 @@ def _resolve_config(config: "Optional[Config]") -> "Config":
     return config if config is not None else Config
 
 
-def pinned_capabilities(config: "Optional[Config]" = None) -> set:
+def pinned_capabilities(config: "Optional[Config]" = None, persisted=()) -> set:
     """Capabilities the owner declared deliberately dormant; never proposed.
 
-    Read from ``Config.utility_pinned`` (``LHASSA_UTILITY_PINNED``), a
-    comma-separated list. The curator's ``pinned`` flag, for capabilities.
+    The union of ``Config.utility_pinned`` (``LHASSA_UTILITY_PINNED``, a
+    comma-separated list) and ``persisted``: the names an owner's rejection
+    pinned in ``watch_state`` (``utility:pinned:<cap>``, see :func:`load_pinned`
+    for the async read). The curator's ``pinned`` flag, for capabilities.
     """
     cfg = _resolve_config(config)
     raw = getattr(cfg, "utility_pinned", "") or ""
-    return {p.strip() for p in str(raw).split(",") if p.strip()}
+    env = {p.strip() for p in str(raw).split(",") if p.strip()}
+    return env | {str(p) for p in (persisted or ())}
+
+
+async def load_pinned(instance_id: Optional[str] = None, config: "Optional[Config]" = None) -> set:
+    """Env-pinned plus rejection-pinned capabilities (the full pinned set)."""
+    cfg = _resolve_config(config)
+    inst = instance_id or cfg.instance_id
+    persisted: set = set()
+    try:
+        await _db.init_db()
+        async with aiosqlite.connect(_db.DB_PATH) as conn:
+            async with conn.execute(
+                "SELECT key FROM watch_state WHERE instance_id = ? AND key LIKE ?",
+                (inst, PINNED_PREFIX + "%"),
+            ) as cur:
+                persisted = {str(r[0])[len(PINNED_PREFIX):] for r in await cur.fetchall()}
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.warning("agents.utility: load_pinned failed; {}", exc)
+    return pinned_capabilities(cfg, persisted)
+
+
+async def pin_capability(instance_id: str, capability: str) -> None:
+    """Persist ``utility:pinned:<cap>``: the owner said no, never ask again."""
+    await _db.set_watch_state(instance_id, PINNED_PREFIX + capability, "1")
+
+
+async def retired_candidates(instance_id: Optional[str] = None) -> list:
+    """Capabilities whose retirement the owner approved (a list, never an act)."""
+    inst = instance_id or Config.instance_id
+    try:
+        raw = await _db.get_watch_state(inst, RETIRED_KEY)
+        data = json.loads(raw) if raw else []
+        return [str(c) for c in data] if isinstance(data, list) else []
+    except Exception:
+        return []
+
+
+async def add_retired_candidate(instance_id: str, capability: str) -> list:
+    """Record ``capability`` as a retirement candidate (deduped). Nothing is removed."""
+    current = await retired_candidates(instance_id)
+    if capability not in current:
+        current.append(capability)
+        await _db.set_watch_state(instance_id, RETIRED_KEY, json.dumps(current))
+    return current
+
+
+async def mark_seen(
+    instance_id: str, names: list, *, now: Optional[datetime] = None
+) -> dict:
+    """Stamp ``utility:seen:<cap>`` the first time each capability is observed.
+
+    Returns ``{capability: first_seen_datetime}`` for every name. The per-
+    capability grace clock: the instance's age says nothing about a capability
+    registered yesterday.
+    """
+    now_dt = _now_utc(now)
+    out: dict = {}
+    for name in names:
+        key = SEEN_PREFIX + name
+        raw = await _db.get_watch_state(instance_id, key)
+        ts = _parse_ts(raw)
+        if ts is None:
+            ts = now_dt
+            await _db.set_watch_state(instance_id, key, now_dt.isoformat())
+        out[name] = ts
+    return out
+
+
+#: Name sets that live in shells (``cli``, ``actionpack``) which an inner layer
+#: may not import. The shells register zero-argument callables here at import
+#: time (see ``actionpack/_utility.py``); this module only reads them.
+_DOOR_SOURCES: list = []
+_SEEDED_SOURCES: list = []
+
+
+def register_door_source(fn) -> None:
+    """Register a callable returning capability names with an instrumented door."""
+    if fn not in _DOOR_SOURCES:
+        _DOOR_SOURCES.append(fn)
+
+
+def register_seeded_source(fn) -> None:
+    """Register a callable returning names the seed/temple front (infrastructure)."""
+    if fn not in _SEEDED_SOURCES:
+        _SEEDED_SOURCES.append(fn)
+
+
+def _door_names() -> set:
+    """Capabilities that have a way to leave an episode naming themselves.
+
+    Derived, not hand-listed: the terminal-subcommand map
+    (``cli.capability_log.COMMAND_CAPABILITY``), the chat tool map
+    (``cli.agent._TOOL_CAPABILITY``), both registered by the shells (an inner
+    layer may not import them) and every allowlisted action that runs
+    through dispatch without a human gate (a task executes and writes
+    ``accion=<name>``). A registered action outside all three has no
+    instrumented door: nothing can ever record its use.
+    """
+    names: set = set()
+    for fn in _DOOR_SOURCES:
+        try:
+            names |= {str(n) for n in fn()}
+        except Exception:  # pragma: no cover - defensive
+            pass
+    try:
+        from lhassa.security.allowlist import ALLOWLIST
+
+        names |= {n for n, spec in ALLOWLIST.items() if not spec.requires_approval}
+    except Exception:  # pragma: no cover - defensive
+        pass
+    return names
+
+
+def has_instrumented_door(name: str) -> bool:
+    """True when a use of ``name`` could ever be recorded (see :func:`_door_names`)."""
+    return name in _door_names()
+
+
+def _seeded_names() -> set:
+    names: set = set()
+    for fn in _SEEDED_SOURCES:
+        try:
+            names |= {str(n) for n in fn()}
+        except Exception:  # pragma: no cover - defensive
+            pass
+    return names
+
+
+def excluded_reason(name: str) -> Optional[str]:
+    """Why ``name`` can never be put on trial, or ``None`` if it can.
+
+    ``"seeded"`` (the maintenance seed or temple fronts it) and
+    ``"infrastructure"`` (the structural set above). Both are machinery, not
+    owner-facing capability: proposing to retire them is the tribunal
+    attacking its own scaffolding.
+    """
+    if name in _seeded_names():
+        return "seeded"
+    if name in INFRASTRUCTURE:
+        return "infrastructure"
+    return None
 
 
 def _now_utc(now: Optional[datetime] = None) -> datetime:
@@ -197,8 +408,12 @@ async def survey(
          "last_use_at", "last_owner_use_at", "days_since_owner_use",
          "state", "pinned"}
 
-    ``state`` is ``unused`` (no episode ever), ``self_driven`` (used, but no
-    owner-driven use inside ``config.utility_dormant_days``) or ``active``.
+    ``state`` is ``unused`` (no use ever, by anyone), ``dormant_owner`` (the
+    owner used it, but not inside ``config.utility_dormant_days``),
+    ``self_driven`` (only Lhassa or its seed ever used it) or ``active``.
+    ``excluded`` names why the tribunal never judges it (``seeded`` /
+    ``infrastructure``) and ``has_door`` says whether a use of it could ever
+    be recorded.
     Never raises: any failure degrades to an empty list.
     """
     try:
@@ -206,7 +421,8 @@ async def survey(
         inst = instance_id or cfg.instance_id
         now_dt = _now_utc(now)
         dormant_days = int(getattr(cfg, "utility_dormant_days", DEFAULT_DORMANT_DAYS) or DEFAULT_DORMANT_DAYS)
-        pinned = pinned_capabilities(cfg)
+        pinned = await load_pinned(inst, cfg)
+        doors = _door_names()
 
         names = _registered_capabilities()
         if not names:
@@ -310,8 +526,10 @@ async def survey(
                 state = STATE_UNUSED
             elif last_owner is not None and last_owner >= cutoff:
                 state = STATE_ACTIVE
+            elif owner_uses > 0:
+                state = STATE_DORMANT_OWNER  # the owner used it, long ago
             else:
-                state = STATE_SELF_DRIVEN
+                state = STATE_SELF_DRIVEN  # only Lhassa or its seed ever did
 
             days_since_owner = (
                 (now_dt - last_owner).total_seconds() / 86400.0 if last_owner else None
@@ -329,6 +547,8 @@ async def survey(
                     "days_since_owner_use": days_since_owner,
                     "state": state,
                     "pinned": name in pinned,
+                    "excluded": excluded_reason(name),
+                    "has_door": name in doors,
                 }
             )
 
@@ -378,22 +598,46 @@ async def find_dormant(
 ) -> list:
     """The tribunal's docket: capabilities that have not earned their place.
 
-    A capability qualifies when it is ``unused`` or ``self_driven`` AND not
-    pinned. Nothing qualifies at all until the instance has more than
-    ``config.utility_grace_days`` of episode history; a young brain is not
-    put on trial. Returns the same row shape as :func:`survey`. Never raises.
+    A capability qualifies when it is ``unused``, ``dormant_owner`` or
+    ``self_driven``, is not pinned (by env or by an owner's rejection) and is
+    not excluded (:func:`excluded_reason`). Further shields:
+
+    * nothing qualifies until the instance has more than
+      ``config.utility_grace_days`` of episode history;
+    * an ``unused`` capability needs an instrumented door
+      (:func:`has_instrumented_door`); otherwise its zero is missing
+      instrumentation, not disuse;
+    * an ``unused`` capability must have been OBSERVED for at least
+      ``config.utility_capability_grace_days`` (``utility:seen:<cap>``), so one
+      registered yesterday is not judged against the instance's age.
+
+    Returns the same row shape as :func:`survey`. Never raises.
     """
     try:
         cfg = _resolve_config(config)
+        inst = instance_id or cfg.instance_id
         grace = int(getattr(cfg, "utility_grace_days", DEFAULT_GRACE_DAYS) or DEFAULT_GRACE_DAYS)
-        if await history_days(instance_id, now=now, config=cfg) < grace:
+        cap_grace_raw = getattr(cfg, "utility_capability_grace_days", None)
+        cap_grace = DEFAULT_CAPABILITY_GRACE_DAYS if cap_grace_raw is None else int(cap_grace_raw)
+        now_dt = _now_utc(now)
+        rows = await survey(inst, now=now, config=cfg)
+        seen = await mark_seen(inst, [r["capability"] for r in rows], now=now_dt)
+        if await history_days(inst, now=now, config=cfg) < grace:
             return []
-        rows = await survey(instance_id, now=now, config=cfg)
-        return [
-            r
-            for r in rows
-            if not r["pinned"] and r["state"] in (STATE_UNUSED, STATE_SELF_DRIVEN)
-        ]
+        docket = []
+        for r in rows:
+            if r["pinned"] or r["excluded"]:
+                continue
+            if r["state"] == STATE_ACTIVE:
+                continue
+            if r["state"] == STATE_UNUSED:
+                if not r["has_door"]:
+                    continue
+                age = (now_dt - seen[r["capability"]]).total_seconds() / 86400.0
+                if age < cap_grace:
+                    continue
+            docket.append(r)
+        return docket
     except Exception as exc:  # pragma: no cover - defensive
         logger.warning("agents.utility: find_dormant failed; {}", exc)
         return []

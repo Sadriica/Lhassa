@@ -414,7 +414,7 @@ is loaded *after* `.env` (override on) and never holds secrets. The most relevan
 | **Memory** | `LHASSA_MEMORY_LAYER4`, `LHASSA_EMBEDDING_MODEL`, `LHASSA_MEMORY_SEMANTIC_TOPK`, `LHASSA_MEMORY_DISTILL_ENABLED` |
 | **Monitor** | `LHASSA_MONITOR_ENABLED`, `LHASSA_MONITOR_IDLE_INTERVAL`, `LHASSA_MONITOR_FAILURE_WINDOW_H` |
 | **Skills curator** | `LHASSA_SKILL_STALE_DAYS` (30), `LHASSA_SKILL_ARCHIVE_DAYS` (90) |
-| **Utility tribunal** | `LHASSA_UTILITY_PINNED`, `LHASSA_UTILITY_DORMANT_DAYS` (30), `LHASSA_UTILITY_GRACE_DAYS` (14) |
+| **Utility tribunal** | `LHASSA_UTILITY_PINNED`, `LHASSA_UTILITY_DORMANT_DAYS` (30), `LHASSA_UTILITY_GRACE_DAYS` (14), `LHASSA_UTILITY_CAPABILITY_GRACE_DAYS` (30) |
 | **Integrity** | `LHASSA_INTEGRITY_ENABLED` (on), `LHASSA_INTEGRITY_INTERVAL` (3600 s) |
 | **Guardrails / routes** | `LHASSA_ALLOW_PERSISTENT_SHELL` (opt in to the persistence tier of shell commands), `LHASSA_ROUTES_FILE` (approved `mint_route` entries, default `~/.lhassa/routes.json`) |
 | **Privacy** | `LHASSA_PSEUDONYMIZE_REMOTE` |

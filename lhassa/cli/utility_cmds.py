@@ -28,6 +28,7 @@ _STATE_STYLE = {
     "active": ("ok", "✓"),
     "self_driven": ("warn", "↻"),
     "unused": ("stone", "–"),
+    "dormant_owner": ("warn", "z"),
 }
 
 
@@ -118,6 +119,32 @@ def docket_cmd(
     _console.print(
         "[stone]pin one with LHASSA_UTILITY_PINNED to keep it deliberately "
         "dormant.[/stone]"
+    )
+
+
+@utility_app.command("candidates")
+def candidates_cmd(
+    json_out: bool = typer.Option(False, "--json", help="Emit the list as JSON."),
+) -> None:
+    """Capabilities whose retirement you approved. Nothing has been removed.
+
+    Approving a ``retire_capability`` approval only records the capability here;
+    a registered action lives in code, so removing it is your edit. Rejecting
+    one pins it instead, so it is never proposed again.
+    """
+    from lhassa.agents import utility
+
+    names = asyncio.run(utility.retired_candidates(_instance_id()))
+    if json_out:
+        typer.echo(json.dumps(names, indent=2, ensure_ascii=False))
+        return
+    if not names:
+        _console.print("[stone]no retirement candidates recorded.[/stone]")
+        return
+    for name in names:
+        _console.print(f"  {name}")
+    _console.print(
+        "[stone]recorded only; nothing is removed or disabled.[/stone]"
     )
 
 

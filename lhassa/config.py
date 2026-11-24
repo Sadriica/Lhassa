@@ -731,6 +731,12 @@ class Config:
     # Nothing is put on trial until the instance has this much episode history;
     # a young brain has not had TIME to use anything.
     utility_grace_days: int = _safe_int(os.getenv("LHASSA_UTILITY_GRACE_DAYS", "14"), 14)
+    # Each capability also has its OWN grace: it is not judged "unused" until it
+    # has been observed this many days (``utility:seen:<cap>`` in watch_state),
+    # whatever the instance's age.
+    utility_capability_grace_days: int = _safe_int(
+        os.getenv("LHASSA_UTILITY_CAPABILITY_GRACE_DAYS", "30"), 30
+    )
     # Capabilities the owner declared deliberately dormant (comma-separated);
     # surveyed, never proposed for retirement. The curator's "pinned", for actions.
     utility_pinned: str = os.getenv("LHASSA_UTILITY_PINNED", "")

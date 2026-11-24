@@ -75,7 +75,8 @@ lhassa code "refactor the parser" --cli codex
 | `bench ingest` | Map experiment result files (the blackbox `research/results/*.jsonl`) into `bench_runs`; idempotent, rows are flagged `pre-audit` or `post-audit` in `detail` | `lhassa bench ingest research/results/*.jsonl` |
 | `bench history` | Recent `bench_runs` rows for a fixture/subject | `lhassa bench history --fixture codegen_fibonacci --limit 20` |
 | `utility survey` | Which capabilities still SERVE the owner; owner-driven vs self-driven use per registered action, least-earned first | `lhassa utility survey --all --json` |
-| `utility docket` | The retirement docket: unused or self-driven, unpinned, past the grace period | `lhassa utility docket` |
+| `utility docket` | The retirement docket: unused, owner-dormant or self-driven; unpinned, not infrastructure, past the grace periods | `lhassa utility docket` |
+| `utility candidates` | Capabilities whose retirement you approved (recorded only; nothing is removed) | `lhassa utility candidates --json` |
 | `fleet` | Known machines with their last check-in and desired state | `lhassa fleet` |
 | `version` | Version, Python runtime, and a few key toggles | `lhassa version` |
 
@@ -88,12 +89,15 @@ leaves an Episode). Each use is bucketed by wake source into **owner** (a human
 reached for it) or **self** (Lhassa scheduled or delegated it to itself), plus a
 pass over `tasks.origen_actor` so deferred work the owner asked for still counts
 (`/remind` mints today and fires next week). A capability with only self-driven
-use reports `self_driven`: running, but not earning its place. `survey` hides
+use reports `self_driven`; one the owner used but not within the dormant window
+reports `dormant_owner`; one nobody used reports `unused`. Seeded maintenance
+actions and structural infrastructure are never put on trial. `survey` hides
 actively owner-driven capabilities unless `--all`; `docket` lists only what is
 proposed for retirement. Nothing is ever retired automatically: the weekly
 `review_capabilities` action parks one `retire_capability` approval per
-capability, once, and `LHASSA_UTILITY_PINNED` exempts anything you want kept
-deliberately dormant.
+capability (capped), once. Approving records it in `lhassa utility candidates`;
+rejecting pins it so it is never proposed again; `LHASSA_UTILITY_PINNED` exempts
+anything else you want kept deliberately dormant.
 
 `tools propose` without `--baseline` cannot graduate; this is BY DESIGN, not
 a bug: gate 3 ("mejor") requires beating a concrete numeric baseline, and a
