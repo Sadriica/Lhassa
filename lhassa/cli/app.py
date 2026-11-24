@@ -37,6 +37,7 @@ from lhassa.cli import artifact_cmds as _artifact_cmds  # noqa: E402
 from lhassa.cli import capabilities as _capabilities  # noqa: E402
 from lhassa.cli import commands as _commands  # noqa: E402
 from lhassa.cli import config_cmds as _config_cmds  # noqa: E402
+from lhassa.cli import action_cmds as _action_cmds  # noqa: E402
 from lhassa.cli import extra_cmds as _extra_cmds  # noqa: E402
 from lhassa.cli import flow_cmds as _flow_cmds  # noqa: E402
 from lhassa.cli import integrity_cmds as _integrity_cmds  # noqa: E402
@@ -380,6 +381,9 @@ app.add_typer(_integrity_cmds.integrity_app, name="integrity")
 
 # Attach the `lhassa review` sub-app (deterministic pre-flight review, no LLM).
 app.add_typer(_review_cmds.review_app, name="review")
+
+# Attach `lhassa action run` (one registered action through the allowlist).
+app.add_typer(_action_cmds.action_app, name="action")
 
 # ── lhassa utility … (the tribunal: which capabilities still SERVE the owner) ──
 app.add_typer(_utility_cmds.utility_app, name="utility")
