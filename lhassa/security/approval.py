@@ -389,6 +389,8 @@ async def resolve(
         # it up); a deny closes it as 'rechazada'. Without this the tap resolved
         # the QUEUE row but the task itself waited forever. Best-effort: a
         # release failure must not undo an already-recorded human decision.
+        if ap.get("tipo") == "retire_capability":
+            await _record_retirement_decision(instance_id, payload, approved)
         task_id = payload.get("task_id")
         if task_id and payload.get("source") == "mint_task":
             import contextlib
@@ -409,6 +411,31 @@ async def resolve(
         origen_trust=payload.get("origen_trust"),
     )
     return result
+
+
+async def _record_retirement_decision(instance_id: str, payload: dict, approved: bool) -> None:
+    """What a human answer to a ``retire_capability`` approval MEANS.
+
+    Approve: the capability joins ``utility:retired_candidates``; NOTHING is
+    removed or disabled (a registered action lives in code). Reject: it is
+    pinned (``utility:pinned:<cap>``) so the tribunal never asks again. Only
+    :func:`resolve` (a human) gets here: the queue closures
+    (``rejected-by-timeout/cap/revived/gone``) go through ``db.close_approval``
+    and deliberately leave no pin. Best-effort: a failure must not undo the
+    recorded decision.
+    """
+    cap = str((payload or {}).get("capability") or "")
+    if not cap:
+        return
+    import contextlib
+
+    from lhassa.agents import utility as _utility
+
+    with contextlib.suppress(Exception):
+        if approved:
+            await _utility.add_retired_candidate(instance_id, cap)
+        else:
+            await _utility.pin_capability(instance_id, cap)
 
 
 async def pending(instance_id: str) -> list:
@@ -456,8 +483,9 @@ def describe(row: dict) -> dict:
             bits = []
             if payload.get("count"):
                 bits.append(f"repeated ×{payload['count']}")
-            bits.append("approving records the draft")
-            bits.append("running it still crosses the approval gate")
+            if payload.get("days_seen"):
+                bits.append(f"on {payload['days_seen']} distinct day(s)")
+            bits.append("approving only records the draft; no script is created or run")
             return {
                 "title": f"Collapse the {label} chain into one script",
                 "detail": " · ".join(bits),
@@ -467,9 +495,11 @@ def describe(row: dict) -> dict:
             bits = []
             if payload.get("count"):
                 bits.append(f"asked ×{payload['count']}")
+            if payload.get("days_seen"):
+                bits.append(f"on {payload['days_seen']} distinct day(s)")
             if payload.get("total_cost_usd") is not None:
-                bits.append(f"~${float(payload['total_cost_usd']):.2f} saved")
-            bits.append("approving stores a durable $0 fact")
+                bits.append(f"~${float(payload['total_cost_usd']):.2f} spent so far")
+            bits.append("approving only records the pattern; nothing is stored")
             return {
                 "title": f"Remember the answer to '{subject}' so I stop re-deriving it",
                 "detail": " · ".join(bits),
@@ -513,22 +543,27 @@ def describe(row: dict) -> dict:
             cap = payload.get("capability") or "?"
             state = str(payload.get("state") or "")
             bits = []
+            owner_uses = int(payload.get("owner_uses") or 0)
+            self_uses = int(payload.get("self_uses") or 0)
+            days = payload.get("days_since_owner_use")
             if state == "unused":
                 bits.append("never used, by anyone")
             else:
-                owner_uses = payload.get("owner_uses")
-                days = payload.get("days_since_owner_use")
+                if owner_uses:
+                    bits.append(f"you used it ×{owner_uses}")
                 if days is not None:
                     try:
-                        bits.append(f"no owner use in {float(days):.0f}d")
+                        bits.append(f"last owner use {float(days):.0f}d ago")
                     except (TypeError, ValueError):
                         pass
                 elif not owner_uses:
                     bits.append("no owner use on record")
-                self_uses = payload.get("self_uses")
                 if self_uses:
-                    bits.append(f"ran {self_uses}× only because Lhassa scheduled it")
-            bits.append("approving records the retirement; pin it to keep it")
+                    bits.append(f"Lhassa ran it ×{self_uses} on its own")
+            bits.append(
+                "approving records it as a retirement candidate; nothing is "
+                "removed · rejecting pins it"
+            )
             return {
                 "title": f"Retire capability '{cap}'",
                 "detail": " · ".join(bits),
@@ -603,9 +638,112 @@ def describe(row: dict) -> dict:
     except Exception:  # a malformed payload must never break a queue render
         return {"title": tipo + (f": {accion}" if accion else ""), "detail": ""}
 
-async def _stamp_english_brief(instance_id: str, approval_id: str, tipo: str, payload: dict) -> None:
-    """Generate and store the English decision brief at request time."""
+def deterministic_brief(tipo: str, payload: dict) -> Optional[dict]:
+    """A rule-based ``{summary, recommendation}`` for self-proposals; no LLM.
+
+    ``retire_capability`` and the ``mint_*`` kinds are decided from numbers the
+    payload already carries (uses, dates, counts), so a model that only saw the
+    title (and wrote most of the old briefs) adds nothing but invention.
+    Returns ``None`` for any other type.
+    """
+    p = payload or {}
+    if tipo == "retire_capability":
+        cap = p.get("capability") or "?"
+        owner = int(p.get("owner_uses") or 0)
+        selfu = int(p.get("self_uses") or 0)
+        total = int(p.get("total_uses") or 0)
+        days = p.get("days_since_owner_use")
+        last = p.get("last_use_at")
+        state = str(p.get("state") or "")
+        summary = (
+            f"Record '{cap}' as a retirement candidate. Uses: {total} total, "
+            f"{owner} by you, {selfu} by Lhassa itself"
+        )
+        if days is not None:
+            summary += f"; last owner use {float(days):.0f} days ago"
+        if last:
+            summary += f"; last use of any kind {str(last)[:10]}"
+        summary += ". Approving removes nothing."
+        if state == "unused" or total == 0:
+            rec = "Approve: no use by anyone, ever."
+        elif owner > 0 and days is not None and float(days) <= 90:
+            rec = f"Reject: you used it {float(days):.0f} days ago; rejecting keeps it."
+        elif owner > 0:
+            rec = f"Approve: no owner use in {float(days or 0):.0f} days."
+        else:
+            rec = f"Approve: only Lhassa used it ({selfu} times); you never did."
+        return {"summary": summary, "recommendation": rec}
+    if tipo in ("mint_script", "mint_memory"):
+        count = int(p.get("count") or 0)
+        days_seen = int(p.get("days_seen") or 0)
+        if tipo == "mint_script":
+            label = " > ".join(str(c) for c in (p.get("chain") or [])) or "?"
+            summary = (
+                f"Record a draft script for the chain {label}, seen {count} times "
+                f"on {days_seen or '?'} distinct day(s). Nothing is created or run."
+            )
+            good = count >= 5 and days_seen >= 2
+            rec = (
+                f"Approve: repeated {count} times over {days_seen} days."
+                if good
+                else f"Reject: only {count} repeats over {days_seen or '?'} day(s)."
+            )
+        else:
+            subject = p.get("despertar_por") or p.get("pattern") or "?"
+            has_answer = bool(p.get("answer") or p.get("fact"))
+            summary = (
+                f"Record the pattern '{subject}', asked {count} times on "
+                f"{days_seen or '?'} distinct day(s). Nothing is stored."
+            )
+            rec = (
+                f"Approve: repeated over {days_seen} days with an answer attached."
+                if has_answer and days_seen >= 2
+                else "Reject: no stable answer or too few days."
+            )
+        return {"summary": summary, "recommendation": rec}
+    if tipo.startswith("mint_"):
+        count = int(p.get("count") or 0)
+        return {
+            "summary": f"Self-proposal {tipo}, pattern repeated {count} times.",
+            "recommendation": (
+                "Approve: repeated often enough." if count >= 5
+                else "Reject: too few repeats."
+            ),
+        }
+    return None
+
+
+async def store_brief(approval_id: str, data: dict) -> None:
+    """Persist ``data`` as the approval's brief (adds the column if needed)."""
     import json
+
+    from lhassa._vendor import aiosqlite
+    from lhassa.core.db._conn import _pkg
+    async with aiosqlite.connect(_pkg().DB_PATH) as db:
+        # The column is created lazily (the API's brief route did it first);
+        # a brief stamped before any dashboard visit must not be lost.
+        async with db.execute("PRAGMA table_info(approvals)") as cur:
+            if "brief" not in [r[1] for r in await cur.fetchall()]:
+                await db.execute("ALTER TABLE approvals ADD COLUMN brief TEXT")
+        await db.execute(
+            "UPDATE approvals SET brief = ? WHERE id = ?",
+            (json.dumps(data, ensure_ascii=False), approval_id),
+        )
+        await db.commit()
+
+
+async def _stamp_english_brief(instance_id: str, approval_id: str, tipo: str, payload: dict) -> None:
+    """Generate and store the English decision brief at request time.
+
+    Self-proposals (``retire_capability``, ``mint_*``) get a deterministic,
+    rule-based brief (:func:`deterministic_brief`); everything else asks the
+    cheap model.
+    """
+    import json
+    det = deterministic_brief(tipo, payload)
+    if det is not None:
+        await store_brief(approval_id, det)
+        return
     from lhassa.config import Config
     from lhassa.llm.gateway import gateway
     item = {
@@ -638,14 +776,7 @@ async def _stamp_english_brief(instance_id: str, approval_id: str, tipo: str, pa
         return
     # The owner's rule: no em dashes anywhere, including model-written text.
     data = {k: _re.sub(r"\s*[\u2014\u2013]\s*", ": ", str(v)).strip() for k, v in data.items()}
-    from lhassa.core.db._conn import _pkg
-    import aiosqlite
-    async with aiosqlite.connect(_pkg().DB_PATH) as db:
-        await db.execute(
-            "UPDATE approvals SET brief = ? WHERE id = ?",
-            (json.dumps(data, ensure_ascii=False), approval_id),
-        )
-        await db.commit()
+    await store_brief(approval_id, data)
 
 
 

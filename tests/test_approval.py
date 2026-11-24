@@ -404,7 +404,9 @@ def test_describe_mint_memory():
     assert desc["title"] == "Remember the answer to 'telegram' so I stop re-deriving it"
     assert "×10" in desc["detail"]
     assert "$0.50" in desc["detail"]
-    assert "durable $0 fact" in desc["detail"]
+    # Approving records the pattern only; the old text promised a stored fact.
+    assert "nothing is stored" in desc["detail"]
+    assert "durable" not in desc["detail"]
 
 
 def test_describe_mint_schedule():

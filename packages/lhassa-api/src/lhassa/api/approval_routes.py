@@ -129,7 +129,7 @@ def _categorize(tipo: str) -> dict:
 
 
 async def _ensure_brief_column() -> None:
-    import aiosqlite
+    from lhassa._vendor import aiosqlite
     from lhassa.core.db._conn import _pkg
     async with aiosqlite.connect(_pkg().DB_PATH) as db:
         async with db.execute("PRAGMA table_info(approvals)") as cur:
@@ -145,7 +145,7 @@ def _no_em_dash(text: str) -> str:
 
 
 async def _store_brief(approval_id: str, brief: dict) -> None:
-    import aiosqlite
+    from lhassa._vendor import aiosqlite
     from lhassa.core.db._conn import _pkg
     async with aiosqlite.connect(_pkg().DB_PATH) as db:
         await db.execute(
@@ -207,6 +207,21 @@ async def get_approval_briefs():
     await _ensure_brief_column()
     rows = await approval.pending(lhassa_config.Config.instance_id)
     missing = [r for r in rows if not (r.get("brief") or "").strip()]
+    # Self-proposals (retire_capability, mint_*) are briefed from their own
+    # payload by rules, never by a model that sees only the title.
+    still_missing = []
+    for r in missing:
+        det = approval.deterministic_brief(r.get("tipo") or "", r.get("payload") or {})
+        if det is None:
+            still_missing.append(r)
+            continue
+        try:
+            await approval.store_brief(str(r["id"]), det)
+        except Exception as exc:  # never fail the queue over a brief
+            logger.warning(f"deterministic brief failed: {exc}")
+    if len(still_missing) != len(missing):
+        rows = await approval.pending(lhassa_config.Config.instance_id)
+    missing = still_missing
     if missing:
         try:
             await _generate_briefs(missing)
