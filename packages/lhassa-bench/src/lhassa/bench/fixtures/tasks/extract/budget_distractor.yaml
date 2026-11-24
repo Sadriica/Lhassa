@@ -1,0 +1,39 @@
+# Synthetic data; no real events, people or hosts.
+id: task_extract_budget_distractor
+title: 'Extract: budget distractor'
+prompt: |
+  Extract the decisions and the to-dos from the notes below. Reply with only JSON of exactly this shape:
+  {"decisions": ["..."], "todos": [{"owner": "...", "task": "...", "due": "YYYY-MM-DD or null"}]}
+  Rules: list only FINAL decisions that were actually made (not options, not reversed ones). A to-do needs a named owner. Use null when no due date is given. Do not invent items. Today is Monday 2026-03-02.
+
+  Notes:
+  Budget approved: 4,500 EUR for the pilot. Ines will send the purchase order to the vendor, no date set.
+subject_kind: completion
+verify:
+  type: json_fields
+  required_paths:
+  - decisions
+  - todos
+  lists:
+    decisions:
+      min: 1
+      max: 1
+      groups:
+      - - 4,500|4500
+        - pilot
+    todos:
+      min: 1
+      max: 1
+      groups:
+      - - ines
+        - purchase order
+        - 're:"due": null'
+tags:
+- task
+- extract
+- extraction
+- json
+- hard
+max_tokens: 400
+reference: '{"decisions": ["Approve a budget of 4,500 EUR for the pilot"], "todos": [{"owner": "Ines",
+  "task": "Send the purchase order to the vendor", "due": null}]}'

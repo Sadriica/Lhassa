@@ -1,0 +1,58 @@
+# Synthetic data; no real events, people or hosts.
+id: task_extract_mixed_longer
+title: 'Extract: mixed longer'
+prompt: |
+  Extract the decisions and the to-dos from the notes below. Reply with only JSON of exactly this shape:
+  {"decisions": ["..."], "todos": [{"owner": "...", "task": "...", "due": "YYYY-MM-DD or null"}]}
+  Rules: list only FINAL decisions that were actually made (not options, not reversed ones). A to-do needs a named owner. Use null when no due date is given. Do not invent items. Today is Monday 2026-03-02.
+
+  Notes:
+  Weekly sync.
+  - Pricing: we decided to keep the free tier at 100 requests per day.
+  - Hana will update the pricing page by 2026-03-09.
+  - We also decided the status page moves to status.example.test.
+  - Ivo takes the DNS change for the status page, due 2026-03-12.
+  - Discussion about a mobile app: no decision.
+  - Hana to ask legal about the terms of service wording. No date.
+  - Decided: support hours stay 09:00-17:00 UTC.
+subject_kind: completion
+verify:
+  type: json_fields
+  required_paths:
+  - decisions
+  - todos
+  lists:
+    decisions:
+      min: 3
+      max: 3
+      groups:
+      - - '100'
+        - free
+      - - status.example.test|status page
+      - - 09:00
+        - '17:00'
+    todos:
+      min: 3
+      max: 3
+      groups:
+      - - hana
+        - pricing page
+        - '2026-03-09'
+      - - ivo
+        - dns
+        - '2026-03-12'
+      - - hana
+        - legal|terms
+        - 're:"due": null'
+tags:
+- task
+- extract
+- extraction
+- json
+- hard
+- long
+max_tokens: 400
+reference: '{"decisions": ["Keep the free tier at 100 requests per day", "Move the status page to status.example.test",
+  "Support hours stay 09:00-17:00 UTC"], "todos": [{"owner": "Hana", "task": "Update the pricing page",
+  "due": "2026-03-09"}, {"owner": "Ivo", "task": "Do the DNS change for the status page", "due": "2026-03-12"},
+  {"owner": "Hana", "task": "Ask legal about the terms of service wording", "due": null}]}'

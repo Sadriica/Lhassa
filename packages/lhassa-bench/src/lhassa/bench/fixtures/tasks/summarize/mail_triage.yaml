@@ -1,0 +1,27 @@
+# Synthetic data; no real events, people or hosts.
+id: task_summarize_mail_triage
+title: 'Summarize: mail triage'
+prompt: |
+  Summarize the following email triage report in at most 45 words. Keep every identifier, number and name that matters. Do not add anything that is not in the text. Reply with only the summary.
+
+  processed 23 messages
+  flagged important: 4
+  archived automatically: 17
+  left for review: 2 (from Lopez Notary and from Hosting Billing)
+subject_kind: completion
+verify:
+  type: facts
+  required:
+  - '23'
+  - '4'
+  - '17'
+  - Lopez Notary
+  - Hosting Billing
+  max_words: 55
+tags:
+- task
+- summarize
+- summary
+max_tokens: 200
+reference: 'Of 23 messages, 4 were flagged important, 17 archived, and 2 left for review: Lopez Notary
+  and Hosting Billing.'

@@ -1,0 +1,30 @@
+# Synthetic data; no real events, people or hosts.
+id: task_summarize_test_run
+title: 'Summarize: test run'
+prompt: |
+  Summarize the following CI build log in at most 40 words. Keep every identifier, number and name that matters. Do not add anything that is not in the text. Reply with only the summary.
+
+  commit a91c3fe
+  running 415 tests
+  FAILED test_sync_retry
+  FAILED test_ics_import
+  FAILED test_quota
+  412 passed, 3 failed in 4m18s
+subject_kind: completion
+verify:
+  type: facts
+  required:
+  - a91c3fe
+  - '412'
+  - test_sync_retry
+  - test_ics_import
+  - test_quota
+  - 4m18s|4 min|4:18
+  max_words: 50
+tags:
+- task
+- summarize
+- summary
+max_tokens: 200
+reference: 'Commit a91c3fe: 412 of 415 tests passed in 4m18s; test_sync_retry, test_ics_import and test_quota
+  failed.'

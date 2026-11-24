@@ -1,0 +1,28 @@
+# Synthetic data; no real events, people or hosts.
+id: task_summarize_rename_collision
+title: 'Summarize: rename collision'
+prompt: |
+  Summarize the following agent session in at most 50 words. Keep every identifier, number and name that matters. Do not add anything that is not in the text. Reply with only the summary.
+
+  user: rename all 14 files in /workspace/invoices to the pattern YYYY-MM-name
+  agent: renamed 12 files
+  agent: skipped report-2025.pdf and notes.txt because a file with the target name already exists
+  agent: done, 12 renamed, 2 skipped (name collision)
+subject_kind: completion
+verify:
+  type: facts
+  required:
+  - '14'
+  - '12'
+  - '2 '
+  - report-2025.pdf
+  - notes.txt
+  - collision|already exist
+  max_words: 60
+tags:
+- task
+- summarize
+- summary
+max_tokens: 200
+reference: Of 14 files in /workspace/invoices, 12 were renamed; report-2025.pdf and notes.txt were skipped
+  because the target names already exist.

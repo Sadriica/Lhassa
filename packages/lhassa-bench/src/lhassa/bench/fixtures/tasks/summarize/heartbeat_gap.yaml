@@ -1,0 +1,29 @@
+# Synthetic data; no real events, people or hosts.
+id: task_summarize_heartbeat_gap
+title: 'Summarize: heartbeat gap'
+prompt: |
+  Summarize the following heartbeat report in at most 45 words. Keep every identifier, number and name that matters. Do not add anything that is not in the text. Reply with only the summary.
+
+  heartbeat interval 5 min, window 00:00-24:00
+  beats expected 288, received 286
+  missed: 03:10, 03:15 (host was suspended)
+  cpu temperature max 84C at 15:42
+  all services resumed automatically after 03:20
+subject_kind: completion
+verify:
+  type: facts
+  required:
+  - '288'
+  - '286'
+  - 03:10
+  - 03:15
+  - '84'
+  - suspend
+  max_words: 55
+tags:
+- task
+- summarize
+- summary
+max_tokens: 200
+reference: 286 of 288 expected heartbeats arrived; 03:10 and 03:15 were missed while the host was suspended.
+  CPU peaked at 84C at 15:42.

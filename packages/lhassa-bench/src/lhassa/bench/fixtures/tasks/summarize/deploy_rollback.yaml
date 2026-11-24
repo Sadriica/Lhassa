@@ -1,0 +1,32 @@
+# Synthetic data; no real events, people or hosts.
+id: task_summarize_deploy_rollback
+title: 'Summarize: deploy rollback'
+prompt: |
+  Summarize the following deploy log in at most 60 words. Keep every identifier, number and name that matters. Do not add anything that is not in the text. Reply with only the summary.
+
+  10:02 deploy start release=r-2041 target=staging
+  10:04 migrate 0087_add_index ok (12s)
+  10:05 healthcheck failed on node-b (HTTP 503)
+  10:07 rollback to r-2039 triggered automatically
+  10:09 healthcheck ok on node-a, node-b
+  10:10 deploy aborted; owner notified
+subject_kind: completion
+verify:
+  type: facts
+  required:
+  - r-2041
+  - r-2039
+  - node-b
+  - '503'
+  - rollback|rolled back|reverted|reverting
+  max_words: 70
+  forbidden:
+  - re:deploy(ment)? (was |has been )?(successful|completed)
+tags:
+- task
+- summarize
+- summary
+- hard
+max_tokens: 200
+reference: Deploy r-2041 to staging failed the node-b healthcheck (HTTP 503), so it automatically rolled
+  back to r-2039 and was aborted; the owner was notified.

@@ -1,0 +1,27 @@
+# Synthetic data; no real events, people or hosts.
+id: task_summarize_disk_cleanup
+title: 'Summarize: disk cleanup'
+prompt: |
+  Summarize the following disk report in at most 45 words. Keep every identifier, number and name that matters. Do not add anything that is not in the text. Reply with only the summary.
+
+  /dev/sdb usage before cleanup: 91%
+  largest directory: /var/cache/thumbs (38 GB)
+  cleanup removed 21 GB of thumbnails older than 90 days
+  /dev/sdb usage after cleanup: 52%
+subject_kind: completion
+verify:
+  type: facts
+  required:
+  - 91%
+  - 38 GB
+  - 21 GB
+  - 52%
+  - /var/cache/thumbs
+  max_words: 55
+tags:
+- task
+- summarize
+- summary
+max_tokens: 200
+reference: /dev/sdb dropped from 91% to 52% after removing 21 GB of old thumbnails from /var/cache/thumbs,
+  the largest directory at 38 GB.

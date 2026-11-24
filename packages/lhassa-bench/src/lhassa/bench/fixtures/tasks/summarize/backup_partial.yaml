@@ -1,0 +1,27 @@
+# Synthetic data; no real events, people or hosts.
+id: task_summarize_backup_partial
+title: 'Summarize: backup partial'
+prompt: |
+  Summarize the following backup log in at most 50 words. Keep every identifier, number and name that matters. Do not add anything that is not in the text. Reply with only the summary.
+
+  [01:00] job bk-778 started, 4 volumes
+  [01:12] volume docs ok (3.1 GB)
+  [01:20] volume mail ok (8.4 GB)
+  [01:41] volume media FAILED at 41 GB: No space left on device
+  [01:55] volume code ok (0.9 GB)
+  [01:56] job bk-778 finished: 3 of 4 volumes ok, retention kept 7 daily
+subject_kind: completion
+verify:
+  type: facts
+  required:
+  - bk-778
+  - media
+  - no space|disk full|out of space|space
+  - 3 of 4|3/4|three of four|three out of four
+  max_words: 60
+tags:
+- task
+- summarize
+- summary
+max_tokens: 200
+reference: Backup job bk-778 saved 3 of 4 volumes; media failed at 41 GB with no space left on the device.

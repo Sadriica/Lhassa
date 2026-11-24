@@ -1,0 +1,29 @@
+# Synthetic data; no real events, people or hosts.
+id: task_summarize_voice_reminders
+title: 'Summarize: voice reminders'
+prompt: |
+  Summarize the following voice assistant session in at most 50 words. Keep every identifier, number and name that matters. Do not add anything that is not in the text. Reply with only the summary.
+
+  user: set a reminder for the dentist on Tuesday at 09:30
+  assistant: reminder created, dentist, Tuesday 09:30
+  user: remind me to pay rent on the 1st
+  assistant: reminder created, pay rent, day 1 of each month
+  user: remind me to call Ana
+  assistant: could not create it: no time was given
+subject_kind: completion
+verify:
+  type: facts
+  required:
+  - dentist
+  - 09:30
+  - rent
+  - Ana
+  - no time|without a time|time was (not )?given|missing time|time missing
+  max_words: 60
+tags:
+- task
+- summarize
+- summary
+max_tokens: 200
+reference: Reminders for the dentist (Tuesday 09:30) and rent (the 1st) were created; the one to call
+  Ana failed because no time was given.

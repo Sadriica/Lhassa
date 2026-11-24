@@ -1,0 +1,32 @@
+# Synthetic data; no real events, people or hosts.
+id: task_extract_decision_only
+title: 'Extract: decision only'
+prompt: |
+  Extract the decisions and the to-dos from the notes below. Reply with only JSON of exactly this shape:
+  {"decisions": ["..."], "todos": [{"owner": "...", "task": "...", "due": "YYYY-MM-DD or null"}]}
+  Rules: list only FINAL decisions that were actually made (not options, not reversed ones). A to-do needs a named owner. Use null when no due date is given. Do not invent items. Today is Monday 2026-03-02.
+
+  Notes:
+  Team agreed to freeze the schema until the audit ends. No action items for now.
+subject_kind: completion
+verify:
+  type: json_fields
+  required_paths:
+  - decisions
+  - todos
+  lists:
+    decisions:
+      min: 1
+      max: 1
+      groups:
+      - - schema
+        - freeze|frozen
+    todos:
+      max: 0
+tags:
+- task
+- extract
+- extraction
+- json
+max_tokens: 400
+reference: '{"decisions": ["Freeze the schema until the audit ends"], "todos": []}'

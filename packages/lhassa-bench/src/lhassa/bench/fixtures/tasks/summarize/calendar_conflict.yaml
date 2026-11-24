@@ -1,0 +1,30 @@
+# Synthetic data; no real events, people or hosts.
+id: task_summarize_calendar_conflict
+title: 'Summarize: calendar conflict'
+prompt: |
+  Summarize the following calendar sync report in at most 45 words. Keep every identifier, number and name that matters. Do not add anything that is not in the text. Reply with only the summary.
+
+  sync run 2026-03-02 07:00, 3 calendars
+  imported 41 events, 2 duplicates skipped
+  conflict: 'Board review' (Mar 5 10:00) overlaps 'Dentist' (Mar 5 10:30), left both
+  no events deleted
+subject_kind: completion
+verify:
+  type: facts
+  required:
+  - '41'
+  - '2 '
+  - Board review
+  - Dentist
+  - Mar 5|March 5|5 Mar
+  max_words: 55
+  forbidden:
+  - re:(was|were|got) deleted
+tags:
+- task
+- summarize
+- summary
+- hard
+max_tokens: 200
+reference: The sync imported 41 events and skipped 2 duplicates; Board review overlaps Dentist on Mar
+  5 and both were kept.

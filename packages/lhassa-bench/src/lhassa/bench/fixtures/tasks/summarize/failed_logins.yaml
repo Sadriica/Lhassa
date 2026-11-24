@@ -1,0 +1,32 @@
+# Synthetic data; no real events, people or hosts.
+id: task_summarize_failed_logins
+title: 'Summarize: failed logins'
+prompt: |
+  Summarize the following security log in at most 50 words. Keep every identifier, number and name that matters. Do not add anything that is not in the text. Reply with only the summary.
+
+  03:10:02 auth failure user=svc-reader src=203.0.113.9
+  03:10:20 auth failure user=svc-reader src=203.0.113.9
+  03:10:41 auth failure user=svc-reader src=203.0.113.9
+  03:11:05 auth failure user=svc-reader src=203.0.113.9
+  03:11:30 auth failure user=svc-reader src=203.0.113.9
+  03:12:00 account svc-reader locked (5 failures)
+  03:40:00 no successful login for svc-reader in the last 24h
+subject_kind: completion
+verify:
+  type: facts
+  required:
+  - 203.0.113.9
+  - svc-reader
+  - 5|five
+  - lock
+  max_words: 60
+  forbidden:
+  - re:(was|were|been) (breached|compromised)
+tags:
+- task
+- summarize
+- summary
+- hard
+max_tokens: 200
+reference: Five failed logins for svc-reader from 203.0.113.9 within about two minutes locked the account
+  at 03:12; there was no successful login.

@@ -1,0 +1,35 @@
+# Synthetic data; no real events, people or hosts.
+id: task_classify_symptom_timeout_root_readonly
+title: 'Classify: symptom timeout root readonly'
+prompt: |
+  You classify events from a personal AI assistant into exactly one category.
+  Categories:
+  - auth: login, credentials, permissions, tokens
+  - network: connectivity, DNS, TLS, timeouts talking to remote hosts
+  - storage: disk, files, database, quota
+  - performance: CPU, memory, latency of local work
+  - scheduler: cron, timers, missed or duplicated jobs
+  - agent_error: a model or tool call failed, bad output, tool misuse
+  Rule: label the ROOT cause named in the event, not the symptom it produced.
+  Reply with only the category name, nothing else.
+
+  Event: 2026-03-02T11:03:09Z step timeout after 30s calling summarizer; root cause: volume /var/data was remounted read-only after a filesystem error
+subject_kind: completion
+verify:
+  type: label
+  expected: storage
+  labels:
+  - auth
+  - network
+  - storage
+  - performance
+  - scheduler
+  - agent_error
+tags:
+- task
+- classify
+- classification
+- hard
+- root-cause
+max_tokens: 32
+reference: storage

@@ -1,0 +1,36 @@
+# Synthetic data; no real events, people or hosts.
+id: task_extract_relative_date
+title: 'Extract: relative date'
+prompt: |
+  Extract the decisions and the to-dos from the notes below. Reply with only JSON of exactly this shape:
+  {"decisions": ["..."], "todos": [{"owner": "...", "task": "...", "due": "YYYY-MM-DD or null"}]}
+  Rules: list only FINAL decisions that were actually made (not options, not reversed ones). A to-do needs a named owner. Use null when no due date is given. Do not invent items. Today is Monday 2026-03-02.
+
+  Notes:
+  Tom: I will send the invoice to the client by Friday.
+subject_kind: completion
+verify:
+  type: json_fields
+  required_paths:
+  - decisions
+  - todos
+  lists:
+    decisions:
+      max: 0
+    todos:
+      min: 1
+      max: 1
+      groups:
+      - - tom
+        - invoice
+        - '2026-03-06'
+tags:
+- task
+- extract
+- extraction
+- json
+- hard
+- dates
+max_tokens: 400
+reference: '{"decisions": [], "todos": [{"owner": "Tom", "task": "Send the invoice to the client", "due":
+  "2026-03-06"}]}'

@@ -1,0 +1,34 @@
+# Synthetic data; no real events, people or hosts.
+id: task_route_move_appointment
+title: 'Route: move appointment'
+prompt: |
+  You route a user request to exactly one handler.
+  Handlers:
+  - shell: run commands that inspect or change system state (services, packages, processes, disk usage)
+  - code_edit: change source code in a repository (fix bugs, rename, refactor, add tests)
+  - web_research: needs current information from the internet
+  - calendar: create, move or query events and reminders
+  - memory_lookup: recall something the user told the assistant before
+  - file_search: locate files by name, content, size or date
+  - chat_only: answer from general knowledge or small talk, no tool needed
+  Reply with only the handler name, nothing else.
+
+  Request: Move my dentist appointment from Tuesday to Thursday at 10.
+subject_kind: completion
+verify:
+  type: label
+  expected: calendar
+  labels:
+  - shell
+  - code_edit
+  - web_research
+  - calendar
+  - memory_lookup
+  - file_search
+  - chat_only
+tags:
+- task
+- route
+- routing
+max_tokens: 32
+reference: calendar

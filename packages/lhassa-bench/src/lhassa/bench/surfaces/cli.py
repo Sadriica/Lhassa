@@ -73,6 +73,9 @@ def bench_run(
         None, "--fixture", "-f", help="Fixture id to restrict to (repeatable). Default: all."
     ),
     max_tokens: int = typer.Option(256, "--max-tokens", help="Cap on each completion."),
+    suite: Optional[str] = typer.Option(
+        None, "--suite", help="'tasks' runs the task suite (classify, summarize, route, policy, extract)."
+    ),
 ) -> None:
     """Run the bench and print a per-subject pass-rate/cost table."""
     from lhassa.bench.runner import run_bench, summarize
@@ -87,7 +90,7 @@ def bench_run(
 
     async def _run() -> list[dict]:
         await db.init_db()
-        return await run_bench(subjects, fixtures=fixtures, config=config, max_tokens=max_tokens)
+        return await run_bench(subjects, fixtures=fixtures, config=config, max_tokens=max_tokens, suite=suite)
 
     rows = asyncio.run(_run())
     if not rows:

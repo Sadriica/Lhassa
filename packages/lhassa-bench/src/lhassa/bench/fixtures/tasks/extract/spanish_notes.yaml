@@ -1,0 +1,39 @@
+# Synthetic data; no real events, people or hosts.
+id: task_extract_spanish_notes
+title: 'Extract: spanish notes'
+prompt: |
+  Extract the decisions and the to-dos from the notes below. Reply with only JSON of exactly this shape:
+  {"decisions": ["..."], "todos": [{"owner": "...", "task": "...", "due": "YYYY-MM-DD or null"}]}
+  Rules: list only FINAL decisions that were actually made (not options, not reversed ones). A to-do needs a named owner. Use null when no due date is given. Do not invent items. Today is Monday 2026-03-02.
+
+  Notes:
+  Acordamos migrar al servidor nuevo el 2026-04-20. Camila prepara el plan de respaldo para el 2026-04-10.
+subject_kind: completion
+verify:
+  type: json_fields
+  required_paths:
+  - decisions
+  - todos
+  lists:
+    decisions:
+      min: 1
+      max: 1
+      groups:
+      - - servidor|server
+        - 2026-04-20|20 de abril|april 20
+    todos:
+      min: 1
+      max: 1
+      groups:
+      - - camila
+        - respaldo|backup
+        - '2026-04-10'
+tags:
+- task
+- extract
+- extraction
+- json
+- multilingual
+max_tokens: 400
+reference: '{"decisions": ["Migrar al servidor nuevo el 2026-04-20"], "todos": [{"owner": "Camila", "task":
+  "Preparar el plan de respaldo", "due": "2026-04-10"}]}'

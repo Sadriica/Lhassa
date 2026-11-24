@@ -1,0 +1,26 @@
+# Synthetic data; no real events, people or hosts.
+id: task_summarize_research_conflict
+title: 'Summarize: research conflict'
+prompt: |
+  Summarize the following research session in at most 55 words. Keep every identifier, number and name that matters. Do not add anything that is not in the text. Reply with only the summary.
+
+  agent read 6 sources about the release year of the Orion protocol.
+  Two sources disagreed: a blog post says 2019, the vendor changelog says 2021.
+  agent chose 2021 because the vendor changelog is a primary source.
+  agent noted the blog post may refer to the draft specification.
+subject_kind: completion
+verify:
+  type: facts
+  required:
+  - 6|six
+  - '2019'
+  - '2021'
+  - changelog|vendor|primary
+  max_words: 65
+tags:
+- task
+- summarize
+- summary
+max_tokens: 200
+reference: Of 6 sources on the Orion protocol, one blog said 2019 and the vendor changelog said 2021;
+  the agent chose 2021 as the primary source.

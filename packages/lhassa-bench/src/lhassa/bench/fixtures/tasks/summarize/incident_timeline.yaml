@@ -1,0 +1,31 @@
+# Synthetic data; no real events, people or hosts.
+id: task_summarize_incident_timeline
+title: 'Summarize: incident timeline'
+prompt: |
+  Summarize the following incident timeline in at most 55 words. Keep every identifier, number and name that matters. Do not add anything that is not in the text. Reply with only the summary.
+
+  15:58 users report the portal is unreachable
+  16:05 first hypothesis: DNS problem; checked, DNS answers are correct
+  16:25 found the real cause: the TLS certificate on gateway-2 expired at 15:30
+  16:40 certificate renewed on gateway-2
+  16:45 portal reachable again, incident closed
+subject_kind: completion
+verify:
+  type: facts
+  required:
+  - gateway-2
+  - cert
+  - 16:40|16:45
+  - expire
+  max_words: 65
+  forbidden:
+  - re:root cause.{0,25}dns
+  - re:caused by (a )?dns
+tags:
+- task
+- summarize
+- summary
+- hard
+max_tokens: 200
+reference: The portal outage was caused by the expired TLS certificate on gateway-2 (not DNS); it was
+  renewed at 16:40 and the incident closed at 16:45.

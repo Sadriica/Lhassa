@@ -1,0 +1,34 @@
+# Synthetic data; no real events, people or hosts.
+id: task_extract_negated_decision
+title: 'Extract: negated decision'
+prompt: |
+  Extract the decisions and the to-dos from the notes below. Reply with only JSON of exactly this shape:
+  {"decisions": ["..."], "todos": [{"owner": "...", "task": "...", "due": "YYYY-MM-DD or null"}]}
+  Rules: list only FINAL decisions that were actually made (not options, not reversed ones). A to-do needs a named owner. Use null when no due date is given. Do not invent items. Today is Monday 2026-03-02.
+
+  Notes:
+  We considered moving to weekly releases but decided not to; we stay on monthly releases. No action items.
+subject_kind: completion
+verify:
+  type: json_fields
+  required_paths:
+  - decisions
+  - todos
+  lists:
+    decisions:
+      min: 1
+      max: 1
+      groups:
+      - - monthly
+    todos:
+      max: 0
+tags:
+- task
+- extract
+- extraction
+- json
+- hard
+max_tokens: 400
+reference: '{"decisions": ["Stay on monthly releases"], "todos": []}'
+bad:
+- '{"decisions": ["Move to weekly releases"], "todos": []}'

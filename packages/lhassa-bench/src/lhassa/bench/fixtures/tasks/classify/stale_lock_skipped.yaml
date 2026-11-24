@@ -1,0 +1,34 @@
+# Synthetic data; no real events, people or hosts.
+id: task_classify_stale_lock_skipped
+title: 'Classify: stale lock skipped'
+prompt: |
+  You classify events from a personal AI assistant into exactly one category.
+  Categories:
+  - auth: login, credentials, permissions, tokens
+  - network: connectivity, DNS, TLS, timeouts talking to remote hosts
+  - storage: disk, files, database, quota
+  - performance: CPU, memory, latency of local work
+  - scheduler: cron, timers, missed or duplicated jobs
+  - agent_error: a model or tool call failed, bad output, tool misuse
+  Rule: label the ROOT cause named in the event, not the symptom it produced.
+  Reply with only the category name, nothing else.
+
+  Event: 2026-03-02T03:00:00Z job weekly-backup skipped: previous run still marked running since 2026-02-20 (stale lock)
+subject_kind: completion
+verify:
+  type: label
+  expected: scheduler
+  labels:
+  - auth
+  - network
+  - storage
+  - performance
+  - scheduler
+  - agent_error
+tags:
+- task
+- classify
+- classification
+- hard
+max_tokens: 32
+reference: scheduler

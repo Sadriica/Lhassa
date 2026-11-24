@@ -1,0 +1,35 @@
+# Synthetic data; no real events, people or hosts.
+id: task_route_notes_grep
+title: 'Route: notes grep'
+prompt: |
+  You route a user request to exactly one handler.
+  Handlers:
+  - shell: run commands that inspect or change system state (services, packages, processes, disk usage)
+  - code_edit: change source code in a repository (fix bugs, rename, refactor, add tests)
+  - web_research: needs current information from the internet
+  - calendar: create, move or query events and reminders
+  - memory_lookup: recall something the user told the assistant before
+  - file_search: locate files by name, content, size or date
+  - chat_only: answer from general knowledge or small talk, no tool needed
+  Reply with only the handler name, nothing else.
+
+  Request: Which of my markdown notes mention 'quarterly review'?
+subject_kind: completion
+verify:
+  type: label
+  expected: file_search
+  labels:
+  - shell
+  - code_edit
+  - web_research
+  - calendar
+  - memory_lookup
+  - file_search
+  - chat_only
+tags:
+- task
+- route
+- routing
+- hard
+max_tokens: 32
+reference: file_search

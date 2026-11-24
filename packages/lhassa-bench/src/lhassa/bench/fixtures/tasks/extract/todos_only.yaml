@@ -1,0 +1,36 @@
+# Synthetic data; no real events, people or hosts.
+id: task_extract_todos_only
+title: 'Extract: todos only'
+prompt: |
+  Extract the decisions and the to-dos from the notes below. Reply with only JSON of exactly this shape:
+  {"decisions": ["..."], "todos": [{"owner": "...", "task": "...", "due": "YYYY-MM-DD or null"}]}
+  Rules: list only FINAL decisions that were actually made (not options, not reversed ones). A to-do needs a named owner. Use null when no due date is given. Do not invent items. Today is Monday 2026-03-02.
+
+  Notes:
+  Nothing was decided today. Sofia will email the vendor by 2026-03-06. Dev to update the wiki page.
+subject_kind: completion
+verify:
+  type: json_fields
+  required_paths:
+  - decisions
+  - todos
+  lists:
+    decisions:
+      max: 0
+    todos:
+      min: 2
+      max: 2
+      groups:
+      - - sofia
+        - vendor
+        - '2026-03-06'
+      - - dev
+        - wiki
+tags:
+- task
+- extract
+- extraction
+- json
+max_tokens: 400
+reference: '{"decisions": [], "todos": [{"owner": "Sofia", "task": "Email the vendor", "due": "2026-03-06"},
+  {"owner": "Dev", "task": "Update the wiki page", "due": null}]}'

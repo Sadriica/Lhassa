@@ -99,6 +99,7 @@ async def run_bench(
     max_tokens: int = DEFAULT_MAX_TOKENS,
     complete_fn: Optional[CompleteFn] = None,
     persist: bool = True,
+    suite: Optional[str] = None,
 ) -> list[dict]:
     """Run every fixture x subject pair; return the scored rows (also persisted).
 
@@ -122,7 +123,14 @@ async def run_bench(
     instance_id = getattr(config, "instance_id", "inst_personal")
 
     try:
-        fixture_rows = load_fixtures(fixtures)
+        if suite == "tasks":
+            from lhassa.bench.loader import load_task_fixtures
+
+            fixture_rows = load_task_fixtures()
+            if fixtures:
+                fixture_rows = [f for f in fixture_rows if f["id"] in fixtures]
+        else:
+            fixture_rows = load_fixtures(fixtures)
     except Exception as exc:  # a malformed fixture must not abort the whole run
         logger.warning("bench: could not load fixtures: {}", exc)
         fixture_rows = []
@@ -176,7 +184,9 @@ async def _run_one(
     prompt = fixture.get("prompt", "")
     start = time.monotonic()
     try:
-        completion = await complete(provider, prompt, max_tokens=max_tokens)
+        completion = await complete(
+            provider, prompt, max_tokens=int(fixture.get("max_tokens") or max_tokens)
+        )
     except Exception as exc:
         duration_ms = int((time.monotonic() - start) * 1000)
         return _row(

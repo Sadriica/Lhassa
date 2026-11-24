@@ -20,7 +20,15 @@ from typing import Callable, Optional
 
 import yaml
 
+# Importing registers the task verifiers (label, facts, json_fields) in the
+# shared verifier registry, so any fixture spec can name them.
+from lhassa.bench import verifiers as _task_verifiers  # noqa: F401
+
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
+# The task suite (classify, summarize, route, policy, extract): one
+# sub-directory per task. Kept apart from the general fixtures so the default
+# ``lhassa bench run`` is unchanged; select it with ``--suite tasks``.
+TASKS_DIR = FIXTURES_DIR / "tasks"
 
 REQUIRED_KEYS = ("id", "title", "prompt", "subject_kind", "verify")
 
@@ -102,6 +110,19 @@ def load_fixtures(ids: Optional[list[str]] = None, *, directory: Optional[Path] 
         return all_fixtures
     by_id = {f["id"]: f for f in all_fixtures}
     return [by_id[i] for i in ids if i in by_id]
+
+
+def load_task_fixtures(task: Optional[str] = None) -> list[dict]:
+    """Load the task suite (optionally one task), each with a ``task`` key set
+    from its directory name."""
+    out: list[dict] = []
+    for sub in sorted(p for p in TASKS_DIR.iterdir() if p.is_dir()):
+        if task and sub.name != task:
+            continue
+        for fixture in load_fixtures(directory=sub):
+            fixture.setdefault("task", sub.name)
+            out.append(fixture)
+    return out
 
 
 def fixture_ids(*, directory: Optional[Path] = None) -> list[str]:

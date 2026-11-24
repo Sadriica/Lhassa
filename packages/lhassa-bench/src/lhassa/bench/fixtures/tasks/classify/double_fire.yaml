@@ -1,0 +1,33 @@
+# Synthetic data; no real events, people or hosts.
+id: task_classify_double_fire
+title: 'Classify: double fire'
+prompt: |
+  You classify events from a personal AI assistant into exactly one category.
+  Categories:
+  - auth: login, credentials, permissions, tokens
+  - network: connectivity, DNS, TLS, timeouts talking to remote hosts
+  - storage: disk, files, database, quota
+  - performance: CPU, memory, latency of local work
+  - scheduler: cron, timers, missed or duplicated jobs
+  - agent_error: a model or tool call failed, bad output, tool misuse
+  Rule: label the ROOT cause named in the event, not the symptom it produced.
+  Reply with only the category name, nothing else.
+
+  Event: 2026-03-02T02:00:01Z job nightly-digest fired twice (02:00:00 and 02:00:01), lock not acquired
+subject_kind: completion
+verify:
+  type: label
+  expected: scheduler
+  labels:
+  - auth
+  - network
+  - storage
+  - performance
+  - scheduler
+  - agent_error
+tags:
+- task
+- classify
+- classification
+max_tokens: 32
+reference: scheduler
