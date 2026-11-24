@@ -80,6 +80,10 @@ _PROPOSAL_TIPOS = (
     "mint_route",
 )
 
+# How much of an episode's result a mint_memory proposal carries as the
+# storable answer (the owner approves WHAT would be remembered, so it is shown).
+ANSWER_MAX_CHARS = 500
+
 # detect_routable defaults; how many times a `[routable:<cap>]`-tagged episode
 # (a message a deterministic capability recognises, that STILL paid for a
 # think/research) must repeat before it is worth proposing a route.
@@ -232,7 +236,10 @@ async def denied_patterns(instance_id: str) -> set[str]:
     pattern from being re-proposed while its approval is still PENDING; once a
     human resolves it ``rechazada`` it falls out of that dedup path entirely, and
     the pattern would otherwise be proposed again on the very next run. A denial
-    is a human decision, not a queue timeout; this reads the approvals table
+    is a human decision, not a queue timeout: rows closed by the queue itself
+    (``payload.resolution`` starting ``rejected-by-``: timeout, cap, revived,
+    gone) are IGNORED, so an expired proposal may come back while one the owner
+    refused never does. This reads the approvals table
     directly (``core.db`` exposes no "list denied" helper) so the owner is never
     asked twice for an automation they already said no to. Pure SQL, $0, never
     raises (degrades to an empty set).
@@ -254,6 +261,8 @@ async def denied_patterns(instance_id: str) -> set[str]:
                 payload = json.loads(row["payload"] or "{}")
             except (ValueError, TypeError):
                 continue
+            if str((payload or {}).get("resolution") or "").startswith("rejected-by-"):
+                continue  # a queue closure (timeout/cap/revived/gone), not a denial
             pat = (payload or {}).get("pattern")
             if pat:
                 patterns.add(str(pat))
@@ -310,7 +319,9 @@ async def detect_repetition(
                 """SELECT despertar_por, accion,
                           COUNT(*) AS n,
                           SUM(COALESCE(costo_usd, 0)) AS cost,
-                          MAX(decision) AS decision_sample
+                          MAX(decision) AS decision_sample,
+                          MAX(resultado) AS answer_sample,
+                          COUNT(DISTINCT substr(creado_en, 1, 10)) AS days_seen
                    FROM episodes
                    WHERE instance_id = ? AND creado_en >= ?
                    GROUP BY despertar_por, accion
@@ -480,7 +491,9 @@ async def detect_recurring(
                 """SELECT despertar_por, accion,
                           COUNT(*) AS n,
                           SUM(COALESCE(costo_usd, 0)) AS cost,
-                          MAX(decision) AS decision_sample
+                          MAX(decision) AS decision_sample,
+                          MAX(resultado) AS answer_sample,
+                          COUNT(DISTINCT substr(creado_en, 1, 10)) AS days_seen
                    FROM episodes
                    WHERE instance_id = ? AND creado_en >= ?
                    GROUP BY despertar_por, accion
@@ -533,6 +546,8 @@ async def detect_recurring(
                 "count": int(row.get("n") or 0),
                 "total_cost_usd": float(row.get("cost") or 0.0),
                 "judgment": is_excluded(accion, str(row.get("decision_sample") or "")),
+                "answer": str(row.get("answer_sample") or "")[:ANSWER_MAX_CHARS],
+                "days_seen": int(row.get("days_seen") or 0),
                 "cadence": cadence,
                 "in_cache": False,
                 "threshold_used": used_min_count,
@@ -738,6 +753,7 @@ def recommend_intervention(finding: dict[str, Any]) -> dict[str, Any]:
                     "despertar_por": despertar_por,
                     "chain": chain,
                     "count": count,
+                    "days_seen": int(finding.get("days_seen") or 0),
                     "draft_script": draft_script_for_chain(chain),
                 },
             }
@@ -790,6 +806,8 @@ def recommend_intervention(finding: dict[str, Any]) -> dict[str, Any]:
                     "accion": accion,
                     "count": count,
                     "total_cost_usd": cost,
+                    "answer": str(finding.get("answer") or "")[:ANSWER_MAX_CHARS],
+                    "days_seen": int(finding.get("days_seen") or 0),
                 },
             }
 
@@ -845,6 +863,55 @@ def draft_script_for_chain(chain: list[str]) -> str:
     return "\n".join(lines)
 
 
+def _min_rotation(chain: "tuple[str, ...] | list[str]") -> tuple:
+    """The canonical (lexicographically smallest) rotation of a chain."""
+    t = tuple(chain)
+    return min(t[i:] + t[:i] for i in range(len(t))) if t else t
+
+
+def _is_periodic(window: "tuple[str, ...]") -> bool:
+    """True when ``window`` is a partial repetition of a shorter root.
+
+    ``a b a b`` and ``a b a`` are the alternation ``a b``; the root is found as
+    its own window, so periodic windows are skipped rather than double counted.
+    """
+    n = len(window)
+    return any(
+        all(window[i] == window[i + p] for i in range(n - p)) for p in range(1, n)
+    )
+
+
+def chain_covers(small: "list[str] | tuple", big: "list[str] | tuple") -> bool:
+    """True when ``small`` (any rotation) is a contiguous part of ``big`` repeated.
+
+    The "this is a rotation or a sub-chain of that one" test: the 2-cycle
+    ``a b`` and ``b a`` are covered by ``a b c``; a chain never covers itself or
+    anything as long as it.
+    """
+    small, big = tuple(small), tuple(big)
+    if not small or len(small) >= len(big):
+        return False
+    expanded = big * (len(small) // len(big) + 3)
+    return any(
+        (small[i:] + small[:i]) == expanded[j : j + len(small)]
+        for i in range(len(small))
+        for j in range(len(big))
+    )
+
+
+def chain_equivalent_patterns(despertar_por: str, chain: list[str]) -> list[str]:
+    """Every pattern key a rotation of ``chain`` could have been stored under."""
+    t = tuple(chain)
+    return [chain_pattern_key(despertar_por, list(t[i:] + t[:i])) for i in range(len(t))]
+
+
+def _parse_chain_pattern(pattern: str) -> "Optional[tuple[str, tuple]]":
+    head, sep, tail = str(pattern).partition("::chain:")
+    if not sep or not tail:
+        return None
+    return head, tuple(tail.split("→"))
+
+
 async def detect_mechanical_chains(
     instance_id: str,
     *,
@@ -855,11 +922,25 @@ async def detect_mechanical_chains(
     """Repeated MECHANICAL action chains; the PTC (``run_script``) candidates.
 
     Reads the window's NON-think episodes (a judgment never enters a chain) in
-    time order per ``despertar_por``, slides windows of length 2..``max_len``
-    over each trigger's action sequence, and reports every exact chain (≥2
-    DISTINCT actions) recurring ≥ ``threshold`` times. v1 limitation, stated
-    honestly: windows may overlap, so a dense run can over-count; the finding
-    is a proposal for a HUMAN to review, never an automatic act. Pure SQL +
+    time order per ``despertar_por`` and reports every chain (>=2 DISTINCT
+    actions, length 2..``max_len``) that recurs >= ``threshold`` times. What a
+    chain is allowed to be, and how it is counted:
+
+    * an action that ``requires_approval`` (``security.allowlist``) is a
+      BARRIER: ``agents.ptc`` can never run it, so no chain crosses or contains
+      it;
+    * ``capability use recorded`` episodes (the accounting rows
+      ``cli/capability_log`` and ``cli/agent`` append) are bookkeeping, not work;
+    * occurrences are counted WITHOUT overlap (greedy, left to right), so a dense
+      run no longer inflates the count with every shifted window;
+    * rotations and repetitions of one cycle are ONE chain: it is keyed by its
+      minimal rotation (``pattern``), reported in the order it first ran
+      (``chain``), and a chain covered by a longer reported one (see
+      :func:`chain_covers`) is dropped;
+    * chains already denied by a human (any rotation, or covered by a denied
+      one) are skipped, like every other proposal kind.
+
+    ``days_seen`` counts the distinct days the occurrences span. Pure SQL +
     Python, $0, never raises (degrades to ``[]``).
     """
     cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
@@ -867,10 +948,11 @@ async def detect_mechanical_chains(
         async with aiosqlite.connect(_db.DB_PATH) as conn:
             conn.row_factory = aiosqlite.Row
             async with conn.execute(
-                """SELECT despertar_por, accion FROM episodes
+                """SELECT despertar_por, accion, creado_en FROM episodes
                    WHERE instance_id = ? AND creado_en >= ?
                      AND COALESCE(accion, '') != ''
                      AND LOWER(COALESCE(decision, '')) NOT LIKE 'think%'
+                     AND LOWER(COALESCE(decision, '')) NOT LIKE 'capability use recorded%'
                    ORDER BY despertar_por, creado_en""",
                 (instance_id, cutoff),
             ) as cur:
@@ -878,36 +960,78 @@ async def detect_mechanical_chains(
     except Exception:
         return []
 
-    sequences: dict[str, list[str]] = {}
+    try:
+        from lhassa.security import allowlist as _al
+
+        gated = {n for n, spec in _al.ALLOWLIST.items() if spec.requires_approval}
+    except Exception:  # pragma: no cover - defensive
+        gated = set()
+
+    # despertar_por -> list of segments (a barrier closes the current one);
+    # each element is (accion, creado_en).
+    segments: dict[str, list[list[tuple[str, str]]]] = {}
     for row in rows:
         accion = str(row.get("accion") or "")
         despertar_por = str(row.get("despertar_por") or "")
         if is_excluded(accion) or is_infrastructure(despertar_por, accion):
             continue  # a judgment, or Lhassa's own $0 machinery; never a chain
-        sequences.setdefault(despertar_por, []).append(accion)
+        segs = segments.setdefault(despertar_por, [[]])
+        if accion in gated:
+            if segs[-1]:
+                segs.append([])
+            continue
+        segs[-1].append((accion, str(row.get("creado_en") or "")))
 
-    counts: dict[tuple[str, tuple[str, ...]], int] = {}
-    for despertar_por, seq in sequences.items():
-        for size in range(2, max_len + 1):
-            for start in range(0, len(seq) - size + 1):
-                window = tuple(seq[start : start + size])
-                if len(set(window)) < 2:
-                    continue  # a chain needs ≥2 DISTINCT actions
-                key = (despertar_por, window)
-                counts[key] = counts.get(key, 0) + 1
+    # (despertar_por, canonical) -> {"first": chain as first run, "n", "days"}
+    found: dict[tuple[str, tuple], dict[str, Any]] = {}
+    for despertar_por, segs in segments.items():
+        for seg in segs:
+            names = [a for a, _ in seg]
+            last_end: dict[tuple, int] = {}
+            for size in range(2, max_len + 1):
+                for start in range(0, len(names) - size + 1):
+                    window = tuple(names[start : start + size])
+                    if len(set(window)) < 2 or _is_periodic(window):
+                        continue
+                    canon = _min_rotation(window)
+                    if start < last_end.get(canon, 0):
+                        continue  # overlaps the previous occurrence of this chain
+                    last_end[canon] = start + size
+                    slot = found.setdefault(
+                        (despertar_por, canon),
+                        {"first": list(window), "n": 0, "days": set()},
+                    )
+                    slot["n"] += 1
+                    slot["days"].add(seg[start][1][:10])
+
+    qualifying = {k: v for k, v in found.items() if v["n"] >= threshold}
+
+    denied: list[tuple[str, tuple]] = []
+    for pat in await denied_patterns(instance_id):
+        parsed = _parse_chain_pattern(pat)
+        if parsed:
+            denied.append((parsed[0], _min_rotation(parsed[1])))
 
     out: list[dict[str, Any]] = []
-    for (despertar_por, window), n in counts.items():
-        if n < threshold:
+    for (despertar_por, canon), slot in qualifying.items():
+        if any(
+            dp == despertar_por and (dc == canon or chain_covers(canon, dc))
+            for dp, dc in denied
+        ):
             continue
-        chain = list(window)
+        if any(
+            dp == despertar_por and chain_covers(canon, other)
+            for (dp, other) in qualifying
+        ):
+            continue  # a rotation or sub-chain of a longer chain that also qualified
         out.append(
             {
-                "pattern": chain_pattern_key(despertar_por, chain),
+                "pattern": chain_pattern_key(despertar_por, list(canon)),
                 "despertar_por": despertar_por,
-                "chain": chain,
-                "count": n,
+                "chain": slot["first"],
+                "count": slot["n"],
+                "days_seen": len(slot["days"]),
             }
         )
-    out.sort(key=lambda f: -f["count"])
+    out.sort(key=lambda f: (-f["count"], f["pattern"]))
     return out

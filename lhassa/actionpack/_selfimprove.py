@@ -20,6 +20,57 @@ from lhassa.security import approval as _approval
 # every subsequent run; mirrors the watchlist transition-dedup idiom.
 _SEEN_PREFIX = "repetition:seen:"
 
+# Per-sweep ceiling per proposal type. Together with the pending cap
+# (Config.approval_pending_cap, read through approval.pending_count) it bounds
+# how much one sweep can add to the queue: 37 + 13 unanswered proposals were
+# once parked in a few weeks, all rejected.
+_MAX_PER_TYPE_PER_RUN = 5
+
+# A remembered answer is only worth proposing if the pattern recurs on at least
+# this many distinct days: one burst (16 episodes in 8 minutes) is a session,
+# not a habit.
+_MIN_MEMORY_DAYS = 2
+
+
+class _Room:
+    """How many more approvals of each type this sweep may park."""
+
+    def __init__(self, instance_id: str) -> None:
+        self.instance_id = instance_id
+        self._left: dict = {}
+
+    async def allow(self, tipo: str) -> bool:
+        if tipo not in self._left:
+            left = _MAX_PER_TYPE_PER_RUN
+            cap = int(getattr(Config, "approval_pending_cap", 0) or 0)
+            if cap > 0:
+                left = min(left, cap - await _approval.pending_count(self.instance_id, tipo))
+            self._left[tipo] = left
+        return self._left[tipo] > 0
+
+    def used(self, tipo: str) -> None:
+        self._left[tipo] = self._left.get(tipo, 0) - 1
+
+
+async def _seen_chain_patterns(instance_id: str) -> list:
+    """Chains already proposed (any rotation), as ``(despertar_por, chain)`` pairs."""
+    from lhassa._vendor import aiosqlite
+
+    out: list = []
+    try:
+        async with aiosqlite.connect(_db.DB_PATH) as conn:
+            async with conn.execute(
+                "SELECT key FROM watch_state WHERE instance_id = ? AND key LIKE ?",
+                (instance_id, _SEEN_PREFIX + "%::chain:%"),
+            ) as cur:
+                for (key,) in await cur.fetchall():
+                    parsed = _repetition._parse_chain_pattern(str(key)[len(_SEEN_PREFIX):])
+                    if parsed:
+                        out.append(parsed)
+    except Exception:
+        return []
+    return out
+
 
 async def detect_repetition(params: dict) -> str:
     """Detect repeated judgment patterns and propose minting a deterministic action.
@@ -42,10 +93,13 @@ async def detect_repetition(params: dict) -> str:
         findings = await _repetition.detect_repetition(instance_id, days=days)
 
         proposed = 0
+        room = _Room(instance_id)
         for f in findings:
             key = _SEEN_PREFIX + f["pattern"]
             if await _db.get_watch_state(instance_id, key):
                 continue  # already proposed this exact pattern once
+            if not await room.allow("mint_action"):
+                break  # sweep ceiling or pending cap reached; the rest waits
 
             title = f"mint deterministic action for {f['pattern']}"
             payload = {
@@ -66,16 +120,33 @@ async def detect_repetition(params: dict) -> str:
                 level="info",
             )
             await _db.set_watch_state(instance_id, key, "1")
+            room.used("mint_action")
             proposed += 1
 
         # Second signal: repeated MECHANICAL action chains → mint_script (PTC)
         # proposals. Same once-only dedupe; the payload carries a deterministic
         # draft the human reviews (running it still crosses the approval gate).
         chains = await _repetition.detect_mechanical_chains(instance_id, days=days)
+        seen_chains = await _seen_chain_patterns(instance_id)
         for f in chains:
             key = _SEEN_PREFIX + f["pattern"]
             if await _db.get_watch_state(instance_id, key):
                 continue
+            # A rotation, repetition or sub-chain of a chain already proposed
+            # (under an older, non-canonical key too) is the SAME proposal.
+            dp = f["despertar_por"]
+            canon = _repetition._min_rotation(f["chain"])
+            if any(
+                sdp == dp
+                and (
+                    _repetition._min_rotation(sc) == canon
+                    or _repetition.chain_covers(canon, sc)
+                )
+                for sdp, sc in seen_chains
+            ):
+                continue
+            if not await room.allow("mint_script"):
+                break
             chain_label = " → ".join(f["chain"])
             payload = {
                 "accion": "mint_script",
@@ -83,6 +154,7 @@ async def detect_repetition(params: dict) -> str:
                 "despertar_por": f["despertar_por"],
                 "chain": f["chain"],
                 "count": f["count"],
+                "days_seen": f.get("days_seen", 0),
                 "draft_script": _repetition.draft_script_for_chain(f["chain"]),
                 "title": f"collapse the {chain_label} chain into one script",
             }
@@ -95,6 +167,8 @@ async def detect_repetition(params: dict) -> str:
                 level="info",
             )
             await _db.set_watch_state(instance_id, key, "1")
+            seen_chains.append((dp, tuple(f["chain"])))
+            room.used("mint_script")
             proposed += 1
 
         # Third signal: the consciousness; recurring patterns (any cost,
@@ -124,6 +198,15 @@ async def detect_repetition(params: dict) -> str:
                 "schedule": "mint_schedule",
                 "cache_seed": "seed_cache",
             }[kind]
+            if kind == "memory_fact" and not (
+                rec["payload"].get("answer")
+                and int(rec["payload"].get("days_seen") or 0) >= _MIN_MEMORY_DAYS
+            ):
+                # Nothing storable to approve, or a single-session burst: a
+                # mint_memory the owner cannot judge or act on is queue noise.
+                continue
+            if not await room.allow(tipo):
+                continue
             payload = dict(rec["payload"])
             payload["accion"] = tipo
             payload["rationale"] = rec["rationale"]
@@ -140,6 +223,7 @@ async def detect_repetition(params: dict) -> str:
             await _approval.request_approval(instance_id, tipo=tipo, payload=payload)
             await _notify(f"{title}; {rec['rationale']}", level="info")
             await _db.set_watch_state(instance_id, key, "1")
+            room.used(tipo)
             proposed += 1
 
         # Fourth signal: the self-routing consciousness; a message class a
@@ -157,6 +241,8 @@ async def detect_repetition(params: dict) -> str:
             if rec["kind"] != "route":
                 continue  # a malformed finding degraded elsewhere; skip it
 
+            if not await room.allow("mint_route"):
+                break
             payload = dict(rec["payload"])
             payload["accion"] = "mint_route"
             payload["rationale"] = rec["rationale"]
@@ -168,6 +254,7 @@ async def detect_repetition(params: dict) -> str:
             )
             await _notify(f"{title}; {rec['rationale']}", level="info")
             await _db.set_watch_state(instance_id, key, "1")
+            room.used("mint_route")
             proposed += 1
 
         total = len(findings) + len(chains) + len(recurring) + len(routable)

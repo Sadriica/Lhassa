@@ -758,3 +758,147 @@ async def test_detect_routable_explicit_min_count_is_never_adapted(brain):
         )
     findings = await detect_routable("inst_routable_explicit", days=7, min_count=5)
     assert findings == []  # 2 < explicit 5, no adaptation applied
+
+
+# ══ chain detector: approval-gated actions, bookkeeping rows, overlap, rotations ══
+
+
+async def _seq(db, actions, *, despertar_por="cron", start_day=0, step_minutes=1,
+               decision="", instance_id="inst_chain"):
+    """Insert ``actions`` as consecutive episodes, ``step_minutes`` apart, from
+    ``start_day`` days ago (newest-last so ordering is deterministic)."""
+    from datetime import datetime, timedelta, timezone
+
+    base = datetime.now(timezone.utc) - timedelta(days=start_day, hours=1)
+    for i, accion in enumerate(actions):
+        await _seed_episode(
+            db, instance_id=instance_id, despertar_por=despertar_por, accion=accion,
+            cost=0.0, decision=decision, when=(base + timedelta(minutes=i * step_minutes)).isoformat(),
+        )
+
+
+@pytest.mark.asyncio
+async def test_a_chain_with_an_approval_gated_action_is_never_proposed(brain):
+    """run_command requires approval; ptc can never run it, so no chain contains it."""
+    from lhassa.agents.repetition import detect_mechanical_chains
+
+    await _seq(brain, ["run_command", "read_file"] * 4)
+    assert await detect_mechanical_chains("inst_chain", days=7, threshold=2) == []
+
+
+@pytest.mark.asyncio
+async def test_a_gated_action_is_a_barrier_not_a_bridge(brain):
+    """x, GATED, y repeated must not become the chain x -> y."""
+    from lhassa.agents.repetition import detect_mechanical_chains
+
+    await _seq(brain, ["web_fetch", "run_command", "export_report"] * 4)
+    chains = await detect_mechanical_chains("inst_chain", days=7, threshold=2)
+    assert not any("run_command" in f["chain"] for f in chains)
+    assert not any(f["chain"] == ["web_fetch", "export_report"] for f in chains)
+
+
+@pytest.mark.asyncio
+async def test_capability_use_bookkeeping_episodes_are_not_work(brain):
+    from lhassa.agents.repetition import detect_mechanical_chains
+
+    await _seq(brain, ["web_fetch", "export_report"] * 4,
+               decision="capability use recorded from `lhassa memory add`")
+    assert await detect_mechanical_chains("inst_chain", days=7, threshold=2) == []
+
+
+@pytest.mark.asyncio
+async def test_occurrences_are_counted_without_overlap(brain):
+    """a b a b a b is THREE occurrences of the cycle, not five shifted windows."""
+    from lhassa.agents.repetition import detect_mechanical_chains
+
+    await _seq(brain, ["web_fetch", "export_report"] * 3)
+    (f,) = await detect_mechanical_chains("inst_chain", days=7, threshold=2)
+    assert f["count"] == 3
+    assert f["chain"] == ["web_fetch", "export_report"]  # as it first ran
+
+
+@pytest.mark.asyncio
+async def test_rotations_and_repetitions_collapse_into_one_chain(brain):
+    """The measured flood: 10 proposals that were rotations/substrings of one alternation."""
+    from lhassa.agents.repetition import detect_mechanical_chains
+
+    await _seq(brain, ["web_fetch", "export_report"] * 6)
+    found = await detect_mechanical_chains("inst_chain", days=7, threshold=2, max_len=4)
+    assert len(found) == 1
+    assert found[0]["pattern"] == "cron::chain:export_report→web_fetch"  # minimal rotation
+
+
+@pytest.mark.asyncio
+async def test_a_subchain_of_a_longer_qualifying_chain_is_dropped(brain):
+    from lhassa.agents.repetition import detect_mechanical_chains
+
+    await _seq(brain, ["ping_url", "web_fetch", "export_report"] * 5)
+    found = await detect_mechanical_chains("inst_chain", days=7, threshold=3)
+    assert [sorted(f["chain"]) for f in found] == [["export_report", "ping_url", "web_fetch"]]
+
+
+@pytest.mark.asyncio
+async def test_days_seen_counts_distinct_days(brain):
+    from lhassa.agents.repetition import detect_mechanical_chains
+
+    await _seq(brain, ["web_fetch", "export_report"] * 2, start_day=0)
+    await _seq(brain, ["web_fetch", "export_report"] * 2, start_day=2)
+    (f,) = await detect_mechanical_chains("inst_chain", days=7, threshold=2)
+    assert f["days_seen"] == 2
+
+
+@pytest.mark.asyncio
+async def test_a_denied_chain_is_not_reproposed_in_any_rotation(brain):
+    from lhassa.agents.repetition import detect_mechanical_chains
+
+    await _seq(brain, ["web_fetch", "export_report"] * 4)
+    ap = await brain.add_approval(
+        "inst_chain", "mint_script",
+        {"accion": "mint_script", "pattern": "cron::chain:export_report→web_fetch"},
+    )
+    await brain.resolve_approval("inst_chain", ap, "rechazada")  # a HUMAN denial
+    assert await detect_mechanical_chains("inst_chain", days=7, threshold=2) == []
+
+
+@pytest.mark.asyncio
+async def test_queue_closures_do_not_count_as_denials_but_human_denials_do(brain):
+    from lhassa.agents.repetition import denied_patterns
+
+    expired = await brain.add_approval("i", "mint_script", {"pattern": "p::expired"})
+    await brain.close_approval("i", expired, "rejected-by-timeout")
+    capped = await brain.add_approval("i", "mint_memory", {"pattern": "p::capped"})
+    await brain.close_approval("i", capped, "rejected-by-cap")
+    human = await brain.add_approval("i", "mint_script", {"pattern": "p::human"})
+    await brain.resolve_approval("i", human, "rechazada")
+    assert await denied_patterns("i") == {"p::human"}
+
+
+@pytest.mark.asyncio
+async def test_selfimprove_does_not_repropose_a_rotation_already_seen(brain, monkeypatch):
+    """An old, non-canonical seen key must also suppress the canonical rotation."""
+    from unittest.mock import AsyncMock, patch
+
+    from lhassa.actionpack._selfimprove import detect_repetition as sweep
+
+    await _seq(brain, ["web_fetch", "export_report"] * 4, instance_id="inst_chain")
+    await brain.set_watch_state("inst_chain", "repetition:seen:cron::chain:web_fetch→export_report", "1")
+    with patch("lhassa.actionpack._selfimprove._notify", AsyncMock(return_value=True)):
+        await sweep({"instance_id": "inst_chain", "days": 7})
+    pending = await brain.load_pending_approvals("inst_chain")
+    assert [a for a in pending if a["tipo"] == "mint_script"] == []
+
+
+@pytest.mark.asyncio
+async def test_selfimprove_mint_script_payload_carries_days_and_respects_the_cap(brain, monkeypatch):
+    from unittest.mock import AsyncMock, patch
+
+    from lhassa.actionpack import _selfimprove
+
+    monkeypatch.setattr(_selfimprove.Config, "approval_pending_cap", 1, raising=False)
+    await _seq(brain, ["web_fetch", "export_report"] * 4, instance_id="inst_chain")
+    await _seq(brain, ["ping_url", "list_dir"] * 4, despertar_por="other", instance_id="inst_chain")
+    with patch("lhassa.actionpack._selfimprove._notify", AsyncMock(return_value=True)):
+        await _selfimprove.detect_repetition({"instance_id": "inst_chain", "days": 7})
+    rows = [a for a in await brain.load_pending_approvals("inst_chain") if a["tipo"] == "mint_script"]
+    assert len(rows) == 1  # the pending cap (1) held the second back
+    assert rows[0]["payload"]["days_seen"] >= 1

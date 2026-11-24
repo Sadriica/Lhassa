@@ -93,15 +93,24 @@ async def test_detect_repetition_no_patterns(brain):
 # ── the consciousness: mint_memory / mint_schedule / seed_cache ──────────────────
 
 
-async def _seed_judgment_pattern(db, instance_id, *, despertar_por="telegram", accion="responder", n=4):
-    for _ in range(n):
+async def _seed_judgment_pattern(
+    db, instance_id, *, despertar_por="telegram", accion="responder", n=4,
+    answer="the stable answer", spread_days=2,
+):
+    """A judgment pattern that is worth a mint_memory: it carries an answer and
+    spans ``spread_days`` distinct days (a single-session burst is not a habit)."""
+    from datetime import datetime, timedelta, timezone
+
+    for i in range(n):
+        when = datetime.now(timezone.utc) - timedelta(days=i % spread_days)
         ep = _FakeEpisode(
             id=db._new_id("ep"),
             instance_id=instance_id,
             despertar_por=despertar_por,
             accion=accion,
             costo_usd=0.0,
-            creado_en=db._now(),
+            resultado=answer,
+            creado_en=when.isoformat(),
         )
         await db.append_episode(ep)
 
@@ -259,3 +268,65 @@ async def test_detect_repetition_does_not_reprose_mint_route(brain):
     assert "0 newly proposed" in result2
     pending = await brain.load_pending_approvals("inst_test")
     assert len([a for a in pending if a["tipo"] == "mint_route"]) == 1
+
+
+# ── mint_memory gates: a storable answer, >= 2 distinct days ──────────────────
+
+
+@pytest.mark.asyncio
+async def test_mint_memory_carries_the_answer_in_the_payload(brain):
+    await _seed_judgment_pattern(brain, "inst_test", answer="x" * 900)
+    with patch("lhassa.actionpack._selfimprove._notify", AsyncMock(return_value=True)):
+        await detect_repetition({"instance_id": "inst_test"})
+    row = [a for a in await brain.load_pending_approvals("inst_test") if a["tipo"] == "mint_memory"][0]
+    assert row["payload"]["answer"] == "x" * 500  # truncated, not dropped
+    assert row["payload"]["days_seen"] >= 2
+
+
+@pytest.mark.asyncio
+async def test_mint_memory_not_proposed_for_a_single_session_burst(brain):
+    await _seed_judgment_pattern(brain, "inst_test", n=16, spread_days=1)
+    with patch("lhassa.actionpack._selfimprove._notify", AsyncMock(return_value=True)):
+        await detect_repetition({"instance_id": "inst_test"})
+    pending = await brain.load_pending_approvals("inst_test")
+    assert [a for a in pending if a["tipo"] == "mint_memory"] == []
+
+
+@pytest.mark.asyncio
+async def test_mint_memory_not_proposed_without_a_storable_answer(brain):
+    await _seed_judgment_pattern(brain, "inst_test", answer="")
+    with patch("lhassa.actionpack._selfimprove._notify", AsyncMock(return_value=True)):
+        await detect_repetition({"instance_id": "inst_test"})
+    pending = await brain.load_pending_approvals("inst_test")
+    assert [a for a in pending if a["tipo"] == "mint_memory"] == []
+
+
+# ── caps: per sweep and pending per type ──────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_pending_cap_stops_new_proposals_of_that_type(brain, monkeypatch):
+    from lhassa.actionpack import _selfimprove
+    # Patch the Config the module under test holds (other tests reload lhassa.config).
+    monkeypatch.setattr(_selfimprove.Config, "approval_pending_cap", 2, raising=False)
+    for i in range(2):  # the queue is already at the cap for mint_memory
+        await brain.add_approval("inst_test", "mint_memory", {"accion": "mint_memory", "n": i})
+    await _seed_judgment_pattern(brain, "inst_test")
+    with patch("lhassa.actionpack._selfimprove._notify", AsyncMock(return_value=True)):
+        await detect_repetition({"instance_id": "inst_test"})
+    pending = await brain.load_pending_approvals("inst_test")
+    assert len([a for a in pending if a["tipo"] == "mint_memory"]) == 2  # nothing added
+    assert _selfimprove._MAX_PER_TYPE_PER_RUN >= 1
+
+
+@pytest.mark.asyncio
+async def test_per_sweep_ceiling_bounds_one_run(brain, monkeypatch):
+    from lhassa.actionpack import _selfimprove
+
+    monkeypatch.setattr(_selfimprove, "_MAX_PER_TYPE_PER_RUN", 2)
+    for k in range(5):
+        await _seed_judgment_pattern(brain, "inst_test", despertar_por=f"chan{k}")
+    with patch("lhassa.actionpack._selfimprove._notify", AsyncMock(return_value=True)):
+        await detect_repetition({"instance_id": "inst_test"})
+    pending = await brain.load_pending_approvals("inst_test")
+    assert len([a for a in pending if a["tipo"] == "mint_memory"]) == 2
