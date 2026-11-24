@@ -1,23 +1,34 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Waybar widget for Lhassa: prints one Waybar JSON object, or opens the dashboard.
+"""Waybar widget for Lhassa: prints Waybar JSON objects, opens the dashboard, shows a menu.
 
-    lhassa-waybar [status]   print {"text","tooltip","class"} (for "exec")
-    lhassa-waybar open [section]  open the dashboard on a section (default: approvals,
-                                  or health when only a check is failing; for "on-click")
+    lhassa-waybar [status]        icon + short counter + tooltip (the group leader)
+    lhassa-waybar agents          the Agents drawer module (active sessions per host)
+    lhassa-waybar attention       the Attention drawer module (empty text = hidden)
+    lhassa-waybar system          the System drawer module (profile, temperature, CPU, battery)
+    lhassa-waybar open [section]  open the dashboard (default: approvals, or fleet when only a
+                                  check or a service is failing; for "on-click")
+    lhassa-waybar menu            right-click menu through wofi (summary, approve/deny,
+                                  dashboard section, power profile)
+    lhassa-waybar scroll up|down  cycle what the counter next to the icon shows
 
 It only READS the state file that the running Lhassa process keeps fresh (see
-lhassa/views/waybar_state.py and doc/waybar.md); it never imports Lhassa, never
-touches the network and never changes anything, so it starts in a few ms and
-degrades to a calm "no brain" when Lhassa is down.
+lhassa/views/waybar_state.py and doc/waybar.md); it never imports Lhassa and never
+touches the network. The only things it changes are its own counter-mode file
+(next to the state file, mode 0600) and what the menu asks Lhassa to do, always
+through the ``lhassa`` command (``approve``, ``deny``, ``action run``), never
+by touching a database. It starts in a few ms and degrades to a calm "no brain"
+when Lhassa is down. A v1 state file (no agents or attention sections) still renders.
 
-Classes: ok, warn (approvals waiting, a health check warning, or budget at the
-soft limit), alert (a health check at alert level or budget exhausted), idle (no state file), stale
-(state file too old, so Lhassa stopped updating it).
+Classes: ok, warn (something needs you), alert (a health check at alert level, a critical
+review finding, a failed service, budget exhausted or a hot package), idle (no state
+file), stale (state file too old, so Lhassa stopped updating it).
 """
 
 import json
 import os
+import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -25,6 +36,16 @@ import time
 
 DEFAULT_URL = "http://127.0.0.1:7766"
 WHEEL = "☸"
+
+#: What the counter next to the icon can show; the mouse wheel cycles them.
+MODES = ("attention", "agents", "temp", "spend")
+
+#: Waybar real-time signals (see doc/waybar.md): icon, attention module, system module.
+SIG_ICON, SIG_ATTENTION, SIG_SYSTEM = 14, 15, 16
+
+OPEN_SECTIONS = ("approvals", "fleet", "integrity", "overview", "activity", "settings")
+POWER_MODES = ("saver", "balanced", "performance")
+_ID = re.compile(r"^[A-Za-z0-9_.:-]{1,80}$")
 
 TEXTS = {
     "en": {
@@ -39,12 +60,41 @@ TEXTS = {
         "health": "Health: {names}",
         "calm": "All calm",
         "click": "Click to open the dashboard",
+        "now": "Now",
+        "attention": "Needs your attention",
+        "today": "Today",
+        "lhassa": "Lhassa",
+        "no_agents": "No active agents",
+        "agents_short": "no agents",
+        "machine": "Machine",
+        "nothing": "Nothing needs you",
+        "k_approval": "approval", "k_ledger": "agent decision", "k_review": "critical finding",
+        "k_push": "push with findings", "k_ci": "CI red", "k_service": "service down",
+        "k_health": "health check",
+        "p_approval": "approvals", "p_ledger": "decisions", "p_review": "findings",
+        "p_push": "pushes", "p_ci": "CI red", "p_service": "down", "p_health": "checks",
+        "events": "events", "commits": "commits", "pushes": "pushes", "api": "API",
+        "top": "most active",
+        "digest": "health digest {level}, {age} ago",
+        "model": "local model {model}",
+        "m_summary": "Today's summary", "m_approve": "Approve a pending item...",
+        "m_deny": "Deny a pending item...", "m_open": "Open the dashboard...",
+        "m_pause": "Pause the non-vital queue (not available yet)",
+        "m_power": "Power profile...", "m_yes_approve": "Yes, approve", "m_yes_deny": "Yes, deny",
+        "m_yes_power": "Yes, switch", "m_cancel": "Cancel",
+        "q_approve": "Approve {what}?", "q_deny": "Deny {what}?", "q_power": "Switch the power profile to {mode}?",
+        "nothing_pending": "No approvals are waiting",
+        "unavailable": "Not available yet: the queue and energy policy does not exist.",
+        "done": "Done", "failed": "Failed",
+        "mode_attention": "attention", "mode_agents": "agents", "mode_temp": "temperature",
+        "mode_spend": "spend", "counter": "Counter shows: {mode} (scroll to change)",
+        "charging": "charging",
     },
     "es": {
         "no_brain": "sin cerebro",
-        "no_brain_tip": "Lhassa no esta corriendo (sin archivo de estado).",
+        "no_brain_tip": "Lhassa no está corriendo (sin archivo de estado).",
         "unreadable_tip": "El archivo de estado de Lhassa no se puede leer.",
-        "stale_tip": "Lhassa dejo de actualizar (ultima vez hace {age}).",
+        "stale_tip": "Lhassa dejó de actualizar (última vez hace {age}).",
         "spent": "Gasto de hoy: ${cost}",
         "budget": "Presupuesto usado: {pct}%",
         "approvals": "Aprobaciones pendientes: {n}",
@@ -52,6 +102,35 @@ TEXTS = {
         "health": "Salud: {names}",
         "calm": "Todo en calma",
         "click": "Clic para abrir el panel",
+        "now": "Ahora",
+        "attention": "Necesita tu atención",
+        "today": "Hoy",
+        "lhassa": "Lhassa",
+        "no_agents": "Ningún agente activo",
+        "agents_short": "sin agentes",
+        "machine": "Máquina",
+        "nothing": "Nada te necesita",
+        "k_approval": "aprobación", "k_ledger": "decisión de agente", "k_review": "hallazgo crítico",
+        "k_push": "push con hallazgos", "k_ci": "CI en rojo", "k_service": "servicio caído",
+        "k_health": "chequeo de salud",
+        "p_approval": "aprobaciones", "p_ledger": "decisiones", "p_review": "hallazgos",
+        "p_push": "pushes", "p_ci": "CI en rojo", "p_service": "caídos", "p_health": "chequeos",
+        "events": "eventos", "commits": "commits", "pushes": "pushes", "api": "API",
+        "top": "más activo",
+        "digest": "resumen de salud {level}, hace {age}",
+        "model": "modelo local {model}",
+        "m_summary": "Resumen de hoy", "m_approve": "Aprobar un pendiente...",
+        "m_deny": "Rechazar un pendiente...", "m_open": "Abrir el panel...",
+        "m_pause": "Pausar la cola no vital (aún no disponible)",
+        "m_power": "Perfil de energía...", "m_yes_approve": "Sí, aprobar", "m_yes_deny": "Sí, rechazar",
+        "m_yes_power": "Sí, cambiar", "m_cancel": "Cancelar",
+        "q_approve": "¿Aprobar {what}?", "q_deny": "¿Rechazar {what}?", "q_power": "¿Cambiar el perfil de energía a {mode}?",
+        "nothing_pending": "No hay aprobaciones pendientes",
+        "unavailable": "Aún no disponible: la política de cola y energía no existe.",
+        "done": "Listo", "failed": "Falló",
+        "mode_attention": "atención", "mode_agents": "agentes", "mode_temp": "temperatura",
+        "mode_spend": "gasto", "counter": "El contador muestra: {mode} (rueda para cambiar)",
+        "charging": "cargando",
     },
 }
 
@@ -69,6 +148,12 @@ def state_path(env):
     if runtime and os.path.isdir(runtime):
         return os.path.join(runtime, "lhassa", "waybar.json")
     return os.path.join(tempfile.gettempdir(), "lhassa-%d" % os.getuid(), "waybar.json")
+
+
+def mode_path(path, env=None):
+    """The counter-mode file: next to the state file, so the same privacy applies."""
+    override = ((env or {}).get("LHASSA_WAYBAR_MODE_FILE") or "").strip()
+    return override or os.path.join(os.path.dirname(path), "waybar-mode")
 
 
 def esc(text):
@@ -90,10 +175,13 @@ def out(text, tooltip, cls):
     return {"text": esc(text), "tooltip": tooltip, "class": cls}
 
 
-def render(path, now, env):
-    """Return the Waybar dict for the state file at ``path``. Never raises."""
-    t = TEXTS[lang(env)]
-    label = "%s %s" % (WHEEL, t["no_brain"])
+def hidden():
+    return {"text": "", "tooltip": "", "class": "hidden"}
+
+
+def read_state(path, now, env):
+    """``(data, None)`` for a fresh state file, else ``(None, (kind, key))`` with
+    ``kind`` in idle/stale and ``key`` the tooltip text id."""
     try:
         stale_after = float(env.get("LHASSA_WAYBAR_STALE_S") or 60)
     except ValueError:
@@ -102,31 +190,186 @@ def render(path, now, env):
         with open(path, encoding="utf-8") as fh:
             data = json.load(fh)
     except FileNotFoundError:
-        return out(label, esc(t["no_brain_tip"]), "idle")
+        return None, ("idle", "no_brain_tip", None)
     except (OSError, ValueError):
-        return out(label, esc(t["unreadable_tip"]), "idle")
+        return None, ("idle", "unreadable_tip", None)
     if not isinstance(data, dict) or not isinstance(data.get("written_at"), (int, float)):
-        return out(label, esc(t["unreadable_tip"]), "idle")
-
+        return None, ("idle", "unreadable_tip", None)
     age = max(0.0, now - float(data["written_at"]))
     if age > stale_after:
-        return out(label, esc(t["stale_tip"].format(age=duration(age))), "stale")
+        return None, ("stale", "stale_tip", duration(age))
+    return data, None
 
-    def num(key, default=0.0):
-        value = data.get(key)
-        ok = isinstance(value, (int, float)) and not isinstance(value, bool)
-        return float(value) if ok else default
 
-    cost = num("cost_usd")
-    pct = num("pct_used")
-    soft = num("soft_pct", 0.8) or 0.8
+def down(t, why):
+    kind, key, age = why
+    label = "%s %s" % (WHEEL, t["no_brain"])
+    return out(label, esc(t[key].format(age=age) if age else t[key]), kind)
+
+
+def num(data, key, default=0.0):
+    value = data.get(key)
+    ok = isinstance(value, (int, float)) and not isinstance(value, bool)
+    return float(value) if ok else default
+
+
+def section(data, key):
+    value = data.get(key)
+    return value if isinstance(value, dict) else {}
+
+
+def is_v2(data):
+    return isinstance(data.get("attention"), dict) or isinstance(data.get("agents"), dict)
+
+
+def read_mode(path, env):
+    try:
+        with open(mode_path(path, env), encoding="utf-8") as fh:
+            mode = fh.read().strip()
+    except OSError:
+        return MODES[0]
+    return mode if mode in MODES else MODES[0]
+
+
+def counter(data, mode):
+    """The short text beside the icon for ``mode`` ('' when there is nothing to say)."""
+    if mode == "agents":
+        total = section(data, "agents").get("total")
+        return "● %d" % total if isinstance(total, int) and total > 0 else ""
+    if mode == "temp":
+        temp = section(data, "system").get("temp_c")
+        return "%d°" % round(temp) if isinstance(temp, (int, float)) else ""
+    if mode == "spend":
+        return "$%.2f" % num(data, "cost_usd")
+    count = section(data, "attention").get("count")
+    return "⚠ %d" % count if isinstance(count, int) and count > 0 else ""
+
+
+def items_of(data):
+    items = section(data, "attention").get("items")
+    return [i for i in items if isinstance(i, dict)] if isinstance(items, list) else []
+
+
+def host_lines(data):
+    """``claude-code: repoA, repoB`` lines, one per host, names only."""
+    agents = section(data, "agents")
+    sessions = agents.get("sessions") if isinstance(agents.get("sessions"), list) else []
+    by_host = {}
+    for sess in sessions:
+        if isinstance(sess, dict) and sess.get("host"):
+            by_host.setdefault(str(sess["host"]), []).append(str(sess.get("repo") or ""))
+    lines = []
+    for host, repos in by_host.items():
+        names = {}
+        for r in repos:
+            if r:
+                names[r] = names.get(r, 0) + 1
+        detail = ", ".join(n if c == 1 else "%s x%d" % (n, c) for n, c in names.items())
+        lines.append("%s %d%s" % (host, len(repos), ": " + detail if detail else ""))
+    return lines
+
+
+def machine_line(data, t):
+    sysd = section(data, "system")
+    bits = []
+    if sysd.get("power_mode"):
+        bits.append(str(sysd["power_mode"]))
+    if isinstance(sysd.get("temp_c"), (int, float)):
+        bits.append("%d°C" % round(sysd["temp_c"]))
+    if isinstance(sysd.get("cpu_pct"), (int, float)):
+        bits.append("CPU %d%%" % round(sysd["cpu_pct"]))
+    if isinstance(sysd.get("battery_pct"), (int, float)):
+        bits.append("%d%%%s" % (round(sysd["battery_pct"]), " " + t["charging"] if sysd.get("charging") else ""))
+    return " · ".join(bits)
+
+
+def item_text(item, t):
+    kind = str(item.get("kind") or "")
+    label = str(item.get("label") or "")
+    what = t.get("k_" + kind, kind)
+    n = item.get("n")
+    extra = " (%d)" % n if isinstance(n, int) and n > 1 else ""
+    return "%s: %s%s  [%s]" % (what, label, extra, item.get("source") or "")
+
+
+def today_line(data, t):
+    td = section(data, "today")
+    bits = []
+    for key, word in (("events", "events"), ("commits", "commits"), ("pushes", "pushes")):
+        if isinstance(td.get(key), int):
+            bits.append("%d %s" % (td[key], t[word]))
+    usd = td.get("api_usd")
+    bits.append("%s $%.2f" % (t["api"], usd if isinstance(usd, (int, float)) else num(data, "cost_usd")))
+    if td.get("top_repo"):
+        bits.append("%s: %s" % (t["top"], td["top_repo"]))
+    return " · ".join(bits)
+
+
+def lhassa_lines(data, t):
+    lh = section(data, "lhassa")
+    lines = []
+    health = [str(n) for n in data.get("health_failing") or []] if isinstance(data.get("health_failing"), list) else []
+    lines.append(t["health"].format(names=", ".join(health)) if health else "%s: ok" % t["health"].split(":")[0])
+    if lh.get("health") and isinstance(lh.get("digest_age_s"), (int, float)):
+        lines.append(t["digest"].format(level=lh["health"], age=duration(lh["digest_age_s"])))
+    if lh.get("model"):
+        lines.append(t["model"].format(model=lh["model"]))
+    return lines
+
+
+def tooltip_v2(data, t, mode):
+    def head(key):
+        return "<b>%s</b>" % esc(t[key])
+
+    lines = [head("now")]
+    agents = host_lines(data)
+    lines += ["  " + esc(x) for x in agents] if agents else ["  " + esc(t["no_agents"])]
+    machine = machine_line(data, t)
+    if machine:
+        lines.append("  " + esc("%s: %s" % (t["machine"], machine)))
+    lines += ["", head("attention")]
+    items = items_of(data)
+    lines += ["  " + esc(item_text(i, t)) for i in items] if items else ["  " + esc(t["nothing"])]
+    lines += ["", head("today"), "  " + esc(today_line(data, t))]
+    lh = lhassa_lines(data, t)
+    if lh:
+        lines += ["", head("lhassa")] + ["  " + esc(x) for x in lh]
+    lines += ["", esc(t["counter"].format(mode=t["mode_" + mode])), esc(t["click"])]
+    return "\n".join(lines)
+
+
+def render(path, now, env):
+    """Return the Waybar dict for the icon at ``path``. Never raises."""
+    t = TEXTS[lang(env)]
+    data, why = read_state(path, now, env)
+    if why:
+        return down(t, why)
+    if is_v2(data):
+        return render_v2(data, path, t, env)
+    return render_v1(data, t)
+
+
+def render_v2(data, path, t, env):
+    cls = data.get("class") if data.get("class") in ("ok", "warn", "alert") else "ok"
+    mode = read_mode(path, env)
+    text = WHEEL
+    count = counter(data, mode)
+    if count:
+        text += " " + count
+    return out(text, tooltip_v2(data, t, mode), cls)
+
+
+def render_v1(data, t):
+    cost = num(data, "cost_usd")
+    pct = num(data, "pct_used")
+    soft = num(data, "soft_pct", 0.8) or 0.8
     approvals = data.get("approvals") if isinstance(data.get("approvals"), int) else None
     tasks = data.get("tasks") if isinstance(data.get("tasks"), int) else None
     failing = data.get("health_failing")
     failing = [str(n) for n in failing] if isinstance(failing, list) else []
     alerting = data.get("health_alert")
     alerting = [str(n) for n in alerting] if isinstance(alerting, list) else []
-    budget_on = num("budget") > 0
+    budget_on = num(data, "budget") > 0
 
     cls = "ok"
     if approvals or failing or (budget_on and pct >= soft):
@@ -153,6 +396,46 @@ def render(path, now, env):
     return out(text, esc("\n".join(lines)), cls)
 
 
+def module(name, path, now, env):
+    """The ``agents`` / ``attention`` / ``system`` drawer modules."""
+    t = TEXTS[lang(env)]
+    data, why = read_state(path, now, env)
+    if why or not is_v2(data):
+        return hidden()
+    if name == "agents":
+        agents = section(data, "agents")
+        hosts = agents.get("hosts") if isinstance(agents.get("hosts"), dict) else {}
+        if not hosts:
+            return out(t["agents_short"], esc(t["no_agents"]), "idle")
+        text = "  ".join("%s %d" % (h.replace("claude-code", "claude"), n)
+                         for h, n in hosts.items() if isinstance(n, int))
+        return out(text, esc("\n".join(host_lines(data))), "ok")
+    if name == "attention":
+        items = items_of(data)
+        if not items:
+            return hidden()
+        kinds = {}
+        for i in items:
+            kinds[str(i.get("kind") or "")] = kinds.get(str(i.get("kind") or ""), 0) + 1
+        text = "⚠ " + " · ".join("%d %s" % (n, t.get("p_" + k, k)) for k, n in kinds.items())
+        cls = "alert" if data.get("class") == "alert" else "warn"
+        return out(text, esc("\n".join(item_text(i, t) for i in items)), cls)
+    sysd = section(data, "system")
+    bits = []
+    if sysd.get("power_mode"):
+        bits.append(str(sysd["power_mode"]))
+    if isinstance(sysd.get("temp_c"), (int, float)):
+        bits.append("%d°" % round(sysd["temp_c"]))
+    if isinstance(sysd.get("cpu_pct"), (int, float)):
+        bits.append("%d%%" % round(sysd["cpu_pct"]))
+    if isinstance(sysd.get("battery_pct"), (int, float)):
+        bits.append("%s%d%%" % ("⚡" if sysd.get("charging") else "", round(sysd["battery_pct"])))
+    if not bits:
+        return hidden()
+    cls = sysd.get("temp_level") if sysd.get("temp_level") in ("ok", "warn", "alert") else "ok"
+    return out(" · ".join(bits), esc(machine_line(data, t)), cls)
+
+
 def dashboard_url(path):
     try:
         with open(path, encoding="utf-8") as fh:
@@ -164,30 +447,208 @@ def dashboard_url(path):
     return DEFAULT_URL
 
 
-# Dashboard sections the click may open (ids of dashboard/src/lib/sections.js). There
-# is no single "administration" section yet: approvals and health (Readiness, id
-# "fleet") are the closest, policies will join them when they exist.
-OPEN_SECTIONS = ("approvals", "fleet", "integrity", "overview", "activity", "settings")
-
-
-def section_url(path, section=None):
+def section_url(path, section_name=None):
     """The dashboard URL with a ``#<section>`` hash.
 
-    ``section`` must be one of :data:`OPEN_SECTIONS`; without one the click picks
-    what needs attention: approvals when any wait, else health (Readiness) when a
-    check is failing, else approvals.
+    ``section_name`` must be one of :data:`OPEN_SECTIONS`; without one the click picks
+    what needs attention: approvals when any wait, else fleet (Readiness) when a
+    check or a service is failing, else approvals.
     """
     base = dashboard_url(path).rstrip("/")
-    if section not in OPEN_SECTIONS:
-        section = "approvals"
+    if section_name not in OPEN_SECTIONS:
+        section_name = "approvals"
         try:
             with open(path, encoding="utf-8") as fh:
                 data = json.load(fh)
-            if not data.get("approvals") and data.get("health_failing"):
-                section = "fleet"
+            kinds = [i.get("kind") for i in items_of(data)]
+            if "approval" in kinds or data.get("approvals"):
+                pass
+            elif data.get("health_failing") or "service" in kinds or "health" in kinds:
+                section_name = "fleet"
         except (OSError, ValueError, AttributeError):
             pass
-    return base + "/#" + section
+    return base + "/#" + section_name
+
+
+def write_mode(path, mode, env):
+    """Atomically store the counter mode (0600, directory 0700)."""
+    target = mode_path(path, env)
+    directory = os.path.dirname(target)
+    os.makedirs(directory, mode=0o700, exist_ok=True)
+    tmp = "%s.%d.tmp" % (target, os.getpid())
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write(mode + "\n")
+        os.replace(tmp, target)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+
+
+def scroll(path, direction, env, run=subprocess.run):
+    step = 1 if direction == "up" else -1
+    current = read_mode(path, env)
+    nxt = MODES[(MODES.index(current) + step) % len(MODES)]
+    write_mode(path, nxt, env)
+    signal_waybar(SIG_ICON, run)
+    return nxt
+
+
+def signal_waybar(number, run=subprocess.run):
+    try:
+        run(["pkill", "-RTMIN+%d" % number, "waybar"], stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=3)
+    except (OSError, subprocess.SubprocessError):
+        pass
+
+
+# -- the right-click menu ------------------------------------------------------
+
+
+def which_or(name, *fallbacks):
+    found = shutil.which(name)
+    if found:
+        return found
+    for cand in fallbacks:
+        if os.path.isfile(cand) and os.access(cand, os.X_OK):
+            return cand
+    return None
+
+
+def wofi_ask(prompt, options, run=subprocess.run, env=None):
+    """Show ``options`` in ``wofi --dmenu``; return the chosen line or ``None``."""
+    wofi = which_or("wofi", "/usr/sbin/wofi", "/usr/bin/wofi")
+    if not wofi:
+        return None
+    try:
+        proc = run([wofi, "--dmenu", "--prompt", prompt, "--cache-file", "/dev/null"],
+                   input="\n".join(options), capture_output=True, text=True, timeout=120)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if getattr(proc, "returncode", 1) != 0:
+        return None
+    choice = (proc.stdout or "").strip("\n")
+    return choice if choice in options else None
+
+
+def notify(title, body, run=subprocess.run):
+    tool = which_or("dunstify", "/usr/bin/dunstify") or which_or("notify-send", "/usr/bin/notify-send")
+    if not tool:
+        return False
+    try:
+        run([tool, "-a", "lhassa", title, body], stdin=subprocess.DEVNULL,
+            capture_output=True, text=True, timeout=5)
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return True
+
+
+def lhassa_cli(env):
+    return (env.get("LHASSA_BIN") or "").strip() or which_or("lhassa", os.path.expanduser("~/.local/bin/lhassa"))
+
+
+def summary_body(data, t):
+    lines = [today_line(data, t)]
+    machine = machine_line(data, t)
+    if machine:
+        lines.append("%s: %s" % (t["machine"], machine))
+    items = items_of(data)
+    lines += [item_text(i, t) for i in items] if items else [t["nothing"]]
+    return "\n".join(lines)
+
+
+def run_cli(args, env, run=subprocess.run):
+    """Run ``lhassa <args>`` (a list: never a shell). ``(ok, text)``."""
+    cli = lhassa_cli(env)
+    if not cli:
+        return False, "lhassa not found"
+    try:
+        proc = run([cli] + args, stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=60)
+    except (OSError, subprocess.SubprocessError) as exc:
+        return False, type(exc).__name__
+    text = ((proc.stdout or "") + (proc.stderr or "")).strip().splitlines()
+    return getattr(proc, "returncode", 1) == 0, (text[-1] if text else "")
+
+
+def pending_choices(data, t):
+    """``{menu line: (id, label)}`` for approvals that carry an id."""
+    out_ = {}
+    for i in items_of(data):
+        ident = str(i.get("id") or "")
+        if i.get("kind") == "approval" and _ID.match(ident):
+            out_["%s  [%s]" % (i.get("label") or "approval", ident[:12])] = (ident, str(i.get("label") or "approval"))
+    return out_
+
+
+def menu(path, env, now=None, ask=None, run=subprocess.run):
+    """The right-click menu. Every change goes through ``lhassa`` and a wofi confirmation."""
+    t = TEXTS[lang(env)]
+    ask = ask or (lambda prompt, options: wofi_ask(prompt, options, run, env))
+    data, why = read_state(path, time.time() if now is None else now, env)
+    data = data or {}
+    pending = pending_choices(data, t)
+    entries = [t["m_summary"]]
+    if pending:
+        entries += [t["m_approve"], t["m_deny"]]
+    entries += [t["m_open"], t["m_pause"], t["m_power"]]
+    choice = ask("Lhassa", entries)
+    if choice is None:
+        return None
+    if choice == t["m_summary"]:
+        notify("Lhassa", summary_body(data, t) if data else t["no_brain_tip"], run)
+        return "summary"
+    if choice in (t["m_approve"], t["m_deny"]):
+        approving = choice == t["m_approve"]
+        pick = ask(choice, list(pending))
+        if pick not in pending:
+            return None
+        ident, label = pending[pick]
+        question = t["q_approve" if approving else "q_deny"].format(what="%s [%s]" % (label, ident[:12]))
+        if ask(question, [t["m_yes_approve" if approving else "m_yes_deny"], t["m_cancel"]]) != \
+                t["m_yes_approve" if approving else "m_yes_deny"]:
+            return None
+        ok, text = run_cli(["approve" if approving else "deny", ident], env, run)
+        notify("Lhassa", "%s: %s" % (t["done"] if ok else t["failed"], text), run)
+        signal_waybar(SIG_ATTENTION, run)
+        signal_waybar(SIG_ICON, run)
+        return "approve" if approving else "deny"
+    if choice == t["m_open"]:
+        pick = ask(choice, list(OPEN_SECTIONS))
+        if pick in OPEN_SECTIONS:
+            open_url(section_url(path, pick))
+            return "open:" + pick
+        return None
+    if choice == t["m_pause"]:
+        notify("Lhassa", t["unavailable"], run)
+        return "pause-unavailable"
+    if choice == t["m_power"]:
+        pick = ask(choice, list(POWER_MODES))
+        if pick not in POWER_MODES:
+            return None
+        if ask(t["q_power"].format(mode=pick), [t["m_yes_power"], t["m_cancel"]]) != t["m_yes_power"]:
+            return None
+        ok, text = run_cli(["action", "run", "power_mode", "--param", "mode=" + pick], env, run)
+        notify("Lhassa", "%s: %s" % (t["done"] if ok else t["failed"], text), run)
+        signal_waybar(SIG_SYSTEM, run)
+        signal_waybar(SIG_ICON, run)
+        return "power:" + pick
+    return None
+
+
+def open_url(url):
+    try:
+        subprocess.Popen(
+            ["xdg-open", url],
+            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+    except OSError:
+        return False
+    return True
 
 
 def main(argv, env=None):
@@ -197,17 +658,22 @@ def main(argv, env=None):
     if command == "status":
         print(json.dumps(render(path, time.time(), env)))
         return 0
+    if command in ("agents", "attention", "system"):
+        print(json.dumps(module(command, path, time.time(), env)))
+        return 0
     if command == "open":
+        return 0 if open_url(section_url(path, argv[2] if len(argv) > 2 else None)) else 1
+    if command == "scroll" and len(argv) > 2 and argv[2] in ("up", "down"):
         try:
-            subprocess.Popen(
-                ["xdg-open", section_url(path, argv[2] if len(argv) > 2 else None)],
-                stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                start_new_session=True,
-            )
+            scroll(path, argv[2], env)
         except OSError:
             return 1
         return 0
-    print("usage: lhassa-waybar [status|open [section]]", file=sys.stderr)
+    if command == "menu":
+        menu(path, env)
+        return 0
+    print("usage: lhassa-waybar [status|agents|attention|system|open [section]|menu|scroll up|down]",
+          file=sys.stderr)
     return 2
 
 
