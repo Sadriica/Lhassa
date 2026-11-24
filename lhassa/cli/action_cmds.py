@@ -16,6 +16,7 @@ import asyncio
 import json
 import os
 import re
+import stat
 import uuid
 
 import typer
@@ -28,14 +29,71 @@ action_app = typer.Typer(
 
 # The CLI signs as the owner (HUMANO trust), so it must not be a general door: any
 # process with a shell could run every allowlisted action that does not need an
-# approval. Only the actions listed here may be run from it; the owner can widen the
-# list with LHASSA_ACTION_RUN_ALLOW (comma separated names), never narrow the code's.
+# approval. Only the actions listed here may be run from it. The owner can widen the
+# list ONLY through the file ``~/.lhassa/action-run-allow`` (one action name per line,
+# ``#`` comments). It is never read from the environment, because any process that
+# starts this command controls its environment; and it is ignored unless it is a
+# regular file owned by the user that nobody else can write (no group or other write
+# bit), so the widening is a decision the owner took on disk, not a switch an agent
+# can flip while invoking the command.
 RUNNABLE = frozenset({"power_mode"})
+ALLOW_FILE = ".lhassa/action-run-allow"
+
+
+def _home() -> str:
+    """The user's home from the password database, not ``$HOME`` (which a caller sets)."""
+    try:
+        import pwd
+
+        return pwd.getpwuid(os.getuid()).pw_dir
+    except (ImportError, KeyError):
+        return os.path.expanduser("~")
+
+
+def allow_file_path() -> str:
+    return os.path.join(_home(), ALLOW_FILE)
+
+
+def extra_allowed(path: "str | None" = None) -> frozenset:
+    """The names the owner's file adds, or nothing when the file is absent or unsafe."""
+    path = path or allow_file_path()
+    try:
+        st = os.lstat(path)
+        if not stat.S_ISREG(st.st_mode) or st.st_uid != os.getuid() or st.st_mode & 0o022:
+            return frozenset()
+        with open(path, encoding="utf-8") as fh:
+            names = {ln.split("#", 1)[0].strip() for ln in fh}
+    except OSError:
+        return frozenset()
+    return frozenset(n for n in names if re.fullmatch(r"[a-z][a-z0-9_]{0,63}", n or ""))
 
 
 def runnable() -> frozenset:
-    extra = {n.strip() for n in os.getenv("LHASSA_ACTION_RUN_ALLOW", "").split(",") if n.strip()}
-    return RUNNABLE | extra
+    return RUNNABLE | extra_allowed()
+
+
+def _parent() -> str:
+    """The parent process name (``/proc/<ppid>/comm``), cheap and best-effort."""
+    try:
+        with open(f"/proc/{os.getppid()}/comm", encoding="utf-8") as fh:
+            return fh.read().strip()[:40]
+    except OSError:
+        return ""
+
+
+def _audit(name: str, params: dict, outcome: dict) -> None:
+    """Record every ``action run`` in the review log (never raises, never logs values)."""
+    try:
+        from lhassa.review.log import record_run
+
+        record_run(
+            "action-run", name, [],
+            outcome="ok" if outcome.get("ok") else "denied",
+            params=sorted(params), parent=_parent(), ppid=os.getppid(),
+            error=str(outcome.get("error") or "")[:120],
+        )
+    except Exception:
+        pass
 
 
 _FAILURE = re.compile(r"(: failed|error:|errored|timed out|is required|is invalid|not found|unknown action)")
@@ -64,7 +122,7 @@ async def run_governed(name: str, params: dict, instance_id: str) -> dict:
         from lhassa.security.trust import Origin, TrustLevel
 
         if name not in runnable():
-            return {"ok": False, "error": f"denied: {name!r} is not runnable from the CLI (see LHASSA_ACTION_RUN_ALLOW)"}
+            return {"ok": False, "error": f"denied: {name!r} is not runnable from the CLI (the owner lists more in ~/.lhassa/action-run-allow)"}
         register_all()
         if _actions.ACTIONS.get(name) is None:
             return {"ok": False, "error": f"unknown action {name!r}"}
@@ -103,6 +161,7 @@ def run_cmd(
         typer.echo(str(exc), err=True)
         raise typer.Exit(2)
     outcome = asyncio.run(run_governed(name, params, Config.instance_id))
+    _audit(name, params, outcome)
     if json_out:
         typer.echo(json.dumps(outcome))
     else:

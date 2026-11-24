@@ -136,8 +136,14 @@ has its own passwordless sudo rule. Nothing in the widget calls that script
 directly. The command exits 1 when the action is denied or reports a failure.
 
 The command signs as the owner, so it is deliberately not a general door: only
-`power_mode` is runnable from it by default. `LHASSA_ACTION_RUN_ALLOW` (comma
-separated action names) widens that list; the allowlist still decides after it.
+`power_mode` is runnable from it by default. The owner can list more names (one per
+line, `#` comments) in `~/.lhassa/action-run-allow`; that file is read only when it
+is a regular file owned by the user with no group or other write bit, and it is never
+read from the environment (the caller controls the environment, not the owner). The
+home directory comes from the password database, not `$HOME`. The allowlist still
+decides after that. Every run, allowed or denied, is appended to the review log
+(`~/.lhassa/review/review.jsonl`) with the action name, the parameter names (never
+the values), the outcome and the parent process name.
 
 ## Configuration
 

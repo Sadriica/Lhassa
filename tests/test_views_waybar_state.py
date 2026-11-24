@@ -13,6 +13,12 @@ import pytest
 
 from lhassa.views import status, waybar_collect, waybar_state
 
+
+@pytest.fixture(autouse=True)
+def _no_scratch_roots(monkeypatch):
+    """pytest's tmp_path lives under /tmp, which is a scratch root in production."""
+    monkeypatch.setattr(waybar_collect, "scratch_roots", lambda: ())
+
 SNAP = {
     "instance_id": "inst_test",
     "budget": 1000,

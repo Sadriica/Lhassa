@@ -70,6 +70,26 @@ def _private(path: str) -> bool:
         return True  # fail closed
 
 
+def scratch_roots() -> "tuple[Path, ...]":
+    """Directories whose contents are scratch work, never a repo worth naming."""
+    import tempfile
+
+    roots = {Path("/tmp"), Path("/var/tmp"), Path(tempfile.gettempdir())}
+    runtime = os.environ.get("XDG_RUNTIME_DIR", "")
+    if runtime:
+        roots.add(Path(runtime))
+    return tuple(roots)
+
+
+def is_scratch(path: str) -> bool:
+    """True when ``path`` lives under a scratch root (temp dirs, the runtime dir)."""
+    try:
+        here = Path(path)
+        return any(root == here or root in here.parents for root in scratch_roots())
+    except (OSError, ValueError, TypeError):
+        return False
+
+
 def repo_root(cwd: str) -> "Path | None":
     """The git work tree root holding ``cwd``, found without running git."""
     try:
@@ -102,6 +122,8 @@ def repo_name(cwd: str) -> str:
     """
     if _private(cwd):
         return ""
+    if is_scratch(cwd):
+        return "scratch"  # sessions in /tmp and friends are one group, not a repo called "tmp"
     root = repo_root(cwd) or Path(cwd)
     if _private(str(root)):
         return ""
@@ -293,6 +315,9 @@ def collect_review(path: "Path | None" = None, now: "float | None" = None) -> di
         crit = int(counts.get("critical") or 0)
         warn = int(counts.get("warn") or 0)
         repo = repo_name(str(rec.get("repo") or "")) if rec.get("repo") else ""
+        # Dry runs of the hooks (a repo under /tmp, or a run that had no repo at all)
+        # are not the owner's work: they never feed the Attention module.
+        noise = not rec.get("repo") or is_scratch(str(rec.get("repo")))
         if ts >= midnight and not rec.get("error"):
             if event == "commit-msg":
                 out["commits"] += 1
@@ -300,8 +325,8 @@ def collect_review(path: "Path | None" = None, now: "float | None" = None) -> di
                 out["push_count"] += 1
         if now - ts > ATTENTION_WINDOW_S:
             break  # the log is chronological: nothing older matters
-        if rec.get("repo") and not repo:
-            continue  # a private repo: not even its findings are surfaced by name
+        if noise or (rec.get("repo") and not repo):
+            continue  # scratch or private: not even its findings are surfaced
         if crit and (event, repo) not in seen_crit:
             seen_crit.add((event, repo))
             out["critical"].append({"kind": "review", "label": repo or str(rec.get("source") or "review")[:30], "n": crit,

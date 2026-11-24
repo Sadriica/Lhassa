@@ -211,6 +211,12 @@ def rec(ts, event, repo_path="", crit=0, warn=0, **extra):
             "counts": {"info": 0, "warn": warn, "critical": crit}, **extra}
 
 
+@pytest.fixture(autouse=True)
+def _no_scratch_roots(monkeypatch):
+    """pytest's tmp_path lives under /tmp, which is a scratch root in production."""
+    monkeypatch.setattr(wc, "scratch_roots", lambda: ())
+
+
 def test_review_critical_findings_and_pushes_with_findings(tmp_path):
     a, b = repo(tmp_path, "alpha"), repo(tmp_path, "beta")
     midnight = wc._local_midnight(NOW)
@@ -230,9 +236,44 @@ def test_review_critical_findings_and_pushes_with_findings(tmp_path):
     assert got["pushes"] == [{"kind": "push", "label": "beta", "n": 1, "source": "pre-push review"}]
 
 
-def test_a_finding_without_a_repo_is_labelled_by_its_source(tmp_path):
-    log = write_log(tmp_path / "r.jsonl", [{**rec(NOW - 5, "check", "", crit=1), "source": "claude-pretooluse"}])
-    assert wc.collect_review(log, now=NOW)["critical"][0]["label"] == "claude-pretooluse"
+def test_a_finding_from_a_run_without_a_repo_is_not_attention(tmp_path):
+    """A dry run of a hook (no repo at all) is not the owner's work."""
+    log = write_log(tmp_path / "r.jsonl", [{**rec(NOW - 5, "check", "", crit=1), "source": "claude-pretooluse"},
+                                           rec(NOW - 4, "pre-push", "", warn=2)])
+    got = wc.collect_review(log, now=NOW)
+    assert got["critical"] == [] and got["pushes"] == []
+    assert got["push_count"] == 1  # it still counts as a push seen today
+
+
+def test_findings_of_a_repo_under_a_scratch_root_are_not_attention(tmp_path, monkeypatch):
+    scratch = tmp_path / "scratchroot"
+    work = repo(scratch, "hooktest")
+    real = repo(tmp_path, "alpha")
+    monkeypatch.setattr(wc, "scratch_roots", lambda: (scratch,))
+    log = write_log(tmp_path / "r.jsonl", [rec(NOW - 5, "commit-msg", work, crit=3),
+                                           rec(NOW - 4, "pre-push", work, warn=1),
+                                           rec(NOW - 3, "pre-push", real, warn=1)])
+    got = wc.collect_review(log, now=NOW)
+    assert got["critical"] == []
+    assert [p["label"] for p in got["pushes"]] == ["alpha"]
+    assert got["commits"] == 1 and got["push_count"] == 2
+
+
+def test_a_session_in_a_scratch_directory_is_called_scratch_not_tmp(tmp_path, monkeypatch):
+    scratch = tmp_path / "tmpish"
+    scratch.mkdir()
+    monkeypatch.setattr(wc, "scratch_roots", lambda: (scratch,))
+    assert wc.repo_name(str(scratch / "x" / "y")) == "scratch"
+    assert wc.repo_name(str(scratch)) == "scratch"
+    assert wc.is_scratch(str(scratch / "a")) and not wc.is_scratch(str(tmp_path / "other"))
+
+
+def test_the_default_scratch_roots_cover_tmp_and_the_runtime_dir(monkeypatch):
+    monkeypatch.undo()
+    monkeypatch.setenv("XDG_RUNTIME_DIR", "/run/user/4242")
+    assert wc.is_scratch("/tmp/claude-1000/x/y") and wc.is_scratch("/run/user/4242/lhassa")
+    assert not wc.is_scratch("/home/someone/Code/repo")
+    assert wc.repo_name("/tmp") == "scratch"
 
 
 def test_review_of_a_private_repo_is_not_surfaced_by_name(tmp_path):

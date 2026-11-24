@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import os
 
 import pytest
 from typer.testing import CliRunner
@@ -105,12 +106,65 @@ def test_an_action_that_needs_approval_is_not_run_from_here(fake_power, monkeypa
     assert fake_power == []
 
 
-def test_only_listed_actions_are_runnable_from_the_cli(fake_power, monkeypatch):
-    """The CLI signs as the owner, so it is not a general door onto every action."""
-    monkeypatch.delenv("LHASSA_ACTION_RUN_ALLOW", raising=False)
+def test_the_environment_can_never_widen_the_runnable_list(fake_power, monkeypatch, tmp_path):
+    """Any process that starts the command controls its environment."""
+    from lhassa.cli import action_cmds
+
+    monkeypatch.setenv("LHASSA_ACTION_RUN_ALLOW", "system_snapshot")
+    assert action_cmds.runnable() == action_cmds.RUNNABLE
     result = runner.invoke(app, ["action", "run", "system_snapshot", "--json"])
     assert result.exit_code == 1 and "not runnable from the CLI" in json.loads(result.output)["error"]
-    # The owner can widen the list explicitly; the allowlist still decides after that.
-    monkeypatch.setenv("LHASSA_ACTION_RUN_ALLOW", "system_snapshot")
-    widened = runner.invoke(app, ["action", "run", "system_snapshot", "--json"])
-    assert "not runnable from the CLI" not in widened.output
+
+
+def _allow_file(tmp_path, text, mode=0o600):
+    f = tmp_path / "action-run-allow"
+    f.write_text(text)
+    os.chmod(f, mode)
+    return str(f)
+
+
+def test_the_owners_file_widens_the_list(tmp_path):
+    from lhassa.cli import action_cmds
+
+    path = _allow_file(tmp_path, "# extra\nsystem_snapshot\nping_url  # trailing note\nBad Name\n")
+    assert action_cmds.extra_allowed(path) == {"system_snapshot", "ping_url"}
+
+
+@pytest.mark.parametrize("mode", [0o620, 0o602, 0o666])
+def test_a_file_others_can_write_is_ignored(tmp_path, mode):
+    from lhassa.cli import action_cmds
+
+    assert action_cmds.extra_allowed(_allow_file(tmp_path, "system_snapshot\n", mode)) == frozenset()
+
+
+def test_a_symlink_or_a_file_of_another_user_is_ignored(tmp_path, monkeypatch):
+    from lhassa.cli import action_cmds
+
+    real = _allow_file(tmp_path, "system_snapshot\n")
+    link = tmp_path / "link"
+    link.symlink_to(real)
+    assert action_cmds.extra_allowed(str(link)) == frozenset()
+    monkeypatch.setattr(os, "getuid", lambda: os.stat(real).st_uid + 1)
+    assert action_cmds.extra_allowed(real) == frozenset()
+    assert action_cmds.extra_allowed(str(tmp_path / "missing")) == frozenset()
+
+
+def test_a_caller_cannot_redirect_the_file_with_home(monkeypatch, tmp_path):
+    from lhassa.cli import action_cmds
+
+    evil = tmp_path / "evil" / ".lhassa"
+    evil.mkdir(parents=True)
+    _allow_file(evil, "system_snapshot\n")
+    monkeypatch.setenv("HOME", str(tmp_path / "evil"))
+    assert not action_cmds.allow_file_path().startswith(str(tmp_path / "evil"))
+
+
+def test_every_run_is_logged_with_parameter_names_but_not_values(fake_power, tmp_path, monkeypatch):
+    monkeypatch.setenv("LHASSA_REVIEW_DIR", str(tmp_path / "review"))
+    runner.invoke(app, ["action", "run", "power_mode", "-p", "mode=saver", "--json"])
+    runner.invoke(app, ["action", "run", "system_snapshot", "--json"])  # denied: still logged
+    rows = [json.loads(ln) for ln in (tmp_path / "review" / "review.jsonl").read_text().splitlines()]
+    runs = [r for r in rows if r["source"] == "action-run"]
+    assert [(r["event"], r["outcome"]) for r in runs] == [("power_mode", "ok"), ("system_snapshot", "denied")]
+    assert runs[0]["params"] == ["mode"] and "saver" not in json.dumps(runs[0])
+    assert "ppid" in runs[0] and "parent" in runs[0]
