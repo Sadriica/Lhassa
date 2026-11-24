@@ -103,3 +103,14 @@ def test_an_action_that_needs_approval_is_not_run_from_here(fake_power, monkeypa
     result = runner.invoke(app, ["action", "run", "power_mode", "-p", "mode=saver", "--json"])
     assert result.exit_code == 1 and "requires human approval" in json.loads(result.output)["error"]
     assert fake_power == []
+
+
+def test_only_listed_actions_are_runnable_from_the_cli(fake_power, monkeypatch):
+    """The CLI signs as the owner, so it is not a general door onto every action."""
+    monkeypatch.delenv("LHASSA_ACTION_RUN_ALLOW", raising=False)
+    result = runner.invoke(app, ["action", "run", "system_snapshot", "--json"])
+    assert result.exit_code == 1 and "not runnable from the CLI" in json.loads(result.output)["error"]
+    # The owner can widen the list explicitly; the allowlist still decides after that.
+    monkeypatch.setenv("LHASSA_ACTION_RUN_ALLOW", "system_snapshot")
+    widened = runner.invoke(app, ["action", "run", "system_snapshot", "--json"])
+    assert "not runnable from the CLI" not in widened.output

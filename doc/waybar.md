@@ -135,6 +135,10 @@ validates the mode (`^[a-z-]{1,20}$`) and calls the `power-mode` script, which
 has its own passwordless sudo rule. Nothing in the widget calls that script
 directly. The command exits 1 when the action is denied or reports a failure.
 
+The command signs as the owner, so it is deliberately not a general door: only
+`power_mode` is runnable from it by default. `LHASSA_ACTION_RUN_ALLOW` (comma
+separated action names) widens that list; the allowlist still decides after it.
+
 ## Configuration
 
 | Variable | Default | Effect |

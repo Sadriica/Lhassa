@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import re
 import uuid
 
@@ -24,6 +25,18 @@ action_app = typer.Typer(
     no_args_is_help=True,
     help="Run a registered action through the allowlist (deny-by-default).",
 )
+
+# The CLI signs as the owner (HUMANO trust), so it must not be a general door: any
+# process with a shell could run every allowlisted action that does not need an
+# approval. Only the actions listed here may be run from it; the owner can widen the
+# list with LHASSA_ACTION_RUN_ALLOW (comma separated names), never narrow the code's.
+RUNNABLE = frozenset({"power_mode"})
+
+
+def runnable() -> frozenset:
+    extra = {n.strip() for n in os.getenv("LHASSA_ACTION_RUN_ALLOW", "").split(",") if n.strip()}
+    return RUNNABLE | extra
+
 
 _FAILURE = re.compile(r"(: failed|error:|errored|timed out|is required|is invalid|not found|unknown action)")
 
@@ -50,6 +63,8 @@ async def run_governed(name: str, params: dict, instance_id: str) -> dict:
         from lhassa.security import signing as _signing
         from lhassa.security.trust import Origin, TrustLevel
 
+        if name not in runnable():
+            return {"ok": False, "error": f"denied: {name!r} is not runnable from the CLI (see LHASSA_ACTION_RUN_ALLOW)"}
         register_all()
         if _actions.ACTIONS.get(name) is None:
             return {"ok": False, "error": f"unknown action {name!r}"}
