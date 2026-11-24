@@ -230,6 +230,11 @@ def test_review_critical_findings_and_pushes_with_findings(tmp_path):
     assert got["pushes"] == [{"kind": "push", "label": "beta", "n": 1, "source": "pre-push review"}]
 
 
+def test_a_finding_without_a_repo_is_labelled_by_its_source(tmp_path):
+    log = write_log(tmp_path / "r.jsonl", [{**rec(NOW - 5, "check", "", crit=1), "source": "claude-pretooluse"}])
+    assert wc.collect_review(log, now=NOW)["critical"][0]["label"] == "claude-pretooluse"
+
+
 def test_review_of_a_private_repo_is_not_surfaced_by_name(tmp_path):
     secret = tmp_path / "lhassa" / "personal" / "x"
     secret.mkdir(parents=True)

@@ -304,11 +304,11 @@ def collect_review(path: "Path | None" = None, now: "float | None" = None) -> di
             continue  # a private repo: not even its findings are surfaced by name
         if crit and (event, repo) not in seen_crit:
             seen_crit.add((event, repo))
-            out["critical"].append({"kind": "review", "label": repo or "repo", "n": crit,
+            out["critical"].append({"kind": "review", "label": repo or str(rec.get("source") or "review")[:30], "n": crit,
                                     "source": "lhassa review"})
         if event == "pre-push" and (crit or warn) and repo not in seen_push:
             seen_push.add(repo)
-            out["pushes"].append({"kind": "push", "label": repo or "repo", "n": crit + warn,
+            out["pushes"].append({"kind": "push", "label": repo or str(rec.get("source") or "review")[:30], "n": crit + warn,
                                   "source": "pre-push review"})
     return out
 
